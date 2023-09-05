@@ -4,7 +4,7 @@ import logging
 import uuid
 import numpy as np
 from nodes.engineering.actions import *
-from applications.chess3d.utils import ModuleTypes
+from utils import ModuleTypes
 
 from nodes.engineering.subsystems import Subsystem
        

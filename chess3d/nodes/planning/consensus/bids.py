@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Union
 import numpy as np
 
-from applications.chess3d.nodes.science.reqs import MeasurementRequest
+from nodes.science.reqs import MeasurementRequest
 
 class BidTypes(Enum):
     UNCONSTRAINED_BID = 'UNCONSTRAINED_BID'

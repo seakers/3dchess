@@ -63,17 +63,17 @@
         },
 
         {
-            "name": "ACBBA TEST - SATS",
+            "name": "ACBBA TEST - SAT",
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/chess3d/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/applications/chess3d",
+            "cwd": "${workspaceRoot}/chess3d",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : "acbba_test_sats"
+            "args" : "acbba_test_sat"
         },
 
         {

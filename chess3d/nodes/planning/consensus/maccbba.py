@@ -7,8 +7,8 @@ from typing import Any, Callable
 import zmq
 import numpy as np
 import pandas as pd
-from applications.chess3d.nodes.orbitdata import OrbitData
-from applications.chess3d.nodes.planning.consensus.bids import ConstrainedBid
+from nodes.orbitdata import OrbitData
+from nodes.planning.consensus.bids import ConstrainedBid
 
 from nodes.states import *
 from nodes.actions import *
