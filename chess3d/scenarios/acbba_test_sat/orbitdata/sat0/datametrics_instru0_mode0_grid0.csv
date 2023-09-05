@@ -1,6 +1,6 @@
 Datametrics file based on GRID COVERAGE
 Epoch [JDUT1] is 2458849.5
-Step size [s] is 1.545887639615842
+Step size [s] is 1.5458876396158427
 Mission Duration [Days] is 1.0
 time index,GP index,pnt-opt index,lat [deg],lon [deg],observation range [km],look angle [deg],incidence angle [deg],solar zenith [deg]
 0,1580,,0.0,-100.0,431.3,-1.8,1.92,80.1

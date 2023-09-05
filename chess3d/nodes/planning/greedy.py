@@ -427,7 +427,8 @@ class GreedyPlanner(PlanningModule):
                     # estimate arrival time using fixed angular rate TODO change to 
                     if dt >= dth / 1.0: # TODO change maximum angular rate 
                         t_imgs.append(t_img)
-                return t_imgs
+
+                return t_imgs if len(t_imgs) > 0 else [-1.0]
 
             elif isinstance(state, UAVAgentState):
                 dr = np.array(req.pos) - np.array(state.pos)

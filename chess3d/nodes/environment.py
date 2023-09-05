@@ -437,6 +437,8 @@ class SimulationEnvironment(EnvironmentNode):
                         ['u_norm', utility_total/max_utility]
                     ]
 
+            #row = [obs["start"],obs["end"],obs["location"]["lat"],obs["location"]["lon"]]
+
             # log and save results
             self.log(f"MEASUREMENTS RECEIVED:\n{str(measurements_df)}\n\n", level=logging.WARNING)
             measurements_df.to_csv(f"{self.results_path}/measurements.csv", index=False)
