@@ -258,6 +258,6 @@
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/acbba_test_sats//orbitdata/"
+        "outDir": "./scenarios/acbba_test_sat//orbitdata/"
     }
 }

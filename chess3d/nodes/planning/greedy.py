@@ -18,9 +18,7 @@ from dmas.network import NetworkConfig
 from dmas.agents import AgentAction
 
 class GreedyPlanner(PlanningModule):
-    """
-    Schedules masurement request tasks on a first-come, first-served basis.
-    """
+    """ Schedules masurement request tasks on a first-come, first-served basis. """
     def __init__(self, 
                 results_path: str, 
                 parent_name: str, 

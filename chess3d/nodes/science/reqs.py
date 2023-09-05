@@ -205,7 +205,7 @@ class MeasurementRequest(object):
 
         return lat, lon, alt
 
-    def lat_lon_to_pos(lat : float, lon : float, alt : float) -> list:
+    def lat_lon_to_pos(self, lat : float, lon : float, alt : float) -> list:
         R = 6.3781363e+003 + alt
         pos = [
                 R * np.cos( lat * np.pi / 180.0) * np.cos( lon * np.pi / 180.0),
@@ -282,7 +282,7 @@ class GroundPointMeasurementRequest(MeasurementRequest):
         lat, lon, alt = lat_lon_pos
 
         if pos is None:
-            pos = lat_lon_to_pos(lat, lon, alt)
+            pos = self.lat_lon_to_pos(lat, lon, alt)
         if not isinstance(pos, list):
             raise AttributeError(f'`pos` must be of type `list`. is of type {type(pos)}.')
         elif len(pos) != 3:

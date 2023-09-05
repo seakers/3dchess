@@ -1,6 +1,0 @@
-routine,t_avg,t_std,t_med,n
-sense,0.009,0.002,0.009,6
-think,0.009,0.001,0.009,6
-do,0.078,0.053,0.07,6
-BROADCAST_MSG,0.0,0.0,0.0,5
-WAIT_FOR_MSG,0.093,0.044,0.07,5
