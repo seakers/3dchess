@@ -1,0 +1,102 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "3D CHESS - SCENARIO 2",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args" : "scenario2"
+        },
+
+        {
+            "name": "VISUALIZER TESTER - Plane",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/visualizer.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args" : ["acbba_test_uav", "plane"]
+        },
+
+        {
+            "name": "VISUALIZER TESTER - Earth",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/visualizer.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args" : ["acbba_test_sats", "earth"]
+        },
+
+
+        {
+            "name": "ACBBA TEST - UAVS",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args" : "acbba_test_uav"
+        },
+
+        {
+            "name": "ACBBA TEST - SATS",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/applications/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args" : "acbba_test_sats"
+        },
+
+        {
+            "name": "VISUALIZER TEST - SAT SIM",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args" : "visualizer_test"
+        }
+    ],
+
+    "compounds": [
+        //{
+        //  "name": "Server/Client Test",
+        //  "configurations": ["Abstract Agent Client Test", "Environment Server Test"],
+        //   "preLaunchTask": "${defaultBuildTask}",
+        //  "stopAll": true
+        //}
+    ]
+}

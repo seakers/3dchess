@@ -1,0 +1,6 @@
+id,type,x_pos,y_pos,z_pos,s_max,measurements,t_start,t_end,t_corr
+c48970f8,GROUND_POINT,2,0,0.0,100,"['OLI']",0.0,100,100.0
+c4898a3e,GROUND_POINT,4,0,0.0,100,"['OLI']",0.0,100,100.0
+c4899664,GROUND_POINT,3,2,0.0,100,"['OLI']",0.0,100,100.0
+c489a172,GROUND_POINT,0,3,0.0,100,['OLI'],0.0,100,100.0
+c489a6b8,GROUND_POINT,3,3,0.0,100,['OLI'],0.0,100,100.0
