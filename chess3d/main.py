@@ -32,6 +32,8 @@ from nodes.science.reqs import GroundPointMeasurementRequest
 from nodes.environment import SimulationEnvironment
 from utils import *
 
+from satplan.visualizer import Visualizer
+
 """
 ======================================================
    _____ ____  ________  __________________
@@ -514,6 +516,14 @@ if __name__ == "__main__":
                 row_out = [obs["start"],obs["end"],obs["location"]["lat"],obs["location"]["lon"]]
                 csvwriter.writerow(row_out)
 
-        x = 1
+    # visualizer = Visualizer(scenario_path+'/',
+    #                         results_path+'/',
+    #                         start_date,
+    #                         dt,
+    #                         scenario_dict.get("duration"),
+    #                         orbitdata_dir+'/grid0.csv'
+    #                         )
+    # visualizer.process_mission_data()
+    # visualizer.plot_mission()
     
     print('\nSIMULATION DONE')

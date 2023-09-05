@@ -897,6 +897,14 @@ class ConsensusPlanner(PlanningModule):
     LOGGING AND TEARDOWN
     --------------------
     """
+    # def record_runtime(self, func : function) -> Any:
+    #     def wrapper(*args, **kwargs):
+    #         t_0 = time.perf_counter()
+    #         vals = func(*args, **kwargs)
+    #         dt = time.perf_counter() - t_0
+    #         self.stats[func.__name__].append(dt)
+    #     return wrapper
+
     @abstractmethod
     def log_results(self, dsc : str, results : dict, level=logging.DEBUG) -> None:
         """

@@ -186,7 +186,7 @@ class ACBBA(ConsensusPlanner):
                     and isinstance(state, SatelliteAgentState)
                     ):
                     # check if the satellite can observe the GP
-                    lat,lon,_ = measurement_req.pos
+                    lat,lon,_ = measurement_req.lat_lon_pos
                     df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, 0.0)
                     if df.empty:
                         continue
@@ -379,7 +379,7 @@ class ACBBA(ConsensusPlanner):
                     # estimate arrival time using fixed angular rate TODO change to 
                     if dt >= dth / 1.0: # TODO change maximum angular rate 
                         t_imgs.append(t_img)
-                return t_imgs
+                return t_imgs if len(t_imgs) > 0 else [-1]
 
             elif isinstance(state, UAVAgentState):
                 dr = np.array(req.pos) - np.array(state.pos)

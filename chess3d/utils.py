@@ -65,7 +65,7 @@ def precompute_orbitdata(scenario_name) -> str:
     """
     
     scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
-    data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbitdata/' in scenario_name else f'./scenarios/{scenario_name}/orbitdata/'
+    data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
    
     changes_to_scenario = False
     with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
@@ -137,10 +137,10 @@ def precompute_orbitdata(scenario_name) -> str:
 
             # set output directory to orbit data directory
             if mission_dict.get("settings", None) is not None:
-                mission_dict["settings"]["outDir"] = scenario_dir + '/orbitdata/'
+                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
             else:
                 mission_dict["settings"] = {}
-                mission_dict["settings"]["outDir"] = scenario_dir + '/orbitdata/'
+                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
 
             # propagate data and save to orbit data directory
             print("Propagating orbits...")

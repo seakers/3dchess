@@ -274,7 +274,7 @@ class OrbitData:
         The data gets stored as a dictionary, with each entry containing the orbit data of each agent in the mission 
         indexed by the name of the agent.
         """
-        data_dir = scenario_dir + '/orbitdata/'
+        data_dir = scenario_dir + '/orbit_data/'
         with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
             
             # load json file as dictionary

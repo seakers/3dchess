@@ -181,7 +181,7 @@ class PlanningModule(InternalModule):
 
         scenario_name = results_path_list[-1]
         scenario_dir = f'./scenarios/{scenario_name}/'
-        data_dir = scenario_dir + '/orbitdata/'
+        data_dir = scenario_dir + '/orbit_data/'
 
         with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
             # load json file as dictionary

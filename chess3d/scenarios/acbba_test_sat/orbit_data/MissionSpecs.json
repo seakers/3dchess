@@ -101,7 +101,7 @@
                 }
             },
             "planner": {
-                "@type": "GREEDY",
+                "@type": "ACBBA",
                 "utility": "LINEAR"
             },
             "notifier": "True",
@@ -164,6 +164,6 @@
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/acbba_test_sat//orbitdata/"
+        "outDir": "./scenarios/acbba_test_sat//orbit_data/"
     }
 }
