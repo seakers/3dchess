@@ -431,26 +431,27 @@ class SimulationEnvironment(EnvironmentNode):
             for req in self.measurement_reqs:
                 req : GroundPointMeasurementRequest
 
-                for sat_name, coverage_data in self.orbitdata.items():
-                    coverage_data : OrbitData
-                    req_start = req.t_start/coverage_data.time_step
-                    req_end = req.t_end/coverage_data.time_step
-                    lat,lon,_ = req.lat_lon_pos
-                    grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
+                for measurement in req.measurements:
+                    measurement_plausible = False
+                    for sat_name, coverage_data in self.orbitdata.items():
+                        coverage_data : OrbitData
+                        req_start = req.t_start/coverage_data.time_step
+                        req_end = req.t_end/coverage_data.time_step
+                        lat,lon,_ = req.lat_lon_pos
+                        grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
 
-                    df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
-                    
-                    t_index = None
-                    instrument_prev = None
-                    for _, row in df.iterrows():
-                        instrument : dict = row['instrument']
+                        df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
+                        
+                        for _, row in df.iterrows():
+                            instrument : dict = row['instrument']
 
-                        if instrument['name'] in req.measurements:
-                            if t_index != row['time index'] - 1:
+                            if instrument['name'] in measurement:
+                                measurement_plausible = True
                                 n_obervations_exp += 1
-
-                            t_index = row['time index']
-                            instrument_prev = instrument['name']
+                                break
+                        
+                        if measurement_plausible:
+                            break
 
                             # 77840.0 0, 5730.0 1
 
