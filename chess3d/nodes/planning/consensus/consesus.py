@@ -281,7 +281,8 @@ class ConsensusPlanner(PlanningModule):
                     # wait for plan to be updated
                     self.replan.set(); self.replan.clear()
                     plan : list = await self.plan_inbox.get()
-                    self.plan_history.append((self.get_current_time(), plan))
+                    plan_copy = [action for action in plan]
+                    self.plan_history.append((self.get_current_time(), plan_copy))
                     self.t_plan = self.get_current_time()
 
                     # compule updated bids from the listener and bundle buiilder

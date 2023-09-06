@@ -431,7 +431,7 @@ class SimulationEnvironment(EnvironmentNode):
             for req in self.measurement_reqs:
                 req : GroundPointMeasurementRequest
 
-                for _, coverage_data in self.orbitdata.items():
+                for sat_name, coverage_data in self.orbitdata.items():
                     coverage_data : OrbitData
                     req_start = req.t_start/coverage_data.time_step
                     req_end = req.t_end/coverage_data.time_step
@@ -451,7 +451,8 @@ class SimulationEnvironment(EnvironmentNode):
 
                             t_index = row['time index']
                             instrument_prev = instrument['name']
-                            
+
+                            # 77840.0 0, 5730.0 1
 
             summary_headers = ['stat_name', 'val']
             summary_data = [
