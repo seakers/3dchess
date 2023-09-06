@@ -111,6 +111,8 @@ This information will be shared to and amongst agents as `TaskRequest` messages.
 
 #
 ## Running DMAS - 3DCHESS
+> NOTE: The [`dmas`](https://github.com/seakers/DMASpy) and [`satplan`](https://github.com/bgorr/satplan) libraries and all of their dependencies are required for running these scenarios.
+
 Open a terminal in this directory and run `main.py` by entering the following command:
 
     python main.py <scenario name>
