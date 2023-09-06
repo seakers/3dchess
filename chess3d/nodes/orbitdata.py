@@ -220,6 +220,9 @@ class OrbitData:
                             .query('@t <= `time index` & `grid index` == @grid_index & `GP index` == @gp_index') \
                             .sort_values(by=['time index'])
 
+        if access_data.empty:
+            x = 1
+
         return access_data
     
     def find_gp_index(self, lat: float, lon: float) -> tuple:
@@ -230,21 +233,21 @@ class OrbitData:
         """
         grid_compiled = None
         for grid in self.grid_data:
+            grid : pd.DataFrame
+        
+            perfect_match = grid.query('`lat [deg]` == @lat & `lon [deg]` == @lon')
+            for _, row in perfect_match.iterrows():
+                grid_index = row['grid index']
+                gp_index = row['GP index']
+                gp_lat = row['lat [deg]']
+                gp_lon = row['lon [deg]']
+
+                return grid_index, gp_index, gp_lat, gp_lon
             
             if grid_compiled is None:
                 grid_compiled = grid
             else:
                 grid_compiled = pd.concat([grid_compiled, grid])
-        
-        perfect_match = grid_compiled.query('`lat [deg]` == @lat & `lon [deg]` == @lon')
-
-        for _, row in perfect_match.iterrows():
-            grid_index = row['grid index']
-            gp_index = row['GP index']
-            gp_lat = row['lat [deg]']
-            gp_lon = row['lon [deg]']
-
-            return grid_index, gp_index, gp_lat, gp_lon
             
         grid_compiled['dr'] = np.sqrt( 
                                         np.power(np.cos( grid_compiled['lat [deg]'] * np.pi / 360 ) * np.cos( grid_compiled['lon [deg]'] * np.pi / 360 ) \

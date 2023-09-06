@@ -592,9 +592,6 @@ class UAVAgentState(SimulationAgentState):
         
         dt = t - self.t
 
-        if dt < 0:
-            x = 1
-
         # update state
         self.update_state(t, status=self.TRAVELING)
 
@@ -631,8 +628,6 @@ class UAVAgentState(SimulationAgentState):
                         ]
 
             dt = min(action.t_end - t, norm / self.max_speed)
-
-            # calc dt_fuel
 
             return action.PENDING, dt
 

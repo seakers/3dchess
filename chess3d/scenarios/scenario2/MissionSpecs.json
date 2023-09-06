@@ -101,7 +101,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -195,7 +195,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -289,7 +289,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -383,7 +383,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -477,7 +477,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -571,7 +571,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -665,7 +665,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -759,7 +759,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -853,7 +853,7 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "@type" : "GREEDY",
                 "utility" : "LINEAR"
             },
             "notifier": "False",

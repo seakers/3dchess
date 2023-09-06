@@ -426,50 +426,49 @@ class SimulationEnvironment(EnvironmentNode):
                 max_utility += req.s_max
                 n_obervations_max += len(req.measurements)
 
-            # calculate expected number of measurements
-            n_obervations_exp = 0
+            # calculate possible number of measurements given coverage metrics
+            n_obervations_pos = 0
             for req in self.measurement_reqs:
                 req : GroundPointMeasurementRequest
+                lat,lon,_ = req.lat_lon_pos
 
-                for measurement in req.measurements:
-                    measurement_plausible = False
-                    for sat_name, coverage_data in self.orbitdata.items():
-                        coverage_data : OrbitData
-                        req_start = req.t_start/coverage_data.time_step
-                        req_end = req.t_end/coverage_data.time_step
-                        lat,lon,_ = req.lat_lon_pos
-                        grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
+                observable_measurements = []
+                for sat_name, coverage_data in self.orbitdata.items():
+                    coverage_data : OrbitData
+                    req_start = req.t_start/coverage_data.time_step
+                    req_end = req.t_end/coverage_data.time_step
+                    grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
 
-                        df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
-                        
-                        for _, row in df.iterrows():
-                            instrument : dict = row['instrument']
+                    df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
+                    
+                    for _, row in df.iterrows():
+                        instrument : dict = row['instrument']
+                        if (instrument['name'] in req.measurements 
+                            and instrument['name'] not in observable_measurements):
+                            observable_measurements.append(instrument['name'])
 
-                            if instrument['name'] in measurement:
-                                measurement_plausible = True
-                                n_obervations_exp += 1
-                                break
-                        
-                        if measurement_plausible:
+                        if len(observable_measurements) == len(req.measurements):
                             break
 
-                            # 77840.0 0, 5730.0 1
+                    if len(observable_measurements) == len(req.measurements):
+                        break
 
+                n_obervations_pos += len(observable_measurements)
+
+            # Generate summary
             summary_headers = ['stat_name', 'val']
             summary_data = [
                         ['t_start', self._clock_config.start_date], 
                         ['t_end', self._clock_config.end_date], 
                         ['n_reqs', len(self.measurement_reqs)],
                         ['n_obs_max', n_obervations_max],
-                        ['n_obs_exp', n_obervations_exp],
+                        ['n_obs_pos', n_obervations_pos],
                         ['n_obs', len(self.measurement_history)],
                         ['n_obs_co', len(co_observations)],
                         ['u_max', max_utility], 
                         ['u', utility_total],
                         ['u_norm', utility_total/max_utility]
                     ]
-
-            #row = [obs["start"],obs["end"],obs["location"]["lat"],obs["location"]["lon"]]
 
             # log and save results
             self.log(f"MEASUREMENTS RECEIVED:\n{str(measurements_df)}\n\n", level=logging.WARNING)
