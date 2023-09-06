@@ -131,7 +131,7 @@ class SimulationAgent(Agent):
 
             if isinstance(resp_msg, AgentStateMessage):
                 # update state
-                pos, vel = resp_msg.state['pos'], resp_msg.state['vel']
+                pos, vel, t = resp_msg.state['pos'], resp_msg.state['vel'], resp_msg.state['t']
             
                 if not self.state.comp_vectors(self.state.pos, pos) or not self.state.comp_vectors(self.state.vel, vel):
                     self.state.update_state(self.get_current_time(), state=resp_msg.state)
@@ -144,6 +144,11 @@ class SimulationAgent(Agent):
                                                     self.state.to_dict()
                                                 )
                     senses.append(state_msg)
+                
+                # update time
+                if self.get_current_time() != t:
+                    x = 1
+                await self.update_current_time(t)
 
             elif isinstance(resp_msg, AgentConnectivityUpdate):
                 if resp_msg.connected == 1:
@@ -453,6 +458,7 @@ class SimulationAgent(Agent):
                 
                 # wait for time update        
                 ignored = []   
+
                 while self.get_current_time() <= t0:
                     # send tic request
                     tic_req = TicRequest(self.get_element_name(), t0, tf)
@@ -468,6 +474,9 @@ class SimulationAgent(Agent):
                         toc_msg = TocMessage(**content)
                         await self.update_current_time(toc_msg.t)
                         self.log(f'toc received! time updated to: {self.get_current_time()}[s]')
+
+                        if self.get_current_time() >= 3580.0:
+                            x = 1
                     else:
                         # ignore message
                         self.log(f'some other manager message was received. ignoring...')

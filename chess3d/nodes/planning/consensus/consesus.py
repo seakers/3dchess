@@ -345,16 +345,16 @@ class ConsensusPlanner(PlanningModule):
                     plan_out.append(action.to_dict())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                out = f'\nPLAN\nid\taction type\tt_start\tt_end\n'
-                for action in plan:
-                    action : AgentAction
-                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+                # out = f'\nPLAN\nid\taction type\tt_start\tt_end\n'
+                # for action in plan:
+                #     action : AgentAction
+                #     out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
                 # self.log(out, level=logging.WARNING)
 
-                out = f'\nPLAN OUT\nid\taction type\tt_start\tt_end\n'
-                for action in plan_out:
-                    action : dict
-                    out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+                # out = f'\nPLAN OUT\nid\taction type\tt_start\tt_end\n'
+                # for action in plan_out:
+                #     action : dict
+                #     out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
                 # self.log(out, level=logging.WARNING)
                 # -------------------------------------
 

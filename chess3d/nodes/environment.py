@@ -1,12 +1,12 @@
 import copy
-import math
 from typing import Any, Callable
 import numpy as np
+import pandas as pd
 from zmq import asyncio as azmq
 
 from pandas import DataFrame
 from nodes.science.utility import synergy_factor
-from nodes.science.reqs import MeasurementRequest
+from nodes.science.reqs import *
 from nodes.orbitdata import OrbitData
 from nodes.states import GroundStationAgentState, UAVAgentState, SatelliteAgentState
 from nodes.actions import MeasurementAction
@@ -178,6 +178,8 @@ class SimulationEnvironment(EnvironmentNode):
                         elif src in self.agents[self.GROUND_STATION]:
                             # Do NOT update state
                             updated_state = GroundStationAgentState(**msg.state)
+
+                        updated_state.t = self.get_current_time()
                         
                         updated_state_msg = AgentStateMessage(self.get_element_name(), src, updated_state.to_dict())
                         resp_msgs.append(updated_state_msg.to_dict())
@@ -424,12 +426,40 @@ class SimulationEnvironment(EnvironmentNode):
                 max_utility += req.s_max
                 n_obervations_max += len(req.measurements)
 
+            # calculate expected number of measurements
+            n_obervations_exp = 0
+            for req in self.measurement_reqs:
+                req : GroundPointMeasurementRequest
+
+                for _, coverage_data in self.orbitdata.items():
+                    coverage_data : OrbitData
+                    req_start = req.t_start/coverage_data.time_step
+                    req_end = req.t_end/coverage_data.time_step
+                    lat,lon,_ = req.lat_lon_pos
+                    grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
+
+                    df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
+                    
+                    t_index = None
+                    instrument_prev = None
+                    for _, row in df.iterrows():
+                        instrument : dict = row['instrument']
+
+                        if instrument['name'] in req.measurements:
+                            if t_index != row['time index'] - 1:
+                                n_obervations_exp += 1
+
+                            t_index = row['time index']
+                            instrument_prev = instrument['name']
+                            
+
             summary_headers = ['stat_name', 'val']
             summary_data = [
                         ['t_start', self._clock_config.start_date], 
                         ['t_end', self._clock_config.end_date], 
                         ['n_reqs', len(self.measurement_reqs)],
                         ['n_obs_max', n_obervations_max],
+                        ['n_obs_exp', n_obervations_exp],
                         ['n_obs', len(self.measurement_history)],
                         ['n_obs_co', len(co_observations)],
                         ['u_max', max_utility], 

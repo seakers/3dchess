@@ -92,9 +92,10 @@ class ACBBA(ConsensusPlanner):
                     if len(path) > 0:
                         x = 1
 
-                    await self.agent_state_lock.acquire()
-                    plan = self.plan_from_path(self.agent_state, results, path)
-                    self.agent_state_lock.release()
+                    if not same_bundle:
+                        await self.agent_state_lock.acquire()
+                        plan = self.plan_from_path(self.agent_state, results, path)
+                        self.agent_state_lock.release()
 
                     if isinstance(self.agent_state, UAVAgentState):
                         await self.agent_state_lock.acquire()
