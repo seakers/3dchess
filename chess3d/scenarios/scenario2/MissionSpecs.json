@@ -1,11 +1,22 @@
-{   
-    "epoch":{"@type":"GREGORIAN_UT1", "year":2020, "month":1, "day":1, "hour":0, "minute":0, "second":0},
-    "duration": 30.0,
-    "propagator": {"@type": "J2 ANALYTICAL PROPAGATOR", "stepSize": 100.0},
+{
+    "epoch": {
+        "@type": "GREGORIAN_UT1",
+        "year": 2020,
+        "month": 1,
+        "day": 1,
+        "hour": 0,
+        "minute": 0,
+        "second": 0
+    },
+    "duration": 1,
+    "propagator": {
+        "@type": "J2 ANALYTICAL PROPAGATOR",
+        "stepSize": 10
+    },
     "spacecraft": [
         {
-            "@id": "vnir_sat_0_0",
-            "name": "vnir_sat_0_0",
+            "@id": "imaging_sat_0_0",
+            "name": "img_0",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -63,7 +74,7 @@
                 },
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
-                    "angleHeight": 5,
+                    "angleHeight": 60,
                     "angleWidth": 60
                 },
                 "@id": "bs1",
@@ -81,7 +92,7 @@
                 },
                 "state": {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
+                    "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
                     "raan": 0.0,
@@ -90,16 +101,16 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
             },
-            "notifier": "True",
+            "notifier": "False",
             "missionProfile": "3D-CHESS",
-            "preplan": "True"
+            "preplan": "False"
         },
         {
-            "@id": "vnir_sat_0_1",
-            "name": "vnir_sat_0_1",
+            "@id": "imaging_sat_0_1",
+            "name": "img_1",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -157,7 +168,7 @@
                 },
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
-                    "angleHeight": 5,
+                    "angleHeight": 60,
                     "angleWidth": 60
                 },
                 "@id": "bs1",
@@ -175,25 +186,25 @@
                 },
                 "state": {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
+                    "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 120.0
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
             },
-            "notifier": "True",
+            "notifier": "False",
             "missionProfile": "3D-CHESS",
-            "preplan": "True"
+            "preplan": "False"
         },
         {
-            "@id": "vnirtir_sat_0_0",
-            "name": "vnirtir_sat_0_0",
+            "@id": "imaging_sat_0_2",
+            "name": "img_2",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -235,52 +246,28 @@
                     }
                 }
             },
-            "instrument": [
-                {
-                    "name": "OLI",
-                    "mass": 10,
-                    "volume": 12.45,
-                    "dataRate": 40,
-                    "bitsPerPixel": 8,
-                    "power": 12,
-                    "snr": 33,
-                    "spatial_res": 50,
-                    "spectral_res": 7e-09,
-                    "orientation": {
-                        "referenceFrame": "SC_BODY_FIXED",
-                        "convention": "REF_FRAME_ALIGNED"
-                    },
-                    "fieldOfViewGeometry": {
-                        "shape": "RECTANGULAR",
-                        "angleHeight": 5,
-                        "angleWidth": 60
-                    },
-                    "@id": "bs1",
-                    "@type": "Basic Sensor"
+            "instrument": {
+                "name": "OLI",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "SC_BODY_FIXED",
+                    "convention": "REF_FRAME_ALIGNED"
                 },
-                {
-                    "name": "ThermalCamera",
-                    "mass": 10,
-                    "volume": 12.45,
-                    "dataRate": 40,
-                    "bitsPerPixel": 8,
-                    "power": 12,
-                    "snr": 33,
-                    "spatial_res": 50,
-                    "spectral_res": 7e-09,
-                    "orientation": {
-                        "referenceFrame": "SC_BODY_FIXED",
-                        "convention": "REF_FRAME_ALIGNED"
-                    },
-                    "fieldOfViewGeometry": {
-                        "shape": "RECTANGULAR",
-                        "angleHeight": 5,
-                        "angleWidth": 60
-                    },
-                    "@id": "bs1",
-                    "@type": "Basic Sensor"
-                }
-            ],
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 60,
+                    "angleWidth": 60
+                },
+                "@id": "bs1",
+                "@type": "Basic Sensor"
+            },
             "orbitState": {
                 "date": {
                     "@type": "GREGORIAN_UT1",
@@ -293,25 +280,25 @@
                 },
                 "state": {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
+                    "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
-                    "raan": 45.0,
+                    "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 240.0
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
             },
-            "notifier": "True",
+            "notifier": "False",
             "missionProfile": "3D-CHESS",
-            "preplan": "True"
+            "preplan": "False"
         },
         {
-            "@id": "vnirtir_sat_0_1",
-            "name": "vnirtir_sat_0_1",
+            "@id": "imaging_sat_1_0",
+            "name": "sar_0",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -353,52 +340,28 @@
                     }
                 }
             },
-            "instrument": [
-                {
-                    "name": "OLI",
-                    "mass": 10,
-                    "volume": 12.45,
-                    "dataRate": 40,
-                    "bitsPerPixel": 8,
-                    "power": 12,
-                    "snr": 33,
-                    "spatial_res": 50,
-                    "spectral_res": 7e-09,
-                    "orientation": {
-                        "referenceFrame": "SC_BODY_FIXED",
-                        "convention": "REF_FRAME_ALIGNED"
-                    },
-                    "fieldOfViewGeometry": {
-                        "shape": "RECTANGULAR",
-                        "angleHeight": 5,
-                        "angleWidth": 60
-                    },
-                    "@id": "bs1",
-                    "@type": "Basic Sensor"
+            "instrument": {
+                "name": "Imaging SAR",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "SC_BODY_FIXED",
+                    "convention": "REF_FRAME_ALIGNED"
                 },
-                {
-                    "name": "ThermalCamera",
-                    "mass": 10,
-                    "volume": 12.45,
-                    "dataRate": 40,
-                    "bitsPerPixel": 8,
-                    "power": 12,
-                    "snr": 33,
-                    "spatial_res": 50,
-                    "spectral_res": 7e-09,
-                    "orientation": {
-                        "referenceFrame": "SC_BODY_FIXED",
-                        "convention": "REF_FRAME_ALIGNED"
-                    },
-                    "fieldOfViewGeometry": {
-                        "shape": "RECTANGULAR",
-                        "angleHeight": 5,
-                        "angleWidth": 60
-                    },
-                    "@id": "bs1",
-                    "@type": "Basic Sensor"
-                }
-            ],
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 60,
+                    "angleWidth": 60
+                },
+                "@id": "bs1",
+                "@type": "Basic Sensor"
+            },
             "orbitState": {
                 "date": {
                     "@type": "GREGORIAN_UT1",
@@ -411,25 +374,213 @@
                 },
                 "state": {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
+                    "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
-                    "raan": 45.0,
+                    "raan": 120.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 40.0
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
             },
-            "notifier": "True",
+            "notifier": "False",
             "missionProfile": "3D-CHESS",
-            "preplan": "True"
+            "preplan": "False"
         },
         {
-            "@id": "tir_sat_0_0",
-            "name": "tir_sat_0_0",
+            "@id": "imaging_sat_1_1",
+            "name": "sar_1",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "cmdh": {
+                        "power": 2,
+                        "memorySize": 100
+                    },
+                    "comms": {
+                        "transmitter": {
+                            "power": 3,
+                            "maxDataRate": 1,
+                            "bufferSize": 10,
+                            "numChannels": 1
+                        },
+                        "receiver": {
+                            "power": 3,
+                            "maxDataRate": 1,
+                            "bufferSize": 10
+                        }
+                    },
+                    "eps": {
+                        "powerGenerator": {
+                            "@type": "Solar Panel",
+                            "maxPowerGeneration": 10
+                        },
+                        "powerStorage": {
+                            "@type": "Battery",
+                            "maxPowerGeneration": 10,
+                            "energyStorageCapacity": 0.01,
+                            "depthOfDischarge": 0.99,
+                            "initialCharge": 1
+                        }
+                    }
+                }
+            },
+            "instrument": {
+                "name": "Imaging SAR",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "SC_BODY_FIXED",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 60,
+                    "angleWidth": 60
+                },
+                "@id": "bs1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 120.0,
+                    "aop": 0.0,
+                    "ta": 160.0
+                }
+            },
+            "planner" : {
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
+            },
+            "notifier": "False",
+            "missionProfile": "3D-CHESS",
+            "preplan": "False"
+        },
+        {
+            "@id": "imaging_sat_1_2",
+            "name": "sar_2",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "cmdh": {
+                        "power": 2,
+                        "memorySize": 100
+                    },
+                    "comms": {
+                        "transmitter": {
+                            "power": 3,
+                            "maxDataRate": 1,
+                            "bufferSize": 10,
+                            "numChannels": 1
+                        },
+                        "receiver": {
+                            "power": 3,
+                            "maxDataRate": 1,
+                            "bufferSize": 10
+                        }
+                    },
+                    "eps": {
+                        "powerGenerator": {
+                            "@type": "Solar Panel",
+                            "maxPowerGeneration": 10
+                        },
+                        "powerStorage": {
+                            "@type": "Battery",
+                            "maxPowerGeneration": 10,
+                            "energyStorageCapacity": 0.01,
+                            "depthOfDischarge": 0.99,
+                            "initialCharge": 1
+                        }
+                    }
+                }
+            },
+            "instrument": {
+                "name": "Imaging SAR",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "SC_BODY_FIXED",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 60,
+                    "angleWidth": 60
+                },
+                "@id": "bs1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 120.0,
+                    "aop": 0.0,
+                    "ta": 280.0
+                }
+            },
+            "planner" : {
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
+            },
+            "notifier": "False",
+            "missionProfile": "3D-CHESS",
+            "preplan": "False"
+        },
+        {
+            "@id": "imaging_sat_2_0",
+            "name": "thm_0",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -487,7 +638,7 @@
                 },
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
-                    "angleHeight": 5,
+                    "angleHeight": 60,
                     "angleWidth": 60
                 },
                 "@id": "bs1",
@@ -505,25 +656,25 @@
                 },
                 "state": {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
+                    "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
-                    "raan": 90.0,
+                    "raan": 240.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 80.0
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
             },
-            "notifier": "True",
+            "notifier": "False",
             "missionProfile": "3D-CHESS",
-            "preplan": "True"
+            "preplan": "False"
         },
         {
-            "@id": "tir_sat_0_1",
-            "name": "tir_sat_0_1",
+            "@id": "imaging_sat_2_1",
+            "name": "thm_1",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -581,7 +732,7 @@
                 },
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
-                    "angleHeight": 5,
+                    "angleHeight": 60,
                     "angleWidth": 60
                 },
                 "@id": "bs1",
@@ -599,25 +750,25 @@
                 },
                 "state": {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
+                    "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
-                    "raan": 90.0,
+                    "raan": 240.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 200.0
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
             },
-            "notifier": "True",
+            "notifier": "False",
             "missionProfile": "3D-CHESS",
-            "preplan": "True"
+            "preplan": "False"
         },
         {
-            "@id": "alt_sat_0_0",
-            "name": "alt_sat_0_0",
+            "@id": "imaging_sat_2_2",
+            "name": "thm_2",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -660,19 +811,22 @@
                 }
             },
             "instrument": {
-                "name": "POSEIDON-3BAltimeter",
+                "name": "ThermalCamera",
                 "mass": 10,
                 "volume": 12.45,
                 "dataRate": 40,
                 "bitsPerPixel": 8,
                 "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
                 "orientation": {
                     "referenceFrame": "SC_BODY_FIXED",
                     "convention": "REF_FRAME_ALIGNED"
                 },
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
-                    "angleHeight": 5,
+                    "angleHeight": 60,
                     "angleWidth": 60
                 },
                 "@id": "bs1",
@@ -690,315 +844,76 @@
                 },
                 "state": {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
+                    "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
-                    "raan": 135.0,
+                    "raan": 240.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 320.0
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
+                "@type" : "ACBBA",
+                "utility" : "LINEAR"
             },
-            "notifier": "True",
+            "notifier": "False",
             "missionProfile": "3D-CHESS",
-            "preplan": "True"
-        },
-        {
-            "@id": "alt_sat_0_1",
-            "name": "alt_sat_0_1",
-            "spacecraftBus": {
-                "name": "BlueCanyon",
-                "mass": 20,
-                "volume": 0.5,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "components": {
-                    "cmdh": {
-                        "power": 2,
-                        "memorySize": 100
-                    },
-                    "comms": {
-                        "transmitter": {
-                            "power": 3,
-                            "maxDataRate": 1,
-                            "bufferSize": 10,
-                            "numChannels": 1
-                        },
-                        "receiver": {
-                            "power": 3,
-                            "maxDataRate": 1,
-                            "bufferSize": 10
-                        }
-                    },
-                    "eps": {
-                        "powerGenerator": {
-                            "@type": "Solar Panel",
-                            "maxPowerGeneration": 10
-                        },
-                        "powerStorage": {
-                            "@type": "Battery",
-                            "maxPowerGeneration": 10,
-                            "energyStorageCapacity": 0.01,
-                            "depthOfDischarge": 0.99,
-                            "initialCharge": 1
-                        }
-                    }
-                }
-            },
-            "instrument": {
-                "name": "POSEIDON-3BAltimeter",
-                "mass": 10,
-                "volume": 12.45,
-                "dataRate": 40,
-                "bitsPerPixel": 8,
-                "power": 12,
-                "orientation": {
-                    "referenceFrame": "SC_BODY_FIXED",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "fieldOfViewGeometry": {
-                    "shape": "RECTANGULAR",
-                    "angleHeight": 5,
-                    "angleWidth": 60
-                },
-                "@id": "bs1",
-                "@type": "Basic Sensor"
-            },
-            "orbitState": {
-                "date": {
-                    "@type": "GREGORIAN_UT1",
-                    "year": 2020,
-                    "month": 1,
-                    "day": 1,
-                    "hour": 0,
-                    "minute": 0,
-                    "second": 0
-                },
-                "state": {
-                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
-                    "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 135.0,
-                    "aop": 0.0,
-                    "ta": 180.0
-                }
-            },
-            "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
-            },
-            "notifier": "True",
-            "missionProfile": "3D-CHESS",
-            "preplan": "True"
-        },
-        {
-            "@id": "alt_sat_1_0",
-            "name": "alt_sat_1_0",
-            "spacecraftBus": {
-                "name": "BlueCanyon",
-                "mass": 20,
-                "volume": 0.5,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "components": {
-                    "cmdh": {
-                        "power": 2,
-                        "memorySize": 100
-                    },
-                    "comms": {
-                        "transmitter": {
-                            "power": 3,
-                            "maxDataRate": 1,
-                            "bufferSize": 10,
-                            "numChannels": 1
-                        },
-                        "receiver": {
-                            "power": 3,
-                            "maxDataRate": 1,
-                            "bufferSize": 10
-                        }
-                    },
-                    "eps": {
-                        "powerGenerator": {
-                            "@type": "Solar Panel",
-                            "maxPowerGeneration": 10
-                        },
-                        "powerStorage": {
-                            "@type": "Battery",
-                            "maxPowerGeneration": 10,
-                            "energyStorageCapacity": 0.01,
-                            "depthOfDischarge": 0.99,
-                            "initialCharge": 1
-                        }
-                    }
-                }
-            },
-            "instrument": {
-                "name": "POSEIDON-3BAltimeter",
-                "mass": 10,
-                "volume": 12.45,
-                "dataRate": 40,
-                "bitsPerPixel": 8,
-                "power": 12,
-                "orientation": {
-                    "referenceFrame": "SC_BODY_FIXED",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "fieldOfViewGeometry": {
-                    "shape": "RECTANGULAR",
-                    "angleHeight": 5,
-                    "angleWidth": 60
-                },
-                "@id": "bs1",
-                "@type": "Basic Sensor"
-            },
-            "orbitState": {
-                "date": {
-                    "@type": "GREGORIAN_UT1",
-                    "year": 2020,
-                    "month": 1,
-                    "day": 1,
-                    "hour": 0,
-                    "minute": 0,
-                    "second": 0
-                },
-                "state": {
-                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
-                    "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 315.0,
-                    "aop": 0.0,
-                    "ta": 90.0
-                }
-            },
-            "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
-            },
-            "notifier": "True",
-            "missionProfile": "3D-CHESS",
-            "preplan": "True"
-        },
-        {
-            "@id": "alt_sat_1_1",
-            "name": "alt_sat_1_1",
-            "spacecraftBus": {
-                "name": "BlueCanyon",
-                "mass": 20,
-                "volume": 0.5,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "components": {
-                    "cmdh": {
-                        "power": 2,
-                        "memorySize": 100
-                    },
-                    "comms": {
-                        "transmitter": {
-                            "power": 3,
-                            "maxDataRate": 1,
-                            "bufferSize": 10,
-                            "numChannels": 1
-                        },
-                        "receiver": {
-                            "power": 3,
-                            "maxDataRate": 1,
-                            "bufferSize": 10
-                        }
-                    },
-                    "eps": {
-                        "powerGenerator": {
-                            "@type": "Solar Panel",
-                            "maxPowerGeneration": 10
-                        },
-                        "powerStorage": {
-                            "@type": "Battery",
-                            "maxPowerGeneration": 10,
-                            "energyStorageCapacity": 0.01,
-                            "depthOfDischarge": 0.99,
-                            "initialCharge": 1
-                        }
-                    }
-                }
-            },
-            "instrument": {
-                "name": "POSEIDON-3BAltimeter",
-                "mass": 10,
-                "volume": 12.45,
-                "dataRate": 40,
-                "bitsPerPixel": 8,
-                "power": 12,
-                "orientation": {
-                    "referenceFrame": "SC_BODY_FIXED",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "fieldOfViewGeometry": {
-                    "shape": "RECTANGULAR",
-                    "angleHeight": 5,
-                    "angleWidth": 60
-                },
-                "@id": "bs1",
-                "@type": "Basic Sensor"
-            },
-            "orbitState": {
-                "date": {
-                    "@type": "GREGORIAN_UT1",
-                    "year": 2020,
-                    "month": 1,
-                    "day": 1,
-                    "hour": 0,
-                    "minute": 0,
-                    "second": 0
-                },
-                "state": {
-                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 6878,
-                    "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 315.0,
-                    "aop": 0.0,
-                    "ta": 270.0
-                }
-            },
-            "planner" : {
-                "@type" : "GREEDY",
-                "utility" : "FIXED"
-            },
-            "notifier": "True",
-            "missionProfile": "3D-CHESS",
-            "preplan": "True"
+            "preplan": "False"
         }
     ],
-    "groundStation" : [
+    "groundStation": [
         {
-            "@id" : "gs1",
-            "name" : "Svalbard",
-            "latitude": 0.0,
-            "longitude": 0.0,
+            "@id": "gs1",
+            "name": "Svalbard",
+            "latitude": 78.23083333333334,
+            "longitude": 15.389444444444443,
             "altitude": 0,
             "minimumElevation": 7,
             "antenna": {
-                "bands" : ["s-band", "x-band"],
-                "frequency": 2120e9,
+                "bands": [
+                    "s-band",
+                    "x-band"
+                ],
+                "frequency": 2120000000000.0,
                 "eirp": 63.5,
                 "gain": 44.6,
-                "diameter" : 10.3,
+                "diameter": 10.3,
                 "power": 10
-            }            
+            }
+        },
+        {
+            "@id": "gs2",
+            "name": "NEN2",
+            "latitude": 0,
+            "longitude": 45,
+            "altitude": 0,
+            "minimumElevation": 7,
+            "antenna": {
+                "bands": [
+                    "s-band",
+                    "x-band"
+                ],
+                "frequency": 2120000000000.0,
+                "eirp": 63.5,
+                "gain": 44.6,
+                "diameter": 10.3,
+                "power": 10
+            }
         }
     ],
-    "grid": [{"@type": "autogrid", "@id": 1, "latUpper":80, "latLower":-80, "lonUpper":180, "lonLower":-180, "gridRes": 5}],
-    "scenario": {"@type": "TEST", "duration": 30.0, "connectivity" : "FULL"},
-    "settings": {"coverageType": "GRID COVERAGE"}
+    "grid": [
+        {
+            "@type": "customGrid",
+            "covGridFilePath": "./scenarios/scenario2/resources/lake_event_points.csv"
+        }
+    ],
+    "scenario": {   
+                    "@type": "TEST", 
+                    "duration": 30.0, 
+                    "connectivity" : "FULL", 
+                    "utility" : "LINEAR"
+                },
+    "settings": {
+        "coverageType": "GRID COVERAGE"
+    }
 }

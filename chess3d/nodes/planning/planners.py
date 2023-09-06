@@ -328,8 +328,15 @@ class PlanningModule(InternalModule):
 
                 grid_data_compiled = []
                 for grid in mission_dict.get('grid'):
-                    i_grid = mission_dict.get('grid').index(grid)
-                    grid_file = data_dir + f'grid{i_grid}.csv'
+                    grid : dict
+                    if grid.get('@type') == 'customGrid':
+                        grid_file = grid.get('covGridFilePath')
+                        # grid_data = pd.read_csv(grid_file)
+                    elif grid.get('@type') == 'autogrid':
+                        i_grid = mission_dict.get('grid').index(grid)
+                        grid_file = data_dir + f'grid{i_grid}.csv'
+                    else:
+                        raise NotImplementedError(f"Loading of grids of type `{grid.get('@type')} not yet supported.`")
 
                     grid_data = pd.read_csv(grid_file)
                     nrows, _ = grid_data.shape

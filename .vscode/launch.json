@@ -6,20 +6,6 @@
     "configurations": [
 
         {
-            "name": "3D CHESS - SCENARIO 2",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args" : "scenario2"
-        },
-
-        {
             "name": "VISUALIZER TESTER - Plane",
             "type": "python",
             "request": "launch",
@@ -88,6 +74,34 @@
                 "PYTHONPATH": "${workspaceRoot}"
             },
             "args" : "visualizer_test"
+        },
+
+        {
+            "name": "SCENARIO 2",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args" : "scenario2"
+        },
+
+        {
+            "name": "SCENARIO 2 - SIMPLE",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args" : "scenario2_simple"
         }
     ],
 
