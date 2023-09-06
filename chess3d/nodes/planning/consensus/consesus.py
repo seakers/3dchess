@@ -330,17 +330,16 @@ class ConsensusPlanner(PlanningModule):
                         t_idle = next_action.t_start if next_action.t_start > self.get_current_time() else self.get_current_time()
                     else:
                         # no more actions to perform
+                        if isinstance(self.agent_state, SatelliteAgentState):
+                            # wait until the next ground-point access
+                            self.orbitdata : OrbitData
+                            t_next = self.orbitdata.get_next_gs_access(self.get_current_time())
+                        else:
+                            # idle until the end of the simulation
+                            t_next = np.Inf
 
-                        # if isinstance(self.agent_state, SatelliteAgentState):
-                        #     # wait until the next ground-point access
-                        #     self.orbitdata : OrbitData
-                        #     t_idle = self.orbitdata.get_next_gs_access(self.get_current_time())
-                        #     x = 1
-                        # else:
-                        #     # idle until the end of the simulation
-                        #     t_idle = np.Inf
-
-                        t_idle = self.get_current_time() + self.planning_horizon
+                        t_idle = self.t_plan + self.planning_horizon
+                        t_idle = t_idle if t_idle < t_next else t_next
 
                     action = WaitForMessages(self.get_current_time(), t_idle)
                     plan_out.append(action.to_dict())
@@ -684,9 +683,6 @@ class ConsensusPlanner(PlanningModule):
                 already_in_bundle = self.check_if_in_bundle(req, subtask_index, bundle)
                 already_performed = self.request_has_been_performed(results, req, subtask_index, state.t)
                 
-                if is_biddable:
-                    x = 1
-
                 if is_biddable and not already_in_bundle and not already_performed:
                     available.append((req, subtaskbid.subtask_index))
 
@@ -714,7 +710,7 @@ class ConsensusPlanner(PlanningModule):
             if isinstance(state, SatelliteAgentState):
                 # check if agent can see the request location
                 lat,lon,_ = req.lat_lon_pos
-                df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, state.t)
+                df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, state.t).sort_values(by='time index')
                 can_access = False
                 if not df.empty:                
                     times = df.get('time index')
@@ -728,8 +724,6 @@ class ConsensusPlanner(PlanningModule):
                             # there exists an access time before the request's availability ends
                             can_access = True
                             break
-                else:
-                    x = 1
                 
                 if not can_access:
                     return False
@@ -771,7 +765,7 @@ class ConsensusPlanner(PlanningModule):
         plan = []
 
         # add convergence timer if needed
-        t_conv_min = self.planning_horizon
+        t_conv_min = self.t_plan + self.planning_horizon
         for measurement_req, subtask_index in path:
             bid : Bid = results[measurement_req.id][subtask_index]
             t_conv = bid.t_update + bid.dt_converge
@@ -779,7 +773,17 @@ class ConsensusPlanner(PlanningModule):
                 t_conv_min = t_conv
 
         if state.t <= t_conv_min:
+            if isinstance(self.agent_state, SatelliteAgentState):
+                # wait until the next ground-point access
+                self.orbitdata : OrbitData
+                t_next = self.orbitdata.get_next_gs_access(self.get_current_time())
+            else:
+                # idle until the end of the simulation
+                t_next = np.Inf
+
+            t_conv_min = t_conv_min if t_conv_min < t_next else t_next            
             plan.append( WaitForMessages(state.t, t_conv_min) )
+
         else:
             # plan.append( WaitForMessages(state.t, state.t) )
             t_conv_min = state.t

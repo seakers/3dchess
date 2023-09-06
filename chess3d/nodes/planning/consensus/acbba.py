@@ -91,7 +91,9 @@ class ACBBA(ConsensusPlanner):
 
                             if not same_bids:
                                 break
-                        
+                    if len(path) > 0:
+                        x = 1
+
                     await self.agent_state_lock.acquire()
                     plan = self.plan_from_path(self.agent_state, results, path)
                     self.agent_state_lock.release()
