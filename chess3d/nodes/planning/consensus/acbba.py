@@ -21,8 +21,8 @@ class ACBBA(ConsensusPlanner):
             path = []
             bundle = []; prev_bundle = []
             plan = []
-            # level = logging.WARNING
-            level = logging.DEBUG
+            level = logging.WARNING
+            # level = logging.DEBUG
 
             while True:
                 # wait for incoming bids

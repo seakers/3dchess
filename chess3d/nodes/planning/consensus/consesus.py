@@ -773,15 +773,15 @@ class ConsensusPlanner(PlanningModule):
                 t_conv_min = t_conv
 
         if state.t <= t_conv_min:
-            if isinstance(self.agent_state, SatelliteAgentState):
-                # wait until the next ground-point access
-                self.orbitdata : OrbitData
-                t_next = self.orbitdata.get_next_gs_access(self.get_current_time())
-            else:
-                # idle until the end of the simulation
-                t_next = np.Inf
+            # if isinstance(self.agent_state, SatelliteAgentState):
+            #     # wait until the next ground-point access
+            #     self.orbitdata : OrbitData
+            #     t_next = self.orbitdata.get_next_gs_access(self.get_current_time())
+            # else:
+            #     # idle until the end of the simulation
+            #     t_next = np.Inf
 
-            t_conv_min = t_conv_min if t_conv_min < t_next else t_next            
+            # t_conv_min = t_conv_min if t_conv_min < t_next else t_next            
             plan.append( WaitForMessages(state.t, t_conv_min) )
 
         else:

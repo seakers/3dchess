@@ -38,9 +38,15 @@ class GroundStationPlanner(FixedPlanner):
                     if action.t_start <= action_i.t_start:
                         i_insert = i
                         break
-                        
-                plan.insert(i_insert, action)
+                if i_insert < 0:
+                    plan.append(action)
+                else:
+                    plan.insert(i_insert, action)
         
+        for action in plan:
+            action : AgentAction
+            print(action.t_start, action.t_end)
+
         super().__init__(   results_path, 
                             parent_name, 
                             plan, 
