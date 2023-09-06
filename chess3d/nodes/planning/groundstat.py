@@ -43,10 +43,6 @@ class GroundStationPlanner(FixedPlanner):
                 else:
                     plan.insert(i_insert, action)
         
-        for action in plan:
-            action : AgentAction
-            print(action.t_start, action.t_end)
-
         super().__init__(   results_path, 
                             parent_name, 
                             plan, 

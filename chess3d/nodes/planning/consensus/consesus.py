@@ -339,7 +339,7 @@ class ConsensusPlanner(PlanningModule):
                             t_next = np.Inf
 
                         t_idle = self.t_plan + self.planning_horizon
-                        t_idle = t_idle if t_idle < t_next else t_next
+                        # t_idle = t_idle if t_idle < t_next else t_next
 
                     action = WaitForMessages(self.get_current_time(), t_idle)
                     plan_out.append(action.to_dict())
@@ -349,13 +349,13 @@ class ConsensusPlanner(PlanningModule):
                 for action in plan:
                     action : AgentAction
                     out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-                self.log(out, level=logging.WARNING)
+                # self.log(out, level=logging.WARNING)
 
                 out = f'\nPLAN OUT\nid\taction type\tt_start\tt_end\n'
                 for action in plan_out:
                     action : dict
                     out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
-                self.log(out, level=logging.WARNING)
+                # self.log(out, level=logging.WARNING)
                 # -------------------------------------
 
                 self.log(f'sending {len(plan_out)} actions to agent...')

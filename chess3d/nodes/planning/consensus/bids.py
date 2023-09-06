@@ -255,12 +255,12 @@ class Bid(ABC):
                     return self, prev!=self
 
             elif self.winner == other.bidder:
-                # if abs(other.t_update - self.t_update) < 1e-6:
-                #     # leave and no rebroadcast
-                #     self._leave(t)
-                #     return None, False
+                if abs(other.t_update - self.t_update) < 1e-6:
+                    # leave and no rebroadcast
+                    self._leave(t)
+                    return None, False
 
-                if other.t_update >= self.t_update:
+                if other.t_update > self.t_update:
                     # update and rebroadcast
                     self._update_info(other, t)
                     return other, prev!=self
@@ -323,7 +323,7 @@ class Bid(ABC):
                 self._leave(t)
                 return self, False
 
-        elif other.winner not in [self.bidder, other.bidder]:
+        elif other.winner not in [self.bidder, other.bidder, self.NONE]:
             if self.winner == self.bidder:
                 if other.winning_bid > self.winning_bid:
                     # update and rebroadcast
@@ -389,7 +389,7 @@ class Bid(ABC):
                 self._update_info(other, t)
                 return other, prev!=self
         
-        return None, prev!=self
+        return None, False
 
     def _update_info(self,
                         other, 

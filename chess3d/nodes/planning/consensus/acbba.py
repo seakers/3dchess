@@ -22,7 +22,7 @@ class ACBBA(ConsensusPlanner):
             bundle = []; prev_bundle = []
             plan = []
             level = logging.WARNING
-            # level = logging.DEBUG
+            level = logging.DEBUG
 
             while True:
                 # wait for incoming bids
@@ -47,14 +47,12 @@ class ACBBA(ConsensusPlanner):
                 self.stats['consensus'].append(dt)
 
                 self.log_changes("builder - CHANGES MADE FROM CONSENSUS", consensus_changes, level)
-
-                # Update iteration counter
-                self.iter_counter += 1
+                self.log_changes("builder - POTENTIAL REBROADCASTS TO BE DONE", consensus_rebroadcasts, level)
 
                 # Planning Phase
                 if(
                     len(consensus_rebroadcasts) > 0 
-                    or self.t_plan + self.planning_horizon >= self.get_current_time() 
+                    or self.t_plan + self.planning_horizon <= self.get_current_time() 
                     ):
                     t_0 = time.perf_counter()
                     results, bundle, path,\
@@ -106,7 +104,10 @@ class ACBBA(ConsensusPlanner):
                     # if not same_bundle or not same_bids:
                     #     # if not converged yet, await for 
                     #     plan.insert(0, WaitForMessages(self.get_current_time(), np.Inf))
-                                
+
+                # Update iteration counter
+                self.iter_counter += 1
+
                 # save previous bundle for future convergence checks
                 prev_bundle_results = {}
                 prev_bundle = []
