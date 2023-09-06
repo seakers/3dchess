@@ -60,14 +60,15 @@ class ConsensusPlanner(PlanningModule):
         self.builder_to_broadcaster_buffer = BidBuffer()
         self.broadcasted_bids_buffer = BidBuffer()
 
-        self.t_curr = 0
+        self.t_curr = 0.0
         self.agent_state : SimulationAgentState = None
         self.agent_state_lock = asyncio.Lock()
         self.agent_state_updated = asyncio.Event()
         self.parent_agent_type = None
         self.orbitdata = None
-        self.plan_inbox = asyncio.Queue()
 
+        self.t_plan = 0.0
+        self.plan_inbox = asyncio.Queue()
         self.replan = asyncio.Event()
 
     async def live(self) -> None:
@@ -273,11 +274,15 @@ class ConsensusPlanner(PlanningModule):
 
                 plan_out = []
                 # Check if relevant changes to the bundle were performed
-                if len(self.listener_to_builder_buffer) > 0:
+                if (
+                    len(self.listener_to_builder_buffer) > 0 
+                    or self.t_plan + self.planning_horizon <= self.get_current_time()
+                    ):
                     # wait for plan to be updated
                     self.replan.set(); self.replan.clear()
                     plan : list = await self.plan_inbox.get()
                     self.plan_history.append((self.get_current_time(), plan))
+                    self.t_plan = self.get_current_time()
 
                     # compule updated bids from the listener and bundle buiilder
                     if len(self.builder_to_broadcaster_buffer) > 0:
@@ -324,8 +329,18 @@ class ConsensusPlanner(PlanningModule):
                         next_action : AgentAction = plan[0]
                         t_idle = next_action.t_start if next_action.t_start > self.get_current_time() else self.get_current_time()
                     else:
-                        # no more actions to perform, idle until the end of the simulation
-                        t_idle = np.Inf
+                        # no more actions to perform
+
+                        # if isinstance(self.agent_state, SatelliteAgentState):
+                        #     # wait until the next ground-point access
+                        #     self.orbitdata : OrbitData
+                        #     t_idle = self.orbitdata.get_next_gs_access(self.get_current_time())
+                        #     x = 1
+                        # else:
+                        #     # idle until the end of the simulation
+                        #     t_idle = np.Inf
+
+                        t_idle = self.get_current_time() + self.planning_horizon
 
                     action = WaitForMessages(self.get_current_time(), t_idle)
                     plan_out.append(action.to_dict())
@@ -335,13 +350,13 @@ class ConsensusPlanner(PlanningModule):
                 for action in plan:
                     action : AgentAction
                     out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-                # self.log(out, level=logging.WARNING)
+                self.log(out, level=logging.WARNING)
 
                 out = f'\nPLAN OUT\nid\taction type\tt_start\tt_end\n'
                 for action in plan_out:
                     action : dict
                     out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
-                # self.log(out, level=logging.WARNING)
+                self.log(out, level=logging.WARNING)
                 # -------------------------------------
 
                 self.log(f'sending {len(plan_out)} actions to agent...')
@@ -669,6 +684,9 @@ class ConsensusPlanner(PlanningModule):
                 already_in_bundle = self.check_if_in_bundle(req, subtask_index, bundle)
                 already_performed = self.request_has_been_performed(results, req, subtask_index, state.t)
                 
+                if is_biddable:
+                    x = 1
+
                 if is_biddable and not already_in_bundle and not already_performed:
                     available.append((req, subtaskbid.subtask_index))
 
@@ -703,10 +721,15 @@ class ConsensusPlanner(PlanningModule):
                     for time in times:
                         time *= self.orbitdata.time_step 
 
-                        if time < req.t_end:
+                        if state.t + self.planning_horizon < time:
+                            break
+
+                        if req.t_start <= time <= req.t_end:
                             # there exists an access time before the request's availability ends
                             can_access = True
                             break
+                else:
+                    x = 1
                 
                 if not can_access:
                     return False
@@ -748,7 +771,7 @@ class ConsensusPlanner(PlanningModule):
         plan = []
 
         # add convergence timer if needed
-        t_conv_min = np.Inf
+        t_conv_min = self.planning_horizon
         for measurement_req, subtask_index in path:
             bid : Bid = results[measurement_req.id][subtask_index]
             t_conv = bid.t_update + bid.dt_converge

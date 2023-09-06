@@ -52,7 +52,10 @@ class ACBBA(ConsensusPlanner):
                 self.iter_counter += 1
 
                 # Planning Phase
-                if len(consensus_rebroadcasts) > 0:
+                if(
+                    len(consensus_rebroadcasts) > 0 
+                    or self.t_plan + self.planning_horizon >= self.get_current_time() 
+                    ):
                     t_0 = time.perf_counter()
                     results, bundle, path,\
                         planner_changes = self.planning_phase( self.agent_state, 
@@ -101,10 +104,7 @@ class ACBBA(ConsensusPlanner):
                     # if not same_bundle or not same_bids:
                     #     # if not converged yet, await for 
                     #     plan.insert(0, WaitForMessages(self.get_current_time(), np.Inf))
-                
-                else:
-                    x = 1
-                
+                                
                 # save previous bundle for future convergence checks
                 prev_bundle_results = {}
                 prev_bundle = []

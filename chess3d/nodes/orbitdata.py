@@ -87,9 +87,11 @@ class OrbitData:
 
         return TimeInterval(-np.Infinity, np.Infinity)
 
-    def get_next_gs_access_interval(self, t):
-        # TODO
-        return [-np.Infinity, np.Infinity]
+    def get_next_gs_access(self, t):
+        accesses = self.gp_access_data.query('`time index` >= @t').sort_values(by='time index')        
+        for _, row in accesses.iterrows():
+            return row['time index'] * self.time_step
+        return np.Inf
 
     def get_next_gp_access_interval(self, lat: float, lon: float, t: float):
         """
