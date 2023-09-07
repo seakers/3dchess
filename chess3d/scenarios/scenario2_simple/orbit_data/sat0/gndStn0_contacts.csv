@@ -1,6 +1,10 @@
-Contacts between Entity1 with id imaging_sat_0_0 with Entity2 with id gs1
+Contacts between Entity1 with id imaging_sat_1_0 with Entity2 with id gs1
 Epoch [JDUT1] is 2458849.5
 Step size [s] is 10.0
 start index,end index
-133,183
-738,776
+646,669
+1233,1278
+1830,1882
+2431,2484
+3034,3083
+3640,3675

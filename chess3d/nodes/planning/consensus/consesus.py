@@ -26,6 +26,7 @@ class ConsensusPlanner(PlanningModule):
                     payload : list,
                     max_bundle_size = 3,
                     planning_horizon = 3600,
+                    initial_reqs : list = [],
                     level: int = logging.INFO, 
                     logger: logging.Logger = None
                 ) -> None:
@@ -51,6 +52,13 @@ class ConsensusPlanner(PlanningModule):
         self.max_bundle_size = max_bundle_size
         self.planning_horizon = planning_horizon
         self.parent_agent_type = None
+
+        self.initial_reqs = []
+        for req in initial_reqs:
+            req : MeasurementRequest
+            if req.t_start > 0:
+                continue
+            self.initial_reqs.append(req)
     
     async def setup(self) -> None:
         await super().setup()
@@ -264,11 +272,13 @@ class ConsensusPlanner(PlanningModule):
 
                             if (isinstance(removed, BroadcastMessageAction) 
                                 and action_msg.status == AgentAction.COMPLETED):
+                                
                                 bid_msg = MeasurementBidMessage(**removed.msg)
                                 bid : Bid = Bid.from_dict(bid_msg.bid)
                                 bid.set_performed(self.get_current_time())
 
-                                await self.listener_to_builder_buffer.put_bid(bid)
+                                if bid.performed:
+                                    await self.listener_to_builder_buffer.put_bid(bid)
                 
                 # --- Look for Plan Updates ---
 
@@ -277,10 +287,12 @@ class ConsensusPlanner(PlanningModule):
                 if (
                     len(self.listener_to_builder_buffer) > 0 
                     or self.t_plan + self.planning_horizon <= self.get_current_time()
+                    or (len(self.initial_reqs) > 0 and self.get_current_time() == 0.0)
                     ):
                     # wait for plan to be updated
                     self.replan.set(); self.replan.clear()
                     plan : list = await self.plan_inbox.get()
+                    # plan = []
                     plan_copy = [action for action in plan]
                     self.plan_history.append((self.get_current_time(), plan_copy))
                     self.t_plan = self.get_current_time()
@@ -346,16 +358,16 @@ class ConsensusPlanner(PlanningModule):
                     plan_out.append(action.to_dict())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # out = f'\nPLAN\nid\taction type\tt_start\tt_end\n'
-                # for action in plan:
-                #     action : AgentAction
-                #     out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+                out = f'\nPLAN\nid\taction type\tt_start\tt_end\n'
+                for action in plan:
+                    action : AgentAction
+                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
                 # self.log(out, level=logging.WARNING)
 
-                # out = f'\nPLAN OUT\nid\taction type\tt_start\tt_end\n'
-                # for action in plan_out:
-                #     action : dict
-                #     out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+                out = f'\nPLAN OUT\nid\taction type\tt_start\tt_end\n'
+                for action in plan_out:
+                    action : dict
+                    out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
                 # self.log(out, level=logging.WARNING)
                 # -------------------------------------
 

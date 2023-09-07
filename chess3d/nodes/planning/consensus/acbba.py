@@ -17,19 +17,28 @@ from nodes.planning.consensus.consesus import ConsensusPlanner
 class ACBBA(ConsensusPlanner):
     async def bundle_builder(self) -> None:
         try:
-            results = {}; prev_bundle_results = {}
-            path = []
-            bundle = []; prev_bundle = []
             plan = []
+            results, bundle, path = {}, [], []
+            prev_bundle_results = {}; prev_bundle = []
             level = logging.WARNING
             level = logging.DEBUG
+
+            donot_rebroadcast = False
 
             while True:
                 # wait for incoming bids
                 await self.replan.wait()
 
-                # incoming_bids = await self.listener_to_builder_buffer.wait_for_updates()
-                incoming_bids = await self.listener_to_builder_buffer.pop_all()
+                if len(self.initial_reqs) > 0 and self.get_current_time() == 0.0:
+                    incoming_bids = []
+                    for req in self.initial_reqs:
+                        bids : list = self.generate_bids_from_request(req)
+                        incoming_bids.extend(bids)
+                    self.initial_reqs = []
+                    donot_rebroadcast = True
+                else:
+                    incoming_bids = await self.listener_to_builder_buffer.pop_all()
+                    donot_rebroadcast = False
                 self.log_changes('builder - BIDS RECEIVED', incoming_bids, level)
 
                 # Consensus Phase 
@@ -45,6 +54,10 @@ class ACBBA(ConsensusPlanner):
                                                             )
                 dt = time.perf_counter() - t_0
                 self.stats['consensus'].append(dt)
+
+                buffer = BidBuffer()
+                await buffer.put_bids(consensus_rebroadcasts)
+                consensus_rebroadcasts = await buffer.pop_all() 
 
                 self.log_changes("builder - CHANGES MADE FROM CONSENSUS", consensus_changes, level)
                 self.log_changes("builder - POTENTIAL REBROADCASTS TO BE DONE", consensus_rebroadcasts, level)
@@ -89,8 +102,6 @@ class ACBBA(ConsensusPlanner):
 
                             if not same_bids:
                                 break
-                    if len(path) > 0:
-                        x = 1
 
                     if not same_bundle:
                         await self.agent_state_lock.acquire()
@@ -121,15 +132,20 @@ class ACBBA(ConsensusPlanner):
                     prev_bundle_results[req.id][subtask_index] = results[req.id][subtask_index].copy()
 
                 # Broadcast changes to bundle and any changes from consensus
-                broadcast_bids : list = consensus_rebroadcasts
-                broadcast_bids.extend(planner_changes)
-                
+                if not donot_rebroadcast:
+                    broadcast_bids : list = consensus_rebroadcasts
+                    broadcast_bids.extend(planner_changes)
+                else:
+                    broadcast_bids = planner_changes
+                    donot_rebroadcast = False
+                                
                 broadcast_buffer = BidBuffer()
                 await broadcast_buffer.put_bids(broadcast_bids)
                 broadcast_bids = await broadcast_buffer.pop_all()
                 self.log_changes("builder - REBROADCASTS TO BE DONE", broadcast_bids, level)
-                await self.builder_to_broadcaster_buffer.put_bids(broadcast_bids)                                
 
+                await self.builder_to_broadcaster_buffer.put_bids(broadcast_bids)                                
+                
                 # Send plan to broadcaster
                 await self.plan_inbox.put(plan)
 
@@ -141,8 +157,6 @@ class ACBBA(ConsensusPlanner):
 
     def generate_bids_from_request(self, req : MeasurementRequest) -> list:
         return UnconstrainedBid.new_bids_from_request(req, self.get_parent_name())
-
-    
 
     """
     ----------------------
@@ -159,6 +173,13 @@ class ACBBA(ConsensusPlanner):
 
         changes = []
         changes_to_bundle = []
+
+        if len(bundle) >= self.max_bundle_size:
+            self.log_results('builder - MODIFIED BUNDLE RESULTS', results, level)
+            self.log_task_sequence('bundle', bundle, level)
+            self.log_task_sequence('path', path, level)
+
+            return results, bundle, path, changes
 
         available_tasks : list = self.get_available_tasks(state, bundle, results)
         
@@ -299,7 +320,7 @@ class ACBBA(ConsensusPlanner):
 
                 # calc utility
                 params = {"req" : req_i, "subtask_index" : subtask_j, "t_img" : t_img}
-                utility = self.utility_func(**params) if t_img >= 0 else 0.0
+                utility = self.utility_func(**params) if t_img >= 0 else np.NINF
                 utility *= synergy_factor(**params)
 
                 # create bid
@@ -432,7 +453,7 @@ class ACBBA(ConsensusPlanner):
                 else:
                     raise ValueError(f'`results` must be of type `list` or `dict`. is of type {type(results)}')
 
-            df = pd.DataFrame(data, columns=headers)
+            df = pd.DataFrame(data, columns=headers).query('`bid` > 0.0')
             self.log(f'\n{dsc} [Iter {self.iter_counter}]\n{str(df)}\n', level)
 
     def log_changes(self, dsc: str, changes: list, level=logging.DEBUG) -> None:

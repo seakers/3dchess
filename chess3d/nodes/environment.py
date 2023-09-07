@@ -441,6 +441,9 @@ class SimulationEnvironment(EnvironmentNode):
 
                     df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
                     
+                    if not df.empty:
+                        x = 1
+
                     for _, row in df.iterrows():
                         instrument : dict = row['instrument']
                         if (instrument['name'] in req.measurements 

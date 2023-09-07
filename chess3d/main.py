@@ -56,7 +56,8 @@ def agent_factory(  scenario_name : str,
                     port : int, 
                     agent_type : SimulationAgentTypes,
                     clock_config : float,
-                    logger : logging.Logger
+                    logger : logging.Logger,
+                    initial_reqs : list
                 ) -> SimulationAgent:
     ## unpack mission specs
     agent_name = agent_dict['name']
@@ -129,7 +130,8 @@ def agent_factory(  scenario_name : str,
                             agent_name,
                             agent_network_config,
                             utility_function[planner_util],
-                            payload)
+                            payload,
+                            initial_reqs=initial_reqs)
 
         elif planner_type == PlannerTypes.MACCBBA.value:
             planner = MACCBBA(results_path,
@@ -328,24 +330,27 @@ if __name__ == "__main__":
             measurement_reqs.append(req)
 
     else:
-        df = pd.read_csv(scenario_path + '/gpRequests.csv')
+        gpRequestFilePath = scenario_dict['scenario'].get('gpRequestFilePath', scenario_path + '/gpRequests.csv')
+        df = pd.read_csv(gpRequestFilePath)
             
         for _, row in df.iterrows():
-            s_max = row['s_max']
+            s_max = row.get('severity',row.get('s_max', None))
             
             measurements_str : str = row['measurements']
             measurements_str = measurements_str.replace('[','')
             measurements_str = measurements_str.replace(']','')
-            # measurements_str = measurements_str.replace(' ','')
+            measurements_str = measurements_str.replace(', ',',')
             measurements_str = measurements_str.replace('\'','')
             measurements = measurements_str.split(',')
 
-            t_start = row['t_start']
-            t_end = row['t_end']
-            t_corr = row['t_corr']
+            t_start = row.get('start time [s]',row.get('t_start', None))
+            t_end =  row.get('t_end', t_start + row.get('duration [s]', None) )
+            t_corr = row.get('t_corr',t_end - t_start)
 
-            lat, lon, alt = row.get('lat', None), row.get('lon', None), row.get('alt', None)
-            if lat is None and lon is None and alt is None: 
+            lat = row.get('lat', row.get('lat [deg]', None)) 
+            lon = row.get('lon', row.get('lon [deg]', None))
+            alt = row.get('alt', 0.0)
+            if lat is None or lon is None or alt is None: 
                 x_pos, y_pos, z_pos = row.get('x_pos', None), row.get('y_pos', None), row.get('z_pos', None)
                 if x_pos is not None and y_pos is not None and z_pos is not None:
                     pos = [x_pos, y_pos, z_pos]
@@ -421,7 +426,8 @@ if __name__ == "__main__":
                                     port, 
                                     SimulationAgentTypes.SATELLITE, 
                                     clock_config, 
-                                    logger
+                                    logger,
+                                    measurement_reqs
                                 )
             agents.append(agent)
             port += 6
@@ -438,7 +444,8 @@ if __name__ == "__main__":
                                     port, 
                                     SimulationAgentTypes.UAV, 
                                     clock_config, 
-                                    logger
+                                    logger,
+                                    measurement_reqs
                                 )
             agents.append(agent)
             port += 6

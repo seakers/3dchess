@@ -27,6 +27,8 @@ class GroundStationPlanner(FixedPlanner):
             msg = MeasurementRequestMessage(parent_name, parent_name, measurement_req.to_dict())
             
             # TODO schedule broadcasts depending on agent access
+            if measurement_req.t_start == 0.0:
+                continue
             action = BroadcastMessageAction(msg.to_dict(), measurement_req.t_start)
 
             if len(plan) == 0:

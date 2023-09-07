@@ -59,7 +59,7 @@
                 }
             },
             "instrument": {
-                "name": "OLI",
+                "name": "visible",
                 "mass": 10,
                 "volume": 12.45,
                 "dataRate": 40,
@@ -156,13 +156,14 @@
         }
     ],
     "scenario": {
-        "@type": "TEST",
+        "@type": "PREDEF",
+        "gpRequestFilePath": "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
         "duration": 30.0,
         "connectivity": "FULL",
         "utility": "LINEAR"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/scenario2_single_sat//orbit_data/"
+        "outDir": "./scenarios/scenario2_single_sat_greedy//orbit_data/"
     }
 }

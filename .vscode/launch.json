@@ -4,7 +4,15 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "${fileDirname}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
         {
             "name": "VISUALIZER TESTER - Plane",
             "type": "python",
@@ -16,9 +24,11 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : ["acbba_test_uav", "plane"]
+            "args": [
+                "acbba_test_uav",
+                "plane"
+            ]
         },
-
         {
             "name": "VISUALIZER TESTER - Earth",
             "type": "python",
@@ -30,10 +40,11 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : ["acbba_test_sats", "earth"]
+            "args": [
+                "acbba_test_sats",
+                "earth"
+            ]
         },
-
-
         {
             "name": "ACBBA TEST - UAVS",
             "type": "python",
@@ -45,9 +56,8 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : "acbba_test_uav"
+            "args": "acbba_test_uav"
         },
-
         {
             "name": "ACBBA TEST - SAT",
             "type": "python",
@@ -59,9 +69,8 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : "acbba_test_sat"
+            "args": "acbba_test_sat"
         },
-
         {
             "name": "VISUALIZER TEST - SAT SIM",
             "type": "python",
@@ -73,9 +82,8 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : "visualizer_test"
+            "args": "visualizer_test"
         },
-
         {
             "name": "SCENARIO 2",
             "type": "python",
@@ -87,9 +95,8 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : "scenario2"
+            "args": "scenario2"
         },
-
         {
             "name": "SCENARIO 2 - SIMPLE",
             "type": "python",
@@ -101,9 +108,8 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : "scenario2_simple"
+            "args": "scenario2_simple"
         },
-
         {
             "name": "SCENARIO 2 - SINGLE SAT ACBBA",
             "type": "python",
@@ -115,9 +121,8 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : "scenario2_single_sat_acbba"
+            "args": "scenario2_single_sat_acbba"
         },
-
         {
             "name": "SCENARIO 2 - SINGLE SAT GREEDY",
             "type": "python",
@@ -129,10 +134,9 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args" : "scenario2_single_sat_greedy"
+            "args": "scenario2_single_sat_greedy"
         }
     ],
-
     "compounds": [
         //{
         //  "name": "Server/Client Test",

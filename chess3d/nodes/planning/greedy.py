@@ -89,6 +89,7 @@ class GreedyPlanner(PlanningModule):
                         # else:
                         #     print('\n')
 
+                replan = False
                 while not self.measurement_req_inbox.empty(): # replan measurement plan
                     # unpack measurement request
                     req_msg : MeasurementRequestMessage = await self.measurement_req_inbox.get()
@@ -98,6 +99,9 @@ class GreedyPlanner(PlanningModule):
                         # was not aware of this task; add to results as a blank bid
                         results[req.id] = GreedyBid.new_bids_from_request(req, self.get_parent_name())
 
+                    replan = True
+                
+                if replan:
                     results, bundle, path = self.planning_phase(state, results, bundle, path)
                     self.plan = self.plan_from_path(state, results, path)
 
@@ -106,39 +110,36 @@ class GreedyPlanner(PlanningModule):
                     if next_action.t_start <= t_curr:
                         plan_out.append(next_action.to_dict())
 
-                # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.log(f'\nPATH\tT{t_curr}\nid\tsubtask index\tmain mmnt\tpos\tt_img', level=logging.DEBUG)
-                out = ''
-                for req, subtask_index in path:
-                    req : MeasurementRequest; subtask_index : int
-                    bid : GreedyBid = results[req.id][subtask_index]
-                    out += f"{req.id.split('-')[0]}, {subtask_index}, {bid.main_measurement}, {req.pos}, {bid.t_img}\n"
-                self.log(out, level=logging.DEBUG)
-
-                self.log(f'\nPLAN\tT{t_curr}\nid\taction type\tt_start\tt_end', level=logging.DEBUG)
-                out = ''
-                for action in self.plan:
-                    action : AgentAction
-                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end},\n"
-                self.log(out, level=logging.DEBUG)
-
-                self.log(f'\nPLAN OUT\tT{t_curr}\nid\taction type\tt_start\tt_end', level=logging.DEBUG)
-                out = ''
-                for action in plan_out:
-                    action : dict
-                    out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
-                self.log(out, level=logging.DEBUG)
-                # -------------------------------------
-
                 if len(plan_out) == 0:
                     # if no plan left, just idle for a time-step
                     self.log('no more actions to perform. instruct agent to idle for the remainder of the simulation.')
                     if len(self.plan) == 0:
-                        t_idle = t_curr + 1e8 # TODO find end of simulation time        
+                        t_idle = np.Inf
                     else:
                         t_idle = self.plan[0].t_start
                     action = WaitForMessages(t_curr, t_idle)
                     plan_out.append(action.to_dict())
+
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                out = f'\nPATH\tT{t_curr}\nid\tsubtask index\tmain mmnt\tpos\tt_img\n'
+                for req, subtask_index in path:
+                    req : MeasurementRequest; subtask_index : int
+                    bid : GreedyBid = results[req.id][subtask_index]
+                    out += f"{req.id.split('-')[0]}, {subtask_index}, {bid.main_measurement}, {req.pos}, {bid.t_img}\n"
+                self.log(out, level=logging.WARNING)
+
+                out = f'\nPLAN\tT{t_curr}\nid\taction type\tt_start\tt_end\n'
+                for action in self.plan:
+                    action : AgentAction
+                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end},\n"
+                self.log(out, level=logging.WARNING)
+
+                out = f'\nPLAN OUT\tT{t_curr}\nid\taction type\tt_start\tt_end\n'
+                for action in plan_out:
+                    action : dict
+                    out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+                self.log(out, level=logging.WARNING)
+                # -------------------------------------
                     
                 self.log(f'sending {len(plan_out)} actions to agent...')
                 plan_msg = PlanMessage(self.get_element_name(), self.get_network_name(), plan_out)
@@ -174,25 +175,17 @@ class GreedyPlanner(PlanningModule):
             # find next best task to put in bundle (greedy)
             max_task = None 
             max_subtask = None
+            unavailable = []
             for measurement_req, subtask_index in available_tasks:
                 # calculate bid for a given available task
                 measurement_req : MeasurementRequest
-                subtask_index : int
-
-                if (    
-                        isinstance(measurement_req, GroundPointMeasurementRequest) 
-                    and isinstance(state, SatelliteAgentState)
-                    ):
-                    # check if the satellite can observe the GP
-                    lat,lon,_ = measurement_req.lat_lon_pos
-                    df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, 0.0)
-                    if df.empty:
-                        continue
+                subtask_index : int                
 
                 projected_path, projected_bids, projected_path_utility = self.calc_path_bid(state, results, path, measurement_req, subtask_index)
 
                 # check if path was found
                 if projected_path is None:
+                    unavailable.append( (measurement_req, subtask_index) )
                     continue
                 
                 # compare to maximum task
@@ -228,11 +221,11 @@ class GreedyPlanner(PlanningModule):
 
                 results[measurement_req.id][subtask_index] = new_bid
 
-            available_tasks : list = self.get_available_tasks(state, bundle, results)
+            available_tasks : list = self.get_available_tasks(state, bundle, results, unavailable)
 
         return results, bundle, path
 
-    def get_available_tasks(self, state : SimulationAgentState, bundle : list, results : dict) -> list:
+    def get_available_tasks(self, state : SimulationAgentState, bundle : list, results : dict, unavailable : list = []) -> list:
         """
         Checks if there are any tasks available to be performed
 
@@ -244,6 +237,9 @@ class GreedyPlanner(PlanningModule):
             for subtask_index in range(len(results[req_id])):
                 subtaskbid : GreedyBid = results[req_id][subtask_index]; 
                 req = MeasurementRequest.from_dict(subtaskbid.req)
+
+                if (req, subtaskbid.subtask_index) in unavailable:
+                    continue
 
                 is_biddable = self.can_bid(state, req, subtask_index, results[req_id]) 
                 already_in_bundle = self.check_if_in_bundle(req, subtask_index, bundle)
@@ -269,6 +265,16 @@ class GreedyPlanner(PlanningModule):
         ## Constraint 1: task must be able to be performed during or after the current time
         if req.t_end < state.t:
             return False
+
+        if (    
+                isinstance(req, GroundPointMeasurementRequest) 
+            and isinstance(state, SatelliteAgentState)
+            ):
+            # check if the satellite can observe the GP
+            lat,lon,_ = req.lat_lon_pos
+            df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, self.get_current_time())
+            if df.empty:
+                return False
         
         return True
 
@@ -316,38 +322,39 @@ class GreedyPlanner(PlanningModule):
 
         # find best placement in path
         # self.log_task_sequence('original path', original_path, level=logging.WARNING)
-        for i in range(len(original_path)+1):
-            # generate possible path
-            path = [scheduled_task for scheduled_task in original_path]
+        # for i in range(len(original_path)+1):
+        # generate possible path
+
+        path = [scheduled_task for scheduled_task in original_path]
+        
+        path.append((req, subtask_index))
+        # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
+
+        # calculate bids for each task in the path
+        bids = {}
+        for req_i, subtask_j in path:
+            # calculate imaging time
+            req_i : MeasurementRequest; subtask_j : int
+            t_img = self.calc_imaging_time(state, path, bids, req_i, subtask_j)
+
+            # calc utility
+            params = {"req" : req_i, "subtask_index" : subtask_j, "t_img" : t_img}
+            utility = self.utility_func(**params) if t_img >= 0 else 0.0
+
+            # create bid
+            bid : GreedyBid = original_results[req_i.id][subtask_j].copy()
+            bid.set_bid(utility, t_img, state.t)
             
-            path.insert(i, (req, subtask_index))
-            # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
+            if req_i.id not in bids:
+                bids[req_i.id] = {}    
+            bids[req_i.id][subtask_j] = bid
 
-            # calculate bids for each task in the path
-            bids = {}
-            for req_i, subtask_j in path:
-                # calculate imaging time
-                req_i : MeasurementRequest; subtask_j : int
-                t_img = self.calc_imaging_time(state, path, bids, req_i, subtask_j)
-
-                # calc utility
-                params = {"req" : req_i, "subtask_index" : subtask_j, "t_img" : t_img}
-                utility = self.utility_func(**params) if t_img >= 0 else 0.0
-
-                # create bid
-                bid : GreedyBid = original_results[req_i.id][subtask_j].copy()
-                bid.set_bid(utility, t_img, state.t)
-                
-                if req_i.id not in bids:
-                    bids[req_i.id] = {}    
-                bids[req_i.id][subtask_j] = bid
-
-            # look for path with the best utility
-            path_utility = self.sum_path_utility(path, bids)
-            if path_utility > winning_path_utility:
-                winning_path = path
-                winning_bids = bids
-                winning_path_utility = path_utility
+        # look for path with the best utility
+        path_utility = self.sum_path_utility(path, bids)
+        if path_utility > winning_path_utility:
+            winning_path = path
+            winning_bids = bids
+            winning_path_utility = path_utility
 
         # TODO implement a true-greedy planning approach
         # path = [scheduled_task for scheduled_task in original_path]
