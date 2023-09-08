@@ -1,7 +1,7 @@
 from abc import abstractmethod
 import asyncio
 import logging
-import math
+from scipy import optimize
 import time
 from typing import Any, Callable, Union
 import pandas as pd
@@ -15,7 +15,7 @@ from dmas.network import NetworkConfig
 from nodes.states import *
 from nodes.planning.consensus.bids import BidBuffer
 from nodes.planning.planners import PlanningModule
-
+from nodes.science.utility import synergy_factor
 
 class ConsensusPlanner(PlanningModule):
     def __init__(   self, 
@@ -283,18 +283,27 @@ class ConsensusPlanner(PlanningModule):
                 # --- Look for Plan Updates ---
 
                 plan_out = []
+                
+                # generate initial plan
+                if (len(self.initial_reqs) > 0 and self.get_current_time() == 0.0):
+                    initial_reqs = self.initial_reqs
+                    self.initial_reqs = []
+
+                    await self.agent_state_lock.acquire()
+                    plan : list = self._initiate_plan(self.agent_state, initial_reqs)
+                    self.agent_state_lock.release()
+
                 # Check if relevant changes to the bundle were performed
-                if (
+                elif (
                     len(self.listener_to_builder_buffer) > 0 
                     or self.t_plan + self.planning_horizon <= self.get_current_time()
-                    or (len(self.initial_reqs) > 0 and self.get_current_time() == 0.0)
                     ):
                     # wait for plan to be updated
-                    self.replan.set(); self.replan.clear()
-                    plan : list = await self.plan_inbox.get()
+                    # self.replan.set(); self.replan.clear()
+                    # plan : list = await self.plan_inbox.get()
                     # plan = []
-                    plan_copy = [action for action in plan]
-                    self.plan_history.append((self.get_current_time(), plan_copy))
+                    # plan_copy = [action for action in plan]
+                    # self.plan_history.append((self.get_current_time(), plan_copy))
                     self.t_plan = self.get_current_time()
 
                     # compule updated bids from the listener and bundle buiilder
@@ -654,6 +663,79 @@ class ConsensusPlanner(PlanningModule):
         PLANNING PHASE
     -----------------------
     """
+    def _initiate_plan(self, state : AbstractAgentState, initial_reqs : list) -> list:
+        
+        results = {req.id : [] for req in initial_reqs}
+        bundle = []
+        path = [] 
+
+        for req in initial_reqs:
+            req : MeasurementRequest
+            bids = self.generate_bids_from_request(req)
+            results[req.id] = bids
+        
+        available_reqs : list = self.get_available_requests( state, [], results )
+
+        if isinstance(state, SatelliteAgentState):
+            # Generates a plan for observing GPs on a first-come first-served basis
+            
+            reqs = {req.id : req for req,_ in available_reqs}
+            arrival_times = {req.id : {} for req,_ in available_reqs}
+
+            for req, subtask_index in available_reqs:
+                t_arrivals : list = self.calc_arrival_times(state, req, self.get_current_time())
+                arrival_times[req.id][subtask_index] = t_arrivals
+            
+            path = []
+
+            for req_id in arrival_times:
+                for subtask_index in arrival_times[req_id]:
+                    t_arrivals : list = arrival_times[req_id][subtask_index]
+                    t_img = t_arrivals.pop(0)
+
+                    path.append((reqs[req_id], subtask_index, t_img))
+
+            path.sort(key=lambda a: a[2])
+
+            while True:
+                
+                conflict_free = True
+                for i in range(len(path) - 1):
+                    j = i + 1
+                    req_i, _, t_i = path[i]
+                    req_j, subtask_index_j, t_j = path[j]
+
+                    th_i = state.calc_off_nadir_agle(req_i)
+                    th_j = state.calc_off_nadir_agle(req_j)
+
+                    if abs(th_i - th_j) / state.max_slew_rate > t_j - t_i:
+                        t_arrivals : list = arrival_times[req_j.id][subtask_index_j]
+                        if len(t_arrivals) > 0:
+                            t_img = t_arrivals.pop(0)
+
+                            path[j] = (req_j, subtask_index_j, t_img)
+                            path.sort(key=lambda a: a[2])
+                        else:
+                            path.pop(j)
+                        conflict_free = False
+                        break
+
+                print('\n')
+                for req, subtask_index, t_img in path:
+                    print(req.id.split('-')[0], subtask_index, t_img)
+
+                if conflict_free:
+                    break
+            
+            plan : list = self.plan_from_path(state, path)
+            return plan
+                
+        else:
+            raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')
+        
+    def conflict_free(self, path) -> bool:
+        """ Checks if path is conflict free """
+
     @abstractmethod
     async def planning_phase(self) -> None:
         pass
@@ -679,9 +761,9 @@ class ConsensusPlanner(PlanningModule):
 
         return utility
 
-    def get_available_tasks(self, state : SimulationAgentState, bundle : list, results : dict) -> list:
+    def get_available_requests(self, state : SimulationAgentState, bundle : list, results : dict) -> list:
         """
-        Checks if there are any tasks available to be performed
+        Checks if there are any requests available to be performed
 
         ### Returns:
             - list containing all available and bidable tasks to be performed by the parent agent
@@ -759,178 +841,326 @@ class ConsensusPlanner(PlanningModule):
        
         return False
 
+    def calc_path_bid(
+                        self, 
+                        state : SimulationAgentState, 
+                        original_results : dict,
+                        original_path : list, 
+                        req : MeasurementRequest, 
+                        subtask_index : int
+                    ) -> tuple:
+        state : SimulationAgentState = state.copy()
+        winning_path = None
+        winning_bids = None
+        winning_path_utility = 0.0
+
+        # check if the subtask is mutually exclusive with something in the bundle
+        for req_i, subtask_j in original_path:
+            req_i : MeasurementRequest; subtask_j : int
+            if req_i.id == req.id:
+                if req.dependency_matrix[subtask_j][subtask_index] < 0:
+                    return winning_path, winning_bids, winning_path_utility
+
+        # find best placement in path
+        # self.log_task_sequence('original path', original_path, level=logging.WARNING)
+        for i in range(len(original_path)+1):
+            # generate possible path
+            path = [scheduled_obs for scheduled_obs in original_path]
+            
+            path.insert(i, (req, subtask_index))
+            # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
+
+            # calculate bids for each task in the path
+            bids = {}
+            for req_i, subtask_j in path:
+                # calculate imaging time
+                req_i : MeasurementRequest
+                subtask_j : int
+                t_img = self.calc_imaging_time(state, path, bids, req_i, subtask_j)
+
+                # calc utility
+                params = {"req" : req_i, "subtask_index" : subtask_j, "t_img" : t_img}
+                utility = self.utility_func(**params) if t_img >= 0 else np.NINF
+                utility *= synergy_factor(**params)
+
+                # create bid
+                bid : Bid = original_results[req_i.id][subtask_j].copy()
+                bid.set_bid(utility, t_img, state.t)
+                
+                if req_i.id not in bids:
+                    bids[req_i.id] = {}    
+                bids[req_i.id][subtask_j] = bid                
+
+            # look for path with the best utility
+            path_utility = self.sum_path_utility(path, bids)
+            if path_utility > winning_path_utility:
+                winning_path = path
+                winning_bids = bids
+                winning_path_utility = path_utility
+
+        return winning_path, winning_bids, winning_path_utility
+
+
+    def calc_imaging_time(self, state : SimulationAgentState, path : list, bids : dict, req : MeasurementRequest, subtask_index : int) -> float:
+        """
+        Computes the ideal" time when a task in the path would be performed
+        ### Returns
+            - t_img (`float`): earliest available imaging time
+        """
+        # calculate the state of the agent prior to performing the measurement request
+        i = path.index((req, subtask_index))
+        if i == 0:
+            t_prev = state.t
+            prev_state = state.copy()
+        else:
+            prev_req, prev_subtask_index = path[i-1]
+            prev_req : MeasurementRequest; prev_subtask_index : int
+            bid_prev : Bid = bids[prev_req.id][prev_subtask_index]
+            t_prev : float = bid_prev.t_img + prev_req.duration
+
+            if isinstance(state, SatelliteAgentState):
+                prev_state : SatelliteAgentState = state.propagate(t_prev)
+                
+                prev_state.attitude = [
+                                        prev_state.calc_off_nadir_agle(prev_req),
+                                        0.0,
+                                        0.0
+                                    ]
+            elif isinstance(state, UAVAgentState):
+                prev_state = state.copy()
+                prev_state.t = t_prev
+                
+                if isinstance(prev_req, GroundPointMeasurementRequest):
+                    prev_state.pos = prev_req.pos
+                else:
+                    raise NotImplementedError
+            else:
+                raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
+
+        return self.calc_arrival_times(prev_state, req, t_prev)[0]
+
+    def calc_arrival_times(self, state : SimulationAgentState, req : MeasurementRequest, t_prev : Union[int, float]) -> float:
+        """
+        Estimates the quickest arrival time from a starting position to a given final position
+        """
+        if isinstance(req, GroundPointMeasurementRequest):
+            # compute earliest time to the task
+            if isinstance(state, SatelliteAgentState):
+                t_imgs = []
+                lat,lon,_ = req.lat_lon_pos
+                df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, t_prev)
+
+                for _, row in df.iterrows():
+                    t_img = row['time index'] * self.orbitdata.time_step
+                    dt = t_img - state.t
+                
+                    # propagate state
+                    propagated_state : SatelliteAgentState = state.propagate(t_img)
+
+                    # compute off-nadir angle
+                    thf = propagated_state.calc_off_nadir_agle(req)
+                    dth = abs(thf - propagated_state.attitude[0])
+
+                    # estimate arrival time using fixed angular rate TODO change to 
+                    if dt >= dth / state.max_slew_rate: # TODO change maximum angular rate 
+                        t_imgs.append(t_img)
+                return t_imgs if len(t_imgs) > 0 else [-1]
+
+            elif isinstance(state, UAVAgentState):
+                dr = np.array(req.pos) - np.array(state.pos)
+                norm = np.sqrt( dr.dot(dr) )
+                return [norm / state.max_speed + t_prev]
+
+            else:
+                raise NotImplementedError(f"arrival time estimation for agents of type {self.parent_agent_type} is not yet supported.")
+
+        else:
+            raise NotImplementedError(f"cannot calculate imaging time for measurement requests of type {type(req)}")       
+
+
     """
     ------------------------
         EXECUTION PHASE
     ------------------------
     """
+    # def plan_from_path( self, 
+    #                     state : SimulationAgentState, 
+    #                     results : dict, 
+    #                     path : list
+    #                 ) -> list:
     def plan_from_path( self, 
                         state : SimulationAgentState, 
-                        results : dict, 
                         path : list
                     ) -> list:
         """
         Generates a list of AgentActions from the current path.
 
         Agents look to move to their designated measurement target and perform the measurement.
-        """
 
+        ## Arguments:
+            - state (:obj:`SimulationAgentState`): state of the agent at the start of the path
+            - path (`list`): list of bids representing the sequence of observations to be performed
+        """
         plan = []
 
-        # add convergence timer if needed
-        t_conv_min = self.t_plan + self.planning_horizon
-        for measurement_req, subtask_index in path:
-            bid : Bid = results[measurement_req.id][subtask_index]
-            t_conv = bid.t_update + bid.dt_converge
-            if t_conv < t_conv_min:
-                t_conv_min = t_conv
-
-        if state.t <= t_conv_min:
-            # if isinstance(self.agent_state, SatelliteAgentState):
-            #     # wait until the next ground-point access
-            #     self.orbitdata : OrbitData
-            #     t_next = self.orbitdata.get_next_gs_access(self.get_current_time())
-            # else:
-            #     # idle until the end of the simulation
-            #     t_next = np.Inf
-
-            # t_conv_min = t_conv_min if t_conv_min < t_next else t_next            
-            plan.append( WaitForMessages(state.t, t_conv_min) )
-
-        else:
-            # plan.append( WaitForMessages(state.t, state.t) )
-            t_conv_min = state.t
-
-        # add actions per measurement
-        for i in range(len(path)):
-            measurement_req, subtask_index = path[i]
-            measurement_req : MeasurementRequest; subtask_index : int
-            subtask_bid : Bid = results[measurement_req.id][subtask_index]
-
-            if not isinstance(measurement_req, GroundPointMeasurementRequest):
-                raise NotImplementedError(f"Cannot create plan for requests of type {type(measurement_req)}")
-            
-            if i == 0:
-                if isinstance(state, SatelliteAgentState):
-                    t_prev = state.t
-                    prev_state : SatelliteAgentState = state.copy()
-
-                elif isinstance(state, UAVAgentState):
-                    t_prev = t_conv_min
-                    prev_state : UAVAgentState = state.copy()
-
-                else:
-                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
-            else:
-                prev_req, prev_subtask_index = path[i-1]
-                prev_req : MeasurementRequest; prev_subtask_index : int
-                bid_prev : Bid = results[prev_req.id][prev_subtask_index]
-                t_prev : float = bid_prev.t_img + prev_req.duration
-
-                if isinstance(state, SatelliteAgentState):
-                    prev_state : SatelliteAgentState = state.propagate(t_prev)
-                    prev_state.attitude = [
-                                        prev_state.calc_off_nadir_agle(prev_req),
-                                        0.0,
-                                        0.0
-                                    ]
-
-                elif isinstance(state, UAVAgentState):
-                    prev_state : UAVAgentState = state.copy()
-                    prev_state.t = t_prev
-
-                    if isinstance(prev_req, GroundPointMeasurementRequest):
-                        prev_state.pos = prev_req.pos
-                    else:
-                        raise NotImplementedError(f"cannot calculate travel time start for requests of type {type(prev_req)} for uav agents")
-
-                else:
-                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
-
-            # maneuver to point to target
-            t_maneuver_end = None
-            if isinstance(state, SatelliteAgentState):
-                prev_state : SatelliteAgentState
-
-                t_maneuver_start = prev_state.t
-                tf = prev_state.calc_off_nadir_agle(measurement_req)
-                t_maneuver_end = t_maneuver_start + abs(tf - prev_state.attitude[0]) / 1.0 # TODO change max attitude rate 
-
-                if t_maneuver_start == -1.0:
-                    continue
-                if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
-                    maneuver_action = ManeuverAction([tf, 0, 0], t_maneuver_start, t_maneuver_end)
-                    plan.append(maneuver_action)            
-
-            # move to target
-            t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
-            if isinstance(state, SatelliteAgentState):
-                lat, lon, _ = measurement_req.lat_lon_pos
-                df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, t_move_start)
-                if df.empty:
-                    continue
-                for _, row in df.iterrows():
-                    t_move_end = row['time index'] * self.orbitdata.time_step
-                    break
-
-                future_state : SatelliteAgentState = state.propagate(t_move_end)
-                final_pos = future_state.pos
-
-            elif isinstance(state, UAVAgentState):
-                final_pos = measurement_req.pos
-                dr = np.array(final_pos) - np.array(prev_state.pos)
-                norm = np.sqrt( dr.dot(dr) )
-                
-                t_move_end = t_move_start + norm / state.max_speed
-
-            else:
-                raise NotImplementedError(f"cannot calculate travel time end for agent states of type {type(state)}")
-            
-            if t_move_end < subtask_bid.t_img:
-                plan.append( WaitForMessages(t_move_end, subtask_bid.t_img) )
-                
-            t_img_start = subtask_bid.t_img
-            t_img_end = t_img_start + measurement_req.duration
-
-            if isinstance(self._clock_config, FixedTimesStepClockConfig):
-                dt = self._clock_config.dt
-                if t_move_start < np.Inf:
-                    t_move_start = dt * math.floor(t_move_start/dt)
-                if t_move_end < np.Inf:
-                    t_move_end = dt * math.ceil(t_move_end/dt)
-
-                if t_img_start < np.Inf:
-                    t_img_start = dt * math.floor(t_img_start/dt)
-                if t_img_end < np.Inf:
-                    t_img_end = dt * math.ceil((t_img_start + measurement_req.duration)/dt)
-            
-            if abs(t_move_start - t_move_end) >= 1e-3:
-                move_action = TravelAction(final_pos, t_move_start, t_move_end)
-                plan.append(move_action)
-            
-            # perform measurement
-            measurement_action = MeasurementAction( 
-                                                    measurement_req.to_dict(),
-                                                    subtask_index, 
-                                                    subtask_bid.main_measurement,
-                                                    subtask_bid.winning_bid,
-                                                    t_img_start, 
-                                                    t_img_end
-                                                    )
-            plan.append(measurement_action)  
-
-            # inform others of request completion
-            bid : Bid = subtask_bid.copy()
-            bid.set_performed(t_img_end)
-            plan.append(BroadcastMessageAction(MeasurementBidMessage(   self.get_parent_name(), 
-                                                                        self.get_parent_name(),
-                                                                        bid.to_dict() 
-                                                                    ).to_dict(),
-                                                t_img_end
-                                                )
-                        )
-        
         return plan
+
+        # plan = []
+
+        # # add convergence timer if needed
+        # t_conv_min = self.t_plan + self.planning_horizon
+        # for measurement_req, subtask_index in path:
+        #     bid : Bid = results[measurement_req.id][subtask_index]
+        #     t_conv = bid.t_update + bid.dt_converge
+        #     if t_conv < t_conv_min:
+        #         t_conv_min = t_conv
+
+        # if state.t <= t_conv_min:
+        #     # if isinstance(self.agent_state, SatelliteAgentState):
+        #     #     # wait until the next ground-point access
+        #     #     self.orbitdata : OrbitData
+        #     #     t_next = self.orbitdata.get_next_gs_access(self.get_current_time())
+        #     # else:
+        #     #     # idle until the end of the simulation
+        #     #     t_next = np.Inf
+
+        #     # t_conv_min = t_conv_min if t_conv_min < t_next else t_next            
+        #     plan.append( WaitForMessages(state.t, t_conv_min) )
+
+        # else:
+        #     # plan.append( WaitForMessages(state.t, state.t) )
+        #     t_conv_min = state.t
+
+        # # add actions per measurement
+        # for i in range(len(path)):
+        #     measurement_req, subtask_index = path[i]
+        #     measurement_req : MeasurementRequest; subtask_index : int
+        #     subtask_bid : Bid = results[measurement_req.id][subtask_index]
+
+        #     if not isinstance(measurement_req, GroundPointMeasurementRequest):
+        #         raise NotImplementedError(f"Cannot create plan for requests of type {type(measurement_req)}")
+            
+        #     if i == 0:
+        #         if isinstance(state, SatelliteAgentState):
+        #             t_prev = state.t
+        #             prev_state : SatelliteAgentState = state.copy()
+
+        #         elif isinstance(state, UAVAgentState):
+        #             t_prev = t_conv_min
+        #             prev_state : UAVAgentState = state.copy()
+
+        #         else:
+        #             raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
+        #     else:
+        #         prev_req, prev_subtask_index = path[i-1]
+        #         prev_req : MeasurementRequest; prev_subtask_index : int
+        #         bid_prev : Bid = results[prev_req.id][prev_subtask_index]
+        #         t_prev : float = bid_prev.t_img + prev_req.duration
+
+        #         if isinstance(state, SatelliteAgentState):
+        #             prev_state : SatelliteAgentState = state.propagate(t_prev)
+        #             prev_state.attitude = [
+        #                                 prev_state.calc_off_nadir_agle(prev_req),
+        #                                 0.0,
+        #                                 0.0
+        #                             ]
+
+        #         elif isinstance(state, UAVAgentState):
+        #             prev_state : UAVAgentState = state.copy()
+        #             prev_state.t = t_prev
+
+        #             if isinstance(prev_req, GroundPointMeasurementRequest):
+        #                 prev_state.pos = prev_req.pos
+        #             else:
+        #                 raise NotImplementedError(f"cannot calculate travel time start for requests of type {type(prev_req)} for uav agents")
+
+        #         else:
+        #             raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
+
+        #     # maneuver to point to target
+        #     t_maneuver_end = None
+        #     if isinstance(state, SatelliteAgentState):
+        #         prev_state : SatelliteAgentState
+
+        #         t_maneuver_start = prev_state.t
+        #         tf = prev_state.calc_off_nadir_agle(measurement_req)
+        #         t_maneuver_end = t_maneuver_start + abs(tf - prev_state.attitude[0]) / 1.0 # TODO change max attitude rate 
+
+        #         if t_maneuver_start == -1.0:
+        #             continue
+        #         if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
+        #             maneuver_action = ManeuverAction([tf, 0, 0], t_maneuver_start, t_maneuver_end)
+        #             plan.append(maneuver_action)            
+
+        #     # move to target
+        #     t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
+        #     if isinstance(state, SatelliteAgentState):
+        #         lat, lon, _ = measurement_req.lat_lon_pos
+        #         df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, t_move_start)
+        #         if df.empty:
+        #             continue
+        #         for _, row in df.iterrows():
+        #             t_move_end = row['time index'] * self.orbitdata.time_step
+        #             break
+
+        #         future_state : SatelliteAgentState = state.propagate(t_move_end)
+        #         final_pos = future_state.pos
+
+        #     elif isinstance(state, UAVAgentState):
+        #         final_pos = measurement_req.pos
+        #         dr = np.array(final_pos) - np.array(prev_state.pos)
+        #         norm = np.sqrt( dr.dot(dr) )
+                
+        #         t_move_end = t_move_start + norm / state.max_speed
+
+        #     else:
+        #         raise NotImplementedError(f"cannot calculate travel time end for agent states of type {type(state)}")
+            
+        #     if t_move_end < subtask_bid.t_img:
+        #         plan.append( WaitForMessages(t_move_end, subtask_bid.t_img) )
+                
+        #     t_img_start = subtask_bid.t_img
+        #     t_img_end = t_img_start + measurement_req.duration
+
+        #     if isinstance(self._clock_config, FixedTimesStepClockConfig):
+        #         dt = self._clock_config.dt
+        #         if t_move_start < np.Inf:
+        #             t_move_start = dt * math.floor(t_move_start/dt)
+        #         if t_move_end < np.Inf:
+        #             t_move_end = dt * math.ceil(t_move_end/dt)
+
+        #         if t_img_start < np.Inf:
+        #             t_img_start = dt * math.floor(t_img_start/dt)
+        #         if t_img_end < np.Inf:
+        #             t_img_end = dt * math.ceil((t_img_start + measurement_req.duration)/dt)
+            
+        #     if abs(t_move_start - t_move_end) >= 1e-3:
+        #         move_action = TravelAction(final_pos, t_move_start, t_move_end)
+        #         plan.append(move_action)
+            
+        #     # perform measurement
+        #     measurement_action = MeasurementAction( 
+        #                                             measurement_req.to_dict(),
+        #                                             subtask_index, 
+        #                                             subtask_bid.main_measurement,
+        #                                             subtask_bid.winning_bid,
+        #                                             t_img_start, 
+        #                                             t_img_end
+        #                                             )
+        #     plan.append(measurement_action)  
+
+        #     # inform others of request completion
+        #     bid : Bid = subtask_bid.copy()
+        #     bid.set_performed(t_img_end)
+        #     plan.append(BroadcastMessageAction(MeasurementBidMessage(   self.get_parent_name(), 
+        #                                                                 self.get_parent_name(),
+        #                                                                 bid.to_dict() 
+        #                                                             ).to_dict(),
+        #                                         t_img_end
+        #                                         )
+        #                 )
+        
+        # return plan
 
     """
     --------------------

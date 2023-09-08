@@ -257,7 +257,7 @@ class MACCBBA(ConsensusPlanner):
         # max_utility = 0.0
         max_task = -1
         max_path_utility = self.sum_path_utility(max_path, max_path_bids)
-        available_tasks : list = self.get_available_tasks(state, bundle, results)
+        available_tasks : list = self.get_available_requests(state, bundle, results)
 
         while len(bundle) < self.max_bundle_size and len(available_tasks) > 0 and max_task is not None:                   
             # find next best task to put in bundle (greedy)
@@ -319,7 +319,7 @@ class MACCBBA(ConsensusPlanner):
             # self.log_task_sequence('bundle', bundle, level)
             # self.log_task_sequence('path', path, level)
 
-            available_tasks : list = self.get_available_tasks(state, bundle, results)
+            available_tasks : list = self.get_available_requests(state, bundle, results)
 
         # broadcast changes to bundle
         for measurement_req, subtask_index in changes_to_bundle:

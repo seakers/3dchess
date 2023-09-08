@@ -270,6 +270,7 @@ class SatelliteAgentState(SimulationAgentState):
                     keplerian_state : dict = None,
                     t: Union[float, int] = 0.0, 
                     eclipse : int = 0,
+                    max_slew_rate : float = 1.0, #degs
                     engineering_module: EngineeringModule = None, 
                     status: str = SimulationAgentState.IDLING, 
                     **_
@@ -277,6 +278,7 @@ class SatelliteAgentState(SimulationAgentState):
         
         self.orbit_state = orbit_state
         self.eclipse = eclipse
+        self.max_slew_rate = max_slew_rate
         if pos is None and vel is None:
             orbit_state : OrbitState = OrbitState.from_dict(self.orbit_state)
             cartesian_state = orbit_state.get_cartesian_earth_centered_inertial_state()
@@ -543,7 +545,26 @@ class SatelliteAgentState(SimulationAgentState):
         
         else:
             raise NotImplementedError(f"cannot calculate off-nadir angle for measurement requests of type {type(req)}")
-            
+
+    def calc_maneuver_duration(self, final_state : AbstractAgentState) -> float:
+        """ 
+        Estimates the time required to perform a maneuver from the current state to a desired final state
+
+        Returns `None` if the maneuver is unfeasible.
+        
+        """
+        if self.t > final_state.t:
+            # cannot maneuver into a previous time
+            return None
+
+        # compute off-nadir angle
+        dth = abs(final_state.attitude[0] - self.attitude[0])
+
+        # estimate maneuver duration
+        dt = dth / self.max_slew_rate # TODO fix to non-fixed slew maneuver
+
+        # check feasibility
+        return dt if self.t + dt <= final_state else None
 
 class UAVAgentState(SimulationAgentState):
     """
