@@ -433,16 +433,13 @@ class SimulationEnvironment(EnvironmentNode):
                 lat,lon,_ = req.lat_lon_pos
 
                 observable_measurements = []
-                for sat_name, coverage_data in self.orbitdata.items():
+                for _, coverage_data in self.orbitdata.items():
                     coverage_data : OrbitData
                     req_start = req.t_start/coverage_data.time_step
                     req_end = req.t_end/coverage_data.time_step
                     grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
 
                     df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
-                    
-                    if not df.empty:
-                        x = 1
 
                     for _, row in df.iterrows():
                         instrument : dict = row['instrument']
