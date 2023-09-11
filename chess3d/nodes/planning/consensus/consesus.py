@@ -89,10 +89,12 @@ class ConsensusPlanner(PlanningModule):
         """
         try:
             listener_task = asyncio.create_task(self.listener(), name='listener()')
-            bundle_builder_task = asyncio.create_task(self.bundle_builder(), name='bundle_builder()')
+            # bundle_builder_task = asyncio.create_task(self.bundle_builder(), name='bundle_builder()')
             planner_task = asyncio.create_task(self.planner(), name='planner()')
             
-            tasks = [listener_task, bundle_builder_task, planner_task]
+            tasks = [listener_task, 
+                    # bundle_builder_task, 
+                    planner_task]
 
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
@@ -228,8 +230,14 @@ class ConsensusPlanner(PlanningModule):
         pass
 
     async def planner(self) -> None:
+        """
+        Generates a plan for the parent agent to perform
+        """
         try:
+            # initialize results vectors
             plan = []
+            bundle, path, results = [], [], {}
+
             # level = logging.WARNING
             level = logging.DEBUG
 
@@ -255,7 +263,6 @@ class ConsensusPlanner(PlanningModule):
                         # if action was completed or aborted, remove from plan
                         if action_msg.status == AgentAction.COMPLETED:
                             self.log(f'action of type `{action.action_type}` completed!', level)
-                            x = 1
 
                         action_dict : dict = action_msg.action
                         completed_action = AgentAction(**action_dict)
@@ -283,22 +290,57 @@ class ConsensusPlanner(PlanningModule):
                 
                 # --- Look for Plan Updates ---
 
+                replan = False
                 plan_out = []
                 
-                # generate initial plan
-                if (len(self.initial_reqs) > 0 and self.get_current_time() == 0.0):
+                if (len(self.initial_reqs) > 0                  # there are initial requests 
+                    and self.get_current_time() <= 1e-3         # simulation just started
+                    ):
+                    # Generate Initial Plan
                     initial_reqs = self.initial_reqs
                     self.initial_reqs = []
 
                     await self.agent_state_lock.acquire()
-                    plan : list = self._initialize_plan(self.agent_state, initial_reqs)
+                    path : list = self._initialize_observation_path(self.agent_state, initial_reqs)
+                    plan : list = self.plan_from_path(self.agent_state, path)
                     self.agent_state_lock.release()
 
-                # Check if relevant changes to the bundle were performed
-                # elif (
-                #     len(self.listener_to_builder_buffer) > 0 
-                #     or self.t_plan + self.planning_horizon <= self.get_current_time()
-                #     ):
+                if (len(self.listener_to_builder_buffer) > 0 ): # bids were received   
+                    # Consensus Phase 
+                    incoming_bids = await self.listener_to_builder_buffer.pop_all()
+                    t_0 = time.perf_counter()
+                    results, bundle, path, consensus_changes, \
+                    consensus_rebroadcasts = self.consensus_phase(  results, 
+                                                                    bundle, 
+                                                                    path, 
+                                                                    self.get_current_time(),
+                                                                    incoming_bids,
+                                                                    'builder',
+                                                                    level
+                                                                )
+                    dt = time.perf_counter() - t_0
+                    self.stats['consensus'].append(dt)
+
+                    buffer = BidBuffer()
+                    await buffer.put_bids(consensus_rebroadcasts)
+                    consensus_rebroadcasts = await buffer.pop_all() 
+
+                    self.log_changes("builder - CHANGES MADE FROM CONSENSUS", consensus_changes, level)
+                    self.log_changes("builder - POTENTIAL REBROADCASTS TO BE DONE", consensus_rebroadcasts, level)
+
+                    replan = len(consensus_rebroadcasts) > 0 
+
+                # if (self.t_plan + self.planning_horizon <= self.get_current_time()): 
+                #     # TODO implement case for planning horizon
+                #     replan = True
+
+                if replan:
+                    await self.agent_state_lock.acquire()
+                    results, bundle, path = self.replanner()         
+                    plan : list = self.plan_from_path(self.agent_state, path)
+                    self.agent_state_lock.release()
+                           
+
                 #     # wait for plan to be updated
                 #     # self.replan.set(); self.replan.clear()
                 #     # plan : list = await self.plan_inbox.get()
@@ -389,6 +431,98 @@ class ConsensusPlanner(PlanningModule):
 
         except asyncio.CancelledError:
             return
+
+    async def replanner(  self, 
+                    state : AbstractAgentState, 
+                    original_plan : list, 
+                    incoming_bids : list, 
+                    level:int=logging.DEBUG
+                    ) -> list:
+        """
+        Readjusts plan as needed
+        """
+
+        
+        # Planning Phase
+        # Only activated if relevant changes were made to the results or if the planning horizon 
+        if(
+            len(consensus_rebroadcasts) > 0 
+            or self.t_plan + self.planning_horizon <= self.get_current_time() 
+            ):
+            t_0 = time.perf_counter()
+            results, bundle, path,\
+                planner_changes = self.planning_phase( self.agent_state, 
+                                                        results, 
+                                                        bundle, 
+                                                        path, 
+                                                        level
+                                                    )
+            dt = time.perf_counter() - t_0
+            self.stats['planning'].append(dt)
+
+            broadcast_buffer = BidBuffer()
+            await broadcast_buffer.put_bids(planner_changes)
+            planner_changes = await broadcast_buffer.pop_all()
+            self.log_changes("builder - CHANGES MADE FROM PLANNING", planner_changes, level)
+            
+            # Check for convergence
+            same_bundle = self.compare_bundles(bundle, prev_bundle)
+            
+            same_bids = True
+            for key, bids in prev_bundle_results.items():
+                key : str; bids : list
+                for i in range(len(bids)):
+                    prev_bid = prev_bundle_results[key][i]
+                    current_bid = results[key][i]
+
+                    if prev_bid is None:
+                        continue
+
+                    if prev_bid != current_bid:
+                        same_bids = False
+                        break
+
+                    if not same_bids:
+                        break
+
+            if not same_bundle:
+                await self.agent_state_lock.acquire()
+                plan = self.plan_from_path(self.agent_state, results, path)
+                self.agent_state_lock.release()
+
+            if isinstance(self.agent_state, UAVAgentState):
+                await self.agent_state_lock.acquire()
+                plan.insert(0, TravelAction(self.agent_state.pos, self.get_current_time()))
+                self.agent_state_lock.release()
+
+            # if not same_bundle or not same_bids:
+            #     # if not converged yet, await for 
+            #     plan.insert(0, WaitForMessages(self.get_current_time(), np.Inf))
+
+        # Update iteration counter
+        self.iter_counter += 1
+
+        # save previous bundle for future convergence checks
+        prev_bundle_results = {}
+        prev_bundle = []
+        for req, subtask_index in bundle:
+            req : MeasurementRequest; subtask_index : int
+            prev_bundle.append((req, subtask_index))
+            
+            if req.id not in prev_bundle_results:
+                prev_bundle_results[req.id] = [None for _ in results[req.id]]
+            prev_bundle_results[req.id][subtask_index] = results[req.id][subtask_index].copy()
+
+        # Broadcast changes to bundle and any changes from consensus
+        broadcast_bids : list = consensus_rebroadcasts
+        broadcast_bids.extend(planner_changes)
+                        
+        broadcast_buffer = BidBuffer()
+        await broadcast_buffer.put_bids(broadcast_bids)
+        broadcast_bids = await broadcast_buffer.pop_all()
+        self.log_changes("builder - REBROADCASTS TO BE DONE", broadcast_bids, level)
+
+        await self.builder_to_broadcaster_buffer.put_bids(broadcast_bids)     
 
     """
     -----------------------
@@ -664,7 +798,7 @@ class ConsensusPlanner(PlanningModule):
         PLANNING PHASE
     -----------------------
     """
-    def _initialize_plan(self, state : AbstractAgentState, initial_reqs : list) -> list:
+    def _initialize_observation_path(self, state : AbstractAgentState, initial_reqs : list, level : int = logging.DEBUG) -> list:
         """ 
         Creates a preliminary observations plan to be performed by the agent. 
 
@@ -722,25 +856,21 @@ class ConsensusPlanner(PlanningModule):
                             path[j] = (req_j, subtask_index_j, t_img, s_j)
                             path.sort(key=lambda a: a[2])
                         else:
-                            path.pop(j) #TODO this is removing an element of the list as its iterating. Needs fix
+                            #TODO remove request from path
+                            raise Exception("Whoops. See Plan Initializer.")
+                            path.pop(j) 
                         conflict_free = False
                         break
 
                 if conflict_free:
                     break
                     
-            print('\n')
+            out = '\n'
             for req, subtask_index, t_img, s in path:
-                print(req.id.split('-')[0], subtask_index, np.round(t_img,3), np.round(s,3))
+                out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
+            self.log(out,level)
 
-            plan : list = self.plan_from_path(state, path)
-
-            print('\n')
-            for action in plan:
-                action : AgentAction
-                print(action.action_type, np.round(action.t_start,3), np.round(action.t_end, 3))
-
-            return plan
+            return path
                 
         else:
             raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')
@@ -773,7 +903,12 @@ class ConsensusPlanner(PlanningModule):
 
         return utility
 
-    def get_available_requests(self, state : SimulationAgentState, bundle : list, results : dict) -> list:
+    def get_available_requests( self, 
+                                state : SimulationAgentState, 
+                                bundle : list, 
+                                results : dict, 
+                                planning_horizon : float = np.Inf
+                                ) -> list:
         """
         Checks if there are any requests available to be performed
 
@@ -786,7 +921,7 @@ class ConsensusPlanner(PlanningModule):
                 subtaskbid : Bid = results[req_id][subtask_index]; 
                 req = MeasurementRequest.from_dict(subtaskbid.req)
 
-                is_biddable = self.can_bid(state, req, subtask_index, results[req_id]) 
+                is_biddable = self.can_bid(state, req, subtask_index, results[req_id], planning_horizon) 
                 already_in_bundle = self.check_if_in_bundle(req, subtask_index, bundle)
                 already_performed = self.request_has_been_performed(results, req, subtask_index, state.t)
                 
@@ -795,7 +930,13 @@ class ConsensusPlanner(PlanningModule):
 
         return available
 
-    def can_bid(self, state : SimulationAgentState, req : MeasurementRequest, subtask_index : int, subtaskbids : list) -> bool:
+    def can_bid(self, 
+                state : SimulationAgentState, 
+                req : MeasurementRequest, 
+                subtask_index : int, 
+                subtaskbids : list,
+                planning_horizon : float
+                ) -> bool:
         """
         Checks if an agent has the ability to bid on a measurement task
         """
@@ -825,8 +966,8 @@ class ConsensusPlanner(PlanningModule):
                     for time in times:
                         time *= self.orbitdata.time_step 
 
-                        # if state.t + self.planning_horizon < time:
-                        #     break
+                        if state.t + planning_horizon < time:
+                            break
 
                         if req.t_start <= time <= req.t_end:
                             # there exists an access time before the request's availability ends
