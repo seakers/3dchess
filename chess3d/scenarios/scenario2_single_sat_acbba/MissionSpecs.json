@@ -102,6 +102,7 @@
             },
             "planner" : {
                 "@type" : "ACBBA",
+                "preplanner" : "None",
                 "utility" : "LINEAR"
             },
             "science" : {

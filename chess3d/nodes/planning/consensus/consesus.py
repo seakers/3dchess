@@ -47,12 +47,18 @@ class ConsensusPlanner(PlanningModule):
                         "c_t_end_check" : [],
                         "c_const_check" : []
                     }
+        
         self.plan_history = []
         self.iter_counter = 0
         self.payload = payload
         self.max_bundle_size = max_bundle_size
         self.planning_horizon = planning_horizon
+        
+        self.agent_state : SimulationAgentState = None
         self.parent_agent_type = None
+        self.orbitdata = None
+        self.t_plan = 0.0
+        self.t_curr = 0.0
 
         self.initial_reqs = []
         for req in initial_reqs:
@@ -68,15 +74,10 @@ class ConsensusPlanner(PlanningModule):
         self.listener_to_broadcaster_buffer = BidBuffer()
         self.builder_to_broadcaster_buffer = BidBuffer()
         self.broadcasted_bids_buffer = BidBuffer()
-
-        self.t_curr = 0.0
-        self.agent_state : SimulationAgentState = None
+        
         self.agent_state_lock = asyncio.Lock()
         self.agent_state_updated = asyncio.Event()
-        self.parent_agent_type = None
-        self.orbitdata = None
 
-        self.t_plan = 0.0
         self.plan_inbox = asyncio.Queue()
         self.replan = asyncio.Event()
 

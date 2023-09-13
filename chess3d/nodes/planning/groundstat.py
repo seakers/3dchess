@@ -97,9 +97,9 @@ class GroundStationPlanner(FixedPlanner):
                         if removed is not None:
                             self.plan.remove(removed)
 
-                while not self.measurement_req_inbox.empty():
+                while not self.req_inbox.empty():
                     # TODO: rebroadcast measurement requests that were not known to this GS
-                    msg : MeasurementRequestMessage = await self.measurement_req_inbox.get()
+                    msg : MeasurementRequestMessage = await self.req_inbox.get()
 
                 plan_out_id = [action['id'] for action in plan_out]
                 for action in self.plan:

@@ -63,9 +63,9 @@ class FixedPlanner(PlanningModule):
                         if removed is not None:
                             self.plan.remove(removed)
 
-                while not self.measurement_req_inbox.empty():
+                while not self.req_inbox.empty():
                     # ignore measurement requests
-                    req_msg : MeasurementRequestMessage = await self.measurement_req_inbox.get()
+                    req_msg : MeasurementRequestMessage = await self.req_inbox.get()
                 
                 plan_out_id = [action['id'] for action in plan_out]
                 for action in self.plan:

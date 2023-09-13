@@ -90,9 +90,9 @@ class GreedyPlanner(PlanningModule):
                         #     print('\n')
 
                 replan = False
-                while not self.measurement_req_inbox.empty(): # replan measurement plan
+                while not self.req_inbox.empty(): # replan measurement plan
                     # unpack measurement request
-                    req_msg : MeasurementRequestMessage = await self.measurement_req_inbox.get()
+                    req_msg : MeasurementRequestMessage = await self.req_inbox.get()
                     req = MeasurementRequest.from_dict(req_msg.req)
 
                     if req.id not in results:
