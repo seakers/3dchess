@@ -247,6 +247,7 @@ class PlanningModule(InternalModule):
 
                 plan_out = []
                 
+                # check if plan has been initialized
                 if (len(self.initial_reqs) > 0                  # there are initial requests 
                     and self.get_current_time() <= 1e-3         # simulation just started
                     and self.preplanner is not None             # there is a preplanner assigned to this planner
@@ -263,21 +264,22 @@ class PlanningModule(InternalModule):
                                                                     )
                     self.agent_state_lock.release()
 
+                # Check if reeplanning is needed
+                incoming_reqs = []
+                while not self.req_inbox.empty():
+                    incoming_reqs.append(await self.req_inbox.get())
+                
+                await self.agent_state_lock.acquire()
                 if (
-                    len(self.req_inbox) > 0                     # there was a new request received
+                    self.replanner.needs_replanning(self.agent_state, plan, incoming_reqs)
                     ):
-                    # Replan
-                    incoming_reqs = []
-                    while not self.req_inbox.empty():
-                        incoming_reqs.append(await self.req_inbox.get())
-
-                    await self.agent_state_lock.acquire()
-                    plan : list = self.replanner.revise_plan(   self.agent_state, 
+                    plan : list = self.replanner.revise_plan(   self.agent_state,
+                                                                plan, 
                                                                 incoming_reqs,
                                                                 self.orbitdata,
                                                                 level
                                                             )
-                    self.agent_state_lock.release()
+                self.agent_state_lock.release()
 
                 # --- Execute plan ---
 
@@ -336,166 +338,3 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
-
-    def plan_from_path( self, 
-                        state : SimulationAgentState, 
-                        path : list
-                    ) -> list:
-        """
-        Generates a list of AgentActions from the current path.
-
-        Agents look to move to their designated measurement target and perform the measurement.
-
-        ## Arguments:
-            - state (:obj:`SimulationAgentState`): state of the agent at the start of the path
-            - path (`list`): list of tuples indicating the sequence of observations to be performed and time of observation
-        """
-        plan = []
-
-        # if no requests left in the path, wait for the next planning horizon
-        if len(path) == 0:
-            t_0 = self.get_current_time()
-            t_f = t_0 + self.planning_horizon
-            return [WaitForMessages(t_0, t_f)]
-
-        # TODO add wait timer if needed for plan convergende
-
-        # add actions per measurement
-        for i in range(len(path)):
-            plan_i = []
-
-            measurement_req, subtask_index, t_img, u_exp = path[i]
-            measurement_req : MeasurementRequest; subtask_index : int; t_img : float; u_exp : float
-
-            if not isinstance(measurement_req, GroundPointMeasurementRequest):
-                raise NotImplementedError(f"Cannot create plan for requests of type {type(measurement_req)}")
-            
-            # Estimate previous state
-            if i == 0:
-                if isinstance(state, SatelliteAgentState):
-                    t_prev = state.t
-                    prev_state : SatelliteAgentState = state.copy()
-
-                elif isinstance(state, UAVAgentState):
-                    t_prev = state.t #TODO consider wait time for convergence
-                    prev_state : UAVAgentState = state.copy()
-
-                else:
-                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
-            else:
-                prev_req = None
-                for action in reversed(plan):
-                    action : AgentAction
-                    if isinstance(action, MeasurementAction):
-                        prev_req = MeasurementRequest.from_dict(action.measurement_req)
-                        break
-
-                action_prev : AgentAction = plan[-1]
-                t_prev = action_prev.t_end
-
-                if isinstance(state, SatelliteAgentState):
-                    prev_state : SatelliteAgentState = state.propagate(t_prev)
-                    
-                    if prev_req is not None:
-                        prev_state.attitude = [
-                                            prev_state.calc_off_nadir_agle(prev_req),
-                                            0.0,
-                                            0.0
-                                        ]
-
-                elif isinstance(state, UAVAgentState):
-                    prev_state : UAVAgentState = state.copy()
-                    prev_state.t = t_prev
-
-                    if isinstance(prev_req, GroundPointMeasurementRequest):
-                        prev_state.pos = prev_req.pos
-                    else:
-                        raise NotImplementedError(f"cannot calculate travel time start for requests of type {type(prev_req)} for uav agents")
-
-                else:
-                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
-
-            # maneuver to point to target
-            t_maneuver_end = None
-            if isinstance(state, SatelliteAgentState):
-                prev_state : SatelliteAgentState
-
-                t_maneuver_start = prev_state.t
-                th_f = prev_state.calc_off_nadir_agle(measurement_req)
-                t_maneuver_end = t_maneuver_start + abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
-
-                if abs(t_maneuver_start - t_maneuver_end) > 0.0:
-                    maneuver_action = ManeuverAction([th_f, 0, 0], t_maneuver_start, t_maneuver_end)
-                    plan_i.append(maneuver_action)   
-                else:
-                    t_maneuver_end = None
-
-            # move to target
-            t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
-            if isinstance(state, SatelliteAgentState):
-                lat, lon, _ = measurement_req.lat_lon_pos
-                df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, t_move_start)
-                
-                t_move_end = None
-                for _, row in df.iterrows():
-                    if row['time index'] * self.orbitdata.time_step >= t_img:
-                        t_move_end = row['time index'] * self.orbitdata.time_step
-                        break
-
-                if t_move_end is None:
-                    # unpheasible path
-                    self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
-                    continue
-
-                future_state : SatelliteAgentState = state.propagate(t_move_end)
-                final_pos = future_state.pos
-
-            elif isinstance(state, UAVAgentState):
-                final_pos = measurement_req.pos
-                dr = np.array(final_pos) - np.array(prev_state.pos)
-                norm = np.sqrt( dr.dot(dr) )
-                
-                t_move_end = t_move_start + norm / state.max_speed
-
-            else:
-                raise NotImplementedError(f"cannot calculate travel time end for agent states of type {type(state)}")
-            
-            if t_move_end < t_img:
-                plan_i.append( WaitForMessages(t_move_end, t_img) )
-                
-            t_img_start = t_img
-            t_img_end = t_img_start + measurement_req.duration
-
-            if isinstance(self._clock_config, FixedTimesStepClockConfig):
-                dt = self._clock_config.dt
-                if t_move_start < np.Inf:
-                    t_move_start = dt * math.floor(t_move_start/dt)
-                if t_move_end < np.Inf:
-                    t_move_end = dt * math.ceil(t_move_end/dt)
-
-                if t_img_start < np.Inf:
-                    t_img_start = dt * math.floor(t_img_start/dt)
-                if t_img_end < np.Inf:
-                    t_img_end = dt * math.ceil((t_img_start + measurement_req.duration)/dt)
-            
-            if abs(t_move_start - t_move_end) >= 1e-3:
-                move_action = TravelAction(final_pos, t_move_start, t_move_end)
-                plan_i.append(move_action)
-            
-            # perform measurement
-            main_measurement, _ = measurement_req.measurement_groups[subtask_index]
-            measurement_action = MeasurementAction( 
-                                                    measurement_req.to_dict(),
-                                                    subtask_index, 
-                                                    main_measurement,
-                                                    u_exp,
-                                                    t_img_start, 
-                                                    t_img_end
-                                                    )
-            plan_i.append(measurement_action)  
-
-            # TODO inform others of request completion
-
-            plan.extend(plan_i)
-        
-        return plan
