@@ -157,6 +157,9 @@ class PlanningModule(InternalModule):
                             await self.measurement_bid_inbox.put(bid_msg)
 
                         # TODO support down-linked information processing
+                else:
+                    # ignore
+                    x = 1 
 
         except asyncio.CancelledError:
             return

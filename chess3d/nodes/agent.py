@@ -200,6 +200,9 @@ class SimulationAgent(Agent):
                     self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
                     actions.append(action_dict)  
                 break
+            else:
+                # ignore
+                x = 1
         
         self.log(f"plan of {len(actions)} actions received from planner module!")
         return actions

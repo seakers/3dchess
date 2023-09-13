@@ -282,9 +282,6 @@ class ScienceModule(InternalModule):
                     science_value, outlier_data = self.compute_science_value(lat, lon, obs)
                     self.log('Computed the science value!',level=logging.INFO)
 
-                    if outlier_data is None:
-                        continue
-
                     metadata = {
                         "observation" : obs
                     }
@@ -292,8 +289,10 @@ class ScienceModule(InternalModule):
 
                     if "scenario1a" in self.scenario_dir:
                         desired_variables = ["visible"]
+
                     elif "scenario1b" in self.scenario_dir:
                         desired_variables = ["visible","altimetry"]
+
                     elif "scenario2" in self.scenario_dir:
                         if outlier_data["event_type"] == "bloom":
                             desired_variables = ["visible","sar","thermal"]
@@ -301,9 +300,7 @@ class ScienceModule(InternalModule):
                             desired_variables = ["visible","thermal"]
                         elif outlier_data["event_type"] == "level":
                             desired_variables = ["visible","sar"]
-                        # else:
-                        #     # no outlier found
-                        #     continue
+                        
                     else:
                         self.log(f'Scenario not supported by `request_handler()`',level=logging.INFO)
                         continue
@@ -313,6 +310,10 @@ class ScienceModule(InternalModule):
                     t_end = np.Inf # TODO
                     t_corr = t_end - t_start
                     measurement_req = GroundPointMeasurementRequest([lat, lon, 0.0], science_value, desired_variables, t_start, t_end, t_corr)
+
+                    self.log(f'sending measurement req to agent...')
+                    req_msg = MeasurementRequestMessage(self.get_parent_name(), self.get_parent_name(), measurement_req.to_dict())
+                    await self._send_manager_msg(req_msg, zmq.PUB)
 
                     x = 1
                     # req_msg = InternalMessage(self.name, AgentModuleTypes.PLANNING_MODULE.value, measurement_request)
@@ -551,10 +552,6 @@ class ScienceModule(InternalModule):
                         lakelevel_coords.append((potential_outlier["lat"],potential_outlier["lon"],potential_outlier["time"]))
                 elif obs_type == "thermal":
                     outlier, outlier_data = self.check_laketemp_outliers(potential_outlier)
-
-                    if outlier_data is None:
-                        x = 1
-
                     if outlier_data["event_type"] == "temp":
                         laketemp_coords.append((potential_outlier["lat"],potential_outlier["lon"],potential_outlier["time"]))
                 elif obs_type == "imagery":
@@ -794,7 +791,7 @@ class ScienceModule(InternalModule):
             obs_duration = obs[3]
             if(self.get_current_time() > obs_start) and (self.get_current_time() < (obs_start+obs_duration)):
                 latest_obs = obs
-                
+
         if latest_obs is None:
             item["severity"] = 0.0
             item["event_type"] = ""
@@ -871,6 +868,8 @@ class ScienceModule(InternalModule):
         outlier_data = {}
         severity = 0.0
         event_type = ""
+        obs_start = 0.0
+        obs_end = np.Inf
 
         for i in range(len(self.points[:, 0])):
             if (
@@ -887,11 +886,15 @@ class ScienceModule(InternalModule):
                     outlier = True
                     severity = obs[4]
                     event_type = "temp"
-
+                    obs_start = obs_start
+                    obs_duration = obs_start + obs_duration
+                    
                     break
         
         item["severity"] = severity
         item["event_type"] = event_type
+        item['obs_start'] = obs_start
+        item['obs_end'] = obs_end
 
         if outlier:
             x = 1

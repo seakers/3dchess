@@ -211,6 +211,9 @@ class ConsensusPlanner(PlanningModule):
                     self.agent_state_updated.clear()
                     
                     await self.states_inbox.put(state) 
+                else:
+                    # ignore
+                    x = 1
 
         except asyncio.CancelledError:
             return
