@@ -104,6 +104,9 @@
                 "@type" : "ACBBA",
                 "utility" : "LINEAR"
             },
+            "science" : {
+                "@type" : "PREDEF"
+            },
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"

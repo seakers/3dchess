@@ -214,7 +214,7 @@ if __name__ == "__main__":
     scenario_name = sys.argv[1]
     plot_results = True
     save_plot = False
-    # level = logging.WARNING
+    level = logging.WARNING
 
     # terminal welcome message
     print_welcome(scenario_name)
@@ -253,15 +253,16 @@ if __name__ == "__main__":
 
     # read logger level
     if isinstance(settings_dict, dict):
-        level = settings_dict.get('logger', logging.WARNING)
-        if not isinstance(level, int):
-            levels = {
-                        'DEBUG': logging.DEBUG, 
-                        'WARNING' : logging.WARNING,
-                        'CRITICAL' : logging.CRITICAL,
-                        'ERROR' : logging.ERROR
-                    }
-            level = levels[level]
+        pass
+        # level = settings_dict.get('logger', logging.WARNING)
+        # if not isinstance(level, int):
+        #     levels = {
+        #                 'DEBUG': logging.DEBUG, 
+        #                 'WARNING' : logging.WARNING,
+        #                 'CRITICAL' : logging.CRITICAL,
+        #                 'ERROR' : logging.ERROR
+        #             }
+        #     level = levels[level]
     else:
         level = logging.WARNING
 

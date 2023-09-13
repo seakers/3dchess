@@ -334,11 +334,11 @@ class ConsensusPlanner(PlanningModule):
                 #     # TODO implement case for planning horizon
                 #     replan = True
 
-                if replan:
-                    await self.agent_state_lock.acquire()
-                    results, bundle, path = self.replanner()         
-                    plan : list = self.plan_from_path(self.agent_state, path)
-                    self.agent_state_lock.release()
+                # if replan:
+                #     await self.agent_state_lock.acquire()
+                #     results, bundle, path, reboradcasts = self.replanner()         
+                #     plan : list = self.plan_from_path(self.agent_state, path)
+                #     self.agent_state_lock.release()
                            
 
                 #     # wait for plan to be updated
