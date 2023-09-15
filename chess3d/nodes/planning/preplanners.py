@@ -57,16 +57,11 @@ class FIFOPreplanner(AbstractPreplanner):
                             orbitdata: OrbitData, 
                             level: int = logging.DEBUG
                         ) -> list:
-                        
+
         results = {req.id : [] for req in initial_reqs}
         path = [] 
-
-        for req in initial_reqs:
-            req : MeasurementRequest
-            bids = self.generate_bids_from_request(req)
-            results[req.id] = bids
         
-        available_reqs : list = self.get_available_requests( state, [], results )
+        available_reqs : list = self.get_available_requests( state ,initial_reqs, orbitdata )
 
         if isinstance(state, SatelliteAgentState):
             # Generates a plan for observing GPs on a first-come first-served basis

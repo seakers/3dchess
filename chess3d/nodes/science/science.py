@@ -70,8 +70,8 @@ class ScienceModule(InternalModule):
                 self.points = self.load_points_scenario1b()
                 self.log(f'Scenario 1b points loaded!',level=logging.INFO)
             elif "scenario2" in self.scenario_dir:
-                # self.points = self.load_events_scenario2()
-                self.points = self.load_events_scenario2_revised()
+                self.points = self.load_events_scenario2()
+                # self.points = self.load_events_scenario2_revised()
                 self.log(f'Scenario 2 points loaded!',level=logging.INFO)
         except Exception as e:
             raise e
@@ -111,25 +111,12 @@ class ScienceModule(InternalModule):
 
     def load_events_scenario2(self):
         points = []
-        # 0 is height, 1 is temperature
-        with open(self.scenario_dir+'/resources/grealm.csv', 'r') as f:
+
+        with open(self.scenario_dir+'/resources/all_events.csv', 'r') as f:
             d_reader = csv.DictReader(f)
             for line in d_reader:
-                points.append((line["lat"],line["lon"],line["avg"],line["std"],line["date"],line["value"],0))
-        with open(self.scenario_dir+'/resources/laketemps.csv', 'r') as f:
-            d_reader = csv.DictReader(f)
-            for line in d_reader:
-                points.append((line["lat"],line["lon"],line["avg"],line["std"],line["date"],line["value"],1))
-        with open(self.scenario_dir+'/resources/blooms.csv', 'r') as f:
-            d_reader = csv.DictReader(f)
-            for line in d_reader:
-                points.append((line["lat"],line["lon"],line["avg"],line["std"],line["date"],line["value"],2))
-        with open(self.scenario_dir+'/resources/extralakes.csv', 'r') as f:
-            d_reader = csv.DictReader(f)
-            for line in d_reader:
-                points.append((line["lat"],line["lon"],0.0,1000000.0,"20220601",0.0,0))
-                points.append((line["lat"],line["lon"],0.0,1000000.0,"20220601",0.0,1))
-                points.append((line["lat"],line["lon"],0.0,1000000.0,"20220601",0.0,2))
+                points.append((line["lat"],line["lon"],line["avg"],line["std"],line["date"],line["value"],line["measurements"]))
+
         points = np.asfarray(points)
         self.log(f'Loaded scenario 2 points',level=logging.INFO)
         return points

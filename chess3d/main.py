@@ -193,6 +193,7 @@ def agent_factory(  scenario_name : str,
         dt = float(dt)
 
         initial_state = SatelliteAgentState(orbit_state_dict, time_step=dt) 
+        
         return SatelliteAgent(
                                 agent_name,
                                 results_path,
