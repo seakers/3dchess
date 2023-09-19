@@ -111,14 +111,22 @@ class ScienceModule(InternalModule):
 
     def load_events_scenario2(self):
         points = []
-
         with open(self.scenario_dir+'/resources/all_events.csv', 'r') as f:
             d_reader = csv.DictReader(f)
             for line in d_reader:
-                points.append((line["lat"],line["lon"],line["avg"],line["std"],line["date"],line["value"],line["measurements"]))
+                line = [
+                                float(line["lat [deg]"]),
+                                float(line["lon [deg]"]),
+                                float(line["start time [s]"]),
+                                float(line["duration [s]"]),
+                                float(line["severity"]),
+                                str(line["measurements"].replace('|',''))
+                            ]
+                points.append(line)
 
-        points = np.asfarray(points)
+        # points = np.asfarray(points)
         self.log(f'Loaded scenario 2 points',level=logging.INFO)
+
         return points
 
     def load_events_scenario2_revised(self): # revised 9/1/23
@@ -269,11 +277,7 @@ class ScienceModule(InternalModule):
                     science_value, outlier_data = self.compute_science_value(lat, lon, obs)
                     self.log('Computed the science value!',level=logging.INFO)
 
-                    metadata = {
-                        "observation" : obs
-                    }
                     desired_variables = []
-
                     if "scenario1a" in self.scenario_dir:
                         desired_variables = ["visible"]
 
@@ -292,10 +296,9 @@ class ScienceModule(InternalModule):
                         self.log(f'Scenario not supported by `request_handler()`',level=logging.INFO)
                         continue
 
-                    # TODO for Alan: hook this up to the planner?
-                    t_start = self.get_current_time()
-                    t_end = np.Inf # TODO
-                    t_corr = t_end - t_start
+                    t_start = outlier_data['obs_start']
+                    t_corr = outlier_data['obs_duration']
+                    t_end = outlier_data['obs_end']
                     measurement_req = GroundPointMeasurementRequest([lat, lon, 0.0], science_value, desired_variables, t_start, t_end, t_corr)
 
                     self.log(f'sending measurement req to agent...')
@@ -762,131 +765,124 @@ class ScienceModule(InternalModule):
         """
         Checks G-REALM data for outliers. To be used for Scenario 2.
         """
-        outlier = False
-        outlier_data = None
-        severity = 0.0
-        event_type = ""
-        lake_obs = []
-        for i in range(len(self.points[:, 0])):
-            if (abs(float(item["lat"])-self.points[i, 0]) < 0.001) and (abs(float(item["lon"]) - self.points[i, 1]) < 0.001):
-                if self.points[i,5] == 0:
-                    lake_obs.append(self.points[i,:])
+        return self.__check_outlier(item, 0)
+        # outlier = False
+        # outlier_data = None
+        # severity = 0.0
+        # event_type = ""
+        # lake_obs = []
+        # for i in range(len(self.points[:, 0])):
+        #     if (abs(float(item["lat"])-self.points[i, 0]) < 0.001) and (abs(float(item["lon"]) - self.points[i, 1]) < 0.001):
+        #         if self.points[i,5] == 0:
+        #             lake_obs.append(self.points[i,:])
                     
-        latest_obs = None
-        for obs in lake_obs:
-            obs_start = obs[2]
-            obs_duration = obs[3]
-            if(self.get_current_time() > obs_start) and (self.get_current_time() < (obs_start+obs_duration)):
-                latest_obs = obs
+        # latest_obs = None
+        # for obs in lake_obs:
+        #     obs_start = obs[2]
+        #     obs_duration = obs[3]
+        #     if(self.get_current_time() > obs_start) and (self.get_current_time() < (obs_start+obs_duration)):
+        #         latest_obs = obs
 
-        if latest_obs is None:
-            item["severity"] = 0.0
-            item["event_type"] = ""
-            return outlier, item
+        # if latest_obs is None:
+        #     item["severity"] = 0.0
+        #     item["event_type"] = ""
+        #     return outlier, item
         
-        # if latest_obs[5] > (latest_obs[2]+latest_obs[3]):
-        #     if latest_obs[3] == 0.0:
-        #         item["severity"] = np.abs(latest_obs[5]/latest_obs[3])
-        #     else:
-        item["severity"] = latest_obs[4]
-        outlier = True
-        outlier_data = item
-        outlier_data["event_type"] = "bloom"
-        self.log(f'Algal bloom detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
-        # else:
-        #     outlier_data = item
-        #     outlier_data["severity"] = 0.0
-        #     outlier_data["event_type"] = ""
-        #     self.log(f'No algal bloom detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
-        return outlier, outlier_data
-
-    def check_lakelevel_outliers(self,item):
-        """
-        Checks G-REALM data for outliers. To be used for Scenario 2.
-        """
-        outlier = False
-        outlier_data = None
-        severity = 0.0
-        event_type = ""
-        lake_obs = []
-        for i in range(len(self.points[:, 0])):
-            if (abs(float(item["lat"])-self.points[i, 0]) < 0.01) and (abs(float(item["lon"]) - self.points[i, 1]) < 0.01):
-                if self.points[i,5] == 2:
-                    lake_obs.append(self.points[i,:])
-                    
-        latest_obs = None
-        for obs in lake_obs:
-            obs_start = obs[2]
-            obs_duration = obs[3]
-            if(self.get_current_time() > obs_start) and (self.get_current_time() < (obs_start+obs_duration)):
-                latest_obs = obs
-        
-        if latest_obs is None:
-            item["severity"] = 0.0
-            item["event_type"] = ""
-            return outlier, item
-        
-        item["severity"] = latest_obs[4]
-        outlier = True
-        outlier_data = item
-        outlier_data["event_type"] = "level"
-        self.log(f'Lake flood detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
-        # elif latest_obs[5] < (latest_obs[2]-latest_obs[3]):
-        #     if latest_obs[3] == 0.0:
-        #         item["severity"] = np.abs(latest_obs[5]/latest_obs[3])
-        #     else:
-        #         item["severity"] = latest_obs[5]
-        #     outlier = True
-        #     outlier_data = item
-        #     outlier_data["event_type"] = "lake drought"
-        #     self.log(f'Lake drought detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
-        # else:
-        #     outlier_data = item
-        #     outlier_data["severity"] = 0.0
-        #     outlier_data["event_type"] = ""
-        #     self.log(f'No lake height outlier detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
-        return outlier, outlier_data
+        # # if latest_obs[5] > (latest_obs[2]+latest_obs[3]):
+        # #     if latest_obs[3] == 0.0:
+        # #         item["severity"] = np.abs(latest_obs[5]/latest_obs[3])
+        # #     else:
+        # item["severity"] = latest_obs[4]
+        # outlier = True
+        # outlier_data = item
+        # outlier_data["event_type"] = "bloom"
+        # self.log(f'Algal bloom detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
+        # # else:
+        # #     outlier_data = item
+        # #     outlier_data["severity"] = 0.0
+        # #     outlier_data["event_type"] = ""
+        # #     self.log(f'No algal bloom detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
+        # return outlier, outlier_data
 
     def check_laketemp_outliers(self,item):
         """
         Checks G-REALM data for outliers. To be used for Scenario 2.
         """
-        outlier = False
-        outlier_data = {}
-        severity = 0.0
-        event_type = ""
-        obs_start = 0.0
-        obs_end = np.Inf
+        return self.__check_outlier(item, 1)   
 
-        for i in range(len(self.points[:, 0])):
-            if (
-                    (abs(float(item["lat"]) - self.points[i, 0]) < 0.01) 
-                and (abs(float(item["lon"]) - self.points[i, 1]) < 0.01)
-                and self.points[i,5] == 1
-                ):
-                obs = self.points[i,:]
-                obs_start = obs[2]
-                obs_duration = obs[3]
-                if obs_start <= self.get_current_time() <= obs_start + obs_duration:
-                    self.log(f'Lake temperature event detected at {obs[0]}, {obs[1]}',level=logging.DEBUG)
-
-                    outlier = True
-                    severity = obs[4]
-                    event_type = "temp"
-                    obs_start = obs_start
-                    obs_duration = obs_start + obs_duration
+    def check_lakelevel_outliers(self,item):
+        """
+        Checks G-REALM data for outliers. To be used for Scenario 2.
+        """
+        return self.__check_outlier(item, 2) 
+        # outlier = False
+        # outlier_data = None
+        # severity = 0.0
+        # event_type = ""
+        # lake_obs = []
+        # for i in range(len(self.points[:, 0])):
+        #     if (abs(float(item["lat"])-self.points[i, 0]) < 0.01) and (abs(float(item["lon"]) - self.points[i, 1]) < 0.01):
+        #         if self.points[i,5] == 2:
+        #             lake_obs.append(self.points[i,:])
                     
+        # latest_obs = None
+        # for obs in lake_obs:
+        #     obs_start = obs[2]
+        #     obs_duration = obs[3]
+        #     if(self.get_current_time() > obs_start) and (self.get_current_time() < (obs_start+obs_duration)):
+        #         latest_obs = obs
+        
+        # if latest_obs is None:
+        #     item["severity"] = 0.0
+        #     item["event_type"] = ""
+        #     return outlier, item
+        
+        # item["severity"] = latest_obs[4]
+        # outlier = True
+        # outlier_data = item
+        # outlier_data["event_type"] = "level"
+        # self.log(f'Lake flood detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
+        # # elif latest_obs[5] < (latest_obs[2]-latest_obs[3]):
+        # #     if latest_obs[3] == 0.0:
+        # #         item["severity"] = np.abs(latest_obs[5]/latest_obs[3])
+        # #     else:
+        # #         item["severity"] = latest_obs[5]
+        # #     outlier = True
+        # #     outlier_data = item
+        # #     outlier_data["event_type"] = "lake drought"
+        # #     self.log(f'Lake drought detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
+        # # else:
+        # #     outlier_data = item
+        # #     outlier_data["severity"] = 0.0
+        # #     outlier_data["event_type"] = ""
+        # #     self.log(f'No lake height outlier detected at {latest_obs[0]}, {latest_obs[1]}',level=logging.DEBUG)
+        # return outlier, outlier_data
+
+    def __check_outlier(self, item : dict, event_idx : int) -> tuple:
+        obs_start, obs_duration, obs_severity, event_type = np.Inf, np.Inf, 0.0, ""
+
+        outlier = False
+        for lat, lon, t_start, duration, severity, measurements in self.points:
+            if (
+                    (abs(float(item["lat"]) - lat) < 0.01) 
+                and (abs(float(item["lon"]) - lon) < 0.01)
+                and measurements == event_idx
+                ):
+                if t_start <= self.get_current_time() <= t_start + duration:
+                    self.log(f'Lake temperature event detected at {lat}, {lon}',level=logging.DEBUG)
+
+                    obs_start, obs_duration, obs_severity = t_start, duration, severity
+                    event_type = "temp"
+                    outlier = True
                     break
         
-        item["severity"] = severity
+        item["severity"] = obs_severity
         item["event_type"] = event_type
         item['obs_start'] = obs_start
-        item['obs_end'] = obs_end
+        item['obs_duration'] = obs_duration
+        item['obs_end'] = obs_start + obs_duration
 
-        if outlier:
-            x = 1
-
-        return outlier, item     
+        return outlier, item 
            
         # elif latest_obs[5] < (latest_obs[2]-latest_obs[3]):
         #     if latest_obs[3] == 0.0:

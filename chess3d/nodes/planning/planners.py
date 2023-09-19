@@ -1,6 +1,6 @@
-import math
 import os
 import re
+import time
 from typing import Any, Callable
 from nodes.planning.preplanners import AbstractPreplanner
 from nodes.planning.replanners import AbstractReplanner
@@ -10,13 +10,6 @@ from nodes.science.reqs import *
 from messages import *
 from dmas.modules import *
 import pandas as pd
-
-class PlannerTypes(Enum):
-    FIXED = 'FIXED'
-    GREEDY = 'GREEDY'
-    MACCBBA = 'MACCBBA'
-    MCCBBA = 'MCCBBA'
-    ACBBA = 'ACBBA'
 
 class PlanningModule(InternalModule):
     def __init__(self, 
@@ -31,6 +24,7 @@ class PlanningModule(InternalModule):
                 logger: logging.Logger = None
                 ) -> None:
                        
+        # setup network settings
         addresses = parent_network_config.get_internal_addresses()        
         sub_addesses = []
         sub_address : str = addresses.get(zmq.PUB)[0]
@@ -53,13 +47,14 @@ class PlanningModule(InternalModule):
                                         zmq.PUB: [pub_address],
                                         zmq.PUSH: [push_address]})
 
+        # intialize module
         super().__init__(f'{parent_name}-PLANNING_MODULE', 
                         planner_network_config, 
                         parent_network_config, 
                         level, 
                         logger)
         
-
+        # initialize default attributes
         self.results_path = results_path
         self.parent_name = parent_name
         self.utility_func = utility_func
@@ -95,6 +90,8 @@ class PlanningModule(InternalModule):
         self.states_inbox = asyncio.Queue()
         self.action_status_inbox = asyncio.Queue()
         self.req_inbox = asyncio.Queue()
+        self.measurement_inbox = asyncio.Queue()
+        self.misc_inbox = asyncio.Queue()
 
         # setup agent state locks
         self.agent_state_lock = asyncio.Lock()
@@ -141,6 +138,7 @@ class PlanningModule(InternalModule):
                     return
 
                 elif content['msg_type'] == SimulationMessageTypes.SENSES.value:
+                    # received agent sense message from parent
                     self.log(f"received senses from parent agent!", level=logging.DEBUG)
 
                     # unpack message 
@@ -164,8 +162,27 @@ class PlanningModule(InternalModule):
                             state_msg : AgentStateMessage = AgentStateMessage(**sense)
                             self.log(f"received agent state message!")
                                                         
-                            # send to planner
-                            await self.states_inbox.put(state_msg) 
+                            # update current state
+                            await self.agent_state_lock.acquire()
+                            state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
+
+                            await self.update_current_time(state.t)
+                            self.agent_state = state
+
+                            if self.parent_agent_type is None:
+                                if isinstance(state, SatelliteAgentState):
+                                    # import orbit data
+                                    self.orbitdata : OrbitData = self._load_orbit_data()
+                                    self.parent_agent_type = SimulationAgentTypes.SATELLITE.value
+                                elif isinstance(state, UAVAgentState):
+                                    self.parent_agent_type = SimulationAgentTypes.UAV.value
+                                elif isinstance(state, GroundStationAgentState):
+                                    self.parent_agent_type = SimulationAgentTypes.GROUND_STATION.value
+                                else:
+                                    raise NotImplementedError(f"states of type {state_msg.state['state_type']} not supported for planners.")
+                            
+                            self.agent_state_lock.release()
+                            await self.states_inbox.put(state)
 
                         elif sense['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
                             # request received directly from another agent
@@ -180,16 +197,31 @@ class PlanningModule(InternalModule):
 
                         # TODO support down-linked information processing
 
-                elif content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
-                    # request received directly from another module
+                        elif sense['msg_type'] == SimulationMessageTypes.MEASUREMENT.value:
+                            # measurement was just performed by agent
+                            msg = message_from_dict(**sense)
+                            await self.measurement_inbox.put(msg)
 
-                    # unpack message 
-                    req_msg = MeasurementRequestMessage(**content)
-                    req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
-                    self.log(f"received measurement request message from another module!")
+                        else:
+                            # other type of message was received
+                            msg = message_from_dict(**sense)
+                            await self.misc_inbox.put(msg)
+
+                # elif content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
+                #     # request received directly from another module
+
+                #     # unpack message 
+                #     req_msg = MeasurementRequestMessage(**content)
+                #     req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
+                #     self.log(f"received measurement request message from another module!")
                     
-                    # send to planner
-                    await self.req_inbox.put(req)
+                #     # send to planner
+                #     await self.req_inbox.put(req)
+
+                else:
+                    # other type of message was received
+                    msg = message_from_dict(**content)
+                    await self.internal_inbox.put(msg)
 
         except asyncio.CancelledError:
             return
@@ -200,8 +232,7 @@ class PlanningModule(InternalModule):
         """
         try:
             # initialize results vectors
-            plan, known_reqs = [], []
-            bundle, path, results = [], [], {}
+            plan = []
 
             # level = logging.WARNING
             level = logging.DEBUG
@@ -211,7 +242,7 @@ class PlanningModule(InternalModule):
                 _ : AgentStateMessage = await self.states_inbox.get()
 
                 # --- Check Action Completion ---
-                
+                performed_actions = []
                 while not self.action_status_inbox.empty():
                     action_msg : AgentActionMessage = await self.action_status_inbox.get()
                     action : AgentAction = action_from_dict(**action_msg.action)
@@ -226,6 +257,8 @@ class PlanningModule(InternalModule):
 
                     else:
                         # if action was completed or aborted, remove from plan
+                        performed_actions.append(action)
+
                         if action_msg.status == AgentAction.COMPLETED:
                             self.log(f'action of type `{action.action_type}` completed!', level)
 
@@ -244,7 +277,6 @@ class PlanningModule(InternalModule):
                             plan.remove(removed)
                 
                 # --- Look for Plan Updates ---
-
                 plan_out = []
                 
                 # check if plan has been initialized
@@ -255,30 +287,54 @@ class PlanningModule(InternalModule):
                     # Generate Initial Plan
                     initial_reqs = self.initial_reqs
                     self.initial_reqs = []
-
+                    
                     await self.agent_state_lock.acquire()
+                    t_0 = time.perf_counter()
                     plan : list = self.preplanner.initialize_plan(  self.agent_state, 
                                                                     initial_reqs,
                                                                     self.orbitdata,
+                                                                    self._clock_config,
                                                                     level
                                                                     )
+                    dt = time.perf_counter() - t_0
+                    self.stats['preplanning'].append(dt)
                     self.agent_state_lock.release()
 
                 # Check if reeplanning is needed
                 incoming_reqs = []
                 while not self.req_inbox.empty():
                     incoming_reqs.append(await self.req_inbox.get())
+
+                incoming_measurements = []
+                while not self.measurement_inbox.empty():
+                    incoming_measurements.append(await self.misc_inbox.get())
+
+                generated_reqs = []
+                if len(incoming_measurements) > 0:
+                    generated_reqs.append(await self.internal_inbox.get())
+                    while not self.misc_inbox.empty():
+                        generated_reqs.append(await self.internal_inbox.get())
                 
                 await self.agent_state_lock.acquire()
+                t_0 = time.perf_counter()
                 if (
-                    self.replanner.needs_replanning(self.agent_state, plan, incoming_reqs)
+                    self.replanner is not None and 
+                    self.replanner.needs_replanning(self.agent_state,
+                                                    plan, 
+                                                    incoming_reqs,
+                                                    incoming_misc)
                     ):
                     plan : list = self.replanner.revise_plan(   self.agent_state,
                                                                 plan, 
                                                                 incoming_reqs,
+                                                                incoming_misc,
                                                                 self.orbitdata,
                                                                 level
                                                             )
+                    
+                    dt = time.perf_counter() - t_0
+                    self.stats['replanning'].append(dt)
+
                 self.agent_state_lock.release()
 
                 # --- Execute plan ---
@@ -338,3 +394,235 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
+
+    async def teardown(self) -> None:
+        # log plan history
+        headers = ['plan_index', 't_plan', 'req_id', 'subtask_index', 't_img', 'u_exp']
+        data = []
+        
+        for i in range(len(self.plan_history)):
+            t_plan, plan = self.plan_history[i]
+            t_plan : float; plan : list
+
+            for action in plan:
+                if not isinstance(action, MeasurementAction):
+                    continue
+
+                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+                line_data = [   i,
+                                np.round(t_plan,3),
+                                req.id.split('-')[0],
+                                action.subtask_index,
+                                np.round(action.t_start,3 ),
+                                np.round(action.u_exp,3)
+                ]
+                data.append(line_data)
+
+        df = pd.DataFrame(data, columns=headers)
+        self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+        df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
+
+        # log performance stats
+        n_decimals = 3
+        headers = ['routine','t_avg','t_std','t_med','n']
+        data = []
+
+        for routine in self.stats:
+            t_avg = np.mean(self.stats[routine])
+            t_std = np.std(self.stats[routine])
+            t_median = np.median(self.stats[routine])
+            n = len(self.stats[routine])
+
+            line_data = [ 
+                            routine,
+                            np.round(t_avg,n_decimals),
+                            np.round(t_std,n_decimals),
+                            np.round(t_median,n_decimals),
+                            n
+                            ]
+            data.append(line_data)
+
+        stats_df = pd.DataFrame(data, columns=headers)
+        self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+        stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
+
+        await super().teardown()
+
+    def _load_orbit_data(self) -> OrbitData:
+        """
+        Loads agent orbit data from pre-computed csv files in scenario directory
+        """
+        if self.parent_agent_type != None:
+            raise RuntimeError(f"orbit data already loaded. It can only be assigned once.")            
+
+        results_path_list = self.results_path.split('/')
+        if 'results' in results_path_list[-1]:
+            results_path_list.pop()
+
+        scenario_name = results_path_list[-1]
+        scenario_dir = f'./scenarios/{scenario_name}/'
+        data_dir = scenario_dir + '/orbit_data/'
+
+        with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
+            # load json file as dictionary
+            mission_dict : dict = json.load(scenario_specs)
+            spacecraft_list : list = mission_dict.get('spacecraft', None)
+            ground_station_list = mission_dict.get('groundStation', None)
+            
+            for spacecraft in spacecraft_list:
+                spacecraft : dict
+                name = spacecraft.get('name')
+                index = spacecraft_list.index(spacecraft)
+                agent_folder = "sat" + str(index) + '/'
+
+                if name != self.get_parent_name():
+                    continue
+
+                # load eclipse data
+                eclipse_file = data_dir + agent_folder + "eclipses.csv"
+                eclipse_data = pd.read_csv(eclipse_file, skiprows=range(3))
+                
+                # load position data
+                position_file = data_dir + agent_folder + "state_cartesian.csv"
+                position_data = pd.read_csv(position_file, skiprows=range(4))
+
+                # load propagation time data
+                time_data =  pd.read_csv(position_file, nrows=3)
+                _, epoc_type, _, epoc = time_data.at[0,time_data.axes[1][0]].split(' ')
+                epoc_type = epoc_type[1 : -1]
+                epoc = float(epoc)
+                _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
+                time_step = float(time_step)
+
+                time_data = { "epoc": epoc, 
+                            "epoc type": epoc_type, 
+                            "time step": time_step }
+
+                # load inter-satellite link data
+                isl_data = dict()
+                for file in os.listdir(data_dir + '/comm/'):                
+                    isl = re.sub(".csv", "", file)
+                    sender, _, receiver = isl.split('_')
+
+                    if 'sat' + str(index) in sender or 'sat' + str(index) in receiver:
+                        isl_file = data_dir + 'comm/' + file
+                        if 'sat' + str(index) in sender:
+                            receiver_index = int(re.sub("[^0-9]", "", receiver))
+                            receiver_name = spacecraft_list[receiver_index].get('name')
+                            isl_data[receiver_name] = pd.read_csv(isl_file, skiprows=range(3))
+                        else:
+                            sender_index = int(re.sub("[^0-9]", "", sender))
+                            sender_name = spacecraft_list[sender_index].get('name')
+                            isl_data[sender_name] = pd.read_csv(isl_file, skiprows=range(3))
+
+                # load ground station access data
+                gs_access_data = pd.DataFrame(columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]'])
+                for file in os.listdir(data_dir + agent_folder):
+                    if 'gndStn' in file:
+                        gndStn_access_file = data_dir + agent_folder + file
+                        gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
+                        nrows, _ = gndStn_access_data.shape
+
+                        if nrows > 0:
+                            gndStn, _ = file.split('_')
+                            gndStn_index = int(re.sub("[^0-9]", "", gndStn))
+                            
+                            gndStn_name = ground_station_list[gndStn_index].get('name')
+                            gndStn_id = ground_station_list[gndStn_index].get('@id')
+                            gndStn_lat = ground_station_list[gndStn_index].get('latitude')
+                            gndStn_lon = ground_station_list[gndStn_index].get('longitude')
+
+                            gndStn_name_column = [gndStn_name] * nrows
+                            gndStn_id_column = [gndStn_id] * nrows
+                            gndStn_lat_column = [gndStn_lat] * nrows
+                            gndStn_lon_column = [gndStn_lon] * nrows
+
+                            gndStn_access_data['gndStn name'] = gndStn_name_column
+                            gndStn_access_data['gndStn id'] = gndStn_id_column
+                            gndStn_access_data['lat [deg]'] = gndStn_lat_column
+                            gndStn_access_data['lon [deg]'] = gndStn_lon_column
+
+                            if len(gs_access_data) == 0:
+                                gs_access_data = gndStn_access_data
+                            else:
+                                gs_access_data = pd.concat([gs_access_data, gndStn_access_data])
+
+                # land coverage data metrics data
+                payload = spacecraft.get('instrument', None)
+                if not isinstance(payload, list):
+                    payload = [payload]
+
+                gp_access_data = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]', 'agent','instrument',
+                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
+
+                for instrument in payload:
+                    i_ins = payload.index(instrument)
+                    gp_acces_by_mode = []
+
+                    # modes = spacecraft.get('instrument', None)
+                    # if not isinstance(modes, list):
+                    #     modes = [0]
+                    modes = [0]
+
+                    gp_acces_by_mode = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]','instrument',
+                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
+                    for mode in modes:
+                        i_mode = modes.index(mode)
+                        gp_access_by_grid = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]',
+                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
+
+                        for grid in mission_dict.get('grid'):
+                            i_grid = mission_dict.get('grid').index(grid)
+                            metrics_file = data_dir + agent_folder + f'datametrics_instru{i_ins}_mode{i_mode}_grid{i_grid}.csv'
+                            metrics_data = pd.read_csv(metrics_file, skiprows=range(4))
+                            
+                            nrows, _ = metrics_data.shape
+                            grid_id_column = [i_grid] * nrows
+                            metrics_data['grid index'] = grid_id_column
+
+                            if len(gp_access_by_grid) == 0:
+                                gp_access_by_grid = metrics_data
+                            else:
+                                gp_access_by_grid = pd.concat([gp_access_by_grid, metrics_data])
+
+                        nrows, _ = gp_access_by_grid.shape
+                        gp_access_by_grid['pnt-opt index'] = [mode] * nrows
+
+                        if len(gp_acces_by_mode) == 0:
+                            gp_acces_by_mode = gp_access_by_grid
+                        else:
+                            gp_acces_by_mode = pd.concat([gp_acces_by_mode, gp_access_by_grid])
+                        # gp_acces_by_mode.append(gp_access_by_grid)
+
+                    nrows, _ = gp_acces_by_mode.shape
+                    gp_access_by_grid['instrument'] = [instrument] * nrows
+                    # gp_access_data[ins_name] = gp_acces_by_mode
+
+                    if len(gp_access_data) == 0:
+                        gp_access_data = gp_acces_by_mode
+                    else:
+                        gp_access_data = pd.concat([gp_access_data, gp_acces_by_mode])
+                
+                nrows, _ = gp_access_data.shape
+                gp_access_data['agent name'] = [spacecraft['name']] * nrows
+
+                grid_data_compiled = []
+                for grid in mission_dict.get('grid'):
+                    grid : dict
+                    if grid.get('@type') == 'customGrid':
+                        grid_file = grid.get('covGridFilePath')
+                        # grid_data = pd.read_csv(grid_file)
+                    elif grid.get('@type') == 'autogrid':
+                        i_grid = mission_dict.get('grid').index(grid)
+                        grid_file = data_dir + f'grid{i_grid}.csv'
+                    else:
+                        raise NotImplementedError(f"Loading of grids of type `{grid.get('@type')} not yet supported.`")
+
+                    grid_data = pd.read_csv(grid_file)
+                    nrows, _ = grid_data.shape
+                    grid_data['GP index'] = [i for i in range(nrows)]
+                    grid_data['grid index'] = [i_grid] * nrows
+                    grid_data_compiled.append(grid_data)
+
+                return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
+                

@@ -83,8 +83,7 @@ class SimulationAgent(Agent):
         for instrument in payload:
             if not isinstance(instrument, Instrument):
                 raise AttributeError(f'`payload` must be a `list` containing elements of type `Instrument`; contains elements of type {type(instrument)}')
-        
-        self.payload : list = payload
+        self.payload = payload
         self.state_history : list = []
         
         # setup results folder:
@@ -411,7 +410,7 @@ class SimulationAgent(Agent):
         
         state_df = DataFrame(data,columns=headers)
         # state_df = state_df.drop_duplicates()
-        self.log(f'\nPayload: {self.payload}\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
+        self.log(f'\nPayload: {self.state.payload}\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
         state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
         # log performance stats

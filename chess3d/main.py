@@ -13,6 +13,7 @@ import concurrent.futures
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
 from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
+from chess3d.nodes.planning.preplanners import FIFOPreplanner
 from manager import SimulationManager
 from monitor import ResultsMonitor
 
@@ -21,11 +22,7 @@ from nodes.uav import UAVAgent
 from nodes.agent import SimulationAgent
 from nodes.groundstat import GroundStationAgent
 from nodes.satellite import SatelliteAgent
-from nodes.planning.fixed import FixedPlanner
-from nodes.planning.greedy import GreedyPlanner
-from nodes.planning.planners import PlannerTypes
-from nodes.planning.consensus.maccbba import MACCBBA
-from nodes.planning.consensus.acbba import ACBBA
+from nodes.planning.planners import PlanningModule
 from nodes.science.science import ScienceModule
 from nodes.science.utility import utility_function
 from nodes.science.reqs import GroundPointMeasurementRequest
@@ -106,51 +103,32 @@ def agent_factory(  scenario_name : str,
 
     ## load planner module
     if planner_dict is not None:
-        planner_type = planner_dict['@type']
-        planner_util = planner_dict['utility']
-        if planner_type == PlannerTypes.FIXED.value:
-            plan = [ ]
-
-            planner = FixedPlanner(results_path, 
-                                    agent_name,
-                                    plan, 
-                                    agent_network_config,
-                                    utility_function[planner_util], 
-                                    logger=logger)
-        elif planner_type == PlannerTypes.GREEDY.value:
-            planner = GreedyPlanner(results_path,
-                                    agent_name,
-                                    agent_network_config,
-                                    utility_function[planner_util],
-                                    payload,
-                                    logger=logger)
-
-        elif planner_type == PlannerTypes.ACBBA.value:
-            planner = ACBBA(results_path,
-                            agent_name,
-                            agent_network_config,
-                            utility_function[planner_util],
-                            payload,
-                            initial_reqs=initial_reqs)
-
-        elif planner_type == PlannerTypes.MACCBBA.value:
-            planner = MACCBBA(results_path,
-                                agent_name, 
-                                agent_network_config,
-                                utility_function[planner_util],
-                                payload,
-                                logger=logger)
+        planner_dict : dict
+        preplanner_type = planner_dict.get('preplanner', None)
+        replanner_type = planner_dict.get('replanner', None)
+        
+        if preplanner_type is not None:
+            if preplanner_type == 'FIFO':
+                preplanner = FIFOPreplanner()
+            else:
+                raise NotImplementedError(f'preplanner of type `{preplanner_type}` not yet supported.')
         else:
-            raise NotImplementedError(f"Planner of type {planner_type} not yet implemented.")
+            preplanner = None
+
+        if replanner_type is not None:
+            raise NotImplementedError(f'replanner of type `{replanner_type}` not yet supported.')
+        else:
+            replanner = None
     else:
-        # add default planner if no planner was specified
-        # TODO create a dummy default planner that  only listens for plans from the ground and executes them
-        planner = FixedPlanner(results_path, 
-                                    agent_name,
-                                    [], 
-                                    agent_network_config,
-                                    utility_function['FIXED'], 
-                                    logger=logger)
+        preplanner, replanner = None, None
+
+    planner = PlanningModule(   results_path, 
+                                agent_name, 
+                                agent_network_config, 
+                                utility_function, 
+                                preplanner,
+                                replanner,
+                                initial_reqs)
 
     ## load science module
     if science_dict is not None:
@@ -169,7 +147,10 @@ def agent_factory(  scenario_name : str,
             else:
                 eps = 1e-6
 
-            initial_state = UAVAgentState( pos, max_speed, eps=eps )
+            initial_state = UAVAgentState(  [instrument.name for instrument in payload], 
+                                            pos, 
+                                            max_speed, 
+                                            eps=eps )
 
             ## create agent
             return UAVAgent(   agent_name, 
@@ -192,7 +173,9 @@ def agent_factory(  scenario_name : str,
         _, _, _, _, dt = l.split(' ')
         dt = float(dt)
 
-        initial_state = SatelliteAgentState(orbit_state_dict, time_step=dt) 
+        initial_state = SatelliteAgentState(orbit_state_dict, 
+                                            [instrument.name for instrument in payload], 
+                                            time_step=dt) 
         
         return SatelliteAgent(
                                 agent_name,
@@ -254,16 +237,15 @@ if __name__ == "__main__":
 
     # read logger level
     if isinstance(settings_dict, dict):
-        pass
-        # level = settings_dict.get('logger', logging.WARNING)
-        # if not isinstance(level, int):
-        #     levels = {
-        #                 'DEBUG': logging.DEBUG, 
-        #                 'WARNING' : logging.WARNING,
-        #                 'CRITICAL' : logging.CRITICAL,
-        #                 'ERROR' : logging.ERROR
-        #             }
-        #     level = levels[level]
+        level = settings_dict.get('logger', logging.WARNING)
+        if not isinstance(level, int):
+            levels = {
+                        'DEBUG': logging.DEBUG, 
+                        'WARNING' : logging.WARNING,
+                        'CRITICAL' : logging.CRITICAL,
+                        'ERROR' : logging.ERROR
+                    }
+            level = levels[level]
     else:
         level = logging.WARNING
 
@@ -471,7 +453,7 @@ if __name__ == "__main__":
                                         manager_network_config,
                                         initial_state,
                                         utility_function[env_utility_function],
-                                        measurement_reqs=measurement_reqs,
+                                        initial_reqs=measurement_reqs,
                                         logger=logger)
             agents.append(agent)
             port += 6

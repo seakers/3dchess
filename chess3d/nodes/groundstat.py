@@ -1,6 +1,8 @@
 import asyncio
 import logging
 from typing import Any, Callable
+from chess3d.nodes.planning.preplanners import FIFOPreplanner
+from nodes.planning.planners import PlanningModule
 from nodes.science.reqs import *
 from dmas.network import NetworkConfig
 from nodes.planning.groundstat import GroundStationPlanner
@@ -18,7 +20,7 @@ class GroundStationAgent(SimulationAgent):
                     manager_network_config: NetworkConfig, 
                     initial_state: SimulationAgentState, 
                     utility_func: Callable[[], Any],  
-                    measurement_reqs : list = [],
+                    initial_reqs : list = [],
                     science_module : ScienceModule = None,
                     level: int = logging.INFO, 
                     logger: logging.Logger = None
@@ -53,13 +55,16 @@ class GroundStationAgent(SimulationAgent):
 														zmq.SUB: [f'tcp://localhost:{port+5}']
 											})
 
-        planning_module = GroundStationPlanner( results_path, 
-                                                agent_name, 
-                                                measurement_reqs, 
-                                                agent_network_config, 
-                                                utility_func,
-                                                level,
-                                                logger)
+        
+        preplanner = None # TODO implement request broadcast planner
+        planning_module = PlanningModule(results_path,
+                                        agent_name,
+                                        agent_network_config,
+                                        utility_func, 
+                                        preplanner,
+                                        initial_reqs=initial_reqs,
+                                        level=level,
+                                        logger=logger)
 
         super().__init__(   agent_name, 
                             results_path,
@@ -72,7 +77,7 @@ class GroundStationAgent(SimulationAgent):
                             level, 
                             logger)
 
-        self.measurement_reqs = measurement_reqs
+        self.measurement_reqs = initial_reqs
 
     async def setup(self) -> None:
         # nothing to setup

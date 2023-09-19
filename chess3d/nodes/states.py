@@ -30,6 +30,7 @@ class SimulationAgentState(AbstractAgentState):
 
     def __init__(   self, 
                     state_type : str,
+                    payload : list,
                     pos : list,
                     vel : list,
                     attitude : list,
@@ -45,6 +46,7 @@ class SimulationAgentState(AbstractAgentState):
         super().__init__()
         
         self.state_type = state_type
+        self.payload = payload
         self.pos : list = pos
         self.vel : list = vel
         self.attitude : list = attitude
@@ -230,6 +232,7 @@ class GroundStationAgentState(SimulationAgentState):
         vel = [0, 0, 0]
         
         super().__init__(SimulationAgentTypes.GROUND_STATION.value, 
+                        [],
                         pos, 
                         vel,
                         [0,0,0],
@@ -261,6 +264,7 @@ class SatelliteAgentState(SimulationAgentState):
     """
     def __init__( self, 
                     orbit_state : dict,
+                    payload : list,
                     time_step : float = None,
                     eps : float = None,
                     pos : list = None,
@@ -304,6 +308,7 @@ class SatelliteAgentState(SimulationAgentState):
         
         super().__init__(   
                             SimulationAgentTypes.SATELLITE.value, 
+                            payload,
                             pos, 
                             vel, 
                             attitude,
@@ -571,6 +576,7 @@ class UAVAgentState(SimulationAgentState):
     Describes the state of a UAV Agent
     """
     def __init__(   self, 
+                    payload : list,
                     pos: list, 
                     max_speed: float,
                     vel: list = [0.0,0.0,0.0], 
@@ -583,6 +589,7 @@ class UAVAgentState(SimulationAgentState):
                 
         super().__init__(
                             SimulationAgentTypes.UAV.value, 
+                            payload,
                             pos, 
                             vel, 
                             [0.0,0.0,0.0], 
