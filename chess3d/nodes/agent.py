@@ -15,7 +15,6 @@ from dmas.utils import runtime_tracker
 
 from messages import *
 
-
 class SimulationAgent(Agent):
     """
     # Abstract Simulation Agent
@@ -90,6 +89,42 @@ class SimulationAgent(Agent):
         # setup results folder:
         self.results_path = setup_results_directory(results_path + '/' + self.get_element_name())
     
+    """
+    --------------------
+            SENSE       
+    --------------------
+    """
+
+    @runtime_tracker
+    async def sense(self, statuses: list) -> list:
+        # initiate senses array
+        senses = []
+
+        # check status of previously performed tasks
+        action_statuses = self.check_action_statuses(statuses)
+        senses.extend(action_statuses)
+
+        # update state
+        self.update_state()
+
+        # sense environment
+        env_updates = await self.sense_environment()
+        env_resp = BusMessage(**env_updates)
+
+        # update agent with environment senses
+        env_senses = await self.update_state_environment(env_resp)
+        senses.extend(env_senses)
+
+        # handle environment broadcasts
+        env_broadcasts = await self.get_environment_broadcasts()
+        senses.extend(env_broadcasts)
+
+        # handle peer broadcasts
+        agent_broadcasts = await self.get_agent_broadcasts()
+        senses.extend(agent_broadcasts)
+
+        return senses
+    
     @runtime_tracker
     def check_action_statuses(self, statuses) -> list:
         senses = []
@@ -104,13 +139,13 @@ class SimulationAgent(Agent):
             senses.append(msg)    
         return senses
     
-    # @runtime_tracker
+    @runtime_tracker
     def update_state(self) -> None:
         self.state.update_state(self.get_current_time(), 
                                 status=SimulationAgentState.SENSING)
         self.state_history.append(self.state.to_dict())
 
-    # @runtime_tracker
+    @runtime_tracker
     async def sense_environment(self) -> dict:
         state_msg = AgentStateMessage(  self.get_element_name(), 
                                         SimulationElementRoles.ENVIRONMENT.value,
@@ -120,7 +155,7 @@ class SimulationAgent(Agent):
 
         return content
     
-    # @runtime_tracker
+    @runtime_tracker
     async def update_state_environment(self, env_resp : BusMessage)-> list:
         senses = []
         for resp in env_resp.msgs:
@@ -163,44 +198,19 @@ class SimulationAgent(Agent):
             senses.append(msg)
         return senses
     
-    # @runtime_tracker
+    @runtime_tracker
     async def get_environment_broadcasts(self) -> list:
         return await self.__empty_queue(self.environment_inbox)
     
-    # @runtime_tracker
+    @runtime_tracker
     async def get_agent_broadcasts(self) -> list:
         return await self.__empty_queue(self.external_inbox)
 
-    @runtime_tracker
-    async def sense(self, statuses: list) -> list:
-        # initiate senses array
-        senses = []
-
-        # check status of previously performed tasks
-        action_statuses = self.check_action_statuses(statuses)
-        senses.extend(action_statuses)
-
-        # update state
-        self.update_state()
-
-        # sense environment
-        env_updates = await self.sense_environment()
-        env_resp = BusMessage(**env_updates)
-
-        # update agent with environment senses
-        env_senses = await self.update_state_environment(env_resp)
-        senses.extend(env_senses)
-
-        # handle environment broadcasts
-        env_broadcasts = await self.get_environment_broadcasts()
-        senses.extend(env_broadcasts)
-
-        # handle peer broadcasts
-        agent_broadcasts = await self.get_agent_broadcasts()
-        senses.extend(agent_broadcasts)
-
-        return senses
-
+    """
+    --------------------
+            THINK       
+    --------------------
+    """
     @runtime_tracker
     async def think(self, senses: list) -> list:
         # send all sensed messages to planner
@@ -237,6 +247,128 @@ class SimulationAgent(Agent):
         self.log(f"plan of {len(actions)} actions received from planner module!")
         return actions
 
+    """
+    --------------------
+            DO       
+    --------------------
+    """
+    @runtime_tracker
+    async def perform_state_change(self, action : AgentAction) -> str:
+        t = self.get_current_time()
+
+        # modify the agent's state
+        status, dt = self.state.perform_action(action, t)
+        self.state_history.append(self.state.to_dict())
+
+        if dt > 0:
+            try:
+                # perfrom time wait if needed
+                await self.sim_wait(dt)
+
+            except asyncio.CancelledError:
+                return
+
+            # update the agent's state
+            status, _ = self.state.perform_action(action, self.get_current_time())
+            self.state_history.append(self.state.to_dict())
+
+        return status
+    
+    @runtime_tracker
+    async def perform_broadcast(self, action : BroadcastMessageAction) -> str:
+        # unpackage action
+        msg_out = message_from_dict(**action.msg)
+
+        # update state
+        self.state.update_state(self.get_current_time(), status=SimulationAgentState.MESSAGING)
+        self.state_history.append(self.state.to_dict())
+        
+        # perform action
+        msg_out.dst = self.get_network_name()
+        await self.send_peer_broadcast(msg_out)
+
+        return AgentAction.COMPLETED
+    
+    @runtime_tracker
+    async def perform_wait_for_messages(self, action : WaitForMessages) -> str:
+        t_curr = self.get_current_time()
+        self.state.update_state(t_curr, status=SimulationAgentState.LISTENING)
+        self.state_history.append(self.state.to_dict())
+
+        if not self.external_inbox.empty():
+            action.status = AgentAction.COMPLETED
+        else:
+            if isinstance(self._clock_config, FixedTimesStepClockConfig) or isinstance(self._clock_config, EventDrivenClockConfig):
+                # give the agent time to finish sending/processing messages before submitting a tic-request
+                if t_curr < 1e-3 or action.t_end == np.Inf:
+                    await asyncio.sleep(1e-2)
+                else:
+                    await asyncio.sleep(1e-3)
+
+            receive_broadcast = asyncio.create_task(self.external_inbox.get())
+            timeout = asyncio.create_task(self.sim_wait(action.t_end - t_curr))
+
+            done, _ = await asyncio.wait([timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
+
+            if receive_broadcast in done:
+                # a mesasge was received before the timer ran out; cancel timer
+                try:
+                    timeout.cancel()
+                    await timeout
+
+                except asyncio.CancelledError:
+                    # restore message to inbox so it can be processed during `sense()`
+                    await self.external_inbox.put(receive_broadcast.result())    
+
+                    # update action completion status
+                    return AgentAction.COMPLETED                
+            else:
+                # timer ran out or time advanced
+                try:
+                    # cancel listen to broadcast
+                    receive_broadcast.cancel()
+                    await receive_broadcast
+
+                except asyncio.CancelledError:
+                    # update action completion status
+                    if self.external_inbox.empty():
+                        return AgentAction.ABORTED
+                    else:
+                        return AgentAction.COMPLETED
+                    
+    @runtime_tracker
+    async def perform_measurement(self, action : MeasurementAction) -> str:
+        self.state : SimulationAgentState
+        measurement_req = MeasurementRequest(**action.measurement_req)
+        
+        self.state.update_state(self.get_current_time(), 
+                                status=SimulationAgentState.MEASURING)
+        self.state_history.append(self.state.to_dict())
+        
+        try:
+            # send a measurement data request to the environment
+            measurement = MeasurementResultsRequestMessage(self.get_element_name(),
+                                                    SimulationElementRoles.ENVIRONMENT.value, 
+                                                    self.state.to_dict(), 
+                                                    action.to_dict()
+                                                    )
+
+            dst,src,measurement_dict = await self.send_peer_message(measurement)
+            result : dict = measurement_dict
+            msg_sci = MeasurementResultsRequestMessage(**result)
+            await self._send_manager_msg(msg_sci, zmq.PUB)
+
+            # add measurement to environment inbox to be processed during `sensing()`
+            await self.environment_inbox.put((dst, src, measurement_dict))
+
+            # wait for the designated duration of the measurmeent 
+            await self.sim_wait(measurement_req.duration)  # TODO only compensate for the time lost between queries
+            
+            return AgentAction.COMPLETED
+
+        except asyncio.CancelledError:
+            return AgentAction.ABORTED
+
     @runtime_tracker
     async def do(self, actions: list) -> dict:
         statuses = []
@@ -245,7 +377,6 @@ class SimulationAgent(Agent):
         for action_dict in actions:
             action_dict : dict
             action = action_from_dict(**action_dict)
-            t_0 = time.perf_counter()
 
             if (action.t_start - self.get_current_time()) > np.finfo(np.float32).eps:
                 self.log(f"action of type {action_dict['action_type']} has NOT started yet. waiting for start time...", level=logging.INFO)
@@ -262,136 +393,35 @@ class SimulationAgent(Agent):
             self.log(f"performing action of type {action_dict['action_type']}...", level=logging.INFO)    
             if (action_dict['action_type'] == ActionTypes.IDLE.value 
                 or action_dict['action_type'] == ActionTypes.TRAVEL.value
-                or action_dict['action_type'] == ActionTypes.MANEUVER.value):
-                
+                or action_dict['action_type'] == ActionTypes.MANEUVER.value):                
                 # this action affects the agent's state
 
                 # unpackage action
                 action = action_from_dict(**action_dict)
-                t = self.get_current_time()
-
-                # modify the agent's state
-                status, dt = self.state.perform_action(action, t)
-                self.state_history.append(self.state.to_dict())
-
-                if dt > 0:
-                    try:
-                        # perfrom time wait if needed
-                        await self.sim_wait(dt)
-
-                    except asyncio.CancelledError:
-                        return
-
-                    # update the agent's state
-                    if self.get_current_time() < t:
-                        x = 1
-
-                    status, _ = self.state.perform_action(action, self.get_current_time())
-                    self.state_history.append(self.state.to_dict())
 
                 # update action completion status
-                action.status = status
+                action.status = await self.perform_state_change(action)
 
             elif action_dict['action_type'] == ActionTypes.BROADCAST_MSG.value:
                 # unpack action
                 action = BroadcastMessageAction(**action_dict)
-                msg_out = message_from_dict(**action.msg)
 
-                # update state
-                self.state.update_state(self.get_current_time(), status=SimulationAgentState.MESSAGING)
-                self.state_history.append(self.state.to_dict())
-                
-                # perform action
-                msg_out.dst = self.get_network_name()
-                await self.send_peer_broadcast(msg_out)
-
-                # set task complation
-                action.status = AgentAction.COMPLETED
+                # set action complation status
+                action.status = await self.perform_broadcast(action)
             
             elif action_dict['action_type'] == ActionTypes.WAIT_FOR_MSG.value:
                 # unpack action 
-                task = WaitForMessages(**action_dict)
-                t_curr = self.get_current_time()
-                self.state.update_state(t_curr, status=SimulationAgentState.LISTENING)
-                self.state_history.append(self.state.to_dict())
+                action = WaitForMessages(**action_dict)
+                
+                # set action complation status
+                action.status = await self.perform_wait_for_messages(action)
 
-                if not self.external_inbox.empty():
-                    action.status = AgentAction.COMPLETED
-                else:
-                    if isinstance(self._clock_config, FixedTimesStepClockConfig) or isinstance(self._clock_config, EventDrivenClockConfig):
-                        # give the agent time to finish sending/processing messages before submitting a tic-request
-                        if t_curr < 1e-3 or task.t_end == np.Inf:
-                            await asyncio.sleep(1e-2)
-                        else:
-                            await asyncio.sleep(1e-3)
-
-                    receive_broadcast = asyncio.create_task(self.external_inbox.get())
-                    timeout = asyncio.create_task(self.sim_wait(task.t_end - t_curr))
-
-                    done, _ = await asyncio.wait([timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
-
-                    if receive_broadcast in done:
-                        # a mesasge was received before the timer ran out; cancel timer
-                        try:
-                            timeout.cancel()
-                            await timeout
-
-                        except asyncio.CancelledError:
-                            # restore message to inbox so it can be processed during `sense()`
-                            await self.external_inbox.put(receive_broadcast.result())    
-
-                            # update action completion status
-                            action.status = AgentAction.COMPLETED                
-                    else:
-                        # timer ran out or time advanced
-                        try:
-                            # cancel listen to broadcast
-                            receive_broadcast.cancel()
-                            await receive_broadcast
-
-                        except asyncio.CancelledError:
-                            # update action completion status
-                            if self.external_inbox.empty():
-                                action.status = AgentAction.ABORTED
-                            else:
-                                action.status = AgentAction.COMPLETED
-            
             elif action_dict['action_type'] == ActionTypes.MEASURE.value:
                 # unpack action 
                 action = MeasurementAction(**action_dict)
-
-                # perform action
-                self.state : SimulationAgentState
-                measurement_req = MeasurementRequest(**action.measurement_req)
-                
-                self.state.update_state(self.get_current_time(), 
-                                        status=SimulationAgentState.MEASURING)
-                self.state_history.append(self.state.to_dict())
-                
-                try:
-                    # send a measurement data request to the environment
-                    measurement = MeasurementResultsRequestMessage(self.get_element_name(),
-                                                            SimulationElementRoles.ENVIRONMENT.value, 
-                                                            self.state.to_dict(), 
-                                                            action_dict
-                                                            )
-
-                    dst,src,measurement_dict = await self.send_peer_message(measurement)
-                    result : dict = measurement_dict
-                    msg_sci = MeasurementResultsRequestMessage(**result)
-                    await self._send_manager_msg(msg_sci, zmq.PUB)
-
-                    # add measurement to environment inbox to be processed during `sensing()`
-                    await self.environment_inbox.put((dst, src, measurement_dict))
-
-                    # wait for the designated duration of the measurmeent 
-                    await self.sim_wait(measurement_req.duration)  # TODO only compensate for the time lost between queries
-                    
-                except asyncio.CancelledError:
-                    return
-                
+                              
                 # update action completion status
-                action.status = AgentAction.COMPLETED
+                action.status = await self.perform_measurement(action)
                 
             else:
                 # ignore action
@@ -401,21 +431,12 @@ class SimulationAgent(Agent):
             self.log(f"finished performing action of type {action_dict['action_type']}! action completion status: {action.status}", level=logging.INFO)
             statuses.append((action, action.status))
 
-            if (action.status in [
-                                    AgentAction.COMPLETED, 
-                                    AgentAction.PENDING,
-                                    AgentAction.ABORTED
-                                ]):
-                dt = time.perf_counter() - t_0
-                if action_dict['action_type'] not in self.stats:
-                    self.stats[action_dict['action_type']] = []    
-                self.stats[action_dict['action_type']].append(dt)
-
         self.log(f'returning {len(statuses)} statuses', level=logging.DEBUG)
         return statuses
 
     async def teardown(self) -> None:
-        # log agent capabilities
+        # TODO log agent capabilities
+
         # log state 
         n_decimals = 3
         headers = ['t', 'x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'attitude', 'status']
