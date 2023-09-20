@@ -314,8 +314,8 @@ if __name__ == "__main__":
             measurement_reqs.append(req)
 
     else:
-        gpRequestFilePath = scenario_dict['scenario'].get('gpRequestFilePath', scenario_path + '/gpRequests.csv')
-        df = pd.read_csv(gpRequestFilePath)
+        initialRequestsPath = scenario_dict['scenario'].get('initialRequestsPath', scenario_path + '/gpRequests.csv')
+        df = pd.read_csv(initialRequestsPath)
             
         for _, row in df.iterrows():
             s_max = row.get('severity',row.get('s_max', None))

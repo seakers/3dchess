@@ -106,8 +106,7 @@
             },
             "science" : "True",
             "notifier": "False",
-            "missionProfile": "3D-CHESS",
-            "preplan": "False"
+            "missionProfile": "3D-CHESS"
         }
     ],
     "groundStation": [
@@ -158,7 +157,8 @@
     ],
     "scenario": {   
                     "@type": "PREDEF", 
-                    "gpRequestFilePath": "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
+                    "initialRequestsPath" : "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/scenario2_simple/resources/all_events.csv", 
                     "duration": 30.0, 
                     "connectivity" : "FULL", 
                     "utility" : "LINEAR"

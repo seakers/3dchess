@@ -59,21 +59,18 @@ def setup_results_directory(scenario_name) -> str:
 
     return results_path
 
-def precompute_orbitdata(scenario_name) -> str:
-    """
-    Pre-calculates coverage and position data for a given scenario
-    """
-    
+def check_changes_to_scenario(scenario_name) -> bool:
+    """ Checks if the scenario has already been pre-computed or if relevant changes have been made """
+
     scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
     data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
-   
-    changes_to_scenario = False
+
     with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
         # check if data has been previously calculated
         if os.path.exists(data_dir + 'MissionSpecs.json'):
             with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
                 scenario_dict : dict = json.load(scenario_specs)
-                mission_dict = json.load(mission_specs)
+                mission_dict : dict = json.load(mission_specs)
 
                 scenario_dict.pop('settings')
                 mission_dict.pop('settings')
@@ -83,26 +80,41 @@ def precompute_orbitdata(scenario_name) -> str:
                     or scenario_dict['duration'] != mission_dict['duration']
                     or scenario_dict['groundStation'] != mission_dict['groundStation']
                     or scenario_dict['grid'] != mission_dict['grid']
-                    or scenario_dict['spacecraft'] != mission_dict['spacecraft']
-                    # or scenario_dict['scenario'] != mission_dict['scenario']
-                    # or scenario_dict['settings'] != mission_dict['settings']
                     ):
-                    changes_to_scenario = True
+                    return True
                 
-                # TODO only re-compute when relevant changes are made to json, not just any changes
-                # elif scenario_dict['spacecraft'] != mission_dict['spacecraft']:
-                #     spacecraft_dict = scenario_dict['spacecraft']
-                #     mission_dict = mission_dict['spacecraft']
+                if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
+                    if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
+                        return True
                     
-                #     if (    spacecraft_dict['@id'] != mission_dict['@id']
-                #         or spacecraft_dict['name'] != mission_dict['name']
-                #         or spacecraft_dict['spacecraftBus'] != mission_dict['spacecraftBus']
-                #         or spacecraft_dict['instrument'] != mission_dict['instrument']
-                #         or spacecraft_dict['orbitState'] != mission_dict['orbitState']
-                #         ):
-                #         changes_to_scenario = True
-        else:
-            changes_to_scenario = True
+                    for i in range(len(scenario_dict['spacecraft'])):
+                        scenario_sat : dict = scenario_dict['spacecraft'][i]
+                        mission_sat : dict = mission_dict['spacecraft'][i]
+                        
+                        scenario_sat.pop("planner")
+                        scenario_sat.pop("science")
+                        scenario_sat.pop("notifier")
+                        scenario_sat.pop("missionProfile")
+
+                        mission_sat.pop("planner")
+                        mission_sat.pop("science")
+                        mission_sat.pop("notifier")
+                        mission_sat.pop("missionProfile")
+
+                        if scenario_sat != mission_sat:
+                            return True
+
+    return False
+
+def precompute_orbitdata(scenario_name) -> str:
+    """
+    Pre-calculates coverage and position data for a given scenario
+    """
+    
+    scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
+    data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
+   
+    changes_to_scenario = check_changes_to_scenario(scenario_name)
 
     if not os.path.exists(data_dir):
         # if directory does not exists, create it
