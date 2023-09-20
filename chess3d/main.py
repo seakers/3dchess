@@ -101,6 +101,13 @@ def agent_factory(  scenario_name : str,
     else:
         payload = []
 
+    ## load science module
+    if science_dict is not None and science_dict == "True":
+        science = ScienceModule(results_path,scenario_path,agent_name,agent_network_config,logger=logger)
+    else:
+        science = None
+        # raise NotImplementedError(f"Science module not yet implemented.")
+
     ## load planner module
     if planner_dict is not None:
         planner_dict : dict
@@ -128,14 +135,7 @@ def agent_factory(  scenario_name : str,
                                 utility_function, 
                                 preplanner,
                                 replanner,
-                                initial_reqs)
-
-    ## load science module
-    if science_dict is not None:
-        science = ScienceModule(results_path,scenario_path,agent_name,agent_network_config,logger=logger)
-    else:
-        science = None
-        # raise NotImplementedError(f"Science module not yet implemented.")
+                                initial_reqs)    
         
     ## create agent
     if agent_type == SimulationAgentTypes.UAV:

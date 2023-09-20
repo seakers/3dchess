@@ -59,11 +59,8 @@ def setup_results_directory(scenario_name) -> str:
 
     return results_path
 
-def check_changes_to_scenario(scenario_name) -> bool:
+def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
     """ Checks if the scenario has already been pre-computed or if relevant changes have been made """
-
-    scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
-    data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
 
     with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
         # check if data has been previously calculated
@@ -114,7 +111,7 @@ def precompute_orbitdata(scenario_name) -> str:
     scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
     data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
    
-    changes_to_scenario = check_changes_to_scenario(scenario_name)
+    changes_to_scenario = check_changes_to_scenario(scenario_dir, data_dir)
 
     if not os.path.exists(data_dir):
         # if directory does not exists, create it

@@ -73,6 +73,7 @@ class PlanningModule(InternalModule):
         self.agent_state : SimulationAgentState = None
         self.parent_agent_type = None
         self.orbitdata : OrbitData = None
+        self.other_modules_exist : bool = False
 
         self.initial_reqs = []
         for req in initial_reqs:
@@ -220,6 +221,9 @@ class PlanningModule(InternalModule):
 
                 else:
                     # other type of message was received
+                    if not self.other_modules_exist:
+                        self.other_modules_exist = True
+
                     msg = message_from_dict(**content)
                     await self.internal_inbox.put(msg)
 
@@ -314,7 +318,7 @@ class PlanningModule(InternalModule):
                     incoming_misc.append(await self.misc_inbox.get())
 
                 generated_reqs = []
-                if len(incoming_measurements) > 0:
+                if len(incoming_measurements) > 0 and self.other_modules_exist:
                     generated_reqs.append( await self.internal_inbox.get())
                     while not self.misc_inbox.empty():
                         generated_reqs.append(await self.internal_inbox.get())
@@ -435,16 +439,16 @@ class PlanningModule(InternalModule):
         data = []
 
         for routine in self.stats:
-            t_avg = np.mean(self.stats[routine])
-            t_std = np.std(self.stats[routine])
-            t_median = np.median(self.stats[routine])
             n = len(self.stats[routine])
+            t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else None
+            t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else None
+            t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else None
 
             line_data = [ 
                             routine,
-                            np.round(t_avg,n_decimals),
-                            np.round(t_std,n_decimals),
-                            np.round(t_median,n_decimals),
+                            t_avg,
+                            t_std,
+                            t_median,
                             n
                             ]
             data.append(line_data)

@@ -101,10 +101,9 @@
                 }
             },
             "planner" : {
-                "preplanner" : "FIFO",
                 "utility" : "LINEAR"
             },
-            "science" : "True",
+            "science" : "False",
             "notifier": "False",
             "missionProfile": "3D-CHESS"
         }
