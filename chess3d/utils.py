@@ -2,6 +2,7 @@ from enum import Enum
 import json
 import os
 import shutil
+import time
 
 import numpy as np
 
@@ -162,5 +163,3 @@ def precompute_orbitdata(scenario_name) -> str:
                 mission_specs.write(json.dumps(mission_dict, indent=4))
 
     return data_dir
-
-

@@ -1,5 +1,4 @@
 import logging
-from typing import Any, Callable
 import numpy as np
 from pandas import DataFrame
 
@@ -12,8 +11,10 @@ from utils import setup_results_directory
 from nodes.actions import *
 from dmas.agents import *
 from dmas.network import NetworkConfig
+from dmas.utils import runtime_tracker
 
 from messages import *
+
 
 class SimulationAgent(Agent):
     """
@@ -88,21 +89,10 @@ class SimulationAgent(Agent):
         
         # setup results folder:
         self.results_path = setup_results_directory(results_path + '/' + self.get_element_name())
-          
-        self.stats['sense_status_check'] = []
-        self.stats['sense_update_state'] = []
-        self.stats['sense_environment'] = []
-        self.stats['sense_environment_update'] = []
-        self.stats['sense_environment_broadcasts'] = []
-        self.stats['sense_agent_broadcasts'] = []
-
-    async def sense(self, statuses: list) -> list:
-        # initiate senses array
+    
+    @runtime_tracker
+    def check_action_statuses(self, statuses) -> list:
         senses = []
-
-        # check status of previously performed tasks
-        t_0 = time.perf_counter()
-        completed = []
         for action, status in statuses:
             # sense and compile updated task status for planner 
             action : AgentAction
@@ -111,35 +101,28 @@ class SimulationAgent(Agent):
                                         self.get_element_name(), 
                                         action.to_dict(),
                                         status)
-            senses.append(msg)      
-
-            # compile completed tasks for state tracking
-            if status == AgentAction.COMPLETED:
-                completed.append(action.id)
-        
-        dt = time.perf_counter() - t_0
-        self.stats['sense_status_check'].append(dt)
-
-        # update state
-        t_0 = time.perf_counter()
+            senses.append(msg)    
+        return senses
+    
+    # @runtime_tracker
+    def update_state(self) -> None:
         self.state.update_state(self.get_current_time(), 
                                 status=SimulationAgentState.SENSING)
         self.state_history.append(self.state.to_dict())
-        dt = time.perf_counter() - t_0
-        self.stats['sense_update_state'].append(dt)
 
-        # sense environment for updated state
-        t_0 = time.perf_counter()
+    # @runtime_tracker
+    async def sense_environment(self) -> dict:
         state_msg = AgentStateMessage(  self.get_element_name(), 
                                         SimulationElementRoles.ENVIRONMENT.value,
                                         self.state.to_dict()
                                     )
         _, _, content = await self.send_peer_message(state_msg)
-        dt = time.perf_counter() - t_0
-        self.stats['sense_environment'].append(dt)
 
-        t_0 = time.perf_counter()
-        env_resp = BusMessage(**content)
+        return content
+    
+    # @runtime_tracker
+    async def update_state_environment(self, env_resp : BusMessage)-> list:
+        senses = []
         for resp in env_resp.msgs:
             # unpackage message
             resp : dict
@@ -169,31 +152,56 @@ class SimulationAgent(Agent):
                     self.subscribe_to_broadcasts(resp_msg.target)
                 else:
                     self.unsubscribe_to_broadcasts(resp_msg.target)
-        dt = time.perf_counter() - t_0
-        self.stats['sense_environment_update'].append(dt)
-
-        # handle environment broadcasts
-        t_0 = time.perf_counter() 
+        return senses 
+    
+    async def __empty_queue(self, queue : asyncio.Queue) -> list:
+        senses = []
         while not self.environment_inbox.empty():
             # save as senses to forward to planner
-            _, _, msg_dict = await self.environment_inbox.get()
+            _, _, msg_dict = await queue.get()
             msg = message_from_dict(**msg_dict)
             senses.append(msg)
-        dt = time.perf_counter() - t_0
-        self.stats['sense_environment_broadcasts'].append(dt)
+        return senses
+    
+    # @runtime_tracker
+    async def get_environment_broadcasts(self) -> list:
+        return await self.__empty_queue(self.environment_inbox)
+    
+    # @runtime_tracker
+    async def get_agent_broadcasts(self) -> list:
+        return await self.__empty_queue(self.external_inbox)
+
+    @runtime_tracker
+    async def sense(self, statuses: list) -> list:
+        # initiate senses array
+        senses = []
+
+        # check status of previously performed tasks
+        action_statuses = self.check_action_statuses(statuses)
+        senses.extend(action_statuses)
+
+        # update state
+        self.update_state()
+
+        # sense environment
+        env_updates = await self.sense_environment()
+        env_resp = BusMessage(**env_updates)
+
+        # update agent with environment senses
+        env_senses = await self.update_state_environment(env_resp)
+        senses.extend(env_senses)
+
+        # handle environment broadcasts
+        env_broadcasts = await self.get_environment_broadcasts()
+        senses.extend(env_broadcasts)
 
         # handle peer broadcasts
-        t_0 = time.perf_counter() 
-        while not self.external_inbox.empty():
-            # save as senses to forward to planner
-            _, _, msg_dict = await self.external_inbox.get()
-            msg = message_from_dict(**msg_dict)
-            senses.append(msg)
-        dt = time.perf_counter() - t_0
-        self.stats['sense_agent_broadcasts'].append(dt)
+        agent_broadcasts = await self.get_agent_broadcasts()
+        senses.extend(agent_broadcasts)
 
         return senses
 
+    @runtime_tracker
     async def think(self, senses: list) -> list:
         # send all sensed messages to planner
         self.log(f'sending {len(senses)} senses to planning module...', level=logging.DEBUG)
@@ -229,6 +237,7 @@ class SimulationAgent(Agent):
         self.log(f"plan of {len(actions)} actions received from planner module!")
         return actions
 
+    @runtime_tracker
     async def do(self, actions: list) -> dict:
         statuses = []
         self.log(f'performing {len(actions)} actions', level=logging.DEBUG)
@@ -312,7 +321,7 @@ class SimulationAgent(Agent):
                     if isinstance(self._clock_config, FixedTimesStepClockConfig) or isinstance(self._clock_config, EventDrivenClockConfig):
                         # give the agent time to finish sending/processing messages before submitting a tic-request
                         if t_curr < 1e-3 or task.t_end == np.Inf:
-                            await asyncio.sleep(1e-3)
+                            await asyncio.sleep(1e-2)
                         else:
                             await asyncio.sleep(1e-3)
 
