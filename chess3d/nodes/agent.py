@@ -89,12 +89,19 @@ class SimulationAgent(Agent):
         # setup results folder:
         self.results_path = setup_results_directory(results_path + '/' + self.get_element_name())
           
+        self.stats['sense_status_check'] = []
+        self.stats['sense_update_state'] = []
+        self.stats['sense_environment'] = []
+        self.stats['sense_environment_update'] = []
+        self.stats['sense_environment_broadcasts'] = []
+        self.stats['sense_agent_broadcasts'] = []
 
     async def sense(self, statuses: list) -> list:
         # initiate senses array
         senses = []
 
         # check status of previously performed tasks
+        t_0 = time.perf_counter()
         completed = []
         for action, status in statuses:
             # sense and compile updated task status for planner 
@@ -109,19 +116,29 @@ class SimulationAgent(Agent):
             # compile completed tasks for state tracking
             if status == AgentAction.COMPLETED:
                 completed.append(action.id)
+        
+        dt = time.perf_counter() - t_0
+        self.stats['sense_status_check'].append(dt)
 
         # update state
+        t_0 = time.perf_counter()
         self.state.update_state(self.get_current_time(), 
                                 status=SimulationAgentState.SENSING)
         self.state_history.append(self.state.to_dict())
+        dt = time.perf_counter() - t_0
+        self.stats['sense_update_state'].append(dt)
 
         # sense environment for updated state
+        t_0 = time.perf_counter()
         state_msg = AgentStateMessage(  self.get_element_name(), 
                                         SimulationElementRoles.ENVIRONMENT.value,
                                         self.state.to_dict()
                                     )
         _, _, content = await self.send_peer_message(state_msg)
+        dt = time.perf_counter() - t_0
+        self.stats['sense_environment'].append(dt)
 
+        t_0 = time.perf_counter()
         env_resp = BusMessage(**content)
         for resp in env_resp.msgs:
             # unpackage message
@@ -145,8 +162,6 @@ class SimulationAgent(Agent):
                     senses.append(state_msg)
                 
                 # update time
-                if self.get_current_time() != t:
-                    x = 1
                 await self.update_current_time(t)
 
             elif isinstance(resp_msg, AgentConnectivityUpdate):
@@ -154,20 +169,28 @@ class SimulationAgent(Agent):
                     self.subscribe_to_broadcasts(resp_msg.target)
                 else:
                     self.unsubscribe_to_broadcasts(resp_msg.target)
+        dt = time.perf_counter() - t_0
+        self.stats['sense_environment_update'].append(dt)
 
         # handle environment broadcasts
+        t_0 = time.perf_counter() 
         while not self.environment_inbox.empty():
             # save as senses to forward to planner
             _, _, msg_dict = await self.environment_inbox.get()
             msg = message_from_dict(**msg_dict)
             senses.append(msg)
+        dt = time.perf_counter() - t_0
+        self.stats['sense_environment_broadcasts'].append(dt)
 
         # handle peer broadcasts
+        t_0 = time.perf_counter() 
         while not self.external_inbox.empty():
             # save as senses to forward to planner
             _, _, msg_dict = await self.external_inbox.get()
             msg = message_from_dict(**msg_dict)
             senses.append(msg)
+        dt = time.perf_counter() - t_0
+        self.stats['sense_agent_broadcasts'].append(dt)
 
         return senses
 
@@ -289,9 +312,9 @@ class SimulationAgent(Agent):
                     if isinstance(self._clock_config, FixedTimesStepClockConfig) or isinstance(self._clock_config, EventDrivenClockConfig):
                         # give the agent time to finish sending/processing messages before submitting a tic-request
                         if t_curr < 1e-3 or task.t_end == np.Inf:
-                            await asyncio.sleep(1e-1)
+                            await asyncio.sleep(1e-3)
                         else:
-                            await asyncio.sleep(5e-2)
+                            await asyncio.sleep(1e-3)
 
                     receive_broadcast = asyncio.create_task(self.external_inbox.get())
                     timeout = asyncio.create_task(self.sim_wait(task.t_end - t_curr))

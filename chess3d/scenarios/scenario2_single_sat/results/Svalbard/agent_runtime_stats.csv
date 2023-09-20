@@ -1,5 +1,11 @@
 routine,t_avg,t_std,t_med,n
-sense,0.018,0.008,0.018,189
-think,0.009,0.004,0.009,189
-do,0.207,2.218,0.014,189
-IDLE,0.207,2.218,0.014,189
+sense,0.017,0.008,0.015,189
+think,0.01,0.004,0.01,189
+do,0.038,0.32,0.014,189
+sense_status_check,0.001,0.001,0.001,190
+sense_update_state,0.0,0.0,0.0,190
+sense_environment,0.014,0.008,0.01,189
+sense_environment_update,0.002,0.002,0.001,189
+sense_environment_broadcasts,0.0,0.0,0.0,189
+sense_agent_broadcasts,0.0,0.0,0.0,189
+IDLE,0.038,0.32,0.014,189

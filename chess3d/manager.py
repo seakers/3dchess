@@ -259,7 +259,7 @@ class SimulationManager(AbstractManager):
             data.append(line_data)
 
         stats_df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+        self.log(f'\MANAGER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
         results_dir = f"{self.results_path}/{self.get_element_name()}/" 
 
         os.mkdir(results_dir)
