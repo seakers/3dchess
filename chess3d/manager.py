@@ -1,5 +1,11 @@
+import logging
 import math
+import os
+from dmas.clocks import ClockConfig
+from dmas.elements import ClockConfig, NetworkConfig, logging
 from dmas.managers import *
+import numpy as np
+import pandas as pd
 from messages import *
 
 class SimulationManager(AbstractManager):
@@ -14,6 +20,20 @@ class SimulationManager(AbstractManager):
         - This will be repeated until the final time has been reached.
 
     """
+    def __init__(   self, 
+                    results_path : str,
+                    simulation_element_name_list: list, 
+                    clock_config: ClockConfig, 
+                    network_config: NetworkConfig, 
+                    level: int = logging.INFO, 
+                    logger: logging.Logger = None) -> None:
+        super().__init__(simulation_element_name_list, clock_config, network_config, level, logger)
+
+        self.results_path : str = results_path
+        self.stats = {f"{name}_wait" : [] for name in simulation_element_name_list}
+        self.stats["clock_wait"] = []
+        self.stats["sim_runtime"] = []
+
     def _check_element_list(self):
         env_count = 0
         for sim_element_name in self._simulation_element_name_list:
@@ -35,6 +55,8 @@ class SimulationManager(AbstractManager):
         Time waited depends on length of simulation and clock type in use.
         """
         try:
+            t_0_sim = time.perf_counter()
+
             desc = f'{self.name}: Simulating for {delay}[s]'
             if isinstance(self._clock_config, AcceleratedRealTimeClockConfig):
                 for _ in tqdm (range (10), desc=desc):
@@ -48,6 +70,8 @@ class SimulationManager(AbstractManager):
                 with tqdm(total=delay, desc=desc) as pbar:
 
                     while t < tf:
+                        t_0 = time.perf_counter()
+
                         # wait for everyone to ask to fast forward            
                         self.log(f'waiting for tic requests...')
                         await self.wait_for_tic_requests()
@@ -70,6 +94,9 @@ class SimulationManager(AbstractManager):
                         pbar.update(dt)
                         t += dt
 
+                        dt = time.perf_counter() - t_0
+                        self.stats['clock_wait'].append(dt)
+
                     self.log('TIMER DONE!', level=logging.INFO)
             
             elif isinstance(self._clock_config, EventDrivenClockConfig):  
@@ -77,6 +104,9 @@ class SimulationManager(AbstractManager):
                 tf = self._clock_config.get_total_seconds()
                 with tqdm(total=tf , desc=desc) as pbar:
                     while t < tf:
+                        
+                        t_0 = time.perf_counter()
+
                         # wait for everyone to ask to fast forward            
                         self.log(f'waiting for tic requests...')
                         reqs = await self.wait_for_tic_requests()
@@ -102,9 +132,16 @@ class SimulationManager(AbstractManager):
                         # updete time and display
                         pbar.update(t_next - t)
                         t = t_next
+                        
+                        dt = time.perf_counter() - t_0
+                        self.stats['clock_wait'].append(dt)
 
             else:
                 raise NotImplemented(f'clock configuration of type {type(self._clock_config)} not yet supported.')
+
+            
+            dt = time.perf_counter() - t_0_sim
+            self.stats['sim_runtime'].append(dt)
 
         except asyncio.CancelledError:
             return
@@ -117,6 +154,7 @@ class SimulationManager(AbstractManager):
             - `dict` mapping simulation elements' names to the messages they sent.
         """
         try:
+            t_0 = time.perf_counter()
             received_messages : dict = {}
             read_task = None
 
@@ -161,6 +199,10 @@ class SimulationManager(AbstractManager):
                         received_messages[src] = tic_req
                         self.log(f'{src} has now reported reported its tic request  to the simulation manager. Wait status: ({len(received_messages)}/{len(self._simulation_element_name_list) - 1})')
 
+                        dt = time.perf_counter() - t_0
+                        self.stats[f'{src}_wait'].append(dt)
+
+
                 elif NodeMessageTypes[msg_type] == NodeMessageTypes.CANCEL_TIC_REQ:
 
                     # log subscriber cancellation
@@ -176,6 +218,8 @@ class SimulationManager(AbstractManager):
                         # node is a part of the simulation and has already been synchronized
                         received_messages.pop(src)
                         self.log(f'{src} has cancelled its tic request to the simulation manager. Wait status: ({len(received_messages)}/{len(self._simulation_element_name_list) - 1})')
+
+                        self.stats[f'{src}_wait'].pop(-1)
 
             return received_messages
 
@@ -194,5 +238,29 @@ class SimulationManager(AbstractManager):
                 await read_task
     
     async def teardown(self) -> None:
-        # nothing to tear-down
-        return
+        # log performance stats
+        n_decimals = 3
+        headers = ['routine','t_avg','t_std','t_med','n']
+        data = []
+
+        for routine in self.stats:
+            n = len(self.stats[routine])
+            t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+            t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+            t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+
+            line_data = [ 
+                            routine,
+                            t_avg,
+                            t_std,
+                            t_median,
+                            n
+                            ]
+            data.append(line_data)
+
+        stats_df = pd.DataFrame(data, columns=headers)
+        self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+        results_dir = f"{self.results_path}/{self.get_element_name()}/" 
+
+        os.mkdir(results_dir)
+        stats_df.to_csv(f"{results_dir}/runtime_stats.csv", index=False)

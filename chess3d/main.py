@@ -362,7 +362,7 @@ if __name__ == "__main__":
                                             )
 
 
-    manager = SimulationManager(agent_names, clock_config, manager_network_config, level)
+    manager = SimulationManager(results_path, agent_names, clock_config, manager_network_config, level)
     logger = manager.get_logger()
 
     # create results monitor

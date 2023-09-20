@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import Any, Callable
-from chess3d.nodes.planning.preplanners import FIFOPreplanner
+from chess3d.nodes.planning.preplanners import FIFOPreplanner, IdlePlanner
 from nodes.planning.planners import PlanningModule
 from nodes.science.reqs import *
 from dmas.network import NetworkConfig
@@ -56,7 +56,9 @@ class GroundStationAgent(SimulationAgent):
 											})
 
         
-        preplanner = None # TODO implement request broadcast planner
+        # preplanner = None # TODO implement request broadcast planner
+        preplanner = IdlePlanner()
+        
         planning_module = PlanningModule(results_path,
                                         agent_name,
                                         agent_network_config,
@@ -65,6 +67,7 @@ class GroundStationAgent(SimulationAgent):
                                         initial_reqs=initial_reqs,
                                         level=level,
                                         logger=logger)
+
 
         super().__init__(   agent_name, 
                             results_path,

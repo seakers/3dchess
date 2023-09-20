@@ -101,6 +101,7 @@
                 }
             },
             "planner" : {
+                "preplanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "science" : "False",

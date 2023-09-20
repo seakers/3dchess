@@ -220,9 +220,6 @@ class OrbitData:
                             .query('@t <= `time index` & `grid index` == @grid_index & `GP index` == @gp_index') \
                             .sort_values(by=['time index'])
 
-        if access_data.empty:
-            x = 1
-
         return access_data
     
     def find_gp_index(self, lat: float, lon: float) -> tuple:

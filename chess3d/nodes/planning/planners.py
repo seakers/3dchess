@@ -67,7 +67,8 @@ class PlanningModule(InternalModule):
         self.stats = {
                         "planning" : [],
                         "preplanning" : [],
-                        "replanning" : []
+                        "replanning" : [],
+                        "science_wait" : []
                     }
 
         self.agent_state : SimulationAgentState = None
@@ -281,8 +282,7 @@ class PlanningModule(InternalModule):
                             plan.remove(removed)
                 
                 # --- Look for Plan Updates ---
-                plan_out = []
-                
+                #                 
                 # check if plan has been initialized
                 if (len(self.initial_reqs) > 0                  # there are initial requests 
                     and self.get_current_time() <= 1e-3         # simulation just started
@@ -305,6 +305,7 @@ class PlanningModule(InternalModule):
                     self.agent_state_lock.release()
 
                 # Check incoming messages
+                t_0 = time.perf_counter()
                 incoming_reqs = []
                 while not self.req_inbox.empty():
                     incoming_reqs.append(await self.req_inbox.get())
@@ -322,6 +323,8 @@ class PlanningModule(InternalModule):
                     generated_reqs.append( await self.internal_inbox.get())
                     while not self.misc_inbox.empty():
                         generated_reqs.append(await self.internal_inbox.get())
+                dt = time.perf_counter() - t_0
+                self.stats['science_wait'].append(dt)
                 
                 # Check if reeplanning is needed
                 await self.agent_state_lock.acquire()
@@ -351,37 +354,10 @@ class PlanningModule(InternalModule):
                 # --- Execute plan ---
 
                 # get next action to perform
-                plan_out_ids = [action['id'] for action in plan_out]
-                for action in plan:
-                    action : AgentAction
-                    if (action.t_start <= self.get_current_time()
-                        and action.id not in plan_out_ids):
-                        
-                        plan_out.append(action.to_dict())
-
-                        if len(plan_out_ids) > 0:
-                            break
-
-                if len(plan_out) == 0:
-                    if len(plan) > 0:
-                        # next action is yet to start, wait until then
-                        next_action : AgentAction = plan[0]
-                        t_idle = next_action.t_start if next_action.t_start > self.get_current_time() else self.get_current_time()
-                    else:
-                        # no more actions to perform
-                        if isinstance(self.agent_state, SatelliteAgentState):
-                            # wait until the next ground-point access
-                            self.orbitdata : OrbitData
-                            t_next = self.orbitdata.get_next_gs_access(self.get_current_time())
-                        else:
-                            # idle until the end of the simulation
-                            t_next = np.Inf
-
-                        # t_idle = self.t_plan + self.planning_horizon
-                        t_idle = t_next
-
-                    action = WaitForMessages(self.get_current_time(), t_idle)
-                    plan_out.append(action.to_dict())
+                t_0 = time.perf_counter()
+                plan_out = self.get_next_actions(plan, self.get_current_time())
+                dt = time.perf_counter() - t_0
+                self.stats['planning'].append(dt)
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 out = f'\nPLAN\nid\taction type\tt_start\tt_end\n'
@@ -405,59 +381,45 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
-
-    async def teardown(self) -> None:
-        # log plan history
-        headers = ['plan_index', 't_plan', 'req_id', 'subtask_index', 't_img', 'u_exp']
-        data = []
         
-        for i in range(len(self.plan_history)):
-            t_plan, plan = self.plan_history[i]
-            t_plan : float; plan : list
+    def get_next_actions(self, plan : list, t : float) -> list:
+        """ Parses current plan and outputs list of actions that are to be performed at a given time"""
 
-            for action in plan:
-                if not isinstance(action, MeasurementAction):
-                    continue
+        plan_out = []
+        plan_out_ids = [action['id'] for action in plan_out]
+        for action in plan:
+            action : AgentAction
+            if (action.t_start <= self.get_current_time()
+                and action.id not in plan_out_ids):
+                
+                plan_out.append(action.to_dict())
 
-                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                line_data = [   i,
-                                np.round(t_plan,3),
-                                req.id.split('-')[0],
-                                action.subtask_index,
-                                np.round(action.t_start,3 ),
-                                np.round(action.u_exp,3)
-                ]
-                data.append(line_data)
+                if len(plan_out_ids) > 0:
+                    break
 
-        df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
-        df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
+        if len(plan_out) == 0:
+            if len(plan) > 0:
+                # next action is yet to start, wait until then
+                next_action : AgentAction = plan[0]
+                t_idle = next_action.t_start if next_action.t_start > t else t
+            else:
+                # no more actions to perform
+                if isinstance(self.agent_state, SatelliteAgentState):
+                    # wait until the next ground-point access
+                    self.orbitdata : OrbitData
+                    # t_next = self.orbitdata.get_next_gs_access(t)
+                    t_next = np.Inf
+                else:
+                    # idle until the end of the simulation
+                    t_next = np.Inf
 
-        # log performance stats
-        n_decimals = 3
-        headers = ['routine','t_avg','t_std','t_med','n']
-        data = []
+                # t_idle = self.t_plan + self.planning_horizon
+                t_idle = t_next
 
-        for routine in self.stats:
-            n = len(self.stats[routine])
-            t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else None
-            t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else None
-            t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else None
+            action = WaitForMessages(t, t_idle)
+            plan_out.append(action.to_dict())
 
-            line_data = [ 
-                            routine,
-                            t_avg,
-                            t_std,
-                            t_median,
-                            n
-                            ]
-            data.append(line_data)
-
-        stats_df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-        stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
-
-        await super().teardown()
+        return plan_out
 
     def _load_orbit_data(self) -> OrbitData:
         """
@@ -637,3 +599,55 @@ class PlanningModule(InternalModule):
 
                 return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
                 
+    async def teardown(self) -> None:
+        # log plan history
+        headers = ['plan_index', 't_plan', 'req_id', 'subtask_index', 't_img', 'u_exp']
+        data = []
+        
+        for i in range(len(self.plan_history)):
+            t_plan, plan = self.plan_history[i]
+            t_plan : float; plan : list
+
+            for action in plan:
+                if not isinstance(action, MeasurementAction):
+                    continue
+
+                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+                line_data = [   i,
+                                np.round(t_plan,3),
+                                req.id.split('-')[0],
+                                action.subtask_index,
+                                np.round(action.t_start,3 ),
+                                np.round(action.u_exp,3)
+                ]
+                data.append(line_data)
+
+        df = pd.DataFrame(data, columns=headers)
+        self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+        df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
+
+        # log performance stats
+        n_decimals = 3
+        headers = ['routine','t_avg','t_std','t_med','n']
+        data = []
+
+        for routine in self.stats:
+            n = len(self.stats[routine])
+            t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+            t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+            t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+
+            line_data = [ 
+                            routine,
+                            t_avg,
+                            t_std,
+                            t_median,
+                            n
+                            ]
+            data.append(line_data)
+
+        stats_df = pd.DataFrame(data, columns=headers)
+        self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+        stats_df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_runtime_stats.csv", index=False)
+
+        await super().teardown()

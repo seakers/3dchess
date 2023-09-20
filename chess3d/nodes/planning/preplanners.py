@@ -4,6 +4,8 @@ import math
 import pandas as pd
 
 from dmas.clocks import *
+from chess3d.nodes.orbitdata import OrbitData
+from chess3d.nodes.states import AbstractAgentState
 
 from nodes.states import *
 from nodes.actions import *
@@ -27,6 +29,7 @@ class AbstractPreplanner(ABC):
                             state : AbstractAgentState, 
                             initial_reqs : list, 
                             orbitdata : OrbitData,
+                            clock_config : ClockConfig,
                             level : int = logging.DEBUG
                         ) -> list:
         """
@@ -334,10 +337,17 @@ class AbstractPreplanner(ABC):
         except Exception as e:
             raise e
 
-class FIFOPreplanner(AbstractPreplanner):
-    def __init__(self) -> None:
-        super().__init__()
+class IdlePlanner(AbstractPreplanner):
+    def initialize_plan(    self, 
+                            state : AbstractAgentState, 
+                            initial_reqs : list, 
+                            orbitdata : OrbitData,
+                            clock_config : ClockConfig,
+                            level : int = logging.DEBUG
+                        ) -> list:
+        return [IdleAction(0.0, np.Inf)]
 
+class FIFOPreplanner(AbstractPreplanner):
     def initialize_plan(    self, 
                             state: AbstractAgentState, 
                             initial_reqs: list, 
