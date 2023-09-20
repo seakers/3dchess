@@ -300,21 +300,26 @@ class PlanningModule(InternalModule):
                     self.stats['preplanning'].append(dt)
                     self.agent_state_lock.release()
 
-                # Check if reeplanning is needed
+                # Check incoming messages
                 incoming_reqs = []
                 while not self.req_inbox.empty():
                     incoming_reqs.append(await self.req_inbox.get())
 
                 incoming_measurements = []
                 while not self.measurement_inbox.empty():
-                    incoming_measurements.append(await self.misc_inbox.get())
+                    incoming_measurements.append(await self.measurement_inbox.get())
+
+                incoming_misc = []
+                while not self.misc_inbox.empty():
+                    incoming_misc.append(await self.misc_inbox.get())
 
                 generated_reqs = []
                 if len(incoming_measurements) > 0:
-                    generated_reqs.append(await self.internal_inbox.get())
+                    generated_reqs.append( await self.internal_inbox.get())
                     while not self.misc_inbox.empty():
                         generated_reqs.append(await self.internal_inbox.get())
                 
+                # Check if reeplanning is needed
                 await self.agent_state_lock.acquire()
                 t_0 = time.perf_counter()
                 if (
@@ -322,11 +327,13 @@ class PlanningModule(InternalModule):
                     self.replanner.needs_replanning(self.agent_state,
                                                     plan, 
                                                     incoming_reqs,
+                                                    generated_reqs,
                                                     incoming_misc)
                     ):
                     plan : list = self.replanner.revise_plan(   self.agent_state,
                                                                 plan, 
                                                                 incoming_reqs,
+                                                                generated_reqs,
                                                                 incoming_misc,
                                                                 self.orbitdata,
                                                                 level
