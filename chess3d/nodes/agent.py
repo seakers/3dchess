@@ -530,8 +530,6 @@ class SimulationAgent(Agent):
                         await self.update_current_time(toc_msg.t)
                         self.log(f'toc received! time updated to: {self.get_current_time()}[s]')
 
-                        if self.get_current_time() >= 3580.0:
-                            x = 1
                     else:
                         # ignore message
                         self.log(f'some other manager message was received. ignoring...')

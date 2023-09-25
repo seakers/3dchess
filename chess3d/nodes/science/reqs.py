@@ -214,6 +214,9 @@ class MeasurementRequest(object):
         ] 
         return pos
 
+    def copy(self) -> object:
+        return MeasurementRequest.from_dict(self.to_dict())
+
 class GroundPointMeasurementRequest(MeasurementRequest):
     """
     Describes a measurement reques of a specific Ground Point to be performed by agents in the simulation

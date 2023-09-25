@@ -55,7 +55,8 @@ def agent_factory(  scenario_name : str,
                     agent_type : SimulationAgentTypes,
                     clock_config : float,
                     logger : logging.Logger,
-                    initial_reqs : list
+                    initial_reqs : list,
+                    events_path : str
                 ) -> SimulationAgent:
     ## unpack mission specs
     agent_name = agent_dict['name']
@@ -104,7 +105,7 @@ def agent_factory(  scenario_name : str,
 
     ## load science module
     if science_dict is not None and science_dict == "True":
-        science = ScienceModule(results_path,scenario_path,agent_name,agent_network_config,logger=logger)
+        science = ScienceModule(results_path,scenario_path,agent_name,agent_network_config,events_path,logger=logger)
     else:
         science = None
         # raise NotImplementedError(f"Science module not yet implemented.")
@@ -325,11 +326,11 @@ if __name__ == "__main__":
             s_max = row.get('severity',row.get('s_max', None))
             
             measurements_str : str = row['measurements']
-            measurements_str = measurements_str.replace('[','')
-            measurements_str = measurements_str.replace(']','')
-            measurements_str = measurements_str.replace(', ',',')
-            measurements_str = measurements_str.replace('\'','')
-            measurements = measurements_str.split(',')
+            measurements_str = measurements_str.replace('[','')         # remove left bracket
+            measurements_str = measurements_str.replace(']','')         # remove right bracket
+            measurements_str = measurements_str.replace(', ',',')       # remove spaces
+            measurements_str = measurements_str.replace('\'','')        # remove quotes if any
+            measurements = measurements_str.split(',')                  # plit into measurements
 
             t_start = row.get('start time [s]',row.get('t_start', None))
             t_end =  row.get('t_end', t_start + row.get('duration [s]', None) )
@@ -380,6 +381,7 @@ if __name__ == "__main__":
     # create environment
     scenario_config_dict : dict = scenario_dict['scenario']
     env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
+    events_path = scenario_dict['scenario'].get('eventsPath', None)
     env_network_config = NetworkConfig( manager.get_network_config().network_name,
 											manager_address_map = {
 													zmq.REQ: [f'tcp://localhost:{port}'],
@@ -397,6 +399,7 @@ if __name__ == "__main__":
                                         manager_network_config,
                                         utility_function[env_utility_function],
                                         measurement_reqs, 
+                                        events_path,
                                         logger=logger)
     port += 6
     
@@ -415,7 +418,8 @@ if __name__ == "__main__":
                                     SimulationAgentTypes.SATELLITE, 
                                     clock_config, 
                                     logger,
-                                    measurement_reqs
+                                    measurement_reqs,
+                                    events_path
                                 )
             agents.append(agent)
             port += 6
@@ -433,7 +437,8 @@ if __name__ == "__main__":
                                     SimulationAgentTypes.UAV, 
                                     clock_config, 
                                     logger,
-                                    measurement_reqs
+                                    measurement_reqs,
+                                    events_path
                                 )
             agents.append(agent)
             port += 6

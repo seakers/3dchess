@@ -4,9 +4,9 @@ import math
 import pandas as pd
 
 from dmas.clocks import *
-from chess3d.nodes.orbitdata import OrbitData
-from chess3d.nodes.states import AbstractAgentState
 
+from nodes.states import AbstractAgentState
+from nodes.orbitdata import OrbitData
 from nodes.states import *
 from nodes.actions import *
 from nodes.science.reqs import *

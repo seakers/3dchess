@@ -209,16 +209,16 @@ class PlanningModule(InternalModule):
                             msg = message_from_dict(**sense)
                             await self.misc_inbox.put(msg)
 
-                # elif content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
-                #     # request received directly from another module
+                elif content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
+                    # request received directly from another module
 
-                #     # unpack message 
-                #     req_msg = MeasurementRequestMessage(**content)
-                #     req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
-                #     self.log(f"received measurement request message from another module!")
+                    # unpack message 
+                    req_msg = MeasurementRequestMessage(**content)
+                    req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
+                    self.log(f"received measurement request message from another module!")
                     
-                #     # send to planner
-                #     await self.req_inbox.put(req)
+                    # send to planner
+                    await self.req_inbox.put(req)
 
                 else:
                     # other type of message was received

@@ -105,7 +105,7 @@
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
-            "science" : "False",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS"
         }
@@ -158,8 +158,8 @@
     ],
     "scenario": {   
                     "@type": "PREDEF", 
-                    "initialRequestsPath" : "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
-                    "eventsPath" : "./scenarios/scenario2_simple/resources/all_events.csv", 
+                    "initialRequestsPath" : "./scenarios/scenario2_single_sat/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/scenario2_single_sat/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
                     "connectivity" : "FULL", 
                     "utility" : "LINEAR"

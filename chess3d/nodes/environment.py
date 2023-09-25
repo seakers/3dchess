@@ -1,4 +1,5 @@
 import copy
+import csv
 import time
 from typing import Any, Callable
 import numpy as np
@@ -39,6 +40,7 @@ class SimulationEnvironment(EnvironmentNode):
                 manager_network_config: NetworkConfig, 
                 utility_func : Callable[[], Any], 
                 measurement_reqs : list = [],
+                events_path : str = None,
                 level: int = logging.INFO, 
                 logger: logging.Logger = None) -> None:
         super().__init__(env_network_config, manager_network_config, [], level, logger)
@@ -104,11 +106,15 @@ class SimulationEnvironment(EnvironmentNode):
                 
                 self.agent_connectivity[src][target] = -1
 
-        self.measurement_reqs = measurement_reqs
+        self.measurement_reqs = []
+        self.initial_reqs = []
+        for req in measurement_reqs:
+            req : MeasurementRequest
+            self.initial_reqs.append(req.copy())
+            self.measurement_reqs.append(req.copy())
 
-        self.stats = {
-
-                    }
+        self.stats = {}
+        self.events_path = events_path
 
     async def setup(self) -> None:
         # nothing to set up
@@ -153,6 +159,9 @@ class SimulationEnvironment(EnvironmentNode):
                         resp.src = self.get_element_name()
                         resp.measurement = measurement_data
                         self.measurement_history.append(resp)
+
+                        if measurement_req not in self.measurement_reqs:
+                            self.measurement_reqs.append(measurement_req.copy())
 
                         await self.respond_peer_message(resp) 
 
@@ -346,172 +355,206 @@ class SimulationEnvironment(EnvironmentNode):
                     'u_exp' : measurement_action.u_exp}
 
     async def teardown(self) -> None:
-        # print final time
-        self.log(f'Environment shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
-        
-        # print received measurements
-        headers = ['req_id','measurer','measurement','pos','t_start','t_end','t_corr','t_img','u_max','u_exp','u']
-        data = []
-        for msg in self.measurement_history:
-            msg : MeasurementResultsRequestMessage
-            measurement_action = MeasurementAction(**msg.measurement_action)
-            req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
-            measurement_data : dict = msg.measurement
-            measurer = msg.dst
-            t_img = msg.measurement['t_img']           
-
-            line_data = [req.id.split('-')[0],
-                            measurer,
-                            measurement_action.instrument_name,
-                            msg.measurement_action["measurement_req"]["pos"],
-                            req.t_start,
-                            req.t_end,
-                            req.t_corr,
-                            t_img,
-                            measurement_data['u_max'],
-                            measurement_data['u_exp'],
-                            measurement_data['u']]
-            data.append(line_data)
-
-        measurements_df = DataFrame(data, columns=headers)
-
-        # calculate utility achieved by measurements
-        utility_total = 0.0
-        max_utility = 0.0
-        n_obervations_max = 0
-        co_observations = []
-
-        for req in self.measurement_reqs:
-            req_id : str = req.id
-            req_id_short = req_id.split('-')[0]
-            req_measurements = measurements_df \
-                                .query('@req_id_short == `req_id`')
+        try:
+            # print final time
+            self.log(f'Environment shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
             
-            req_utility = 0
-            for idx, row_i in req_measurements.iterrows():
-                t_img_i = row_i['t_img']
-                measurement_i = row_i['measurement']
-                correlated_measurements = []
+            # print received measurements
+            headers = ['req_id','measurer','measurement','pos','t_start','t_end','t_corr','t_img','u_max','u_exp','u']
+            data = []
+            for msg in self.measurement_history:
+                msg : MeasurementResultsRequestMessage
+                measurement_action = MeasurementAction(**msg.measurement_action)
+                req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
+                measurement_data : dict = msg.measurement
+                measurer = msg.dst
+                t_img = msg.measurement['t_img']           
 
-                for _, row_j in req_measurements.iterrows():
-                    measurement_j = row_j['measurement']
-                    t_img_j = row_j['t_img']
+                line_data = [req.id.split('-')[0],
+                                measurer,
+                                measurement_action.instrument_name,
+                                msg.measurement_action["measurement_req"]["pos"],
+                                req.t_start,
+                                req.t_end,
+                                req.t_corr,
+                                t_img,
+                                measurement_data['u_max'],
+                                measurement_data['u_exp'],
+                                measurement_data['u']]
+                data.append(line_data)
 
-                    if measurement_i == measurement_j:
-                        continue
+            measurements_df = DataFrame(data, columns=headers)
 
-                    if abs(t_img_i - t_img_j) <= req.t_corr:
-                        correlated_measurements.append( measurement_j )
-
-                subtask_index = None
-                while subtask_index == None:
-                    for main_measurement, dependent_measurements in req.measurement_groups:
-                        if (main_measurement == measurement_i 
-                            and len(np.setdiff1d(correlated_measurements, dependent_measurements)) == 0):
-                            subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
-                            break
-                    
-                    if subtask_index == None:
-                        correlated_measurements == []
-
-                if len(correlated_measurements) > 0:
-                    co_observation : list = copy.copy(dependent_measurements)
-                    co_observation.append(main_measurement)
-                    co_observation.append(req_id)
-                    co_observation = set(co_observation) 
-
-                    if co_observation not in co_observations:
-                        co_observations.append(co_observation)
-                                
-                params = {
-                            "req" : req, 
-                            "subtask_index" : subtask_index,
-                            "t_img" : t_img_i
-                        }
-                utility = self.utility_func(**params) * synergy_factor(**params)
-                req_utility += utility
-
-                measurements_df.loc[idx,'u']=utility
-
-            utility_total += req_utility
-            max_utility += req.s_max
-            n_obervations_max += len(req.measurements)
-
-        # calculate possible number of measurements given coverage metrics
-        n_obervations_pos = 0
-        for req in self.measurement_reqs:
-            req : GroundPointMeasurementRequest
-            lat,lon,_ = req.lat_lon_pos
-
-            observable_measurements = []
-            for _, coverage_data in self.orbitdata.items():
-                coverage_data : OrbitData
-                req_start = req.t_start/coverage_data.time_step
-                req_end = req.t_end/coverage_data.time_step
-                grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
-
-                df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
+            # count total number of events in the simulation
+            
+            if self.events_path is not None:
+                df = pd.read_csv(self.events_path)
+                n_events, _ = df.shape
+                n_obs_events = 0
 
                 for _, row in df.iterrows():
-                    instrument : dict = row['instrument']
-                    if (instrument['name'] in req.measurements 
-                        and instrument['name'] not in observable_measurements):
-                        observable_measurements.append(instrument['name'])
+                    x = 1
+                # with open(self.events_path, 'r') as f:
+                #     d_reader = csv.DictReader(f)
+                #     for line in d_reader:
+                #         line = [
+                #                         float(line["lat [deg]"]),
+                #                         float(line["lon [deg]"]),
+                #                         float(line["start time [s]"]),
+                #                         float(line["duration [s]"]),
+                #                         float(line["severity"]),
+                #                         str(line["measurements"].replace('|',''))
+                #                     ]
+                #         # points.append(line)
+            else:
+                n_events = 0
+                n_obs_events = 0
+
+            # calculate utility achieved by measurements
+            utility_total = 0.0
+            max_utility = 0.0
+            n_obervations_max = 0
+            co_observations = []
+
+            for req in self.measurement_reqs:
+                req_id : str = req.id
+                req_id_short = req_id.split('-')[0]
+                req_measurements = measurements_df \
+                                    .query('@req_id_short == `req_id`')
+                
+                req_utility = 0
+                for idx, row_i in req_measurements.iterrows():
+                    t_img_i = row_i['t_img']
+                    measurement_i = row_i['measurement']
+                    correlated_measurements = []
+
+                    for _, row_j in req_measurements.iterrows():
+                        measurement_j = row_j['measurement']
+                        t_img_j = row_j['t_img']
+
+                        if measurement_i == measurement_j:
+                            continue
+
+                        if abs(t_img_i - t_img_j) <= req.t_corr:
+                            correlated_measurements.append( measurement_j )
+
+                    subtask_index = None
+                    while subtask_index == None:
+                        for main_measurement, dependent_measurements in req.measurement_groups:
+                            if (main_measurement == measurement_i 
+                                and len(np.setdiff1d(correlated_measurements, dependent_measurements)) == 0):
+                                subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
+                                break
+                        
+                        if subtask_index == None:
+                            correlated_measurements == []
+
+                    if len(correlated_measurements) > 0:
+                        co_observation : list = copy.copy(dependent_measurements)
+                        co_observation.append(main_measurement)
+                        co_observation.append(req_id)
+                        co_observation = set(co_observation) 
+
+                        if co_observation not in co_observations:
+                            co_observations.append(co_observation)
+                                    
+                    params = {
+                                "req" : req, 
+                                "subtask_index" : subtask_index,
+                                "t_img" : t_img_i
+                            }
+                    utility = self.utility_func(**params) * synergy_factor(**params)
+                    req_utility += utility
+
+                    measurements_df.loc[idx,'u']=utility
+
+                utility_total += req_utility
+                max_utility += req.s_max
+                n_obervations_max += len(req.measurements)
+
+            # calculate possible number of measurements given coverage metrics
+            n_obervations_pos = 0
+            for req in self.measurement_reqs:
+                req : GroundPointMeasurementRequest
+                lat,lon,_ = req.lat_lon_pos
+
+                observable_measurements = []
+                for _, coverage_data in self.orbitdata.items():
+                    coverage_data : OrbitData
+                    req_start = req.t_start/coverage_data.time_step
+                    req_end = req.t_end/coverage_data.time_step
+                    grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
+
+                    df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
+
+                    for _, row in df.iterrows():
+                        instrument : dict = row['instrument']
+                        if (instrument['name'] in req.measurements 
+                            and instrument['name'] not in observable_measurements):
+                            observable_measurements.append(instrument['name'])
+
+                        if len(observable_measurements) == len(req.measurements):
+                            break
 
                     if len(observable_measurements) == len(req.measurements):
                         break
 
-                if len(observable_measurements) == len(req.measurements):
-                    break
+                n_obervations_pos += len(observable_measurements)
 
-            n_obervations_pos += len(observable_measurements)
+            # Generate summary
+            summary_headers = ['stat_name', 'val']
+            summary_data = [
+                        ['t_start', self._clock_config.start_date], 
+                        ['t_end', self._clock_config.end_date], 
+                        ['n_events', n_events],
+                        ['n_obs_events', n_obs_events],
+                        ['n_reqs', len(self.measurement_reqs)],
+                        ['n_obs_max', n_obervations_max],
+                        ['n_obs_pos', n_obervations_pos],
+                        ['n_obs', len(self.measurement_history)],
+                        ['n_obs_co', len(co_observations)],
+                        ['u_max', max_utility], 
+                        ['u', utility_total],
+                        ['u_norm', utility_total/max_utility]
+                    ]
 
-        # Generate summary
-        summary_headers = ['stat_name', 'val']
-        summary_data = [
-                    ['t_start', self._clock_config.start_date], 
-                    ['t_end', self._clock_config.end_date], 
-                    ['n_reqs', len(self.measurement_reqs)],
-                    ['n_obs_max', n_obervations_max],
-                    ['n_obs_pos', n_obervations_pos],
-                    ['n_obs', len(self.measurement_history)],
-                    ['n_obs_co', len(co_observations)],
-                    ['u_max', max_utility], 
-                    ['u', utility_total],
-                    ['u_norm', utility_total/max_utility]
-                ]
+            # log and save results
+            self.log(f"MEASUREMENTS RECEIVED:\n{str(measurements_df)}\n\n", level=logging.WARNING)
+            measurements_df.to_csv(f"{self.results_path}/measurements.csv", index=False)
 
-        # log and save results
-        self.log(f"MEASUREMENTS RECEIVED:\n{str(measurements_df)}\n\n", level=logging.WARNING)
-        measurements_df.to_csv(f"{self.results_path}/measurements.csv", index=False)
+            summary_df = DataFrame(summary_data, columns=summary_headers)
+            self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)
+            summary_df.to_csv(f"{self.results_path}/../summary.csv", index=False)
 
-        summary_df = DataFrame(summary_data, columns=summary_headers)
-        self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)
-        summary_df.to_csv(f"{self.results_path}/../summary.csv", index=False)
+            # log performance stats
+            n_decimals = 3
+            headers = ['routine','t_avg','t_std','t_med','n']
+            data = []
 
-        # log performance stats
-        n_decimals = 3
-        headers = ['routine','t_avg','t_std','t_med','n']
-        data = []
+            for routine in self.stats:
+                n = len(self.stats[routine])
+                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
 
-        for routine in self.stats:
-            n = len(self.stats[routine])
-            t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
-            t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
-            t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+                line_data = [ 
+                                routine,
+                                t_avg,
+                                t_std,
+                                t_median,
+                                n
+                                ]
+                data.append(line_data)
 
-            line_data = [ 
-                            routine,
-                            t_avg,
-                            t_std,
-                            t_median,
-                            n
-                            ]
-            data.append(line_data)
-
-        stats_df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-        stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
+            stats_df = pd.DataFrame(data, columns=headers)
+            self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+            stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
+        
+        except asyncio.CancelledError as e:
+            raise e
+        except Exception as e:
+            print(e.with_traceback())
+            raise e
 
     async def sim_wait(self, delay: float) -> None:
         try:
