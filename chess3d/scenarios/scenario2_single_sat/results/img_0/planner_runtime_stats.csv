@@ -1,5 +1,5 @@
 routine,t_avg,t_std,t_med,n
-planning,0.001,0.0,0.001,44
-preplanning,4.821,0.0,4.821,1
-replanning,-1.0,0.0,-1.0,0
-science_wait,0.0,0.0,0.0,45
+planning,0.001,0.0,0.001,194
+preplanning,4.591,0.0,4.591,1
+replanning,3.422,0.0,3.422,1
+science_wait,0.0,0.0,0.0,194

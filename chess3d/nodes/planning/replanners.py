@@ -8,6 +8,7 @@ from dmas.clocks import *
 from nodes.orbitdata import OrbitData
 from nodes.science.reqs import *
 from nodes.states import *
+from messages import MeasurementRequestMessage
 
 class AbstractReplanner(ABC):
     """
@@ -149,7 +150,7 @@ class AbstractReplanner(ABC):
 
                 if t_move_end is None:
                     # unpheasible path
-                    self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
+                    # self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
                     continue
 
                 future_state : SatelliteAgentState = state.propagate(t_move_end)
@@ -220,6 +221,7 @@ class AbstractReplanner(ABC):
         available = []
         for req in requests:
             req : MeasurementRequest
+
             for subtask_index in range(len(req.measurements)):
                 if self._can_perform(state, req, subtask_index, orbitdata):
                     available.append((req, subtask_index))
@@ -325,7 +327,7 @@ class FIFOReplanner(AbstractReplanner):
                             current_plan : list, 
                             incoming_reqs : list, 
                             generated_reqs : list
-                        ) -> list:
+                        ) -> tuple:
         """ Compiles incoming and generated requests and returns a list of unique requests"""
         
         ## list all requests in current plan
@@ -339,13 +341,14 @@ class FIFOReplanner(AbstractReplanner):
         ## compare with incoming or generated requests
         new_reqs = []
         for req in incoming_reqs:
-            if req not in known_reqs:
+            req : MeasurementRequest
+            if req not in known_reqs and req.s_max > 0.0:
                 new_reqs.append(req)
         for req in generated_reqs:
-            if req not in known_reqs:
+            if req not in known_reqs and req.s_max > 0.0:
                 new_reqs.append(req)
         
-        return new_reqs
+        return known_reqs, new_reqs
 
 
     def needs_replanning(   self, 
@@ -363,7 +366,7 @@ class FIFOReplanner(AbstractReplanner):
 
         # check if incoming or generated measurement requests are already accounted for
         ## list all requests in current plan
-        new_reqs : list = self._compile_requests(current_plan, incoming_reqs, generated_reqs)
+        _, new_reqs = self._compile_requests(current_plan, incoming_reqs, generated_reqs)
 
         # if no new requests, then do NOT replan
         if len(new_reqs) == 0:
@@ -388,7 +391,8 @@ class FIFOReplanner(AbstractReplanner):
         path = []         
         
         # compile requests
-        reqs = self._compile_requests(current_plan, incoming_reqs, generated_reqs)
+        known_reqs, new_reqs = self._compile_requests(current_plan, incoming_reqs, generated_reqs)
+        reqs : list = known_reqs; reqs.extend(new_reqs)
 
         available_reqs : list = self._get_available_requests( state, reqs, orbitdata )
 
@@ -444,9 +448,15 @@ class FIFOReplanner(AbstractReplanner):
             out = '\n'
             for req, subtask_index, t_img, s in path:
                 out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-            # self.log(out,level)
 
-            return self._plan_from_path(state, path, orbitdata, clock_config)
+            plan : list = self._plan_from_path(state, path, orbitdata, clock_config)
+            
+            for req in generated_reqs:
+                req : MeasurementRequest
+                req_msg = MeasurementRequestMessage("", "", req.to_dict())
+                plan.insert(0, BroadcastMessageAction(req_msg.to_dict(), state.t))
+
+            return plan
                 
         else:
             raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')

@@ -378,30 +378,30 @@ if __name__ == "__main__":
     
     monitor = ResultsMonitor(clock_config, monitor_network_config, logger=logger)
 
-    # create environment
+    # # create environment
     scenario_config_dict : dict = scenario_dict['scenario']
     env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
     events_path = scenario_dict['scenario'].get('eventsPath', None)
-    env_network_config = NetworkConfig( manager.get_network_config().network_name,
-											manager_address_map = {
-													zmq.REQ: [f'tcp://localhost:{port}'],
-													zmq.SUB: [f'tcp://localhost:{port+1}'],
-                                                    zmq.PUB: [f'tcp://localhost:{port+2}'],
-													zmq.PUSH: [f'tcp://localhost:{port+3}']},
-											external_address_map = {
-													zmq.REP: [f'tcp://*:{port+4}'],
-													zmq.PUB: [f'tcp://*:{port+5}']
-											})
+    # env_network_config = NetworkConfig( manager.get_network_config().network_name,
+	# 										manager_address_map = {
+	# 												zmq.REQ: [f'tcp://localhost:{port}'],
+	# 												zmq.SUB: [f'tcp://localhost:{port+1}'],
+    #                                                 zmq.PUB: [f'tcp://localhost:{port+2}'],
+	# 												zmq.PUSH: [f'tcp://localhost:{port+3}']},
+	# 										external_address_map = {
+	# 												zmq.REP: [f'tcp://*:{port+4}'],
+	# 												zmq.PUB: [f'tcp://*:{port+5}']
+	# 										})
     
-    environment = SimulationEnvironment(scenario_path, 
-                                        results_path, 
-                                        env_network_config, 
-                                        manager_network_config,
-                                        utility_function[env_utility_function],
-                                        measurement_reqs, 
-                                        events_path,
-                                        logger=logger)
-    port += 6
+    # environment = SimulationEnvironment(scenario_path, 
+    #                                     results_path, 
+    #                                     env_network_config, 
+    #                                     manager_network_config,
+    #                                     utility_function[env_utility_function],
+    #                                     measurement_reqs, 
+    #                                     events_path,
+    #                                     logger=logger)
+    agent_port = port + 6
     
     # Create agents 
     agents = []
@@ -414,7 +414,7 @@ if __name__ == "__main__":
                                     orbitdata_dir, 
                                     d, 
                                     manager_network_config, 
-                                    port, 
+                                    agent_port, 
                                     SimulationAgentTypes.SATELLITE, 
                                     clock_config, 
                                     logger,
@@ -422,7 +422,7 @@ if __name__ == "__main__":
                                     events_path
                                 )
             agents.append(agent)
-            port += 6
+            agent_port += 6
 
     if uav_dict is not None:
         # Create uav agents
@@ -433,7 +433,7 @@ if __name__ == "__main__":
                                     orbitdata_dir, 
                                     d, 
                                     manager_network_config, 
-                                    port, 
+                                    agent_port, 
                                     SimulationAgentTypes.UAV, 
                                     clock_config, 
                                     logger,
@@ -441,7 +441,7 @@ if __name__ == "__main__":
                                     events_path
                                 )
             agents.append(agent)
-            port += 6
+            agent_port += 6
 
     if gstation_dict is not None:
         # Create ground station agents
@@ -458,14 +458,43 @@ if __name__ == "__main__":
             agent = GroundStationAgent( agent_name, 
                                         results_path,
                                         scenario_name,
-                                        port,
+                                        agent_port,
                                         manager_network_config,
                                         initial_state,
                                         utility_function[env_utility_function],
                                         initial_reqs=measurement_reqs,
                                         logger=logger)
             agents.append(agent)
-            port += 6
+            agent_port += 6
+
+    # create environment
+    env_subs = []
+    for agent in agents:
+        agent_pubs : str = agent._network_config.external_address_map[zmq.PUB]
+        for agent_pub in agent_pubs:
+            env_sub : str = agent_pub.replace('*', 'localhost')
+            env_subs.append(env_sub)
+
+    env_network_config = NetworkConfig( manager.get_network_config().network_name,
+											manager_address_map = {
+													zmq.REQ: [f'tcp://localhost:{port}'],
+													zmq.SUB: [f'tcp://localhost:{port+1}'],
+                                                    zmq.PUB: [f'tcp://localhost:{port+2}'],
+													zmq.PUSH: [f'tcp://localhost:{port+3}']},
+											external_address_map = {
+													zmq.REP: [f'tcp://*:{port+4}'],
+													zmq.PUB: [f'tcp://*:{port+5}'],
+                                                    zmq.SUB: env_subs
+											})
+    
+    environment = SimulationEnvironment(scenario_path, 
+                                        results_path, 
+                                        env_network_config, 
+                                        manager_network_config,
+                                        utility_function[env_utility_function],
+                                        measurement_reqs, 
+                                        events_path,
+                                        logger=logger)
             
     # run simulation
     with concurrent.futures.ThreadPoolExecutor(len(agents) + 3) as pool:

@@ -209,16 +209,20 @@ class PlanningModule(InternalModule):
                             msg = message_from_dict(**sense)
                             await self.misc_inbox.put(msg)
 
-                elif content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
-                    # request received directly from another module
+                # elif content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
+                #     # request received directly from another module
 
-                    # unpack message 
-                    req_msg = MeasurementRequestMessage(**content)
-                    req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
-                    self.log(f"received measurement request message from another module!")
+                #     # other type of message was received
+                #     if not self.other_modules_exist:
+                #         self.other_modules_exist = True
+
+                #     # unpack message 
+                #     req_msg = MeasurementRequestMessage(**content)
+                #     req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
+                #     self.log(f"received measurement request message from another module!")
                     
-                    # send to planner
-                    await self.req_inbox.put(req)
+                #     # send to planner
+                #     await self.internal_inbox.put(req)
 
                 else:
                     # other type of message was received
@@ -308,21 +312,33 @@ class PlanningModule(InternalModule):
                 t_0 = time.perf_counter()
                 incoming_reqs = []
                 while not self.req_inbox.empty():
-                    incoming_reqs.append(await self.req_inbox.get())
+                    req_msg : MeasurementRequestMessage = await self.req_inbox.get()
+                    incoming_reqs.append( MeasurementRequest.from_dict(req_msg.req))
 
                 incoming_measurements = []
                 while not self.measurement_inbox.empty():
                     incoming_measurements.append(await self.measurement_inbox.get())
 
+                generated_reqs = []
+                if len(incoming_measurements) > 0 and self.other_modules_exist:
+                    internal_msg = await self.internal_inbox.get()
+
+                    if not isinstance(internal_msg, MeasurementRequestMessage):
+                        await self.misc_inbox.put(internal_msg)
+                    else:
+                        generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
+
+                    while not self.misc_inbox.empty():
+                        internal_msg = await self.internal_inbox.get()
+                        if not isinstance(internal_msg, MeasurementRequestMessage):
+                            await self.misc_inbox.put(internal_msg)
+                        else:
+                            generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
+
                 incoming_misc = []
                 while not self.misc_inbox.empty():
                     incoming_misc.append(await self.misc_inbox.get())
 
-                generated_reqs = []
-                if len(incoming_measurements) > 0 and self.other_modules_exist:
-                    generated_reqs.append( await self.internal_inbox.get())
-                    while not self.misc_inbox.empty():
-                        generated_reqs.append(await self.internal_inbox.get())
                 dt = time.perf_counter() - t_0
                 self.stats['science_wait'].append(dt)
                 
@@ -343,8 +359,8 @@ class PlanningModule(InternalModule):
                                                                 incoming_reqs,
                                                                 generated_reqs,
                                                                 incoming_misc,
-                                                                self.orbitdata,
-                                                                level
+                                                                self._clock_config,
+                                                                self.orbitdata
                                                             )
                     
                     dt = time.perf_counter() - t_0

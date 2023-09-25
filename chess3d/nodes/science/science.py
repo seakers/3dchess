@@ -307,12 +307,6 @@ class ScienceModule(InternalModule):
 
                     if len(desired_variables) > 0:
                         x = 1
-                    # req_msg = InternalMessage(self.name, AgentModuleTypes.PLANNING_MODULE.value, measurement_request)
-                    # ext_msg = InternalMessage(self.name, ComponentNames.TRANSMITTER.value, measurement_request)
-                    # if self.parent_module.notifier == "True":
-                    #     await self.send_internal_message(req_msg)
-                    #     await self.send_internal_message(ext_msg)
-                    #     self.log(f'Sent message to transmitter!',level=logging.DEBUG)
 
                 else:
                     # ignore
@@ -761,26 +755,26 @@ class ScienceModule(InternalModule):
                 self.log(f'No flood detected at {lat}, {lon}',level=logging.INFO)
             item["checked"] = True
         return outlier, outlier_data
-    
+
     def check_bloom_outliers(self,item):
         """
         Checks G-REALM data for outliers. To be used for Scenario 2.
         """
-        return self.__check_outlier(item, ["visible","sar","thermal"])
+        return self.__check_outlier(item, ["visible","sar","thermal"], 'bloom')
 
     def check_laketemp_outliers(self,item):
         """
         Checks G-REALM data for outliers. To be used for Scenario 2.
         """
-        return self.__check_outlier(item, ["visible","thermal"])   
+        return self.__check_outlier(item, ["visible","thermal"], 'temp')   
 
     def check_lakelevel_outliers(self,item):
         """
         Checks G-REALM data for outliers. To be used for Scenario 2.
         """
-        return self.__check_outlier(item, ['visible', 'sar']) 
+        return self.__check_outlier(item, ['visible', 'sar'], 'level') 
 
-    def __check_outlier(self, item : dict, event_measurements : list) -> tuple:
+    def __check_outlier(self, item : dict, event_measurements : list, outlier_event_type : str) -> tuple:
         obs_start, obs_duration, obs_severity, event_type = np.Inf, np.Inf, 0.0, ""
 
         outlier = False
@@ -805,7 +799,7 @@ class ScienceModule(InternalModule):
                 self.log(f'Lake temperature event detected at {lat}, {lon}',level=logging.DEBUG)
 
                 obs_start, obs_duration, obs_severity = t_start, duration, severity
-                event_type = "temp"
+                event_type = outlier_event_type
                 outlier = True
                 break
         
@@ -814,6 +808,7 @@ class ScienceModule(InternalModule):
         item['obs_start'] = obs_start
         item['obs_duration'] = obs_duration
         item['obs_end'] = obs_start + obs_duration
+        item['desired_products'] = measurements
 
         return outlier, item 
 

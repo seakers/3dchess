@@ -167,7 +167,7 @@ class MeasurementRequest(object):
 
     def __repr__(self):
         task_id = self.id.split('-')
-        return f'MeasurementTask_{task_id[0]}'
+        return f'MeasurementReq_{task_id[0]}'
 
     def to_dict(self) -> dict:
         """

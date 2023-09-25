@@ -111,7 +111,7 @@ class SimulationEnvironment(EnvironmentNode):
         for req in measurement_reqs:
             req : MeasurementRequest
             self.initial_reqs.append(req.copy())
-            self.measurement_reqs.append(req.copy())
+            # self.measurement_reqs.append(req.copy())
 
         self.stats = {}
         self.events_path = events_path
@@ -127,9 +127,11 @@ class SimulationEnvironment(EnvironmentNode):
 
             manager_socket, _ = self._manager_socket_map.get(zmq.SUB)
             agent_socket, _ = self._external_socket_map.get(zmq.REP)
+            agent_broadcasts, _ = self._external_socket_map.get(zmq.SUB)
 
             poller.register(manager_socket, zmq.POLLIN)
             poller.register(agent_socket, zmq.POLLIN)
+            poller.register(agent_broadcasts, zmq.POLLIN)
             
             # track agent and simulation states
             while True:
@@ -159,9 +161,6 @@ class SimulationEnvironment(EnvironmentNode):
                         resp.src = self.get_element_name()
                         resp.measurement = measurement_data
                         self.measurement_history.append(resp)
-
-                        if measurement_req not in self.measurement_reqs:
-                            self.measurement_reqs.append(measurement_req.copy())
 
                         await self.respond_peer_message(resp) 
 
@@ -236,6 +235,16 @@ class SimulationEnvironment(EnvironmentNode):
                     if src not in self.stats:
                         self.stats[src] = []
                     self.stats[src].append(dt)
+
+                elif agent_broadcasts in socks:
+                    dst, src, content = await self.listen_peer_broadcast()
+
+                    if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
+                        req_msg = MeasurementRequestMessage(**content)
+                        measurement_req = MeasurementRequest.from_dict(req_msg.req)
+
+                        if measurement_req not in self.measurement_reqs:
+                            self.measurement_reqs.append(measurement_req)
 
                 elif manager_socket in socks:
                     # check if manager message is received:
@@ -390,25 +399,45 @@ class SimulationEnvironment(EnvironmentNode):
             if self.events_path is not None:
                 df = pd.read_csv(self.events_path)
                 n_events, _ = df.shape
-                n_obs_events = 0
+                n_events_detected = 0
+                n_events_obs = 0
 
                 for _, row in df.iterrows():
-                    x = 1
-                # with open(self.events_path, 'r') as f:
-                #     d_reader = csv.DictReader(f)
-                #     for line in d_reader:
-                #         line = [
-                #                         float(line["lat [deg]"]),
-                #                         float(line["lon [deg]"]),
-                #                         float(line["start time [s]"]),
-                #                         float(line["duration [s]"]),
-                #                         float(line["severity"]),
-                #                         str(line["measurements"].replace('|',''))
-                #                     ]
-                #         # points.append(line)
+                    for req in self.measurement_reqs:
+                        req : MeasurementRequest
+                        lat,lon,_ = req.lat_lon_pos
+
+                        if (    
+                                abs(lat - row['lat [deg]']) <= 1e-2 and
+                                abs(lon - row['lon [deg]']) <= 1e-2 and
+                                abs(req.t_start - row['start time [s]']) <= 1e-2 and
+                                abs(req.t_end - (row['start time [s]'] + row['duration [s]'])) <= 1e-2 and
+                                abs(req.s_max == row['severity']) <= 1e-2
+                        ):
+                            measurements : str = row['measurements']
+                            measurements : str = measurements.replace('[','')
+                            measurements : str = measurements.replace(']','')
+                            measurements : str = measurements.replace(' ','')
+                            measurements = measurements.split(',')
+
+                            if len(req.measurements) != len(measurements):
+                                continue
+
+                            measurement_not_found = False
+                            for measurement in req.measurements:
+                                if measurement not in measurements:
+                                    measurement_not_found = True
+                                    break
+                            if measurement_not_found:
+                                continue
+
+                            n_events_detected += 1 
+                            break
+
             else:
                 n_events = 0
-                n_obs_events = 0
+                n_events_detected = 0
+                n_events_obs = 0
 
             # calculate utility achieved by measurements
             utility_total = 0.0
@@ -507,8 +536,11 @@ class SimulationEnvironment(EnvironmentNode):
                         ['t_start', self._clock_config.start_date], 
                         ['t_end', self._clock_config.end_date], 
                         ['n_events', n_events],
-                        ['n_obs_events', n_obs_events],
-                        ['n_reqs', len(self.measurement_reqs)],
+                        ['n_events_detected', n_events_detected],
+                        ['n_events_obs', n_events_obs],
+                        ['n_reqs_init', len(self.initial_reqs)],
+                        ['n_reqs_gen', len(self.measurement_reqs)],
+                        ['n_reqs', len(self.measurement_reqs) + len(self.initial_reqs)],
                         ['n_obs_max', n_obervations_max],
                         ['n_obs_pos', n_obervations_pos],
                         ['n_obs', len(self.measurement_history)],

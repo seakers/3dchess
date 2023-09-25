@@ -284,6 +284,7 @@ class SimulationAgent(Agent):
         self.state_history.append(self.state.to_dict())
         
         # perform action
+        msg_out.src = self.get_element_name()
         msg_out.dst = self.get_network_name()
         await self.send_peer_broadcast(msg_out)
 
