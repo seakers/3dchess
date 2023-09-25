@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 import logging
 import pandas as pd
 
+from nodes.orbitdata import OrbitData
 from nodes.science.reqs import *
 from nodes.states import *
-from nodes.orbitdata import OrbitData
 
 class AbstractReplanner(ABC):
     """
@@ -13,10 +13,11 @@ class AbstractReplanner(ABC):
     @abstractmethod 
     def needs_replanning(   self, 
                             state : AbstractAgentState,
-                            curent_plan : list,
+                            current_plan : list,
                             incoming_reqs : list,
                             generated_reqs : list,
-                            misc_messages : list
+                            misc_messages : list,
+                            orbitdata : OrbitData = None
                         ) -> bool:
         """
         Returns `True` if the current plan needs replanning
@@ -29,6 +30,7 @@ class AbstractReplanner(ABC):
                         incoming_reqs : list, 
                         generated_reqs : list,
                         misc_messages : list,
+                        orbitdata : OrbitData = None,
                         **kwargs
                     ) -> list:
         """
@@ -67,12 +69,12 @@ class AbstractReplanner(ABC):
         for req in requests:
             req : MeasurementRequest
             for subtask_index in range(len(req.measurements)):
-                if self.__can_bid(state, req, subtask_index, orbitdata):
+                if self._can_perform(state, req, subtask_index, orbitdata):
                     available.append((req, subtask_index))
 
         return available
 
-    def __can_bid(self, 
+    def _can_perform(self, 
                 state : SimulationAgentState, 
                 req : MeasurementRequest, 
                 subtask_index : int, 
@@ -80,7 +82,7 @@ class AbstractReplanner(ABC):
                 planning_horizon : float = np.Inf
                 ) -> bool:
         """
-        Checks if an agent has the ability to bid on a measurement task
+        Checks if an agent has the ability to perform a measurement task
         """
         # check planning horizon
         if state.t + planning_horizon < req.t_start:
@@ -166,6 +168,46 @@ class AbstractReplanner(ABC):
 
 
 class FIFOReplanner(AbstractReplanner):
+
+    def needs_replanning(   self, 
+                            state : AbstractAgentState,
+                            current_plan : list,
+                            incoming_reqs : list,
+                            generated_reqs : list,
+                            _ : list,
+                            orbitdata : OrbitData
+                        ) -> bool:
+
+        # if no incoming or generated measurement requests, then do NOT replan
+        if len(incoming_reqs) + len(generated_reqs) == 0:
+            return False
+
+        # check if incoming or generated measurement requests are already accounted for
+        ## list all requests in current plan
+        known_reqs = []
+        for action in current_plan:
+            if isinstance(action, MeasurementAction):
+                req = MeasurementRequest.from_dict(action.measurement_req)
+                if req not in known_reqs:
+                    known_reqs.append(req)
+
+        ## compare with incoming or generated requests
+        new_reqs = []
+        for req in incoming_reqs:
+            if req not in known_reqs:
+                new_reqs.append(req)
+        for req in generated_reqs:
+            if req not in known_reqs:
+                new_reqs.append(req)
+
+        # if no new requests, then do NOT replan
+        if len(new_reqs) == 0:
+            return False
+
+        # check if new requests can be done given the current state of the agent
+        performable_reqs = self._get_available_requests(state, new_reqs, orbitdata)    
+        return len(performable_reqs) > 0
+
     
     def revise_plan(    self, 
                         state : AbstractAgentState, 
@@ -176,13 +218,14 @@ class FIFOReplanner(AbstractReplanner):
                         orbitdata : OrbitData,
                         level : int = logging.DEBUG
                     ) -> list:
+        return []
 
-        # initialize plan
-        path = []         
+        # # initialize plan
+        # path = []         
         
-        # compile requests
-        reqs = []
-        # for 
+        # # compile requests
+        # reqs = []
+        # # for 
 
         # available_reqs : list = self._get_available_requests( state, initial_reqs, orbitdata )
 
@@ -244,3 +287,6 @@ class FIFOReplanner(AbstractReplanner):
                 
         # else:
         #     raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')
+        
+    def plan_from_path(self, state: SimulationAgentState, path: list, **kwargs) -> list:
+        return []

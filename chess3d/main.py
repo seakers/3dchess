@@ -13,7 +13,8 @@ import concurrent.futures
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
 from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
-from chess3d.nodes.planning.preplanners import FIFOPreplanner
+from nodes.planning.preplanners import *
+from nodes.planning.replanners import *
 from manager import SimulationManager
 from monitor import ResultsMonitor
 
@@ -123,7 +124,10 @@ def agent_factory(  scenario_name : str,
             preplanner = None
 
         if replanner_type is not None:
-            raise NotImplementedError(f'replanner of type `{replanner_type}` not yet supported.')
+            if replanner_type == 'FIFO':
+                replanner = FIFOReplanner()
+            else:
+                raise NotImplementedError(f'replanner of type `{replanner_type}` not yet supported.')
         else:
             replanner = None
     else:

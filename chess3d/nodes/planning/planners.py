@@ -335,7 +335,8 @@ class PlanningModule(InternalModule):
                                                     plan, 
                                                     incoming_reqs,
                                                     generated_reqs,
-                                                    incoming_misc)
+                                                    incoming_misc,
+                                                    self.orbitdata)
                     ):
                     plan : list = self.replanner.revise_plan(   self.agent_state,
                                                                 plan, 
