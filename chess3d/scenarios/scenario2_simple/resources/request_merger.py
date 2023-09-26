@@ -63,5 +63,4 @@ if __name__ == '__main__':
     n_new, _ = reqs_merged.shape
 
     print(f"{n_prev} requests merged into {n_new} requests! Reduced by {np.round((n_prev - n_new)/n_prev*100, 3)}%\n")
-    
-    x = 1
+    print('\nDONE')

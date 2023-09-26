@@ -7,10 +7,10 @@ n_events_obs,0
 n_reqs_init,101
 n_reqs_gen,1
 n_reqs,102
-n_obs_max,3
-n_obs_pos,1
+n_obs_max,306
+n_obs_pos,86
 n_obs,86
 n_obs_co,0
-u_max,7.235586791929105
-u,0.2760242368772955
-u_norm,0.038148148148148146
+u_max,108.23558679192911
+u,5.989154380910214
+u_norm,0.05533442889189207

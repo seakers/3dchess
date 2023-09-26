@@ -102,6 +102,7 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -195,7 +196,8 @@
                 }
             },
             "planner" : {
-                "@type" : "ACBBA",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",

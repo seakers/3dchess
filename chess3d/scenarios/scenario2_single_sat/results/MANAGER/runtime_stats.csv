@@ -1,7 +1,7 @@
 routine,t_avg,t_std,t_med,n
 ENVIRONMENT_wait,-1.0,0.0,-1.0,0
-img_0_wait,0.108,0.428,0.048,192
-Svalbard_wait,0.055,0.03,0.043,192
-NEN2_wait,0.056,0.031,0.044,192
-clock_wait,0.11,0.428,0.05,192
-sim_runtime,21.16,0.0,21.16,1
+img_0_wait,0.11,0.439,0.049,192
+Svalbard_wait,0.048,0.023,0.04,192
+NEN2_wait,0.045,0.024,0.037,192
+clock_wait,0.112,0.439,0.051,192
+sim_runtime,21.434,0.0,21.434,1

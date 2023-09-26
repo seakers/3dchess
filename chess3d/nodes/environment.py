@@ -392,10 +392,9 @@ class SimulationEnvironment(EnvironmentNode):
                                 measurement_data['u']]
                 data.append(line_data)
 
-            measurements_df = DataFrame(data, columns=headers)
+            received_measurements_df = DataFrame(data, columns=headers)
 
             # count total number of events in the simulation
-            
             if self.events_path is not None:
                 df = pd.read_csv(self.events_path)
                 n_events, _ = df.shape
@@ -445,10 +444,14 @@ class SimulationEnvironment(EnvironmentNode):
             n_obervations_max = 0
             co_observations = []
 
-            for req in self.measurement_reqs:
+            measurement_reqs = [req.copy() for req in self.measurement_reqs]
+            for req in self.initial_reqs:
+                measurement_reqs.append(req.copy())
+
+            for req in measurement_reqs:
                 req_id : str = req.id
                 req_id_short = req_id.split('-')[0]
-                req_measurements = measurements_df \
+                req_measurements = received_measurements_df \
                                     .query('@req_id_short == `req_id`')
                 
                 req_utility = 0
@@ -495,7 +498,7 @@ class SimulationEnvironment(EnvironmentNode):
                     utility = self.utility_func(**params) * synergy_factor(**params)
                     req_utility += utility
 
-                    measurements_df.loc[idx,'u']=utility
+                    received_measurements_df.loc[idx,'u']=utility
 
                 utility_total += req_utility
                 max_utility += req.s_max
@@ -503,7 +506,11 @@ class SimulationEnvironment(EnvironmentNode):
 
             # calculate possible number of measurements given coverage metrics
             n_obervations_pos = 0
-            for req in self.measurement_reqs:
+            for req in measurement_reqs:
+                if not isinstance(req, GroundPointMeasurementRequest):
+                    self.log(f"WARNING cannot process results for requests of type {type(req)}", logging.WARNING)
+                    continue
+
                 req : GroundPointMeasurementRequest
                 lat,lon,_ = req.lat_lon_pos
 
@@ -540,19 +547,19 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_events_obs', n_events_obs],
                         ['n_reqs_init', len(self.initial_reqs)],
                         ['n_reqs_gen', len(self.measurement_reqs)],
-                        ['n_reqs', len(self.measurement_reqs) + len(self.initial_reqs)],
+                        ['n_reqs_total', len(self.measurement_reqs) + len(self.initial_reqs)],
                         ['n_obs_max', n_obervations_max],
                         ['n_obs_pos', n_obervations_pos],
                         ['n_obs', len(self.measurement_history)],
-                        ['n_obs_co', len(co_observations)],
+                        ['n_co_obs', len(co_observations)],
                         ['u_max', max_utility], 
                         ['u', utility_total],
                         ['u_norm', utility_total/max_utility]
                     ]
 
             # log and save results
-            self.log(f"MEASUREMENTS RECEIVED:\n{str(measurements_df)}\n\n", level=logging.WARNING)
-            measurements_df.to_csv(f"{self.results_path}/measurements.csv", index=False)
+            self.log(f"MEASUREMENTS RECEIVED:\n{str(received_measurements_df)}\n\n", level=logging.WARNING)
+            received_measurements_df.to_csv(f"{self.results_path}/measurements.csv", index=False)
 
             summary_df = DataFrame(summary_data, columns=summary_headers)
             self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)

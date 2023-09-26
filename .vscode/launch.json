@@ -98,6 +98,19 @@
             "args": "scenario2"
         },
         {
+            "name": "SCENARIO 2 - REDUCED",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "scenario2_reduced"
+        },
+        {
             "name": "SCENARIO 2 - SIMPLE",
             "type": "python",
             "request": "launch",
