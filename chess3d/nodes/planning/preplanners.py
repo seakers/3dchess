@@ -88,6 +88,9 @@ class AbstractPreplanner(ABC):
                     if isinstance(action, MeasurementAction):
                         prev_req = MeasurementRequest.from_dict(action.measurement_req)
                         break
+                
+                if len(plan) < 1:
+                    x = 1
 
                 action_prev : AgentAction = plan[-1]
                 t_prev = action_prev.t_end
@@ -142,7 +145,7 @@ class AbstractPreplanner(ABC):
                         break
 
                 if t_move_end is None:
-                    # unpheasible path
+                    # unfeasible path
                     self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
                     continue
 

@@ -544,9 +544,10 @@ class SatelliteAgentState(SimulationAgentState):
                             sat_to_gp[2]/sat_to_gp_norm
                         ])
             
-            proj = np.dot(sat_to_gp, nadir_dir) * nadir_dir + np.dot(sat_to_gp, perp_dir) * perp_dir
+            R_inert_2_rot = np.matrix([nadir_dir, vel_dir, perp_dir])
+            sat_to_gp_rot = np.matmul(R_inert_2_rot, sat_to_gp).A[0]
 
-            return np.arccos( np.dot(proj, nadir_dir) ) * 360 / np.pi
+            return np.arctan2(sat_to_gp_rot[2], sat_to_gp_rot[0]) * 180 / np.pi
         
         else:
             raise NotImplementedError(f"cannot calculate off-nadir angle for measurement requests of type {type(req)}")
