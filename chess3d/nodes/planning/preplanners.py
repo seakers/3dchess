@@ -92,9 +92,6 @@ class AbstractPreplanner(ABC):
                         prev_req = MeasurementRequest.from_dict(action.measurement_req)
                         break
                 
-                if len(plan) < 1:
-                    x = 1
-
                 action_prev : AgentAction = plan[-1]
                 t_prev = action_prev.t_end
 
@@ -208,7 +205,8 @@ class AbstractPreplanner(ABC):
     def _get_available_requests( self, 
                                 state : SimulationAgentState, 
                                 requests : list,
-                                orbitdata : OrbitData
+                                orbitdata : OrbitData,
+                                planning_horizon : float = np.Inf
                                 ) -> list:
         """
         Checks if there are any requests available to be performed
@@ -220,7 +218,7 @@ class AbstractPreplanner(ABC):
         for req in requests:
             req : MeasurementRequest
             for subtask_index in range(len(req.measurements)):
-                if self.__can_bid(state, req, subtask_index, orbitdata):
+                if self.__can_bid(state, req, subtask_index, orbitdata, planning_horizon):
                     available.append((req, subtask_index))
 
         return available
@@ -253,9 +251,8 @@ class AbstractPreplanner(ABC):
             if isinstance(state, SatelliteAgentState):
                 # check if agent can see the request location
                 lat,lon,_ = req.lat_lon_pos
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, state.t).sort_values(by='time index')
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, req.t_start, req.t_end)
                 
-                can_access = False
                 if not df.empty:                
                     times = df.get('time index')
                     for time in times:
@@ -264,13 +261,9 @@ class AbstractPreplanner(ABC):
                         if state.t + planning_horizon < time:
                             break
 
-                        if req.t_start <= time <= req.t_end:
-                            # there exists an access time before the request's availability ends
-                            can_access = True
-                            break
+                        return True
                 
-                if not can_access:
-                    return False
+                return False
         
         return True
 
@@ -354,7 +347,7 @@ class IdlePlanner(AbstractPreplanner):
                             t_init : float = 0.0,
                             planning_horizon : float = np.Inf,
                             level : int = logging.DEBUG
-                        ) -> list:
+                        ) -> tuple:
         return [IdleAction(0.0, np.Inf)]
 
 class FIFOPreplanner(AbstractPreplanner):
@@ -366,7 +359,7 @@ class FIFOPreplanner(AbstractPreplanner):
                             t_init : float = 0.0,
                             planning_horizon : float = np.Inf,
                             level: int = logging.DEBUG
-                        ) -> list:
+                        ) -> tuple:
         path = []         
         available_reqs : list = self._get_available_requests( state ,initial_reqs, orbitdata )
 
@@ -432,7 +425,14 @@ class FIFOPreplanner(AbstractPreplanner):
             # # self.log(out,level)
             # print(out)
 
-            return self._plan_from_path(state, path, orbitdata, t_init, clock_config)
+            # generate plan from path
+            plan = self._plan_from_path(state, path, orbitdata, t_init, clock_config)
+
+            # wait for next planning horizon 
+            if len(plan) > 0 and plan[-1].t_end < t_init + planning_horizon:
+                plan.append(WaitForMessages(plan[-1].t_end, t_init + planning_horizon))
+
+            return plan
                 
         else:
             raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')

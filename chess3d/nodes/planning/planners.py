@@ -126,6 +126,11 @@ class PlanningModule(InternalModule):
                     task.cancel()
                     await task
 
+    """
+    -----------------
+        LISTENER
+    -----------------
+    """
     async def listener(self) -> None:
         """
         Listens for any incoming messages, unpacks them and classifies them into 
@@ -221,245 +226,7 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
-
-    async def planner(self) -> None:
-        """
-        Generates a plan for the parent agent to perform
-        """
-        try:
-            # initialize results vectors
-            plan = []
-
-            # level = logging.WARNING
-            level = logging.DEBUG
-
-            while True:
-                # wait for agent to update state
-                _ : AgentStateMessage = await self.states_inbox.get()
-                assert abs(self.get_current_time() - self.agent_state.t) <= 1e-2
-
-                # --- Check Action Completion ---
-                performed_actions = []
-                while not self.action_status_inbox.empty():
-                    action_msg : AgentActionMessage = await self.action_status_inbox.get()
-                    action : AgentAction = action_from_dict(**action_msg.action)
-
-                    if action_msg.status == AgentAction.PENDING:
-                        # if action wasn't completed, try again
-                        plan_ids = [action.id for action in self.plan]
-                        action_dict : dict = action_msg.action
-                        if action_dict['id'] in plan_ids:
-                            self.log(f'action {action_dict} not completed yet! trying again...')
-                            plan_out.append(action_dict)
-
-                    else:
-                        # if action was completed or aborted, remove from plan
-                        performed_actions.append(action)
-
-                        if action_msg.status == AgentAction.COMPLETED:
-                            self.log(f'action of type `{action.action_type}` completed!', level)
-
-                        action_dict : dict = action_msg.action
-                        completed_action = AgentAction(**action_dict)
-                        removed = None
-                        for action in plan:
-                            action : AgentAction
-                            if action.id == completed_action.id:
-                                removed = action
-                                break
-                        
-                        if removed is not None:
-                            removed : AgentAction
-                            plan : list
-                            plan.remove(removed)
-                
-                # --- Look for Plan Updates ---
-                #                 
-                # check if plan has been initialized
-                if (len(self.initial_reqs) > 0                  # there are initial requests 
-                    and self.get_current_time() <= 1e-3         # simulation just started
-                    and self.preplanner is not None             # there is a preplanner assigned to this planner
-                    ):
-                    # initiate plan
-                    plan = await self.preplanning(level)
-
-                    # update last time plan was updated
-                    self.t_plan = self.get_current_time()
-
-                    # save copy of plan for post-processing
-                    plan_copy = []
-                    for action in plan:
-                        plan_copy.append(action)
-                    self.plan_history.append(plan_copy)
-
-                # Check incoming messages
-                t_0 = time.perf_counter()
-                incoming_reqs = []
-                while not self.req_inbox.empty():
-                    req : MeasurementRequest = await self.req_inbox.get()
-                    incoming_reqs.append(req)
-
-                incoming_measurements = []
-                while not self.measurement_inbox.empty():
-                    incoming_measurements.append(await self.measurement_inbox.get())
-
-                generated_reqs = []
-                if len(incoming_measurements) > 0 and self.other_modules_exist:
-                    internal_msg = await self.internal_inbox.get()
-
-                    if not isinstance(internal_msg, MeasurementRequestMessage):
-                        await self.misc_inbox.put(internal_msg)
-                    else:
-                        generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
-
-                    while not self.misc_inbox.empty():
-                        internal_msg = await self.internal_inbox.get()
-                        if not isinstance(internal_msg, MeasurementRequestMessage):
-                            await self.misc_inbox.put(internal_msg)
-                        else:
-                            generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
-
-                incoming_misc = []
-                while not self.misc_inbox.empty():
-                    incoming_misc.append(await self.misc_inbox.get())
-
-                dt = time.perf_counter() - t_0
-                self.stats['science_wait'].append(dt)
-                
-                # Check if reeplanning is needed
-                await self.agent_state_lock.acquire()
-                t_0 = time.perf_counter()
-                if (
-                    self.replanner is not None and 
-                    self.replanner.needs_replanning(self.agent_state,
-                                                    plan, 
-                                                    incoming_reqs,
-                                                    generated_reqs,
-                                                    incoming_misc,
-                                                    self.orbitdata)
-                    ):
-                    plan : list = self.replanner.revise_plan(   self.agent_state,
-                                                                plan, 
-                                                                incoming_reqs,
-                                                                generated_reqs,
-                                                                incoming_misc,
-                                                                self._clock_config,
-                                                                self.orbitdata
-                                                            )
-                    
-                    dt = time.perf_counter() - t_0
-                    self.stats['replanning'].append(dt)
-
-                    # save copy of new plan for post-processing
-                    plan_copy = []
-                    for action in plan:
-                        plan_copy.append(action)
-                    self.plan_history.append(plan_copy)
-
-                # --- Execute plan ---
-
-                # get next action to perform
-                t_0 = time.perf_counter()
-                plan_out = self.get_next_actions(plan, self.get_current_time())
-                dt = time.perf_counter() - t_0
-                self.stats['planning'].append(dt)
-
-                for req in generated_reqs:
-                    req : MeasurementRequest
-                    req_msg = MeasurementRequestMessage("", "", req.to_dict())
-                    plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
-                                                                self.get_current_time()).to_dict()
-                                                            )
-
-                self.agent_state_lock.release()
-
-                # --- FOR DEBUGGING PURPOSES ONLY: ---
-                out = f'\nPLAN\nid\taction type\tt_start\tt_end\n'
-                for action in plan:
-                    action : AgentAction
-                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-                # self.log(out, level=logging.WARNING)
-
-                out = f'\nPLAN OUT\nid\taction type\tt_start\tt_end\n'
-                for action in plan_out:
-                    action : dict
-                    out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
-                # self.log(out, level=logging.WARNING)
-                # -------------------------------------
-
-                self.log(f'sending {len(plan_out)} actions to agent...')
-                plan_msg = PlanMessage(self.get_element_name(), self.get_network_name(), plan_out)
-                await self._send_manager_msg(plan_msg, zmq.PUB)
-
-                self.log(f'actions sent!')
-
-        except asyncio.CancelledError:
-            return
-            
-    @runtime_tracker
-    async def preplanning(self, level) -> None:
-        # Generate Initial Plan
-        initial_reqs = self.initial_reqs
-        self.initial_reqs = []
         
-        await self.agent_state_lock.acquire()
-
-        plan : list = self.preplanner.initialize_plan(  self.agent_state, 
-                                                        initial_reqs,
-                                                        self.orbitdata,
-                                                        self._clock_config,
-                                                        self.get_current_time(),
-                                                        self.planning_horizon,
-                                                        level
-                                                        )
-        self.agent_state_lock.release()
-
-        # check if plan fits within planning horizon
-        if len(plan) > 0:
-            last_action : AgentAction = plan[-1]
-            assert last_action.t_end <= self.t_plan + self.planning_horizon
-
-        return plan
-
-    def get_next_actions(self, plan : list, t : float) -> list:
-        """ Parses current plan and outputs list of actions that are to be performed at a given time"""
-
-        plan_out = []
-        plan_out_ids = [action['id'] for action in plan_out]
-        for action in plan:
-            action : AgentAction
-            if (action.t_start <= t
-                and action.id not in plan_out_ids):
-                
-                plan_out.append(action.to_dict())
-
-                if len(plan_out_ids) > 0:
-                    break
-
-        if len(plan_out) == 0:
-            if len(plan) > 0:
-                # next action is yet to start, wait until then
-                next_action : AgentAction = plan[0]
-                t_idle = next_action.t_start if next_action.t_start > t else t
-            else:
-                # no more actions to perform
-                # if isinstance(self.agent_state, SatelliteAgentState):
-                #     # wait until the next ground-point access
-                #     self.orbitdata : OrbitData
-                #     # t_next = self.orbitdata.get_next_gs_access(t)
-                #     t_next = np.Inf
-                # else:
-                #     # idle until the end of the simulation
-                #     t_next = np.Inf
-
-                # t_idle = self.t_plan + self.planning_horizon
-                t_idle = t_next
-
-            action = WaitForMessages(t, t_idle)
-            plan_out.append(action.to_dict())
-
-        return plan_out
-
     def _load_orbit_data(self) -> OrbitData:
         """
         Loads agent orbit data from pre-computed csv files in scenario directory
@@ -637,7 +404,272 @@ class PlanningModule(InternalModule):
                     grid_data_compiled.append(grid_data)
 
                 return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
+    
+    """
+    -----------------
+         PLANNER
+    -----------------
+    """
+    async def planner(self) -> None:
+        """
+        Generates a plan for the parent agent to perform
+        """
+        try:
+            # initialize results vectors
+            plan = []
+
+            # level = logging.WARNING
+            level = logging.DEBUG
+
+            while True:
+                # wait for agent to update state
+                _ : AgentStateMessage = await self.states_inbox.get()
+                assert abs(self.get_current_time() - self.agent_state.t) <= 1e-2
+
+                # --- Check Action Completion ---
+                performed_actions = []
+                while not self.action_status_inbox.empty():
+                    action_msg : AgentActionMessage = await self.action_status_inbox.get()
+                    action : AgentAction = action_from_dict(**action_msg.action)
+
+                    if action_msg.status == AgentAction.PENDING:
+                        # if action wasn't completed, try again
+                        plan_ids = [action.id for action in self.plan]
+                        action_dict : dict = action_msg.action
+
+                        if action_dict['id'] in plan_ids:
+                            self.log(f'action {action_dict} not completed yet! trying again...')
+                            plan_out.append(action_dict)
+
+                    else:
+                        # if action was completed or aborted, remove from plan
+                        performed_actions.append(action)
+
+                        if action_msg.status == AgentAction.COMPLETED:
+                            self.log(f'action of type `{action.action_type}` completed!', level)
+
+                        action_dict : dict = action_msg.action
+                        completed_action = AgentAction(**action_dict)
+                        removed = None
+                        for action in plan:
+                            action : AgentAction
+                            if action.id == completed_action.id:
+                                removed = action
+                                break
+                        
+                        if removed is not None:
+                            removed : AgentAction
+                            plan : list
+                            plan.remove(removed)
                 
+                # --- Look for Plan Updates ---
+                #                 
+                # check if plan has been initialized
+                if (self.preplanner is not None                 # there is a preplanner assigned to this planner
+                    and len(self.initial_reqs) > 0              # there are initial requests 
+                    and self.get_current_time() <= 1e-3         # simulation just started
+                    ):
+
+                    # initialize plan
+                    plan = await self._preplan(level)
+
+                    # update last time plan was updated
+                    self.t_plan = self.get_current_time()
+
+                    # save copy of plan for post-processing
+                    plan_copy = []
+                    for action in plan:
+                        plan_copy.append(action)
+                    self.plan_history.append(plan_copy)
+
+                # Check incoming messages
+                incoming_reqs, generated_reqs, incoming_misc = await self._wait_for_messages()
+                
+                # Check if reeplanning is needed
+                await self.agent_state_lock.acquire()
+                agent_state = self.agent_state.copy()
+                self.agent_state_lock.release()
+
+                if (
+                    self.replanner is not None and 
+                    self.replanner.needs_replanning(agent_state,
+                                                    plan, 
+                                                    incoming_reqs,
+                                                    generated_reqs,
+                                                    incoming_misc,
+                                                    self.t_plan,
+                                                    self.planning_horizon,
+                                                    self.orbitdata)
+                    ):
+                    
+                    # replan
+                    plan : list = await self._replan(plan, incoming_reqs, generated_reqs, incoming_misc)
+                    
+                    # update last time plan was updated
+                    self.t_plan = self.get_current_time()
+
+                    # save copy of plan for post-processing
+                    plan_copy = []
+                    for action in plan:
+                        plan_copy.append(action)
+                    self.plan_history.append(plan_copy)
+
+                # --- Execute plan ---
+
+                # get next action to perform
+                plan_out = self._get_next_actions(plan, generated_reqs, self.get_current_time())
+
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(plan, "PLAN", logging.WARNING)
+                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                # -------------------------------------
+
+                # send plan to parent agent
+                self.log(f'sending {len(plan_out)} actions to parent agent...')
+                plan_msg = PlanMessage(self.get_element_name(), self.get_network_name(), plan_out)
+                await self._send_manager_msg(plan_msg, zmq.PUB)
+
+                self.log(f'actions sent!')
+
+        except asyncio.CancelledError:
+            return
+                
+    @runtime_tracker
+    async def _preplan( self, 
+                        level
+                        ) -> None:
+        # Generate Initial Plan        
+        await self.agent_state_lock.acquire()
+
+        plan = self.preplanner.initialize_plan( self.agent_state, 
+                                                self.initial_reqs,
+                                                self.orbitdata,
+                                                self._clock_config,
+                                                self.get_current_time(),
+                                                self.planning_horizon,
+                                                level
+                                                )
+        self.agent_state_lock.release()
+
+        # Remove considered requests from initial request list
+        for action in plan:
+            if isinstance(action, MeasurementAction):
+                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+                if req in self.initial_reqs:
+                    self.initial_reqs.remove(req)
+
+        # Forward remaining initial requests to request inbox for possible future consideration
+        while len(self.initial_reqs) > 0:
+            await self.req_inbox.put(self.initial_reqs.pop())
+
+        return plan
+
+    @runtime_tracker
+    async def _replan(  self, 
+                        current_plan : list,
+                        incoming_reqs : list,
+                        generated_reqs : list,
+                        incoming_misc : list,
+                        level : int = logging.DEBUG
+                        ) -> None:
+        
+        # Modify current Plan      
+        await self.agent_state_lock.acquire()
+
+        plan : list = self.replanner.replan(    self.agent_state,
+                                                current_plan, 
+                                                incoming_reqs,
+                                                generated_reqs,
+                                                incoming_misc,
+                                                self._clock_config,
+                                                self.t_plan,
+                                                self.planning_horizon,
+                                                self.orbitdata
+                                            )        
+        self.agent_state_lock.release()
+
+        return plan
+    
+    @runtime_tracker
+    async def _wait_for_messages(self) -> tuple:
+        """
+        Collects and classifies incoming messages. If a measurement was made by the parent agent,
+        it waits until other modules to process the measurement's data and send a response.
+
+        ## Returns:
+            incoming_reqs 
+            incoming_measurements
+            generated_reqs 
+            incoming_misc
+        """
+        incoming_reqs = []
+        while not self.req_inbox.empty():
+            req : MeasurementRequest = await self.req_inbox.get()
+            incoming_reqs.append(req)
+
+        incoming_measurements = []
+        while not self.measurement_inbox.empty():
+            incoming_measurements.append(await self.measurement_inbox.get())
+
+        generated_reqs = []
+        if (self.other_modules_exist                # other modules exist within the parent agent
+            and len(incoming_measurements) > 0      # the agent just performed a measurement
+            ):
+
+            # wait for science module to send their assesment of the measurement 
+            internal_msg = await self.internal_inbox.get()
+
+            if not isinstance(internal_msg, MeasurementRequestMessage):
+                await self.misc_inbox.put(internal_msg)
+            else:
+                generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
+
+            while not self.misc_inbox.empty():
+                internal_msg = await self.internal_inbox.get()
+                if not isinstance(internal_msg, MeasurementRequestMessage):
+                    await self.misc_inbox.put(internal_msg)
+                else:
+                    generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
+
+        incoming_misc = []
+        while not self.misc_inbox.empty():
+            incoming_misc.append(await self.misc_inbox.get())
+
+        return incoming_reqs, generated_reqs, incoming_misc
+
+    @runtime_tracker
+    def _get_next_actions(self, plan : list, generated_reqs : list, t : float) -> list:
+        """ Parses current plan and outputs list of actions that are to be performed at a given time"""
+
+        # get next available action to perform
+        plan_out = filter(lambda action : action.t_start <= t, plan)
+        plan_out = [action.to_dict() for action in list(plan_out)]
+
+        for req in generated_reqs:
+            req : MeasurementRequest
+            req_msg = MeasurementRequestMessage("", "", req.to_dict())
+            plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
+                                                        self.get_current_time()).to_dict()
+                                                    )
+
+        if len(plan_out) == 0:
+            t_idle = plan[0].t_start if len(plan) > 0 else np.Inf
+            action = WaitForMessages(t, t_idle)
+            plan_out.append(action.to_dict())        
+
+        return plan_out
+    
+    def __log_plan(self, plan : list, title : str, level : int = logging.DEBUG) -> None:
+        out = f'\{title}\nid\taction type\tt_start\tt_end\n'
+
+        for action in plan:
+            if isinstance(action, AgentAction):
+                out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+            elif isinstance(action, dict):
+                out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+        
+        self.log(out, level)
+               
     async def teardown(self) -> None:
         # log plan history
         headers = ['plan_index', 't_plan', 'req_id', 'subtask_index', 't_img', 'u_exp']
