@@ -248,12 +248,7 @@ class PlanningModule(InternalModule):
             while True:
                 # wait for agent to update state
                 _ : AgentStateMessage = await self.states_inbox.get()
-
                 assert abs(self.get_current_time() - self.agent_state.t) <= 1e-2
-                
-                if 140 < self.get_current_time() <= 150 and self.get_parent_name() == "img_1":
-                    print(self.get_parent_name(), self.get_current_time(), self.agent_state.t)
-                    x =1
 
                 # --- Check Action Completion ---
                 performed_actions = []
