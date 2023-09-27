@@ -335,26 +335,75 @@ class FIFOReplanner(AbstractReplanner):
                             planning_horizon : float = np.Inf,
                             orbitdata : OrbitData = None
                         ) -> bool:
+        
+        # update list of known requests
+        self._update_known_requests(current_plan, incoming_reqs, generated_reqs)
 
         # new planning horizon reached; must replan
         if state.t >= t_plan + planning_horizon:
             return True
 
-        # if no incoming or generated measurement requests, then do NOT replan
-        if len(incoming_reqs) + len(generated_reqs) == 0:
-            return False
-
         # check if incoming or generated measurement requests are already accounted for
-        scheduled_reqs, new_reqs = self._compile_requests(current_plan, incoming_reqs, generated_reqs)
+        scheduled_reqs, unscheduled_reqs = self._compare_requests(current_plan)
 
         # if no new requests, then do NOT replan
-        if len(new_reqs) == 0:
+        if len(unscheduled_reqs) == 0:
             return False
 
         # check if new requests can be done given the current state of the agent
-        performable_reqs = self._get_available_requests(state, new_reqs, orbitdata)    
+        all_reqs = [req for req in scheduled_reqs]; all_reqs.extend(unscheduled_reqs)
+        performable_reqs = self._get_available_requests(state, all_reqs, orbitdata, planning_horizon)    
 
         return len(performable_reqs) > len(scheduled_reqs)
+   
+    def _update_known_requests(  self, 
+                                current_plan : list,
+                                incoming_reqs : list,
+                                generated_reqs : list
+                                ) -> None:
+        ## list all requests in current plan
+        scheduled_reqs = []
+        for action in current_plan:
+            if isinstance(action, MeasurementAction):
+                req = MeasurementRequest.from_dict(action.measurement_req)
+                if req not in scheduled_reqs:
+                    scheduled_reqs.append(req)
+
+        ## compare with incoming or generated requests
+        new_reqs = []
+        for req in incoming_reqs:
+            req : MeasurementRequest
+            if req not in scheduled_reqs and req.s_max > 0.0:
+                new_reqs.append(req)
+        for req in generated_reqs:
+            if req not in scheduled_reqs and req.s_max > 0.0:
+                new_reqs.append(req)
+
+        scheduled_reqs = list(filter(lambda req : req not in self.known_reqs, scheduled_reqs))
+        new_reqs = list(filter(lambda req : req not in self.known_reqs, new_reqs))
+
+        self.known_reqs.extend(scheduled_reqs)
+        self.known_reqs.extend(new_reqs)
+
+    def _compare_requests(  self, 
+                            current_plan : list
+                        ) -> tuple:
+        """ Separates scheduled and unscheduled requests """
+        
+        ## list all requests in current plan
+        scheduled_reqs = []
+        for action in current_plan:
+            if isinstance(action, MeasurementAction):
+                req = MeasurementRequest.from_dict(action.measurement_req)
+                if req not in scheduled_reqs:
+                    scheduled_reqs.append(req)
+
+        ## list all known request that have not been scheduled yet
+        new_reqs = list(filter(lambda req : req not in scheduled_reqs and req.s_max > 0.0, 
+                                self.known_reqs)
+                        )
+        
+        return scheduled_reqs, new_reqs
     
     def replan( self, 
                 state : AbstractAgentState, 
@@ -373,10 +422,7 @@ class FIFOReplanner(AbstractReplanner):
         path = []         
         
         # compile requests
-        self.
-        scheduled_reqs, new_reqs = self._compile_requests(current_plan, incoming_reqs, generated_reqs)
-        
-        self.known_reqs.extend(new_reqs)       
+        scheduled_reqs, unscheduled_reqs = self._compare_requests(current_plan)            
         available_reqs : list = self._get_available_requests( state, self.known_reqs, orbitdata )
 
         if isinstance(state, SatelliteAgentState):
@@ -450,29 +496,3 @@ class FIFOReplanner(AbstractReplanner):
 
             return plan
     
-    def _compile_requests(  self, 
-                            current_plan : list, 
-                            incoming_reqs : list, 
-                            generated_reqs : list
-                        ) -> tuple:
-        """ Compiles incoming and generated requests and returns a list of unique requests"""
-        
-        ## list all requests in current plan
-        scheduled_reqs = []
-        for action in current_plan:
-            if isinstance(action, MeasurementAction):
-                req = MeasurementRequest.from_dict(action.measurement_req)
-                if req not in scheduled_reqs:
-                    scheduled_reqs.append(req)
-
-        ## compare with incoming or generated requests
-        new_reqs = []
-        for req in incoming_reqs:
-            req : MeasurementRequest
-            if req not in scheduled_reqs and req.s_max > 0.0:
-                new_reqs.append(req)
-        for req in generated_reqs:
-            if req not in scheduled_reqs and req.s_max > 0.0:
-                new_reqs.append(req)
-        
-        return scheduled_reqs, new_reqs
