@@ -211,13 +211,14 @@ class OrbitData:
         else:
             return touple_min
 
-    def get_ground_point_accesses_future(self, lat: float, lon: float, t: float):
+    def get_ground_point_accesses_future(self, lat: float, lon: float, t: float, t_end : float = np.Inf):
         t = t/self.time_step
+        t_end = t_end/self.time_step
 
         grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
 
         access_data = self.gp_access_data \
-                            .query('@t <= `time index` & `grid index` == @grid_index & `GP index` == @gp_index') \
+                            .query('@t <= `time index` & `time index` <= @t_end & `grid index` == @grid_index & `GP index` == @gp_index') \
                             .sort_values(by=['time index'])
 
         return access_data

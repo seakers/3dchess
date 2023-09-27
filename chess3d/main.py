@@ -115,6 +115,7 @@ def agent_factory(  scenario_name : str,
         planner_dict : dict
         preplanner_type = planner_dict.get('preplanner', None)
         replanner_type = planner_dict.get('replanner', None)
+        planning_horizon = planner_dict.get('horizon', np.Inf)
         
         if preplanner_type is not None:
             if preplanner_type == 'FIFO':
@@ -140,6 +141,7 @@ def agent_factory(  scenario_name : str,
                                 utility_function, 
                                 preplanner,
                                 replanner,
+                                planning_horizon,
                                 initial_reqs)    
         
     ## create agent

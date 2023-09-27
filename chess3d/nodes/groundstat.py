@@ -59,7 +59,7 @@ class GroundStationAgent(SimulationAgent):
         # preplanner = None # TODO implement request broadcast planner
         preplanner = IdlePlanner()
         
-        planning_module = PlanningModule(results_path,
+        planning_module = PlanningModule(results_path, 
                                         agent_name,
                                         agent_network_config,
                                         utility_func, 
@@ -67,7 +67,6 @@ class GroundStationAgent(SimulationAgent):
                                         initial_reqs=initial_reqs,
                                         level=level,
                                         logger=logger)
-
 
         super().__init__(   agent_name, 
                             results_path,

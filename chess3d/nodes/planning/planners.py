@@ -19,6 +19,7 @@ class PlanningModule(InternalModule):
                 utility_func : Callable[[], Any],
                 preplanner : AbstractPreplanner = None,
                 replanner : AbstractReplanner = None,
+                planning_horizon : float = np.Inf,
                 initial_reqs : list = [],
                 level: int = logging.INFO, 
                 logger: logging.Logger = None
@@ -61,6 +62,7 @@ class PlanningModule(InternalModule):
 
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
+        self.planning_horizon : float = planning_horizon
         
         self.plan_history = []
         self.plan = []
@@ -71,6 +73,7 @@ class PlanningModule(InternalModule):
                         "science_wait" : []
                     }
 
+        self.t_plan = -1.0
         self.agent_state : SimulationAgentState = None
         self.parent_agent_type = None
         self.orbitdata : OrbitData = None
@@ -208,21 +211,6 @@ class PlanningModule(InternalModule):
                             msg = message_from_dict(**sense)
                             await self.misc_inbox.put(msg)
 
-                # elif content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
-                #     # request received directly from another module
-
-                #     # other type of message was received
-                #     if not self.other_modules_exist:
-                #         self.other_modules_exist = True
-
-                #     # unpack message 
-                #     req_msg = MeasurementRequestMessage(**content)
-                #     req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
-                #     self.log(f"received measurement request message from another module!")
-                    
-                #     # send to planner
-                #     await self.internal_inbox.put(req)
-
                 else:
                     # other type of message was received
                     if not self.other_modules_exist:
@@ -292,22 +280,11 @@ class PlanningModule(InternalModule):
                     and self.get_current_time() <= 1e-3         # simulation just started
                     and self.preplanner is not None             # there is a preplanner assigned to this planner
                     ):
-                    # Generate Initial Plan
-                    initial_reqs = self.initial_reqs
-                    self.initial_reqs = []
-                    
-                    await self.agent_state_lock.acquire()
-                    t_0 = time.perf_counter()
-                    plan : list = self.preplanner.initialize_plan(  self.agent_state, 
-                                                                    initial_reqs,
-                                                                    self.orbitdata,
-                                                                    self._clock_config,
-                                                                    self.get_current_time(),
-                                                                    level
-                                                                    )
-                    dt = time.perf_counter() - t_0
-                    self.stats['preplanning'].append(dt)
-                    self.agent_state_lock.release()
+                    # initiate plan
+                    plan = await self.preplanning(level)
+
+                    # update last time plan was updated
+                    self.t_plan = self.get_current_time()
 
                     # save copy of plan for post-processing
                     plan_copy = []
@@ -418,7 +395,32 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
+            
+    @runtime_tracker
+    async def preplanning(self, level) -> None:
+        # Generate Initial Plan
+        initial_reqs = self.initial_reqs
+        self.initial_reqs = []
         
+        await self.agent_state_lock.acquire()
+
+        plan : list = self.preplanner.initialize_plan(  self.agent_state, 
+                                                        initial_reqs,
+                                                        self.orbitdata,
+                                                        self._clock_config,
+                                                        self.get_current_time(),
+                                                        self.planning_horizon,
+                                                        level
+                                                        )
+        self.agent_state_lock.release()
+
+        # check if plan fits within planning horizon
+        if len(plan) > 0:
+            last_action : AgentAction = plan[-1]
+            assert last_action.t_end <= self.t_plan + self.planning_horizon
+
+        return plan
+
     def get_next_actions(self, plan : list, t : float) -> list:
         """ Parses current plan and outputs list of actions that are to be performed at a given time"""
 
@@ -441,14 +443,14 @@ class PlanningModule(InternalModule):
                 t_idle = next_action.t_start if next_action.t_start > t else t
             else:
                 # no more actions to perform
-                if isinstance(self.agent_state, SatelliteAgentState):
-                    # wait until the next ground-point access
-                    self.orbitdata : OrbitData
-                    # t_next = self.orbitdata.get_next_gs_access(t)
-                    t_next = np.Inf
-                else:
-                    # idle until the end of the simulation
-                    t_next = np.Inf
+                # if isinstance(self.agent_state, SatelliteAgentState):
+                #     # wait until the next ground-point access
+                #     self.orbitdata : OrbitData
+                #     # t_next = self.orbitdata.get_next_gs_access(t)
+                #     t_next = np.Inf
+                # else:
+                #     # idle until the end of the simulation
+                #     t_next = np.Inf
 
                 # t_idle = self.t_plan + self.planning_horizon
                 t_idle = t_next

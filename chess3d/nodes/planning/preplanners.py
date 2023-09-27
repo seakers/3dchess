@@ -31,6 +31,7 @@ class AbstractPreplanner(ABC):
                             orbitdata : OrbitData,
                             clock_config : ClockConfig,
                             t_init : float = 0.0,
+                            planning_horizon : float = np.Inf,
                             level : int = logging.DEBUG
                         ) -> list:
         """
@@ -277,6 +278,7 @@ class AbstractPreplanner(ABC):
                             state : SimulationAgentState, 
                             req : MeasurementRequest, 
                             t_prev : Union[int, float],
+                            planning_horizon : Union[int, float], 
                             orbitdata : OrbitData) -> float:
         """
         Estimates the quickest arrival time from a starting position to a given final position
@@ -286,7 +288,8 @@ class AbstractPreplanner(ABC):
             if isinstance(state, SatelliteAgentState):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, t_prev)
+                t_end = t_prev + planning_horizon
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, t_prev, t_end)
 
                 for _, row in df.iterrows():
                     t_img = row['time index'] * orbitdata.time_step
@@ -303,7 +306,7 @@ class AbstractPreplanner(ABC):
                     if dt >= dth / state.max_slew_rate: # TODO change maximum angular rate 
                         t_imgs.append(t_img)
                         
-                return t_imgs if len(t_imgs) > 0 else [-1]
+                return t_imgs
 
             elif isinstance(state, UAVAgentState):
                 dr = np.array(req.pos) - np.array(state.pos)
@@ -349,6 +352,7 @@ class IdlePlanner(AbstractPreplanner):
                             orbitdata : OrbitData,
                             clock_config : ClockConfig,
                             t_init : float = 0.0,
+                            planning_horizon : float = np.Inf,
                             level : int = logging.DEBUG
                         ) -> list:
         return [IdleAction(0.0, np.Inf)]
@@ -360,6 +364,7 @@ class FIFOPreplanner(AbstractPreplanner):
                             orbitdata: OrbitData, 
                             clock_config : ClockConfig,
                             t_init : float = 0.0,
+                            planning_horizon : float = np.Inf,
                             level: int = logging.DEBUG
                         ) -> list:
         path = []         
@@ -372,7 +377,7 @@ class FIFOPreplanner(AbstractPreplanner):
             arrival_times = {req.id : {} for req, _ in available_reqs}
 
             for req, subtask_index in available_reqs:
-                t_arrivals : list = self._calc_arrival_times(state, req, state.t, orbitdata)
+                t_arrivals : list = self._calc_arrival_times(state, req, state.t, planning_horizon, orbitdata)
                 arrival_times[req.id][subtask_index] = t_arrivals
             
             path = []
@@ -380,11 +385,18 @@ class FIFOPreplanner(AbstractPreplanner):
             for req_id in arrival_times:
                 for subtask_index in arrival_times[req_id]:
                     t_arrivals : list = arrival_times[req_id][subtask_index]
-                    t_img = t_arrivals.pop(0)
-                    req : MeasurementRequest = reqs[req_id]
-                    path.append((req, subtask_index, t_img, req.s_max/len(req.measurements)))
+
+                    if len(t_arrivals) > 0:
+                        t_img = t_arrivals.pop(0)
+                        req : MeasurementRequest = reqs[req_id]
+                        path.append((req, subtask_index, t_img, req.s_max/len(req.measurements)))
 
             path.sort(key=lambda a: a[2])
+
+            # out = '\n'
+            # for req, subtask_index, t_img, s in path:
+            #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
+            # print(out)
 
             while True:
                 
@@ -414,10 +426,11 @@ class FIFOPreplanner(AbstractPreplanner):
                 if conflict_free:
                     break
                     
-            out = '\n'
-            for req, subtask_index, t_img, s in path:
-                out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-            # self.log(out,level)
+            # out = '\n'
+            # for req, subtask_index, t_img, s in path:
+            #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
+            # # self.log(out,level)
+            # print(out)
 
             return self._plan_from_path(state, path, orbitdata, t_init, clock_config)
                 
