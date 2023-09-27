@@ -191,7 +191,7 @@ class SimulationAgent(Agent):
     
     async def __empty_queue(self, queue : asyncio.Queue) -> list:
         senses = []
-        while not self.environment_inbox.empty():
+        while not queue.empty():
             # save as senses to forward to planner
             _, _, msg_dict = await queue.get()
             msg = message_from_dict(**msg_dict)
@@ -204,6 +204,9 @@ class SimulationAgent(Agent):
     
     @runtime_tracker
     async def get_agent_broadcasts(self) -> list:
+        if self.get_element_name() == 'img_1':
+            x= 1
+
         return await self.__empty_queue(self.external_inbox)
 
     """
@@ -253,6 +256,71 @@ class SimulationAgent(Agent):
     --------------------
     """
     @runtime_tracker
+    async def do(self, actions: list) -> dict:
+        statuses = []
+        self.log(f'performing {len(actions)} actions', level=logging.DEBUG)
+        
+        for action_dict in actions:
+            action_dict : dict
+            action = action_from_dict(**action_dict)
+
+            if (action.t_start - self.get_current_time()) > np.finfo(np.float32).eps:
+                self.log(f"action of type {action_dict['action_type']} has NOT started yet. waiting for start time...", level=logging.INFO)
+                action.status = AgentAction.PENDING
+                statuses.append((action, action.status))
+                continue
+            
+            if (self.get_current_time() - action.t_end) > np.finfo(np.float32).eps:
+                self.log(f"action of type {action_dict['action_type']} has already occureed. could not perform task before...", level=logging.INFO)
+                action.status = AgentAction.ABORTED
+                statuses.append((action, action.status))
+                continue
+
+            self.log(f"performing action of type {action_dict['action_type']}...", level=logging.INFO)    
+            if (action_dict['action_type'] == ActionTypes.IDLE.value 
+                or action_dict['action_type'] == ActionTypes.TRAVEL.value
+                or action_dict['action_type'] == ActionTypes.MANEUVER.value):                
+                # this action affects the agent's state
+
+                # unpackage action
+                action = action_from_dict(**action_dict)
+
+                # update action completion status
+                action.status = await self.perform_state_change(action)
+
+            elif action_dict['action_type'] == ActionTypes.BROADCAST_MSG.value:
+                # unpack action
+                action = BroadcastMessageAction(**action_dict)
+
+                # set action complation status
+                action.status = await self.perform_broadcast(action)
+            
+            elif action_dict['action_type'] == ActionTypes.WAIT_FOR_MSG.value:
+                # unpack action 
+                action = WaitForMessages(**action_dict)
+                
+                # set action complation status
+                action.status = await self.perform_wait_for_messages(action)
+
+            elif action_dict['action_type'] == ActionTypes.MEASURE.value:
+                # unpack action 
+                action = MeasurementAction(**action_dict)
+                              
+                # update action completion status
+                action.status = await self.perform_measurement(action)
+                
+            else:
+                # ignore action
+                self.log(f"action of type {action_dict['action_type']} not yet supported. ignoring...", level=logging.INFO)
+                action.status = AgentAction.ABORTED  
+                
+            self.log(f"finished performing action of type {action_dict['action_type']}! action completion status: {action.status}", level=logging.INFO)
+            statuses.append((action, action.status))
+
+        self.log(f'returning {len(statuses)} statuses', level=logging.DEBUG)
+        return statuses
+
+    @runtime_tracker
     async def perform_state_change(self, action : AgentAction) -> str:
         t = self.get_current_time()
 
@@ -297,7 +365,8 @@ class SimulationAgent(Agent):
         self.state_history.append(self.state.to_dict())
 
         if not self.external_inbox.empty():
-            action.status = AgentAction.COMPLETED
+            return AgentAction.COMPLETED
+        
         else:
             if isinstance(self._clock_config, FixedTimesStepClockConfig) or isinstance(self._clock_config, EventDrivenClockConfig):
                 # give the agent time to finish sending/processing messages before submitting a tic-request
@@ -370,71 +439,11 @@ class SimulationAgent(Agent):
         except asyncio.CancelledError:
             return AgentAction.ABORTED
 
-    @runtime_tracker
-    async def do(self, actions: list) -> dict:
-        statuses = []
-        self.log(f'performing {len(actions)} actions', level=logging.DEBUG)
-        
-        for action_dict in actions:
-            action_dict : dict
-            action = action_from_dict(**action_dict)
-
-            if (action.t_start - self.get_current_time()) > np.finfo(np.float32).eps:
-                self.log(f"action of type {action_dict['action_type']} has NOT started yet. waiting for start time...", level=logging.INFO)
-                action.status = AgentAction.PENDING
-                statuses.append((action, action.status))
-                continue
-            
-            if (self.get_current_time() - action.t_end) > np.finfo(np.float32).eps:
-                self.log(f"action of type {action_dict['action_type']} has already occureed. could not perform task before...", level=logging.INFO)
-                action.status = AgentAction.ABORTED
-                statuses.append((action, action.status))
-                continue
-
-            self.log(f"performing action of type {action_dict['action_type']}...", level=logging.INFO)    
-            if (action_dict['action_type'] == ActionTypes.IDLE.value 
-                or action_dict['action_type'] == ActionTypes.TRAVEL.value
-                or action_dict['action_type'] == ActionTypes.MANEUVER.value):                
-                # this action affects the agent's state
-
-                # unpackage action
-                action = action_from_dict(**action_dict)
-
-                # update action completion status
-                action.status = await self.perform_state_change(action)
-
-            elif action_dict['action_type'] == ActionTypes.BROADCAST_MSG.value:
-                # unpack action
-                action = BroadcastMessageAction(**action_dict)
-
-                # set action complation status
-                action.status = await self.perform_broadcast(action)
-            
-            elif action_dict['action_type'] == ActionTypes.WAIT_FOR_MSG.value:
-                # unpack action 
-                action = WaitForMessages(**action_dict)
-                
-                # set action complation status
-                action.status = await self.perform_wait_for_messages(action)
-
-            elif action_dict['action_type'] == ActionTypes.MEASURE.value:
-                # unpack action 
-                action = MeasurementAction(**action_dict)
-                              
-                # update action completion status
-                action.status = await self.perform_measurement(action)
-                
-            else:
-                # ignore action
-                self.log(f"action of type {action_dict['action_type']} not yet supported. ignoring...", level=logging.INFO)
-                action.status = AgentAction.ABORTED  
-                
-            self.log(f"finished performing action of type {action_dict['action_type']}! action completion status: {action.status}", level=logging.INFO)
-            statuses.append((action, action.status))
-
-        self.log(f'returning {len(statuses)} statuses', level=logging.DEBUG)
-        return statuses
-
+    """
+    --------------------
+          TEARDOWN       
+    --------------------
+    """
     async def teardown(self) -> None:
         # TODO log agent capabilities
 

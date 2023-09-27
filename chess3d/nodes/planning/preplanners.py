@@ -30,6 +30,7 @@ class AbstractPreplanner(ABC):
                             initial_reqs : list, 
                             orbitdata : OrbitData,
                             clock_config : ClockConfig,
+                            t_init : float = 0.0,
                             level : int = logging.DEBUG
                         ) -> list:
         """
@@ -40,6 +41,7 @@ class AbstractPreplanner(ABC):
                             state : SimulationAgentState, 
                             path : list,
                             orbitdata : OrbitData,
+                            t_init : float,
                             clock_config : ClockConfig
                     ) -> list:
         """
@@ -55,7 +57,7 @@ class AbstractPreplanner(ABC):
 
         # if no requests in the path, wait indefinitely
         if len(path) == 0:
-            t_0 = state.t
+            t_0 = t_init
             t_f = np.Inf
             return [WaitForMessages(t_0, t_f)]
 
@@ -72,11 +74,11 @@ class AbstractPreplanner(ABC):
             # Estimate previous state
             if i == 0:
                 if isinstance(state, SatelliteAgentState):
-                    t_prev = state.t
+                    t_prev = t_init
                     prev_state : SatelliteAgentState = state.copy()
 
                 elif isinstance(state, UAVAgentState):
-                    t_prev = state.t #TODO consider wait time for convergence
+                    t_prev = t_init #TODO consider wait time for convergence
                     prev_state : UAVAgentState = state.copy()
 
                 else:
@@ -346,6 +348,7 @@ class IdlePlanner(AbstractPreplanner):
                             initial_reqs : list, 
                             orbitdata : OrbitData,
                             clock_config : ClockConfig,
+                            t_init : float = 0.0,
                             level : int = logging.DEBUG
                         ) -> list:
         return [IdleAction(0.0, np.Inf)]
@@ -356,6 +359,7 @@ class FIFOPreplanner(AbstractPreplanner):
                             initial_reqs: list, 
                             orbitdata: OrbitData, 
                             clock_config : ClockConfig,
+                            t_init : float = 0.0,
                             level: int = logging.DEBUG
                         ) -> list:
         path = []         
@@ -415,7 +419,7 @@ class FIFOPreplanner(AbstractPreplanner):
                 out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
             # self.log(out,level)
 
-            return self._plan_from_path(state, path, orbitdata, clock_config)
+            return self._plan_from_path(state, path, orbitdata, t_init, clock_config)
                 
         else:
             raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')

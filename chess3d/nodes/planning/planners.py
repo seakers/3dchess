@@ -167,7 +167,6 @@ class PlanningModule(InternalModule):
                             # update current state
                             await self.agent_state_lock.acquire()
                             state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
-
                             await self.update_current_time(state.t)
                             self.agent_state = state
 
@@ -250,6 +249,12 @@ class PlanningModule(InternalModule):
                 # wait for agent to update state
                 _ : AgentStateMessage = await self.states_inbox.get()
 
+                assert abs(self.get_current_time() - self.agent_state.t) <= 1e-2
+                
+                if 140 < self.get_current_time() <= 150 and self.get_parent_name() == "img_1":
+                    print(self.get_parent_name(), self.get_current_time(), self.agent_state.t)
+                    x =1
+
                 # --- Check Action Completion ---
                 performed_actions = []
                 while not self.action_status_inbox.empty():
@@ -302,6 +307,7 @@ class PlanningModule(InternalModule):
                                                                     initial_reqs,
                                                                     self.orbitdata,
                                                                     self._clock_config,
+                                                                    self.get_current_time(),
                                                                     level
                                                                     )
                     dt = time.perf_counter() - t_0
@@ -315,14 +321,11 @@ class PlanningModule(InternalModule):
                     self.plan_history.append(plan_copy)
 
                 # Check incoming messages
-                if 140 <= self.get_current_time() <= 150:
-                    x =1
-
                 t_0 = time.perf_counter()
                 incoming_reqs = []
                 while not self.req_inbox.empty():
-                    req_msg : MeasurementRequestMessage = await self.req_inbox.get()
-                    incoming_reqs.append( MeasurementRequest.from_dict(req_msg.req))
+                    req : MeasurementRequest = await self.req_inbox.get()
+                    incoming_reqs.append(req)
 
                 incoming_measurements = []
                 while not self.measurement_inbox.empty():
@@ -428,7 +431,7 @@ class PlanningModule(InternalModule):
         plan_out_ids = [action['id'] for action in plan_out]
         for action in plan:
             action : AgentAction
-            if (action.t_start <= self.get_current_time()
+            if (action.t_start <= t
                 and action.id not in plan_out_ids):
                 
                 plan_out.append(action.to_dict())
