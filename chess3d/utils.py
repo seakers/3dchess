@@ -89,15 +89,23 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
                         scenario_sat : dict = scenario_dict['spacecraft'][i]
                         mission_sat : dict = mission_dict['spacecraft'][i]
                         
-                        scenario_sat.pop("planner")
-                        scenario_sat.pop("science")
-                        scenario_sat.pop("notifier")
-                        scenario_sat.pop("missionProfile")
+                        if "planner" in scenario_sat:
+                            scenario_sat.pop("planner")
+                        if "science" in scenario_sat:
+                            scenario_sat.pop("science")
+                        if "notifier" in scenario_sat:
+                            scenario_sat.pop("notifier") 
+                        if "missionProfile" in scenario_sat:
+                            scenario_sat.pop("missionProfile")
 
-                        mission_sat.pop("planner")
-                        mission_sat.pop("science")
-                        mission_sat.pop("notifier")
-                        mission_sat.pop("missionProfile")
+                        if "planner" in mission_sat:
+                            mission_sat.pop("planner")
+                        if "science" in mission_sat:
+                            mission_sat.pop("science")
+                        if "notifier" in mission_sat:
+                            mission_sat.pop("notifier") 
+                        if "missionProfile" in mission_sat:
+                            mission_sat.pop("missionProfile")
 
                         if scenario_sat != mission_sat:
                             return True

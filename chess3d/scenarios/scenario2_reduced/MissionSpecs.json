@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 0.5,
+    "duration": 1.0,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -102,9 +102,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -197,9 +198,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -292,9 +294,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -387,9 +390,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -482,9 +486,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -577,9 +582,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -672,9 +678,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -767,9 +774,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -862,9 +870,10 @@
             },
             "planner" : {
                 "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                
                 "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"

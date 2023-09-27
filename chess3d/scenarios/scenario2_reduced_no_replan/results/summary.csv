@@ -1,0 +1,16 @@
+stat_name,val
+t_start,2020-01-01 00:00:00+00:00
+t_end,2020-01-02 00:00:00+00:00
+n_events,790
+n_events_detected,0
+n_events_obs,0
+n_reqs_init,101
+n_reqs_gen,0
+n_reqs_total,101
+n_obs_max,303
+n_obs_pos,300
+n_obs,704
+n_co_obs,100
+u_max,101.0
+u,142.0716049382716
+u_norm,1.4066495538442734

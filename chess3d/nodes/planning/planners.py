@@ -308,7 +308,16 @@ class PlanningModule(InternalModule):
                     self.stats['preplanning'].append(dt)
                     self.agent_state_lock.release()
 
+                    # save copy of plan for post-processing
+                    plan_copy = []
+                    for action in plan:
+                        plan_copy.append(action)
+                    self.plan_history.append(plan_copy)
+
                 # Check incoming messages
+                if 140 <= self.get_current_time() <= 150:
+                    x =1
+
                 t_0 = time.perf_counter()
                 incoming_reqs = []
                 while not self.req_inbox.empty():
@@ -366,7 +375,11 @@ class PlanningModule(InternalModule):
                     dt = time.perf_counter() - t_0
                     self.stats['replanning'].append(dt)
 
-                self.agent_state_lock.release()
+                    # save copy of new plan for post-processing
+                    plan_copy = []
+                    for action in plan:
+                        plan_copy.append(action)
+                    self.plan_history.append(plan_copy)
 
                 # --- Execute plan ---
 
@@ -375,6 +388,15 @@ class PlanningModule(InternalModule):
                 plan_out = self.get_next_actions(plan, self.get_current_time())
                 dt = time.perf_counter() - t_0
                 self.stats['planning'].append(dt)
+
+                for req in generated_reqs:
+                    req : MeasurementRequest
+                    req_msg = MeasurementRequestMessage("", "", req.to_dict())
+                    plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
+                                                                self.get_current_time()).to_dict()
+                                                            )
+
+                self.agent_state_lock.release()
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 out = f'\nPLAN\nid\taction type\tt_start\tt_end\n'

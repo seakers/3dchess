@@ -366,7 +366,7 @@ class FIFOReplanner(AbstractReplanner):
 
         # check if incoming or generated measurement requests are already accounted for
         ## list all requests in current plan
-        _, new_reqs = self._compile_requests(current_plan, incoming_reqs, generated_reqs)
+        known_reqs, new_reqs = self._compile_requests(current_plan, incoming_reqs, generated_reqs)
 
         # if no new requests, then do NOT replan
         if len(new_reqs) == 0:
@@ -374,7 +374,8 @@ class FIFOReplanner(AbstractReplanner):
 
         # check if new requests can be done given the current state of the agent
         performable_reqs = self._get_available_requests(state, new_reqs, orbitdata)    
-        return len(performable_reqs) > 0
+
+        return len(performable_reqs) > len(known_reqs)
 
     
     def revise_plan(    self, 
@@ -451,11 +452,6 @@ class FIFOReplanner(AbstractReplanner):
 
             plan : list = self._plan_from_path(state, path, orbitdata, clock_config)
             
-            for req in generated_reqs:
-                req : MeasurementRequest
-                req_msg = MeasurementRequestMessage("", "", req.to_dict())
-                plan.insert(0, BroadcastMessageAction(req_msg.to_dict(), state.t))
-
             return plan
                 
         else:

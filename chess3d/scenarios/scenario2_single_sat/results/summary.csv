@@ -2,15 +2,15 @@ stat_name,val
 t_start,2020-01-01 00:00:00+00:00
 t_end,2020-01-02 00:00:00+00:00
 n_events,790
-n_events_detected,1
+n_events_detected,5
 n_events_obs,0
 n_reqs_init,101
-n_reqs_gen,1
-n_reqs,102
-n_obs_max,306
-n_obs_pos,86
-n_obs,86
-n_obs_co,0
-u_max,108.23558679192911
-u,5.989154380910214
-u_norm,0.05533442889189207
+n_reqs_gen,84
+n_reqs_total,185
+n_obs_max,318
+n_obs_pos,90
+n_obs,85
+n_co_obs,0
+u_max,128.83407161364707
+u,5.713130144032919
+u_norm,0.04434486989719373
