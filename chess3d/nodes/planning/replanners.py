@@ -8,7 +8,6 @@ from dmas.clocks import *
 from nodes.orbitdata import OrbitData
 from nodes.science.reqs import *
 from nodes.states import *
-from messages import MeasurementRequestMessage
 
 class AbstractReplanner(ABC):
     """
@@ -18,11 +17,12 @@ class AbstractReplanner(ABC):
     def needs_replanning(   self, 
                             state : AbstractAgentState,
                             current_plan : list,
+                            performed_actions : list,
                             incoming_reqs : list,
                             generated_reqs : list,
                             misc_messages : list,
                             t_plan : float,
-                            planning_horizon : float = np.Inf,
+                            planning_horizon : float,
                             orbitdata : OrbitData = None
                         ) -> bool:
         """
@@ -33,12 +33,13 @@ class AbstractReplanner(ABC):
     def replan( self, 
                 state : AbstractAgentState, 
                 current_plan : list,
+                performed_actions : list,
                 incoming_reqs : list, 
                 generated_reqs : list,
                 misc_messages : list,
-                clock_config : ClockConfig,
                 t_plan : float,
-                planning_horizon : float = np.Inf,
+                planning_horizon : float,
+                clock_config : ClockConfig,
                 orbitdata : OrbitData = None,
                 **kwargs
             ) -> list:

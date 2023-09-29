@@ -462,27 +462,17 @@ class PlanningModule(InternalModule):
                             plan : list
                             plan.remove(removed)
                 
-                # --- Look for Plan Updates ---
-                #                 
+                # --- Create plan ---
                 # check if plan has been initialized
                 if (self.preplanner is not None                 # there is a preplanner assigned to this planner
                     and len(self.initial_reqs) > 0              # there are initial requests 
-                    and self.get_current_time() <= 1e-3         # simulation just started
+                    and self.get_current_time() <= 1e-3         # the simulation just started
                     ):
 
                     # initialize plan
-                    plan = await self._preplan(level)
+                    plan = await self._preplan(level)                   
 
-                    # update last time plan was updated
-                    self.t_plan = self.get_current_time()
-
-                    # save copy of plan for post-processing
-                    plan_copy = []
-                    for action in plan:
-                        plan_copy.append(action)
-                    self.plan_history.append(plan_copy)
-
-                # Check incoming messages
+                # Read incoming messages
                 incoming_reqs, generated_reqs, incoming_misc = await self._wait_for_messages()
                 
                 # Check if reeplanning is needed
@@ -490,29 +480,29 @@ class PlanningModule(InternalModule):
                 agent_state = self.agent_state.copy()
                 self.agent_state_lock.release()
 
-                if (
-                    self.replanner is not None and 
-                    self.replanner.needs_replanning(agent_state,
+                if (    
+                    self.replanner is not None and                          # there is a replanner assigned to this planner
+                    self.replanner.needs_replanning(                        # there is new relevant information to be considered
+                                                    agent_state,
                                                     plan, 
+                                                    performed_actions,
                                                     incoming_reqs,
                                                     generated_reqs,
                                                     incoming_misc,
                                                     self.t_plan,
                                                     self.planning_horizon,
-                                                    self.orbitdata)
+                                                    self.orbitdata
+                                                )
                     ):
                     
                     # replan
-                    plan : list = await self._replan(plan, incoming_reqs, generated_reqs, incoming_misc)
-                    
-                    # update last time plan was updated
-                    self.t_plan = self.get_current_time()
-
-                    # save copy of plan for post-processing
-                    plan_copy = []
-                    for action in plan:
-                        plan_copy.append(action)
-                    self.plan_history.append(plan_copy)
+                    plan : list = await self._replan(   
+                                                        plan, 
+                                                        performed_actions,
+                                                        incoming_reqs, 
+                                                        generated_reqs, 
+                                                        incoming_misc
+                                                    )                    
 
                 # --- Execute plan ---
 
@@ -562,11 +552,21 @@ class PlanningModule(InternalModule):
         while len(self.initial_reqs) > 0:
             await self.req_inbox.put(self.initial_reqs.pop())
 
+        # update last time plan was updated
+        self.t_plan = self.get_current_time()
+
+        # save copy of plan for post-processing
+        plan_copy = []
+        for action in plan:
+            plan_copy.append(action)
+        self.plan_history.append(plan_copy)
+
         return plan
 
     @runtime_tracker
     async def _replan(  self, 
                         current_plan : list,
+                        performed_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
                         incoming_misc : list,
@@ -578,15 +578,25 @@ class PlanningModule(InternalModule):
 
         plan : list = self.replanner.replan(    self.agent_state,
                                                 current_plan, 
+                                                performed_actions,
                                                 incoming_reqs,
                                                 generated_reqs,
                                                 incoming_misc,
-                                                self._clock_config,
                                                 self.t_plan,
                                                 self.planning_horizon,
+                                                self._clock_config,
                                                 self.orbitdata
                                             )        
         self.agent_state_lock.release()
+
+        # update last time plan was updated
+        self.t_plan = self.get_current_time()
+
+        # save copy of plan for post-processing
+        plan_copy = []
+        for action in plan:
+            plan_copy.append(action)
+        self.plan_history.append(plan_copy)
 
         return plan
     
