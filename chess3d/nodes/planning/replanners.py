@@ -215,6 +215,7 @@ class AbstractReplanner(ABC):
                                 state : SimulationAgentState, 
                                 requests : list,
                                 orbitdata : OrbitData,
+                                t_plan : float,
                                 planning_horizon : float = np.Inf
                                 ) -> list:
         """
@@ -227,7 +228,13 @@ class AbstractReplanner(ABC):
         for req in requests:
             req : MeasurementRequest
             for subtask_index in range(len(req.measurements)):
-                if self.__can_bid(state, req, subtask_index, orbitdata, planning_horizon):
+                if self.__can_bid(  state, 
+                                    req, 
+                                    subtask_index, 
+                                    orbitdata, 
+                                    t_plan,
+                                    planning_horizon
+                                ):
                     available.append((req, subtask_index))
 
         return available
@@ -237,6 +244,7 @@ class AbstractReplanner(ABC):
                 req : MeasurementRequest, 
                 subtask_index : int, 
                 orbitdata : OrbitData,
+                t_plan : float,
                 planning_horizon : float = np.Inf
                 ) -> bool:
         """
@@ -323,7 +331,9 @@ class AbstractReplanner(ABC):
 
 class FIFOReplanner(AbstractReplanner):
     def __init__(self):
+        self.arrival_times = {}
         self.known_reqs = []
+        self.prev_path = None
 
     def needs_replanning(   self, 
                             state : AbstractAgentState,
@@ -337,7 +347,17 @@ class FIFOReplanner(AbstractReplanner):
                         ) -> bool:
         
         # update list of known requests
-        self._update_known_requests(current_plan, incoming_reqs, generated_reqs)
+        new_reqs : list = self._update_known_requests(  state,
+                                                        current_plan, 
+                                                        incoming_reqs,
+                                                        generated_reqs, 
+                                                        t_plan,
+                                                        planning_horizon,
+                                                        orbitdata)
+        self.update_arrival_times(  state, 
+                                    new_reqs, 
+                                    planning_horizon,
+                                    orbitdata)
 
         # new planning horizon reached; must replan
         if state.t >= t_plan + planning_horizon:
@@ -345,21 +365,44 @@ class FIFOReplanner(AbstractReplanner):
 
         # check if incoming or generated measurement requests are already accounted for
         scheduled_reqs, unscheduled_reqs = self._compare_requests(current_plan)
+        
+        if self.prev_path is None:
+            self.prev_path = [req for req in scheduled_reqs]
 
-        # if no new requests, then do NOT replan
+        # no more requests to schedule; do NOT replan
         if len(unscheduled_reqs) == 0:
             return False
 
         # check if new requests can be done given the current state of the agent
-        all_reqs = [req for req in scheduled_reqs]; all_reqs.extend(unscheduled_reqs)
-        performable_reqs = self._get_available_requests(state, all_reqs, orbitdata, planning_horizon)    
+        if isinstance(state, SatelliteAgentState):
+            reqs = {req.id : req for req in self.known_reqs}
+            
+            performable_reqs = []
+            for req_id in self.arrival_times:
+                t_arrivals : list = self.arrival_times[req_id]
+                req : MeasurementRequest = reqs[req_id]
 
-        return len(performable_reqs) > len(scheduled_reqs)
+                if (len(t_arrivals) > 0 
+                    and t_arrivals[0] <= t_plan + planning_horizon
+                    and not req in self.prev_path
+                    ):
+                    performable_reqs.append(req)
+
+            if len(performable_reqs) > len(self.prev_path):
+                x = 1 
+
+            return len(performable_reqs) > len(self.prev_path)
+        
+        return False
    
-    def _update_known_requests(  self, 
+    def _update_known_requests( self, 
+                                state : AbstractAgentState,
                                 current_plan : list,
                                 incoming_reqs : list,
-                                generated_reqs : list
+                                generated_reqs : list,
+                                t_plan : float,
+                                planning_horizon : float, 
+                                orbitdata : OrbitData
                                 ) -> None:
         ## list all requests in current plan
         scheduled_reqs = []
@@ -381,9 +424,20 @@ class FIFOReplanner(AbstractReplanner):
 
         scheduled_reqs = list(filter(lambda req : req not in self.known_reqs, scheduled_reqs))
         new_reqs = list(filter(lambda req : req not in self.known_reqs, new_reqs))
+        new_reqs.extend(scheduled_reqs)
 
-        self.known_reqs.extend(scheduled_reqs)
         self.known_reqs.extend(new_reqs)
+
+        return new_reqs
+
+    def update_arrival_times(   self,
+                                state,  
+                                new_reqs : list,
+                                planning_horizon : float,
+                                orbitdata : OrbitData) -> None:
+        for req in new_reqs:
+            self.arrival_times[req.id] = self._calc_arrival_times(state, req, state.t, planning_horizon, orbitdata)
+
 
     def _compare_requests(  self, 
                             current_plan : list
@@ -423,7 +477,7 @@ class FIFOReplanner(AbstractReplanner):
         
         # compile requests
         scheduled_reqs, unscheduled_reqs = self._compare_requests(current_plan)            
-        available_reqs : list = self._get_available_requests( state, self.known_reqs, orbitdata )
+        available_reqs : list = self._get_available_requests( state, self.known_reqs, orbitdata, t_plan, planning_horizon )
 
         if isinstance(state, SatelliteAgentState):
             # Generates a plan for observing GPs on a first-come first-served basis
@@ -494,5 +548,7 @@ class FIFOReplanner(AbstractReplanner):
             if len(plan) > 0 and plan[-1].t_end < t_plan + planning_horizon:
                 plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
 
+            self.prev_path = [req for req, _, __, ___, in path]
+                
             return plan
     
