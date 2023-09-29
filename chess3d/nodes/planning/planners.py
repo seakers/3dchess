@@ -429,11 +429,7 @@ class PlanningModule(InternalModule):
                 completed_actions, aborted_actions, pending_actions = await self.__check_action_completion(plan, level)
 
                 # remove aborted or completed actions from plan
-                performed_actions = [action for action in completed_actions]
-                performed_actions.extend(aborted_actions)
-                for action in performed_actions:
-                    if action in plan:
-                        plan.remove(action)
+                plan, performed_actions = self.__remove_performed_actions_from_plan(plan, completed_actions, aborted_actions)
                 
                 # --- Create plan ---
                 # check if plan has been initialized
@@ -483,8 +479,8 @@ class PlanningModule(InternalModule):
                 plan_out = self._get_next_actions(plan, pending_actions, generated_reqs, self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(plan, "PLAN", logging.WARNING)
-                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                self.__log_plan(plan, "PLAN", logging.WARNING)
+                self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
                 # send plan to parent agent
@@ -497,6 +493,7 @@ class PlanningModule(InternalModule):
         except asyncio.CancelledError:
             return
         
+    @runtime_tracker
     async def __check_action_completion(self, current_plan : list, level : int = logging.DEBUG) -> tuple:
         """
         Checks incoming messages from agent to check which actions from its plan have been completed, aborted, or are still pending
@@ -537,40 +534,22 @@ class PlanningModule(InternalModule):
         
         return completed_actions, aborted_actions, pending_actions
     
-        # performed_actions = []
-        # while not self.action_status_inbox.empty():
-        #     action_msg : AgentActionMessage = await self.action_status_inbox.get()
-        #     action : AgentAction = action_from_dict(**action_msg.action)
+    def __remove_performed_actions_from_plan(   self, 
+                                                current_plan : list, 
+                                                completed_actions : list, 
+                                                aborted_actions : list) -> tuple:
+        
+        updated_plan = [action for action in current_plan]
+        performed_actions = [action for action in completed_actions]
+        performed_actions.extend(aborted_actions)
+        for performed_action in performed_actions:
+            performed_action : AgentAction
+            for action in updated_plan:
+                action : AgentAction
+                if performed_action.id == action.id:
+                    updated_plan.remove(action)
 
-        #     if action_msg.status == AgentAction.PENDING:
-        #         # if action wasn't completed, try again
-        #         plan_ids = [action.id for action in self.plan]
-        #         action_dict : dict = action_msg.action
-
-        #         if action_dict['id'] in plan_ids:
-        #             self.log(f'action {action_dict} not completed yet! trying again...')
-        #             plan_out.append(action_dict)
-
-        #     else:
-        #         # if action was completed or aborted, remove from plan
-        #         performed_actions.append(action)
-
-        #         if action_msg.status == AgentAction.COMPLETED:
-        #             self.log(f'action of type `{action.action_type}` completed!', level)
-
-                # action_dict : dict = action_msg.action
-                # completed_action = AgentAction(**action_dict)
-                # removed = None
-                # for action in plan:
-                #     action : AgentAction
-                #     if action.id == completed_action.id:
-                #         removed = action
-                #         break
-                
-                # if removed is not None:
-                #     removed : AgentAction
-                #     plan : list
-                #     plan.remove(removed)
+        return updated_plan, performed_actions
                 
     @runtime_tracker
     async def _preplan( self, 
@@ -700,8 +679,8 @@ class PlanningModule(InternalModule):
         """ Parses current plan and outputs list of actions that are to be performed at a given time"""
 
         # get next available action to perform
-        plan_out = filter(lambda action : action.t_start <= t, plan)
-        plan_out = [action.to_dict() for action in list(plan_out)]
+        plan_out = list(filter(lambda action : action.t_start <= t, plan))
+        plan_out = [action.to_dict() for action in plan_out]
 
         # re-attempt pending actions 
         for action in pending_actions:
@@ -725,7 +704,7 @@ class PlanningModule(InternalModule):
         return plan_out
     
     def __log_plan(self, plan : list, title : str, level : int = logging.DEBUG) -> None:
-        out = f'\{title}\nid\taction type\tt_start\tt_end\n'
+        out = f'\n{title}\nid\taction type\tt_start\tt_end\n'
 
         for action in plan:
             if isinstance(action, AgentAction):
