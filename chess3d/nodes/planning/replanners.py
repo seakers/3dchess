@@ -40,8 +40,7 @@ class AbstractReplanner(ABC):
                 t_plan : float,
                 planning_horizon : float,
                 clock_config : ClockConfig,
-                orbitdata : OrbitData = None,
-                **kwargs
+                orbitdata : OrbitData = None
             ) -> list:
         """
         Revises the current plan 
@@ -339,22 +338,19 @@ class FIFOReplanner(AbstractReplanner):
     def needs_replanning(   self, 
                             state : AbstractAgentState,
                             current_plan : list,
+                            performed_actions : list,
                             incoming_reqs : list,
                             generated_reqs : list,
-                            _ : list,
+                            misc_messages : list,
                             t_plan : float,
-                            planning_horizon : float = np.Inf,
+                            planning_horizon : float,
                             orbitdata : OrbitData = None
                         ) -> bool:
         
         # update list of known requests
-        new_reqs : list = self._update_known_requests(  state,
-                                                        current_plan, 
+        new_reqs : list = self._update_known_requests(  current_plan, 
                                                         incoming_reqs,
-                                                        generated_reqs, 
-                                                        t_plan,
-                                                        planning_horizon,
-                                                        orbitdata)
+                                                        generated_reqs)
         self.update_arrival_times(  state, 
                                     new_reqs, 
                                     planning_horizon,
@@ -397,14 +393,10 @@ class FIFOReplanner(AbstractReplanner):
         return False
    
     def _update_known_requests( self, 
-                                state : AbstractAgentState,
                                 current_plan : list,
                                 incoming_reqs : list,
-                                generated_reqs : list,
-                                t_plan : float,
-                                planning_horizon : float, 
-                                orbitdata : OrbitData
-                                ) -> None:
+                                generated_reqs : list
+                                ) -> list:
         ## list all requests in current plan
         scheduled_reqs = []
         for action in current_plan:
@@ -439,9 +431,9 @@ class FIFOReplanner(AbstractReplanner):
         for req in new_reqs:
             self.arrival_times[req.id] = self._calc_arrival_times(state, req, state.t, planning_horizon, orbitdata)
 
-
     def _compare_requests(  self, 
-                            current_plan : list
+                            current_plan : list,
+                            performed_actions : list
                         ) -> tuple:
         """ Separates scheduled and unscheduled requests """
         
@@ -463,14 +455,14 @@ class FIFOReplanner(AbstractReplanner):
     def replan( self, 
                 state : AbstractAgentState, 
                 current_plan : list,
+                performed_actions : list,
                 incoming_reqs : list, 
                 generated_reqs : list,
-                _ : list,
-                clock_config : ClockConfig,
+                misc_messages : list,
                 t_plan : float,
-                planning_horizon : float = np.Inf,
-                orbitdata : OrbitData = None,
-                **__
+                planning_horizon : float,
+                clock_config : ClockConfig,
+                orbitdata : OrbitData = None
             ) -> list:
         
         # initialize plan
