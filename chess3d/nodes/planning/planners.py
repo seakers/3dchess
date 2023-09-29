@@ -479,8 +479,8 @@ class PlanningModule(InternalModule):
                 plan_out = self._get_next_actions(plan, pending_actions, generated_reqs, self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(plan, "PLAN", logging.WARNING)
-                self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                # self.__log_plan(plan, "PLAN", logging.WARNING)
+                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
                 # send plan to parent agent

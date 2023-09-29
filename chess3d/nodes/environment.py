@@ -524,10 +524,10 @@ class SimulationEnvironment(EnvironmentNode):
                     df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
 
                     for _, row in df.iterrows():
-                        instrument : dict = row['instrument']
-                        if (instrument['name'] in req.measurements 
-                            and instrument['name'] not in observable_measurements):
-                            observable_measurements.append(instrument['name'])
+                        instrument : str = row['instrument']
+                        if (instrument in req.measurements 
+                            and instrument not in observable_measurements):
+                            observable_measurements.append(instrument)
 
                         if len(observable_measurements) == len(req.measurements):
                             break

@@ -540,7 +540,7 @@ class FIFOReplanner(AbstractReplanner):
             out = '\n'
             for req, subtask_index, t_img, s in path:
                 out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-            print(out)
+            # print(out)
             x = 1
 
             while True:
@@ -574,15 +574,16 @@ class FIFOReplanner(AbstractReplanner):
         out = '\n'
         for req, subtask_index, t_img, s in path:
             out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-        # self.log(out,level)
-        print(out)
+        # print(out)
 
         # generate plan from path
         plan = self._plan_from_path(state, path, orbitdata, state.t, clock_config)
 
         # wait for next planning horizon 
-        if len(plan) > 0 and plan[-1].t_end < t_plan + planning_horizon:
-            plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
+        if len(plan) > 0 and plan[-1].t_end < state.t + planning_horizon:
+            plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
+        else:
+            plan.append(WaitForMessages(state.t, state.t + planning_horizon))
 
         self.prev_path = [req for req, _, __, ___, in path]
             
