@@ -136,7 +136,8 @@ class AbstractPreplanner(ABC):
             t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
             if isinstance(state, SatelliteAgentState):
                 lat, lon, _ = measurement_req.lat_lon_pos
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, t_move_start)
+                instrument = measurement_req.measurements[subtask_index]
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_move_start)
                 
                 t_move_end = None
                 for _, row in df.iterrows():
@@ -251,7 +252,8 @@ class AbstractPreplanner(ABC):
             if isinstance(state, SatelliteAgentState):
                 # check if agent can see the request location
                 lat,lon,_ = req.lat_lon_pos
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, req.t_start, req.t_end)
+                instrument = req.measurements[subtask_index]
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, req.t_start, req.t_end)
                 
                 if not df.empty:                
                     times = df.get('time index')
@@ -270,6 +272,7 @@ class AbstractPreplanner(ABC):
     def _calc_arrival_times(self, 
                             state : SimulationAgentState, 
                             req : MeasurementRequest, 
+                            subtask_index : int, 
                             t_prev : Union[int, float],
                             planning_horizon : Union[int, float], 
                             orbitdata : OrbitData) -> float:
@@ -282,7 +285,8 @@ class AbstractPreplanner(ABC):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
                 t_end = t_prev + planning_horizon
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, t_prev, t_end)
+                instrument = req.measurements[subtask_index]
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_prev, t_end)
 
                 for _, row in df.iterrows():
                     t_img = row['time index'] * orbitdata.time_step
@@ -370,7 +374,7 @@ class FIFOPreplanner(AbstractPreplanner):
             arrival_times = {req.id : {} for req, _ in available_reqs}
 
             for req, subtask_index in available_reqs:
-                t_arrivals : list = self._calc_arrival_times(state, req, state.t, planning_horizon, orbitdata)
+                t_arrivals : list = self._calc_arrival_times(state, req, subtask_index, state.t, planning_horizon, orbitdata)
                 arrival_times[req.id][subtask_index] = t_arrivals
             
             path = []

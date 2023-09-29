@@ -373,7 +373,7 @@ class PlanningModule(InternalModule):
                         # gp_acces_by_mode.append(gp_access_by_grid)
 
                     nrows, _ = gp_acces_by_mode.shape
-                    gp_access_by_grid['instrument'] = [instrument] * nrows
+                    gp_access_by_grid['instrument'] = [instrument['name']] * nrows
                     # gp_access_data[ins_name] = gp_acces_by_mode
 
                     if len(gp_access_data) == 0:

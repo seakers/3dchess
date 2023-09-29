@@ -145,7 +145,8 @@ class AbstractReplanner(ABC):
             t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
             if isinstance(state, SatelliteAgentState):
                 lat, lon, _ = measurement_req.lat_lon_pos
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, t_move_start)
+                instrument = measurement_req.measurements[subtask_index]
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_move_start)
                 
                 t_move_end = None
                 for _, row in df.iterrows():
@@ -268,7 +269,8 @@ class AbstractReplanner(ABC):
             if isinstance(state, SatelliteAgentState):
                 # check if agent can see the request location
                 lat,lon,_ = req.lat_lon_pos
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, req.t_start, req.t_end)
+                instrument = req.measurements[subtask_index]
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, req.t_start, req.t_end)
                 
                 if not df.empty:                
                     times = df.get('time index')
@@ -385,33 +387,39 @@ class FIFOReplanner(AbstractReplanner):
         if state.t < t_plan + planning_horizon:
             # calculate new access times for new requests
             for req in new_reqs:
-                self.access_times[req.id] = self._calc_arrival_times(   state, 
-                                                                        req, 
-                                                                        t_plan, 
-                                                                        planning_horizon, 
-                                                                        orbitdata)
-            
+                if req.id not in self.access_times:
+                    self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
+                    for subtask_index in range(len(req.measurements)):
+                        self.access_times[req.id][subtask_index] = self._calc_arrival_times(   state, 
+                                                                                                req,
+                                                                                                subtask_index, 
+                                                                                                t_plan, 
+                                                                                                planning_horizon, 
+                                                                                                orbitdata)
+                            
             # update access times if a measurement was completed
             for action in performed_actions:
                 if isinstance(action, MeasurementAction):
                     req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
                     if action.status == action.COMPLETED:
-                        self.access_times[req.id] = []
+                        self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
 
             # update latest available access time for each known request
             for req_id in self.access_times:
-                t_arrivals : list = self.access_times[req_id]
-                while len(t_arrivals) > 0 and t_arrivals[0] < state.t:
-                    t_arrivals.pop(0)
-                self.access_times[req_id] = t_arrivals
+                for t_arrivals in self.access_times[req_id]:
+                    while len(t_arrivals) > 0 and t_arrivals[0] < state.t:
+                        t_arrivals.pop(0)
         else:
             # recalculate access times for all known requests
             for req in self.known_reqs:
-                self.access_times[req.id] = self._calc_arrival_times(   state, 
-                                                                        req, 
-                                                                        state.t, 
-                                                                        planning_horizon, 
-                                                                        orbitdata)
+                self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
+                for subtask_index in range(len(req.measurements)):
+                    self.access_times[req.id][subtask_index] = self._calc_arrival_times(    state, 
+                                                                                            req, 
+                                                                                            subtask_index,
+                                                                                            state.t,
+                                                                                            planning_horizon, 
+                                                                                            orbitdata)
 
         # for req_id in self.access_times:
         #     print(req_id.split('-')[0], self.access_times[req_id])
@@ -421,6 +429,7 @@ class FIFOReplanner(AbstractReplanner):
     def _calc_arrival_times(self, 
                             state : SimulationAgentState, 
                             req : MeasurementRequest, 
+                            subtask_index : int,
                             t_prev : Union[int, float],
                             planning_horizon : Union[int, float], 
                             orbitdata : OrbitData) -> float:
@@ -432,8 +441,9 @@ class FIFOReplanner(AbstractReplanner):
             if isinstance(state, SatelliteAgentState):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
+                instrument = req.measurements[subtask_index]
                 t_end = t_prev + planning_horizon
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, t_prev, t_end)
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_prev, t_end)
 
                 for _, row in df.iterrows():
                     t_img = row['time index'] * orbitdata.time_step
@@ -477,10 +487,17 @@ class FIFOReplanner(AbstractReplanner):
                     scheduled_reqs.append(req)
 
         ## list all known available request that have not been scheduled yet
-        new_reqs = list(filter((lambda  req : req not in scheduled_reqs 
-                                        and len(self.access_times[req.id]) > 0
-                                ), 
-                                self.known_reqs))
+        def is_new_req(req : MeasurementRequest) -> bool:
+            if req in scheduled_reqs:
+                return False
+            
+            for t_arrivals in self.access_times[req.id]:
+                if len(t_arrivals) > 0:
+                    return True
+                
+            return False
+
+        new_reqs = list(filter(is_new_req, self.known_reqs))
         
         return scheduled_reqs, new_reqs
     
@@ -507,15 +524,16 @@ class FIFOReplanner(AbstractReplanner):
         if isinstance(state, SatelliteAgentState):
             # Generates a plan for observing GPs on a first-come first-served basis            
             path = []
-            reqs = [req for req in self.known_reqs]
+            reqs = {req.id : req for req in self.known_reqs}
 
             for req_id in self.access_times:
-                t_arrivals : list = self.access_times[req_id]
+                for subtask_index in range(len(self.access_times[req_id])):
+                    t_arrivals : list = self.access_times[req_id][subtask_index]
 
-                if len(t_arrivals) > 0:
-                    t_img = t_arrivals.pop(0)
-                    req : MeasurementRequest = reqs[req_id]
-                    path.append((req, subtask_index, t_img, req.s_max/len(req.measurements)))
+                    if len(t_arrivals) > 0:
+                        t_img = t_arrivals.pop(0)
+                        req : MeasurementRequest = reqs[req_id]
+                        path.append((req, subtask_index, t_img, req.s_max/len(req.measurements)))
 
             path.sort(key=lambda a: a[2])
 
