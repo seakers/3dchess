@@ -243,7 +243,12 @@ class SimulationEnvironment(EnvironmentNode):
                         req_msg = MeasurementRequestMessage(**content)
                         measurement_req = MeasurementRequest.from_dict(req_msg.req)
 
-                        if measurement_req not in self.measurement_reqs:
+                        if measurement_req.s_max <= 0.0:
+                            continue
+                        
+                        initial_req_ids = [req.id for req in self.initial_reqs]
+                        gen_req_ids = [req.id for req in self.measurement_reqs]
+                        if (measurement_req.id not in gen_req_ids and measurement_req.id not in initial_req_ids):
                             self.measurement_reqs.append(measurement_req)
 
                 elif manager_socket in socks:
@@ -443,6 +448,7 @@ class SimulationEnvironment(EnvironmentNode):
             max_utility = 0.0
             n_obervations_max = 0
             co_observations = []
+            unique_observations = []
 
             measurement_reqs = [req.copy() for req in self.measurement_reqs]
             for req in self.initial_reqs:
@@ -453,12 +459,16 @@ class SimulationEnvironment(EnvironmentNode):
                 req_id_short = req_id.split('-')[0]
                 req_measurements = received_measurements_df \
                                     .query('@req_id_short == `req_id`')
+
                 
                 req_utility = 0
                 for idx, row_i in req_measurements.iterrows():
                     t_img_i = row_i['t_img']
                     measurement_i = row_i['measurement']
                     correlated_measurements = []
+
+                    if (req_id_short, measurement_i) not in unique_observations:
+                        unique_observations.append( (req_id_short, measurement_i) )
 
                     for _, row_j in req_measurements.iterrows():
                         measurement_j = row_j['measurement']
@@ -551,6 +561,7 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_obs_max', n_obervations_max],
                         ['n_obs_pos', n_obervations_pos],
                         ['n_obs', len(self.measurement_history)],
+                        ['n_obs_unique', len(unique_observations)],
                         ['n_co_obs', len(co_observations)],
                         ['u_max', max_utility], 
                         ['u', utility_total],

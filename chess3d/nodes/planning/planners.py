@@ -9,6 +9,7 @@ from nodes.states import *
 from nodes.science.reqs import *
 from messages import *
 from dmas.modules import *
+from dmas.utils import runtime_tracker
 import pandas as pd
 
 class PlanningModule(InternalModule):
@@ -234,12 +235,14 @@ class PlanningModule(InternalModule):
             raise RuntimeError(f"orbit data already loaded. It can only be assigned once.")            
 
         results_path_list = self.results_path.split('/')
+        while "" in results_path_list:
+            results_path_list.remove("")
         if 'results' in results_path_list[-1]:
             results_path_list.pop()
 
         scenario_name = results_path_list[-1]
         scenario_dir = f'./scenarios/{scenario_name}/'
-        data_dir = scenario_dir + '/orbit_data/'
+        data_dir = scenario_dir + 'orbit_data/'
 
         with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
             # load json file as dictionary
@@ -425,25 +428,40 @@ class PlanningModule(InternalModule):
                 _ : AgentStateMessage = await self.states_inbox.get()
                 assert abs(self.get_current_time() - self.agent_state.t) <= 1e-2
 
-                # --- Check Action Completion ---
+                # --- Check incoming information ---
+                # check action completion
                 completed_actions, aborted_actions, pending_actions = await self.__check_action_completion(plan, level)
 
                 # remove aborted or completed actions from plan
                 plan, performed_actions = self.__remove_performed_actions_from_plan(plan, completed_actions, aborted_actions)
                 
+                # Read incoming messages
+                incoming_reqs, generated_reqs, misc_messages = await self._wait_for_messages()
+                
                 # --- Create plan ---
                 # check if plan has been initialized
-                if (self.preplanner is not None                 # there is a preplanner assigned to this planner
-                    and len(self.initial_reqs) > 0              # there are initial requests 
-                    and self.get_current_time() <= 1e-3         # the simulation just started
+                if (self.preplanner is not None                                         # there is a preplanner assigned to this planner
+                    and self.preplanner.needs_initialized_plan(                         # there is a need to construct a new plan
+                                                                agent_state,
+                                                                plan, 
+                                                                performed_actions,
+                                                                incoming_reqs,
+                                                                generated_reqs,
+                                                                misc_messages,
+                                                                self.t_plan,
+                                                                self.planning_horizon,
+                                                                self.orbitdata
+                                                            )
                     ):
 
                     # initialize plan
-                    plan = await self._preplan(level)                   
+                    plan = await self._preplan( plan, 
+                                                performed_actions,
+                                                incoming_reqs,
+                                                generated_reqs,
+                                                misc_messages,
+                                                level)                   
 
-                # Read incoming messages
-                incoming_reqs, generated_reqs, incoming_misc = await self._wait_for_messages()
-                
                 # Check if reeplanning is needed
                 await self.agent_state_lock.acquire()
                 agent_state = self.agent_state.copy()
@@ -457,7 +475,7 @@ class PlanningModule(InternalModule):
                                                     performed_actions,
                                                     incoming_reqs,
                                                     generated_reqs,
-                                                    incoming_misc,
+                                                    misc_messages,
                                                     self.t_plan,
                                                     self.planning_horizon,
                                                     self.orbitdata
@@ -470,7 +488,7 @@ class PlanningModule(InternalModule):
                                                         performed_actions,
                                                         incoming_reqs, 
                                                         generated_reqs, 
-                                                        incoming_misc
+                                                        misc_messages
                                                     )                    
 
                 # --- Execute plan ---
@@ -553,18 +571,25 @@ class PlanningModule(InternalModule):
                 
     @runtime_tracker
     async def _preplan( self, 
-                        level
+                        plan : list,
+                        performed_actions : list,
+                        incoming_reqs : list,
+                        generated_reqs : list,
+                        misc_messages : list,
+                        level : int 
                         ) -> None:
         # Generate Initial Plan        
         await self.agent_state_lock.acquire()
 
         plan = self.preplanner.initialize_plan( self.agent_state, 
-                                                self.initial_reqs,
-                                                self.orbitdata,
-                                                self._clock_config,
-                                                self.get_current_time(),
+                                                plan,
+                                                performed_actions,
+                                                incoming_reqs,
+                                                generated_reqs,
+                                                misc_messages,
+                                                self.t_plan,
                                                 self.planning_horizon,
-                                                level
+                                                self.orbitdata
                                                 )
         self.agent_state_lock.release()
 
@@ -635,9 +660,8 @@ class PlanningModule(InternalModule):
 
         ## Returns:
             incoming_reqs 
-            incoming_measurements
             generated_reqs 
-            incoming_misc
+            misc_messages
         """
         incoming_reqs = []
         while not self.req_inbox.empty():
@@ -668,11 +692,11 @@ class PlanningModule(InternalModule):
                 else:
                     generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
 
-        incoming_misc = []
+        misc_messages = []
         while not self.misc_inbox.empty():
-            incoming_misc.append(await self.misc_inbox.get())
+            misc_messages.append(await self.misc_inbox.get())
 
-        return incoming_reqs, generated_reqs, incoming_misc
+        return incoming_reqs, generated_reqs, misc_messages
 
     @runtime_tracker
     def _get_next_actions(self, plan : list, pending_actions : list, generated_reqs : list, t : float) -> list:
@@ -687,9 +711,12 @@ class PlanningModule(InternalModule):
             action : AgentAction
             plan_out.insert(0, action.to_dict())
 
-        # broadcasts all newly generated requests
+        # broadcasts all newly generated requests if they have a non-zero scientific value
         for req in generated_reqs:
             req : MeasurementRequest
+            if req.s_max <= 0.0:
+                continue
+
             req_msg = MeasurementRequestMessage("", "", req.to_dict())
             plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
                                                         self.get_current_time()).to_dict()
@@ -760,6 +787,38 @@ class PlanningModule(InternalModule):
                             n
                             ]
             data.append(line_data)
+
+        if isinstance(self.preplanner, AbstractPreplanner):
+            for routine in self.preplanner.stats:
+                n = len(self.preplanner.stats[routine])
+                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+
+                line_data = [ 
+                                f"preplanner--{routine}",
+                                t_avg,
+                                t_std,
+                                t_median,
+                                n
+                                ]
+                data.append(line_data)
+
+        if isinstance(self.replanner, AbstractReplanner):
+            for routine in self.replanner.stats:
+                n = len(self.preplanner.stats[routine])
+                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+
+                line_data = [ 
+                                f"replanner--{routine}",
+                                t_avg,
+                                t_std,
+                                t_median,
+                                n
+                                ]
+                data.append(line_data)
 
         stats_df = pd.DataFrame(data, columns=headers)
         self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)

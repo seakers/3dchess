@@ -147,19 +147,6 @@
                 "PYTHONPATH": "${workspaceRoot}"
             },
             "args": "scenario2_single_sat_acbba"
-        },
-        {
-            "name": "SCENARIO 2 - SINGLE SAT GREEDY",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "scenario2_single_sat_greedy"
         }
     ],
     "compounds": [

@@ -26,21 +26,11 @@ class ModuleTypes(Enum):
     SCIENCE = 'SCIENCE'
     ENGINEERING = 'ENGINEERING'
 
-def print_welcome(scenario_name) -> None:
-    os.system('cls' if os.name == 'nt' else 'clear')
-    out = "\n======================================================"
-    out += '\n   _____ ____        ________  __________________\n  |__  // __ \      / ____/ / / / ____/ ___/ ___/\n   /_ </ / / /_____/ /   / /_/ / __/  \__ \\__ \ \n ___/ / /_/ /_____/ /___/ __  / /___ ___/ /__/ / \n/____/_____/      \____/_/ /_/_____//____/____/ (v1.0)'
-    out += "\n======================================================"
-    out += '\n\tTexas A&M University - SEAK Lab ©'
-    out += "\n======================================================"
-    out += f"\nSCENARIO: {scenario_name}"
-    print(out)
-
-def setup_results_directory(scenario_name) -> str:
+def setup_results_directory(scenario_path) -> str:
     """
     Creates an empty results directory within the current working directory
     """
-    results_path = f'{scenario_name}' if '/results/' in scenario_name else f'./scenarios/{scenario_name}/results'
+    results_path = f'{scenario_path}' if '/results/' in scenario_path else f'{scenario_path}/results'
 
     if not os.path.exists(results_path):
         # create results directory if it doesn't exist
@@ -59,115 +49,3 @@ def setup_results_directory(scenario_name) -> str:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
 
     return results_path
-
-def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
-    """ Checks if the scenario has already been pre-computed or if relevant changes have been made """
-
-    with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
-        # check if data has been previously calculated
-        if os.path.exists(data_dir + 'MissionSpecs.json'):
-            with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
-                scenario_dict : dict = json.load(scenario_specs)
-                mission_dict : dict = json.load(mission_specs)
-
-                scenario_dict.pop('settings')
-                mission_dict.pop('settings')
-
-                if (
-                       scenario_dict['epoch'] != mission_dict['epoch']
-                    or scenario_dict['duration'] != mission_dict['duration']
-                    or scenario_dict['groundStation'] != mission_dict['groundStation']
-                    or scenario_dict['grid'] != mission_dict['grid']
-                    ):
-                    return True
-                
-                if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
-                    if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
-                        return True
-                    
-                    for i in range(len(scenario_dict['spacecraft'])):
-                        scenario_sat : dict = scenario_dict['spacecraft'][i]
-                        mission_sat : dict = mission_dict['spacecraft'][i]
-                        
-                        if "planner" in scenario_sat:
-                            scenario_sat.pop("planner")
-                        if "science" in scenario_sat:
-                            scenario_sat.pop("science")
-                        if "notifier" in scenario_sat:
-                            scenario_sat.pop("notifier") 
-                        if "missionProfile" in scenario_sat:
-                            scenario_sat.pop("missionProfile")
-
-                        if "planner" in mission_sat:
-                            mission_sat.pop("planner")
-                        if "science" in mission_sat:
-                            mission_sat.pop("science")
-                        if "notifier" in mission_sat:
-                            mission_sat.pop("notifier") 
-                        if "missionProfile" in mission_sat:
-                            mission_sat.pop("missionProfile")
-
-                        if scenario_sat != mission_sat:
-                            return True
-
-    return False
-
-def precompute_orbitdata(scenario_name) -> str:
-    """
-    Pre-calculates coverage and position data for a given scenario
-    """
-    
-    scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
-    data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
-   
-    changes_to_scenario = check_changes_to_scenario(scenario_dir, data_dir)
-
-    if not os.path.exists(data_dir):
-        # if directory does not exists, create it
-        os.mkdir(data_dir)
-        changes_to_scenario = True
-
-    if not changes_to_scenario:
-        # if propagation data files already exist, load results
-        print('Orbit data found!')
-    else:
-        # if propagation data files do not exist, propagate and then load results
-        if changes_to_scenario:
-            print('Existing orbit data does not match scenario.')
-        else:
-            print('Orbit data not found.')
-
-        # print('Clearing \'orbitdata\' directory...')    
-        # clear files if they exist
-        if os.path.exists(data_dir):
-            for f in os.listdir(data_dir):
-                if os.path.isdir(os.path.join(data_dir, f)):
-                    for h in os.listdir(data_dir + f):
-                            os.remove(os.path.join(data_dir, f, h))
-                    os.rmdir(data_dir + f)
-                else:
-                    os.remove(os.path.join(data_dir, f)) 
-        # print('\'orbitddata\' cleared!')
-
-        with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
-            # load json file as dictionary
-            mission_dict : dict = json.load(scenario_specs)
-
-            # set output directory to orbit data directory
-            if mission_dict.get("settings", None) is not None:
-                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
-            else:
-                mission_dict["settings"] = {}
-                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
-
-            # propagate data and save to orbit data directory
-            print("Propagating orbits...")
-            mission : Mission = Mission.from_json(mission_dict)  
-            mission.execute()                
-            print("Propagation done!")
-
-            # save specifications of propagation in the orbit data directory
-            with open(data_dir +'MissionSpecs.json', 'w') as mission_specs:
-                mission_specs.write(json.dumps(mission_dict, indent=4))
-
-    return data_dir

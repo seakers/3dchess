@@ -3,6 +3,7 @@ import logging
 import math
 import pandas as pd
 
+from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 from nodes.states import AbstractAgentState
@@ -22,22 +23,56 @@ class AbstractPreplanner(ABC):
                     logger: logging.Logger = None
                 ) -> None:
         super().__init__()
+
+        self.performed_requests = []
+        self.access_times = {}
+        self.known_reqs = []
+        
+        self.stats = {}
         self._logger = logger
 
     @abstractmethod
-    def initialize_plan(    self, 
-                            state : AbstractAgentState, 
-                            initial_reqs : list, 
-                            orbitdata : OrbitData,
-                            clock_config : ClockConfig,
-                            t_init : float = 0.0,
-                            planning_horizon : float = np.Inf,
-                            level : int = logging.DEBUG
-                        ) -> list:
+    def needs_initialized_plan( self, 
+                                state : SimulationAgentState,
+                                current_plan : list,
+                                performed_actions : list,
+                                incoming_reqs : list,
+                                generated_reqs : list,
+                                misc_messages : list,
+                                t_plan : float,
+                                planning_horizon : float = np.Inf,
+                                orbitdata : OrbitData = None
+                            ) -> bool:
+        """ Determines whether a new plan needs to be initalized """    
+        # update list of known requests
+        reqs = [req for req in incoming_reqs]
+        reqs.extend(generated_reqs)
+
+        for req in reqs:
+            if req not in self.known_reqs:
+                self.known_reqs.append(req)
+        
+        # check if plan needs to be inialized
+        return (t_plan < 0                                  # simulation just started
+                or state.t >= t_plan + planning_horizon)    # planning horizon has been reached
+
+    @abstractmethod
+    def initialize_plan(self, 
+                        state : SimulationAgentState,
+                        current_plan : list,
+                        performed_actions : list,
+                        incoming_reqs : list,
+                        generated_reqs : list,
+                        misc_messages : list,
+                        t_plan : float,
+                        planning_horizon : float = np.Inf,
+                        orbitdata : OrbitData = None
+                    ) -> bool:
         """
         Creates an initial plan for the agent to perform
         """
 
+    @runtime_tracker
     def _plan_from_path(    self, 
                             state : SimulationAgentState, 
                             path : list,
@@ -203,6 +238,7 @@ class AbstractPreplanner(ABC):
         
         return plan
 
+    @runtime_tracker
     def _get_available_requests( self, 
                                 state : SimulationAgentState, 
                                 requests : list,
@@ -224,6 +260,7 @@ class AbstractPreplanner(ABC):
 
         return available
 
+    @runtime_tracker
     def __can_bid(self, 
                 state : SimulationAgentState, 
                 req : MeasurementRequest, 
@@ -269,6 +306,7 @@ class AbstractPreplanner(ABC):
         
         return True
 
+    @runtime_tracker
     def _calc_arrival_times(self, 
                             state : SimulationAgentState, 
                             req : MeasurementRequest, 
@@ -343,29 +381,31 @@ class AbstractPreplanner(ABC):
             raise e
 
 class IdlePlanner(AbstractPreplanner):
+    @runtime_tracker
     def initialize_plan(    self, 
-                            state : AbstractAgentState, 
-                            initial_reqs : list, 
-                            orbitdata : OrbitData,
-                            clock_config : ClockConfig,
-                            t_init : float = 0.0,
-                            planning_horizon : float = np.Inf,
-                            level : int = logging.DEBUG
+                            *_
                         ) -> tuple:
         return [IdleAction(0.0, np.Inf)]
 
 class FIFOPreplanner(AbstractPreplanner):
-    def initialize_plan(    self, 
-                            state: AbstractAgentState, 
-                            initial_reqs: list, 
-                            orbitdata: OrbitData, 
-                            clock_config : ClockConfig,
-                            t_init : float = 0.0,
-                            planning_horizon : float = np.Inf,
-                            level: int = logging.DEBUG
-                        ) -> tuple:
+    @runtime_tracker
+    def needs_initialized_plan(self, state: SimulationAgentState, current_plan: list, performed_actions: list, incoming_reqs: list, generated_reqs: list, misc_messages: list, t_plan: float, planning_horizon: float = np.Inf, orbitdata: OrbitData = None) -> bool:
+        return super().needs_initialized_plan(state, current_plan, performed_actions, incoming_reqs, generated_reqs, misc_messages, t_plan, planning_horizon, orbitdata)
+
+    @runtime_tracker
+    def initialize_plan(self, 
+                        state : SimulationAgentState,
+                        current_plan : list,
+                        performed_actions : list,
+                        incoming_reqs : list,
+                        generated_reqs : list,
+                        misc_messages : list,
+                        t_plan : float,
+                        planning_horizon : float = np.Inf,
+                        orbitdata : OrbitData = None
+                    ) -> bool:
         path = []         
-        available_reqs : list = self._get_available_requests( state ,initial_reqs, orbitdata )
+        available_reqs : list = self._get_available_requests( state, self.known_reqs, orbitdata )
 
         if isinstance(state, SatelliteAgentState):
             # Generates a plan for observing GPs on a first-come first-served basis

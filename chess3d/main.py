@@ -44,8 +44,131 @@ from satplan.visualizer import Visualizer
                 Texas A&M - SEAK Lab
 ======================================================
 
-Preliminary wrapper used for debugging purposes
+Wrapper for running DMAS simulations for the 3DCHESS project
 """
+
+def print_welcome(scenario_name) -> None:
+    os.system('cls' if os.name == 'nt' else 'clear')
+    out = "\n======================================================"
+    out += '\n   _____ ____        ________  __________________\n  |__  // __ \      / ____/ / / / ____/ ___/ ___/\n   /_ </ / / /_____/ /   / /_/ / __/  \__ \\__ \ \n ___/ / /_/ /_____/ /___/ __  / /___ ___/ /__/ / \n/____/_____/      \____/_/ /_/_____//____/____/ (v1.0)'
+    out += "\n======================================================"
+    out += '\n\tTexas A&M University - SEAK Lab ©'
+    out += "\n======================================================"
+    out += f"\nSCENARIO: {scenario_name}"
+    print(out)
+
+def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
+    """ Checks if the scenario has already been pre-computed or if relevant changes have been made """
+
+    with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
+        # check if data has been previously calculated
+        if os.path.exists(data_dir + 'MissionSpecs.json'):
+            with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
+                scenario_dict : dict = json.load(scenario_specs)
+                mission_dict : dict = json.load(mission_specs)
+
+                scenario_dict.pop('settings')
+                mission_dict.pop('settings')
+
+                if (
+                       scenario_dict['epoch'] != mission_dict['epoch']
+                    or scenario_dict['duration'] != mission_dict['duration']
+                    or scenario_dict['groundStation'] != mission_dict['groundStation']
+                    or scenario_dict['grid'] != mission_dict['grid']
+                    ):
+                    return True
+                
+                if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
+                    if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
+                        return True
+                    
+                    for i in range(len(scenario_dict['spacecraft'])):
+                        scenario_sat : dict = scenario_dict['spacecraft'][i]
+                        mission_sat : dict = mission_dict['spacecraft'][i]
+                        
+                        if "planner" in scenario_sat:
+                            scenario_sat.pop("planner")
+                        if "science" in scenario_sat:
+                            scenario_sat.pop("science")
+                        if "notifier" in scenario_sat:
+                            scenario_sat.pop("notifier") 
+                        if "missionProfile" in scenario_sat:
+                            scenario_sat.pop("missionProfile")
+
+                        if "planner" in mission_sat:
+                            mission_sat.pop("planner")
+                        if "science" in mission_sat:
+                            mission_sat.pop("science")
+                        if "notifier" in mission_sat:
+                            mission_sat.pop("notifier") 
+                        if "missionProfile" in mission_sat:
+                            mission_sat.pop("missionProfile")
+
+                        if scenario_sat != mission_sat:
+                            return True
+
+    return False
+
+def precompute_orbitdata(scenario_name) -> str:
+    """
+    Pre-calculates coverage and position data for a given scenario
+    """
+    
+    scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
+    data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
+   
+    changes_to_scenario = check_changes_to_scenario(scenario_dir, data_dir)
+
+    if not os.path.exists(data_dir):
+        # if directory does not exists, create it
+        os.mkdir(data_dir)
+        changes_to_scenario = True
+
+    if not changes_to_scenario:
+        # if propagation data files already exist, load results
+        print('Orbit data found!')
+    else:
+        # if propagation data files do not exist, propagate and then load results
+        if changes_to_scenario:
+            print('Existing orbit data does not match scenario.')
+        else:
+            print('Orbit data not found.')
+
+        # print('Clearing \'orbitdata\' directory...')    
+        # clear files if they exist
+        if os.path.exists(data_dir):
+            for f in os.listdir(data_dir):
+                if os.path.isdir(os.path.join(data_dir, f)):
+                    for h in os.listdir(data_dir + f):
+                            os.remove(os.path.join(data_dir, f, h))
+                    os.rmdir(data_dir + f)
+                else:
+                    os.remove(os.path.join(data_dir, f)) 
+        # print('\'orbitddata\' cleared!')
+
+        with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
+            # load json file as dictionary
+            mission_dict : dict = json.load(scenario_specs)
+
+            # set output directory to orbit data directory
+            if mission_dict.get("settings", None) is not None:
+                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+            else:
+                mission_dict["settings"] = {}
+                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+
+            # propagate data and save to orbit data directory
+            print("Propagating orbits...")
+            mission : Mission = Mission.from_json(mission_dict)  
+            mission.execute()                
+            print("Propagation done!")
+
+            # save specifications of propagation in the orbit data directory
+            with open(data_dir +'MissionSpecs.json', 'w') as mission_specs:
+                mission_specs.write(json.dumps(mission_dict, indent=4))
+
+    return data_dir
+
 def agent_factory(  scenario_name : str, 
                     scenario_path : str,
                     results_path : str,
@@ -201,6 +324,8 @@ def agent_factory(  scenario_name : str,
 
 
 def main(   scenario_name : str, 
+            scenario_path : str,
+            orbitdata_dir : str,
             plot_results : bool = False, 
             save_plot : bool = False, 
             level : int = logging.WARNING
@@ -208,17 +333,13 @@ def main(   scenario_name : str,
     """
     Runs Simulation 
     """
-    # terminal welcome message
-    print_welcome(scenario_name)
-
     # create results directory
-    results_path = setup_results_directory(scenario_name)
+    results_path = setup_results_directory(scenario_path)
 
-    # select unsused port
+    # select unsused ports
     port = random.randint(5555, 9999)
     
     # load scenario json file
-    scenario_path = f"{scenario_name}" if "./scenarios/" in scenario_name else f'./scenarios/{scenario_name}/'
     scenario_file = open(scenario_path + '/MissionSpecs.json', 'r')
     scenario_dict : dict = json.load(scenario_file)
     scenario_file.close()
@@ -239,9 +360,6 @@ def main(   scenario_name : str,
     if gstation_dict:
         for gstation in gstation_dict:
             agent_names.append(gstation['name'])
-
-    # precompute orbit data
-    orbitdata_dir = precompute_orbitdata(scenario_name) if spacecraft_dict is not None else None
 
     # read logger level
     if isinstance(settings_dict, dict):
@@ -385,25 +503,6 @@ def main(   scenario_name : str,
     scenario_config_dict : dict = scenario_dict['scenario']
     env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
     events_path = scenario_dict['scenario'].get('eventsPath', None)
-    # env_network_config = NetworkConfig( manager.get_network_config().network_name,
-	# 										manager_address_map = {
-	# 												zmq.REQ: [f'tcp://localhost:{port}'],
-	# 												zmq.SUB: [f'tcp://localhost:{port+1}'],
-    #                                                 zmq.PUB: [f'tcp://localhost:{port+2}'],
-	# 												zmq.PUSH: [f'tcp://localhost:{port+3}']},
-	# 										external_address_map = {
-	# 												zmq.REP: [f'tcp://*:{port+4}'],
-	# 												zmq.PUB: [f'tcp://*:{port+5}']
-	# 										})
-    
-    # environment = SimulationEnvironment(scenario_path, 
-    #                                     results_path, 
-    #                                     env_network_config, 
-    #                                     manager_network_config,
-    #                                     utility_function[env_utility_function],
-    #                                     measurement_reqs, 
-    #                                     events_path,
-    #                                     logger=logger)
     agent_port = port + 6
     
     # Create agents 
@@ -549,6 +648,8 @@ def main(   scenario_name : str,
                 csvwriter.writerow(row_out)
 
     if plot_results:
+        raise NotImplementedError("Visualization integration with `satplan` not yet supported.")
+        
         visualizer = Visualizer(scenario_path+'/',
                                 results_path+'/',
                                 start_date,
@@ -558,6 +659,9 @@ def main(   scenario_name : str,
                                 )
         visualizer.process_mission_data()
         visualizer.plot_mission()
+        
+        if save_plot:
+            raise NotImplementedError("Saving of `satplan` animations not yet supported.")
     
     print(f'\nSIMULATION FOR SCENARIO `{scenario_name}` DONE')
 
@@ -581,9 +685,15 @@ if __name__ == "__main__":
     parser.add_argument(    '-s', 
                             '--save-plot',
                             action='store_true',
-                            help='creates animated plot of the simulation',
+                            help='saves animated plot of the simulation as a gif',
                             required=False,
-                            default=False)     
+                            default=False) 
+    parser.add_argument(    '-d', 
+                            '--no-graphic',
+                            action='store_true',
+                            help='does not draws ascii welcome screen graphic',
+                            required=False,
+                            default=False)  
     parser.add_argument(    '-l', 
                             '--level',
                             choices=['DEBUG', 'INFO', 'WARNING', 'CRITICAL', 'ERROR'],
@@ -597,6 +707,7 @@ if __name__ == "__main__":
     scenario_name = args.scenario_name
     plot_results = args.plot_result
     save_plot = args.save_plot
+    no_grapgic = args.no_graphic
 
     levels = {  'DEBUG' : logging.DEBUG, 
                 'INFO' : logging.INFO, 
@@ -606,4 +717,18 @@ if __name__ == "__main__":
             }
     level = levels.get(args.level)
 
-    main(scenario_name, plot_results, save_plot, levels)
+    # terminal welcome message
+    if not no_grapgic:
+        print_welcome(scenario_name)
+    
+    # load scenario json file
+    scenario_path = f"{scenario_name}" if "./scenarios/" in scenario_name else f'./scenarios/{scenario_name}/'
+    scenario_file = open(scenario_path + '/MissionSpecs.json', 'r')
+    scenario_dict : dict = json.load(scenario_file)
+    scenario_file.close()
+
+    # precompute orbit data
+    spacecraft_dict = scenario_dict.get('spacecraft', None)
+    orbitdata_dir = precompute_orbitdata(scenario_name) if spacecraft_dict is not None else None
+ 
+    main(scenario_name, scenario_path, orbitdata_dir, plot_results, save_plot, levels)

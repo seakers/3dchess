@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-import logging
 import math
 import pandas as pd
 
+from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 from nodes.orbitdata import OrbitData
@@ -13,6 +13,10 @@ class AbstractReplanner(ABC):
     """
     # Replanner    
     """
+    def __init__(self) -> None:
+        super().__init__()
+        self.stats = {}
+
     @abstractmethod 
     def needs_replanning(   self, 
                             state : AbstractAgentState,
@@ -47,6 +51,7 @@ class AbstractReplanner(ABC):
         """
         pass
 
+    @runtime_tracker
     def _plan_from_path(    self, 
                             state : SimulationAgentState, 
                             path : list,
@@ -212,6 +217,7 @@ class AbstractReplanner(ABC):
         
         return plan
 
+    @runtime_tracker
     def _get_available_requests( self, 
                                 state : SimulationAgentState, 
                                 requests : list,
@@ -240,6 +246,7 @@ class AbstractReplanner(ABC):
 
         return available
 
+    @runtime_tracker
     def __can_bid(self, 
                 state : SimulationAgentState, 
                 req : MeasurementRequest, 
@@ -293,6 +300,7 @@ class FIFOReplanner(AbstractReplanner):
         self.known_reqs = []
         self.prev_path = None
 
+    @runtime_tracker
     def needs_replanning(   self, 
                             state : SimulationAgentState,
                             current_plan : list,
@@ -329,6 +337,7 @@ class FIFOReplanner(AbstractReplanner):
 
         return state.t >= t_plan + planning_horizon or len(unscheduled_reqs) > 0
    
+    @runtime_tracker
     def _update_known_requests( self, 
                                 current_plan : list,
                                 incoming_reqs : list,
@@ -364,6 +373,7 @@ class FIFOReplanner(AbstractReplanner):
 
         return new_reqs
     
+    @runtime_tracker
     def __update_performed_requests(self, performed_actions : list) -> None:
         """ Updates an internal list of requests performed by the parent agent """
         for action in performed_actions:
@@ -374,6 +384,7 @@ class FIFOReplanner(AbstractReplanner):
 
         return
 
+    @runtime_tracker
     def __update_access_times(  self,
                                 state : AbstractAgentState,
                                 new_reqs : list,
