@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import Any, Callable
-from chess3d.nodes.planning.preplanners import FIFOPreplanner, IdlePlanner
+from nodes.planning.preplanners import FIFOPreplanner, IdlePlanner
 from nodes.planning.planners import PlanningModule
 from nodes.science.reqs import *
 from dmas.network import NetworkConfig

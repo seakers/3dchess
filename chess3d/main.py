@@ -1,3 +1,4 @@
+import argparse
 import csv
 from datetime import datetime, timedelta
 import json
@@ -199,14 +200,14 @@ def agent_factory(  scenario_name : str,
         raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")
 
 
-if __name__ == "__main__":
-    
-    # read system arguments
-    scenario_name = sys.argv[1]
-    plot_results = True
-    save_plot = False
-    level = logging.WARNING
-
+def main(   scenario_name : str, 
+            plot_results : bool = False, 
+            save_plot : bool = False, 
+            level : int = logging.WARNING
+        ) -> None:
+    """
+    Runs Simulation 
+    """
     # terminal welcome message
     print_welcome(scenario_name)
 
@@ -547,14 +548,62 @@ if __name__ == "__main__":
                 row_out = [obs["start"],obs["end"],obs["location"]["lat"],obs["location"]["lon"]]
                 csvwriter.writerow(row_out)
 
-    # visualizer = Visualizer(scenario_path+'/',
-    #                         results_path+'/',
-    #                         start_date,
-    #                         dt,
-    #                         scenario_dict.get("duration"),
-    #                         orbitdata_dir+'/grid0.csv'
-    #                         )
-    # visualizer.process_mission_data()
-    # visualizer.plot_mission()
+    if plot_results:
+        visualizer = Visualizer(scenario_path+'/',
+                                results_path+'/',
+                                start_date,
+                                dt,
+                                scenario_dict.get("duration"),
+                                orbitdata_dir+'/grid0.csv'
+                                )
+        visualizer.process_mission_data()
+        visualizer.plot_mission()
     
-    print('\nSIMULATION DONE')
+    print(f'\nSIMULATION FOR SCENARIO `{scenario_name}` DONE')
+
+if __name__ == "__main__":
+    
+    # read system arguments
+    parser = argparse.ArgumentParser(
+                    prog='DMAS for 3D-CHESS',
+                    description='Simulates an autonomous Earth-Observing satellite mission.',
+                    epilog='- TAMU')
+
+    parser.add_argument(    'scenario_name', 
+                            help='name of the scenario being simulated',
+                            type=str)
+    parser.add_argument(    '-p', 
+                            '--plot-result',
+                            action='store_true',
+                            help='creates animated plot of the simulation',
+                            required=False,
+                            default=False)    
+    parser.add_argument(    '-s', 
+                            '--save-plot',
+                            action='store_true',
+                            help='creates animated plot of the simulation',
+                            required=False,
+                            default=False)     
+    parser.add_argument(    '-l', 
+                            '--level',
+                            choices=['DEBUG', 'INFO', 'WARNING', 'CRITICAL', 'ERROR'],
+                            default='WARNING',
+                            help='logging level',
+                            required=False,
+                            type=str)  
+                    
+    args = parser.parse_args()
+    
+    scenario_name = args.scenario_name
+    plot_results = args.plot_result
+    save_plot = args.save_plot
+
+    levels = {  'DEBUG' : logging.DEBUG, 
+                'INFO' : logging.INFO, 
+                'WARNING' : logging.WARNING, 
+                'CRITICAL' : logging.CRITICAL, 
+                'ERROR' : logging.ERROR
+            }
+    level = levels.get(args.level)
+
+    main(scenario_name, plot_results, save_plot, levels)

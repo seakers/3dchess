@@ -11,7 +11,10 @@
             "program": "${file}",
             "cwd": "${fileDirname}",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "args": [
+                "scenario2_single_sat",
+            ]
         },
         {
             "name": "VISUALIZER TESTER - Plane",
@@ -23,11 +26,7 @@
             "cwd": "${workspaceRoot}/chess3d",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": [
-                "acbba_test_uav",
-                "plane"
-            ]
+            }
         },
         {
             "name": "VISUALIZER TESTER - Earth",

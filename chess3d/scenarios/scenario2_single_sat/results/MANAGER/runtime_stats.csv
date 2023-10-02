@@ -1,5 +1,0 @@
-routine,t_avg,t_std,t_med,n
-ENVIRONMENT_wait,-1.0,0.0,-1.0,0
-img_0_wait,0.491,2.118,0.037,343
-clock_wait,0.493,2.117,0.04,343
-sim_runtime,169.028,0.0,169.028,1
