@@ -451,6 +451,7 @@ class SimulationEnvironment(EnvironmentNode):
                         
                         if req == event_req:
                             n_events_obs += 1
+                            break
 
             else:
                 n_events = 0

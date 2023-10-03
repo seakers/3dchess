@@ -308,7 +308,8 @@ class AbstractPreplanner(ABC):
 
                 t_maneuver_start = prev_state.t
                 th_f = prev_state.calc_off_nadir_agle(measurement_req)
-                t_maneuver_end = t_maneuver_start + abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
+                dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
+                t_maneuver_end = t_maneuver_start + dt
 
                 if abs(t_maneuver_start - t_maneuver_end) > 0.0:
                     maneuver_action = ManeuverAction([th_f, 0, 0], t_maneuver_start, t_maneuver_end)
@@ -334,6 +335,8 @@ class AbstractPreplanner(ABC):
                 #     # unpheasible path
                 #     # self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
                 #     continue
+
+                # if t_img < t_move_start:
 
                 t_move_end = t_img
                 future_state : SatelliteAgentState = state.propagate(t_move_end)
@@ -368,6 +371,10 @@ class AbstractPreplanner(ABC):
                     t_img_end = dt * math.ceil((t_img_start + measurement_req.duration)/dt)
             
             if abs(t_move_start - t_move_end) >= 1e-3:
+                if t_move_start > t_move_end:
+                    continue
+                    x = 1
+
                 move_action = TravelAction(final_pos, t_move_start, t_move_end)
                 plan_i.append(move_action)
             
