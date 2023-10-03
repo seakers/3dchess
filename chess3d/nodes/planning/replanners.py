@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import logging
 import math
 import pandas as pd
 
@@ -13,20 +14,28 @@ class AbstractReplanner(ABC):
     """
     # Replanner    
     """
-    def __init__(self) -> None:
+    def __init__(   self, 
+                    logger: logging.Logger = None
+                ) -> None:
         super().__init__()
+
+        self.performed_requests = []
+        self.access_times = {}
+        self.known_reqs = []
+        
         self.stats = {}
+        self._logger = logger
 
     @abstractmethod 
     def needs_replanning(   self, 
-                            state : AbstractAgentState,
+                            state : SimulationAgentState,
                             current_plan : list,
                             performed_actions : list,
                             incoming_reqs : list,
                             generated_reqs : list,
                             misc_messages : list,
                             t_plan : float,
-                            planning_horizon : float,
+                            planning_horizon : float = np.Inf,
                             orbitdata : OrbitData = None
                         ) -> bool:
         """
@@ -52,6 +61,22 @@ class AbstractReplanner(ABC):
         pass
 
     @runtime_tracker
+    def _get_available_requests(self) -> list:
+        """ Returns a list of known requests that can be performed within the current planning horizon """
+
+        reqs = {req.id : req for req in self.known_reqs}
+        available_reqs = []
+
+        for req_id in self.access_times:
+            for subtask_index in range(len(self.access_times[req_id])):
+                t_arrivals : list = self.access_times[req_id][subtask_index]
+
+                if len(t_arrivals) > 0:
+                    available_reqs.append((reqs[req_id], subtask_index))
+
+        return available_reqs
+
+    @runtime_tracker
     def _plan_from_path(    self, 
                             state : SimulationAgentState, 
                             path : list,
@@ -68,15 +93,9 @@ class AbstractReplanner(ABC):
             - state (:obj:`SimulationAgentState`): state of the agent at the start of the path
             - path (`list`): list of tuples indicating the sequence of observations to be performed and time of observation
         """
-        plan = []
-
-        # if no requests in the path, wait indefinitely
-        if len(path) == 0:
-            t_0 = t_init
-            t_f = np.Inf
-            return [WaitForMessages(t_0, t_f)]
-
         # create appropriate actions for every measurement in the path
+        plan = []
+        
         for i in range(len(path)):
             plan_i = []
 
@@ -217,88 +236,7 @@ class AbstractReplanner(ABC):
         
         return plan
 
-    @runtime_tracker
-    def _get_available_requests( self, 
-                                state : SimulationAgentState, 
-                                requests : list,
-                                orbitdata : OrbitData,
-                                t_plan : float,
-                                planning_horizon : float = np.Inf
-                                ) -> list:
-        """
-        Checks if there are any requests available to be performed
-
-        ### Returns:
-            - list containing all available and bidable tasks to be performed by the parent agent
-        """
-        available = []
-        for req in requests:
-            req : MeasurementRequest
-            for subtask_index in range(len(req.measurements)):
-                if self.__can_bid(  state, 
-                                    req, 
-                                    subtask_index, 
-                                    orbitdata, 
-                                    t_plan,
-                                    planning_horizon
-                                ):
-                    available.append((req, subtask_index))
-
-        return available
-
-    @runtime_tracker
-    def __can_bid(self, 
-                state : SimulationAgentState, 
-                req : MeasurementRequest, 
-                subtask_index : int, 
-                orbitdata : OrbitData,
-                t_plan : float,
-                planning_horizon : float = np.Inf
-                ) -> bool:
-        """
-        Checks if an agent has the ability to bid on a measurement task
-        """
-        # check planning horizon
-        if state.t + planning_horizon < req.t_start:
-            return False
-
-        # check capabilities - TODO: Replace with knowledge graph
-        main_measurement = req.measurements[subtask_index]
-        if main_measurement not in [instrument for instrument in state.payload]:
-            return False 
-
-        # check time constraints
-        ## Constraint 1: task must be able to be performed during or after the current time
-        if req.t_end < state.t:
-            return False
-
-        elif isinstance(req, GroundPointMeasurementRequest):
-            if isinstance(state, SatelliteAgentState):
-                # check if agent can see the request location
-                lat,lon,_ = req.lat_lon_pos
-                instrument = req.measurements[subtask_index]
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, req.t_start, req.t_end)
-                
-                if not df.empty:                
-                    times = df.get('time index')
-                    for time in times:
-                        time *= orbitdata.time_step 
-
-                        if state.t + planning_horizon < time:
-                            break
-
-                        return True
-                
-                return False
-        
-        return True
-
 class FIFOReplanner(AbstractReplanner):
-    def __init__(self):
-        self.performed_requests = []
-        self.access_times = {}
-        self.known_reqs = []
-        self.prev_path = None
 
     @runtime_tracker
     def needs_replanning(   self, 
@@ -331,11 +269,11 @@ class FIFOReplanner(AbstractReplanner):
         # check if incoming or generated measurement requests are already accounted for
         _, unscheduled_reqs = self._compare_requests(current_plan)
 
-        # replan if planning horizon has been reached or if there are requests to be scheduled
-        if state.t >= t_plan + planning_horizon or len(unscheduled_reqs) > 0:            
+        # replan if there are new requests to be scheduled
+        if len(unscheduled_reqs) > 0:            
             x = 1
 
-        return state.t >= t_plan + planning_horizon or len(unscheduled_reqs) > 0
+        return len(unscheduled_reqs) > 0
    
     @runtime_tracker
     def __update_known_requests( self, 
@@ -386,7 +324,7 @@ class FIFOReplanner(AbstractReplanner):
 
     @runtime_tracker
     def __update_access_times(  self,
-                                state : AbstractAgentState,
+                                state : SimulationAgentState,
                                 new_reqs : list,
                                 performed_actions : list,  
                                 t_plan : float,
@@ -395,31 +333,33 @@ class FIFOReplanner(AbstractReplanner):
         """
         Calculates and saves the access times of all known requests
         """
+        t_plan = t_plan if t_plan >= 0 else 0
+
         if state.t < t_plan + planning_horizon:
             # calculate new access times for new requests
             for req in new_reqs:
                 if req.id not in self.access_times:
                     self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
                     for subtask_index in range(len(req.measurements)):
-                        self.access_times[req.id][subtask_index] = self._calc_arrival_times(   state, 
-                                                                                                req,
-                                                                                                subtask_index, 
-                                                                                                t_plan, 
-                                                                                                planning_horizon, 
-                                                                                                orbitdata)
+                        self.access_times[req.id][subtask_index] = self._calc_arrival_times(state, 
+                                                                                            req,
+                                                                                            subtask_index, 
+                                                                                            t_plan, 
+                                                                                            planning_horizon, 
+                                                                                            orbitdata)
                             
             # update access times if a measurement was completed
-            for action in performed_actions:
-                if isinstance(action, MeasurementAction):
-                    req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                    if action.status == action.COMPLETED:
-                        self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
+            for req in self.performed_requests:
+                req : MeasurementRequest
+                self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
 
             # update latest available access time for each known request
             for req_id in self.access_times:
                 for t_arrivals in self.access_times[req_id]:
+                    t_arrivals : list
                     while len(t_arrivals) > 0 and t_arrivals[0] < state.t:
                         t_arrivals.pop(0)
+
         else:
             # recalculate access times for all known requests
             for req in self.known_reqs:
@@ -431,11 +371,10 @@ class FIFOReplanner(AbstractReplanner):
                                                                                             state.t,
                                                                                             planning_horizon, 
                                                                                             orbitdata)
-
-        # for req_id in self.access_times:
-        #     print(req_id.split('-')[0], self.access_times[req_id])
-
-        return
+            # update access times if a measurement was completed
+            for req in self.performed_requests:
+                req : MeasurementRequest
+                self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
     
     def _calc_arrival_times(self, 
                             state : SimulationAgentState, 
@@ -527,32 +466,26 @@ class FIFOReplanner(AbstractReplanner):
         
         # initialize plan
         path = []         
-        
-        # # compile requests
-        # scheduled_reqs, unscheduled_reqs = self._compare_requests(current_plan)            
-        # available_reqs : list = self._get_available_requests( state, self.known_reqs, orbitdata, t_plan, planning_horizon )
+        available_reqs : list = self._get_available_requests()
 
         if isinstance(state, SatelliteAgentState):
-            # Generates a plan for observing GPs on a first-come first-served basis            
-            path = []
-            reqs = {req.id : req for req in self.known_reqs}
+            # Generates a plan for observing GPs on a first-come first-served basis
+            reqs = {req.id : req for req, _ in available_reqs}
 
-            for req_id in self.access_times:
-                for subtask_index in range(len(self.access_times[req_id])):
-                    t_arrivals : list = self.access_times[req_id][subtask_index]
+            for req, subtask_index in available_reqs:
+                t_arrivals : list = self.access_times[req.id][subtask_index]
 
-                    if len(t_arrivals) > 0:
-                        t_img = t_arrivals.pop(0)
-                        req : MeasurementRequest = reqs[req_id]
-                        path.append((req, subtask_index, t_img, req.s_max/len(req.measurements)))
+                if len(t_arrivals) > 0:
+                    t_img = t_arrivals.pop(0)
+                    req : MeasurementRequest = reqs[req.id]
+                    path.append((req, subtask_index, t_img, req.s_max/len(req.measurements)))
 
             path.sort(key=lambda a: a[2])
 
-            out = '\n'
-            for req, subtask_index, t_img, s in path:
-                out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
+            # out = '\n'
+            # for req, subtask_index, t_img, s in path:
+            #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
             # print(out)
-            x = 1
 
             while True:
                 
@@ -582,21 +515,27 @@ class FIFOReplanner(AbstractReplanner):
                 if conflict_free:
                     break
                     
-        out = '\n'
-        for req, subtask_index, t_img, s in path:
-            out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-        # print(out)
+            # out = '\n'
+            # for req, subtask_index, t_img, s in path:
+            #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
+            # print(out)
 
-        # generate plan from path
-        plan = self._plan_from_path(state, path, orbitdata, state.t, clock_config)
+            # generate plan from path
+            plan = self._plan_from_path(state, path, orbitdata, t_plan, clock_config)
 
-        # wait for next planning horizon 
-        if len(plan) > 0 and plan[-1].t_end < state.t + planning_horizon:
-            plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
+            # wait for next planning horizon 
+            if len(plan) > 0:
+                if state.t >= t_plan + planning_horizon:
+                    plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
+                elif plan[-1].t_end < t_plan + planning_horizon:
+                    plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
+            else:
+                plan.append(WaitForMessages(state.t, state.t + planning_horizon))
+
+            self.prev_path = [req for req, _, __, ___, in path]
+
+            return plan if len(plan) >= len(current_plan) else current_plan
+        
         else:
-            plan.append(WaitForMessages(state.t, state.t + planning_horizon))
-
-        self.prev_path = [req for req, _, __, ___, in path]
-            
-        return plan
+            raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')
     

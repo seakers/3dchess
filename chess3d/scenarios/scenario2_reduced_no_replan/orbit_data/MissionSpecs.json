@@ -100,11 +100,13 @@
                     "ta": 0.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -195,11 +197,13 @@
                     "ta": 120.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -290,11 +294,13 @@
                     "ta": 240.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -385,11 +391,13 @@
                     "ta": 40.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -480,11 +488,13 @@
                     "ta": 160.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -575,11 +585,13 @@
                     "ta": 280.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -670,11 +682,13 @@
                     "ta": 80.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -765,11 +779,13 @@
                     "ta": 200.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -860,55 +876,20 @@
                     "ta": 320.0
                 }
             },
-            "planner": {
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
-                "utility": "LINEAR"
+            "planner" : {
+                "horizon" : 360000,
+                "preplanner" : "FIFO",
+                
+                "utility" : "LINEAR"
             },
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
         }
     ],
     "groundStation": [
-        {
-            "@id": "gs1",
-            "name": "Svalbard",
-            "latitude": 78.23083333333334,
-            "longitude": 15.389444444444443,
-            "altitude": 0,
-            "minimumElevation": 7,
-            "antenna": {
-                "bands": [
-                    "s-band",
-                    "x-band"
-                ],
-                "frequency": 2120000000000.0,
-                "eirp": 63.5,
-                "gain": 44.6,
-                "diameter": 10.3,
-                "power": 10
-            }
-        },
-        {
-            "@id": "gs2",
-            "name": "NEN2",
-            "latitude": 0,
-            "longitude": 45,
-            "altitude": 0,
-            "minimumElevation": 7,
-            "antenna": {
-                "bands": [
-                    "s-band",
-                    "x-band"
-                ],
-                "frequency": 2120000000000.0,
-                "eirp": 63.5,
-                "gain": 44.6,
-                "diameter": 10.3,
-                "power": 10
-            }
-        }
+        
     ],
     "grid": [
         {
@@ -916,16 +897,15 @@
             "covGridFilePath": "./scenarios/scenario2_reduced/resources/lake_event_points.csv"
         }
     ],
-    "scenario": {
-        "@type": "PREDEF",
-        "initialRequestsPath": "./scenarios/scenario2_reduced/resources/initial_requests_merged.csv",
-        "eventsPath": "./scenarios/scenario2_reduced/resources/all_events_formatted.csv",
-        "duration": 30.0,
-        "connectivity": "FULL",
-        "utility": "LINEAR"
-    },
+    "scenario": {   
+                    "@type": "PREDEF", 
+                    "initialRequestsPath" : "./scenarios/scenario2_reduced/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/scenario2_reduced/resources/all_events_formatted.csv", 
+                    "duration": 30.0, 
+                    "connectivity" : "FULL", 
+                    "utility" : "LINEAR"
+                },
     "settings": {
-        "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/scenario2_reduced//orbit_data/"
+        "coverageType": "GRID COVERAGE"
     }
 }

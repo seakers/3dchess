@@ -6,14 +6,12 @@ import pandas as pd
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from nodes.states import AbstractAgentState
 from nodes.orbitdata import OrbitData
 from nodes.states import *
 from nodes.actions import *
 from nodes.science.reqs import *
 from nodes.states import SimulationAgentState
 from nodes.orbitdata import OrbitData
-from nodes.states import AbstractAgentState
 
 class AbstractPreplanner(ABC):
     """
@@ -69,7 +67,8 @@ class AbstractPreplanner(ABC):
         reqs = [req for req in incoming_reqs]
         reqs.extend(generated_reqs)
 
-        new_reqs = list(filter(lambda req : req not in self.known_reqs, reqs))
+        new_reqs = list(filter(lambda req : req not in self.known_reqs 
+                                            and req.s_max > 0, reqs))
 
         return new_reqs
 
@@ -101,11 +100,11 @@ class AbstractPreplanner(ABC):
             # calculate new access times for new requests
             for req in new_reqs:
                 if req.id not in self.access_times:
-                    self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
-                    for subtask_index in range(len(req.measurements)):
-                        self.access_times[req.id][subtask_index] = self._calc_arrival_times(state, 
+                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+                    for instrument in self.access_times[req.id]:
+                        self.access_times[req.id][instrument] = self._calc_arrival_times(   state, 
                                                                                             req,
-                                                                                            subtask_index, 
+                                                                                            instrument, 
                                                                                             t_plan, 
                                                                                             planning_horizon, 
                                                                                             orbitdata)
@@ -115,32 +114,39 @@ class AbstractPreplanner(ABC):
                 if isinstance(action, MeasurementAction):
                     req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
                     if action.status == action.COMPLETED:
-                        self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
+                        self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
 
             # update latest available access time for each known request
             for req_id in self.access_times:
-                for t_arrivals in self.access_times[req_id]:
-                    t_arrivals : list
+                for instrument in self.access_times[req_id]:
+                    t_arrivals : list = self.access_times[req_id][instrument]
                     while len(t_arrivals) > 0 and t_arrivals[0] < state.t:
                         t_arrivals.pop(0)
 
         else:
             # recalculate access times for all known requests
-            for req in self.known_reqs:
-                self.access_times[req.id] = [[] for _ in range(len(req.measurements))]
-                for subtask_index in range(len(req.measurements)):
-                    self.access_times[req.id][subtask_index] = self._calc_arrival_times(    state, 
-                                                                                            req, 
-                                                                                            subtask_index,
-                                                                                            state.t,
-                                                                                            planning_horizon, 
-                                                                                            orbitdata)
+            unperformed_reqs = list(filter(lambda req : req not in self.performed_requests, self.known_reqs))
+
+            for req in unperformed_reqs:
+                self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+                for instrument in self.access_times[req.id]:
+                    self.access_times[req.id][instrument] = self._calc_arrival_times(   state, 
+                                                                                        req, 
+                                                                                        instrument,
+                                                                                        state.t,
+                                                                                        planning_horizon, 
+                                                                                        orbitdata)
+            
+            # update access times if a measurement was completed
+            for req in self.performed_requests:
+                req : MeasurementRequest
+                self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
     
     @runtime_tracker
     def _calc_arrival_times(self, 
                             state : SimulationAgentState, 
                             req : MeasurementRequest, 
-                            subtask_index : int,
+                            instrument : str,
                             t_prev : Union[int, float],
                             planning_horizon : Union[int, float], 
                             orbitdata : OrbitData) -> float:
@@ -152,7 +158,6 @@ class AbstractPreplanner(ABC):
             if isinstance(state, SatelliteAgentState):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
-                instrument = req.measurements[subtask_index]
                 t_end = t_prev + planning_horizon
                 df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_prev, t_end)
 
@@ -202,6 +207,27 @@ class AbstractPreplanner(ABC):
         """
 
     @runtime_tracker
+    def _get_available_requests(self) -> list:
+        """ Returns a list of known requests that can be performed within the current planning horizon """
+
+        reqs = {req.id : req for req in self.known_reqs}
+        available_reqs = []
+
+        for req_id in self.access_times:
+            req : MeasurementRequest = reqs[req_id]
+            for instrument in self.access_times[req_id]:
+                t_arrivals : list = self.access_times[req_id][instrument]
+
+                if len(t_arrivals) > 0:
+                    for subtask_index in range(len(req.measurement_groups)):
+                        main_instrument, _ = req.measurement_groups[subtask_index]
+                        if main_instrument == instrument:
+                            available_reqs.append((reqs[req_id], subtask_index))
+                            break
+
+        return available_reqs
+
+    @runtime_tracker
     def _plan_from_path(    self, 
                             state : SimulationAgentState, 
                             path : list,
@@ -220,7 +246,7 @@ class AbstractPreplanner(ABC):
         """
         # create appropriate actions for every measurement in the path
         plan = []
-        
+
         for i in range(len(path)):
             plan_i = []
 
@@ -293,21 +319,23 @@ class AbstractPreplanner(ABC):
             # move to target
             t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
             if isinstance(state, SatelliteAgentState):
-                lat, lon, _ = measurement_req.lat_lon_pos
-                instrument = measurement_req.measurements[subtask_index]
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_move_start)
+                # lat, lon, _ = measurement_req.lat_lon_pos
+                # instrument, _ = measurement_req.measurement_groups[subtask_index]  
+                # t_arrivals = self.access_times[measurement_req.id][instrument]
                 
-                t_move_end = None
-                for _, row in df.iterrows():
-                    if row['time index'] * orbitdata.time_step >= t_img:
-                        t_move_end = row['time index'] * orbitdata.time_step
-                        break
+                # t_move_end = None
+                # # for _, row in df.iterrows():
+                # for t_arrival in t_arrivals:
+                #     if t_arrival >= t_img:
+                #         t_move_end = t_arrival
+                #         break
 
-                if t_move_end is None:
-                    # unpheasible path
-                    # self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
-                    continue
+                # if t_move_end is None:
+                #     # unpheasible path
+                #     # self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
+                #     continue
 
+                t_move_end = t_img
                 future_state : SatelliteAgentState = state.propagate(t_move_end)
                 final_pos = future_state.pos
 
@@ -360,22 +388,6 @@ class AbstractPreplanner(ABC):
             plan.extend(plan_i)
         
         return plan
-    
-    @runtime_tracker
-    def _get_available_requests(self) -> list:
-        """ Returns a list of known requests that can be performed within the current planning horizon """
-
-        reqs = {req.id : req for req in self.known_reqs}
-        available_reqs = []
-
-        for req_id in self.access_times:
-            for subtask_index in range(len(self.access_times[req_id])):
-                t_arrivals : list = self.access_times[req_id][subtask_index]
-
-                if len(t_arrivals) > 0:
-                    available_reqs.append((reqs[req_id], subtask_index))
-
-        return available_reqs
 
 class IdlePlanner(AbstractPreplanner):
     @runtime_tracker
@@ -385,7 +397,6 @@ class IdlePlanner(AbstractPreplanner):
         return [IdleAction(0.0, np.Inf)]
 
 class FIFOPreplanner(AbstractPreplanner):
-
     @runtime_tracker
     def initialize_plan(self, 
                         state : SimulationAgentState,
@@ -408,7 +419,8 @@ class FIFOPreplanner(AbstractPreplanner):
             reqs = {req.id : req for req, _ in available_reqs}
 
             for req, subtask_index in available_reqs:
-                t_arrivals : list = self.access_times[req.id][subtask_index]
+                instrument, _ = req.measurement_groups[subtask_index]  
+                t_arrivals : list = self.access_times[req.id][instrument]
 
                 if len(t_arrivals) > 0:
                     t_img = t_arrivals.pop(0)
@@ -425,6 +437,8 @@ class FIFOPreplanner(AbstractPreplanner):
             while True:
                 
                 conflict_free = True
+                i_remove = None
+
                 for i in range(len(path) - 1):
                     j = i + 1
                     req_i, _, t_i, __ = path[i]
@@ -434,18 +448,25 @@ class FIFOPreplanner(AbstractPreplanner):
                     th_j = state.calc_off_nadir_agle(req_j)
 
                     if abs(th_i - th_j) / state.max_slew_rate > t_j - t_i:
-                        t_arrivals : list = self.access_times[req_j.id][subtask_index_j]
+                        instrument, _ = req.measurement_groups[subtask_index_j]  
+                        t_arrivals : list = self.access_times[req_j.id][instrument]
                         if len(t_arrivals) > 0:
+                            # pick next arrival time
                             t_img = t_arrivals.pop(0)
 
                             path[j] = (req_j, subtask_index_j, t_img, s_j)
                             path.sort(key=lambda a: a[2])
                         else:
-                            #TODO remove request from path
-                            raise Exception("Whoops. See Plan Initializer.")
-                            path.pop(j) 
+                            # remove request from path
+                            i_remove = j
+                            conflict_free = False
+                            break
+                            # raise Exception("Whoops. See Plan Initializer.")
                         conflict_free = False
                         break
+                
+                if i_remove is not None:
+                    path.pop(j) 
 
                 if conflict_free:
                     break
@@ -461,12 +482,11 @@ class FIFOPreplanner(AbstractPreplanner):
             # wait for next planning horizon 
             if len(plan) > 0:
                 if state.t >= t_plan + planning_horizon:
-                    if plan[-1].t_end > state.t + planning_horizon:
-                        x = 1
-
                     plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
                 elif plan[-1].t_end < t_plan + planning_horizon:
                     plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
+            else:
+                plan.append(WaitForMessages(state.t, state.t + planning_horizon))
 
             return plan
                 

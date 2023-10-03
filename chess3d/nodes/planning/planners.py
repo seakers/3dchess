@@ -67,10 +67,6 @@ class PlanningModule(InternalModule):
         
         self.plan_history = []
         self.stats = {
-                        "planning" : [],
-                        "preplanning" : [],
-                        "replanning" : [],
-                        "science_wait" : []
                     }
 
         self.t_plan = -1.0
@@ -469,7 +465,11 @@ class PlanningModule(InternalModule):
                                                 incoming_reqs,
                                                 generated_reqs,
                                                 misc_messages,
-                                                level)                   
+                                                level)   
+                    
+                    # --- FOR DEBUGGING PURPOSES ONLY: ---
+                    # self.__log_plan(plan, "PLAN", logging.WARNING)
+                    # -------------------------------------
 
                 # Check if reeplanning is needed
                 await self.agent_state_lock.acquire()
@@ -498,7 +498,10 @@ class PlanningModule(InternalModule):
                                                         incoming_reqs, 
                                                         generated_reqs, 
                                                         misc_messages
-                                                    )                    
+                                                    )     
+                    # --- FOR DEBUGGING PURPOSES ONLY: ---
+                    # self.__log_plan(plan, "PLAN", logging.WARNING)
+                    # -------------------------------------
 
                 # --- Execute plan ---
 
@@ -506,7 +509,6 @@ class PlanningModule(InternalModule):
                 plan_out = self._get_next_actions(plan, pending_actions, generated_reqs, self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(plan, "PLAN", logging.WARNING)
                 # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
@@ -638,16 +640,16 @@ class PlanningModule(InternalModule):
         # Modify current Plan      
         await self.agent_state_lock.acquire()
 
-        plan : list = self.replanner.replan(self.agent_state,
+        plan : list = self.replanner.replan(self.agent_state, 
                                             current_plan,
                                             performed_actions,
-                                            incoming_reqs,
+                                            incoming_reqs, 
                                             generated_reqs,
                                             misc_messages,
                                             self.t_plan,
-                                            self._clock_config,
                                             self.planning_horizon,
-                                            self.orbitdata)
+                                            self._clock_config,
+                                            self.orbitdata) 
         self.agent_state_lock.release()
 
         # update last time plan was updated
@@ -800,12 +802,12 @@ class PlanningModule(InternalModule):
         if isinstance(self.preplanner, AbstractPreplanner):
             for routine in self.preplanner.stats:
                 n = len(self.preplanner.stats[routine])
-                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
-                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
-                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.preplanner.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
 
                 line_data = [ 
-                                f"preplanner--{routine}",
+                                f"preplanner/{routine}",
                                 t_avg,
                                 t_std,
                                 t_median,
@@ -815,13 +817,13 @@ class PlanningModule(InternalModule):
 
         if isinstance(self.replanner, AbstractReplanner):
             for routine in self.replanner.stats:
-                n = len(self.preplanner.stats[routine])
-                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
-                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
-                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+                n = len(self.replanner.stats[routine])
+                t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.replanner.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
 
                 line_data = [ 
-                                f"replanner--{routine}",
+                                f"replanner/{routine}",
                                 t_avg,
                                 t_std,
                                 t_median,

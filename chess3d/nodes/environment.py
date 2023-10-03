@@ -245,7 +245,7 @@ class SimulationEnvironment(EnvironmentNode):
 
                         if measurement_req.s_max <= 0.0:
                             continue
-                        
+
                         initial_req_ids = [req.id for req in self.initial_reqs]
                         gen_req_ids = [req.id for req in self.measurement_reqs]
                         if (measurement_req.id not in gen_req_ids and measurement_req.id not in initial_req_ids):
@@ -403,9 +403,9 @@ class SimulationEnvironment(EnvironmentNode):
             if self.events_path is not None:
                 df = pd.read_csv(self.events_path)
                 n_events, _ = df.shape
-                n_events_detected = 0
-                n_events_obs = 0
+                
 
+                events_detected = []
                 for _, row in df.iterrows():
                     for req in self.measurement_reqs:
                         req : MeasurementRequest
@@ -432,11 +432,25 @@ class SimulationEnvironment(EnvironmentNode):
                                 if measurement not in measurements:
                                     measurement_not_found = True
                                     break
+                                
                             if measurement_not_found:
                                 continue
 
-                            n_events_detected += 1 
+                            # n_events_detected += 1 
+                            events_detected.append((req, row))
                             break
+
+                n_events_detected = len(events_detected)
+
+                n_events_obs = 0
+                for event_req, _ in events_detected:
+                    for msg in self.measurement_history:
+                        msg : MeasurementResultsRequestMessage
+                        measurement_action = MeasurementAction(**msg.measurement_action)
+                        req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
+                        
+                        if req == event_req:
+                            n_events_obs += 1
 
             else:
                 n_events = 0

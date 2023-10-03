@@ -1,5 +1,5 @@
 routine,t_avg,t_std,t_med,n
 ENVIRONMENT_wait,-1.0,0.0,-1.0,0
-img_0_wait,0.074,0.601,0.029,197
-clock_wait,0.075,0.601,0.03,197
-sim_runtime,14.757,0.0,14.757,1
+img_0_wait,0.341,0.952,0.029,211
+clock_wait,0.342,0.952,0.03,211
+sim_runtime,72.241,0.0,72.241,1
