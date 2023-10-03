@@ -102,6 +102,10 @@ class PlanningModule(InternalModule):
         self.agent_state_lock = asyncio.Lock()
         self.agent_state_updated = asyncio.Event()
 
+        # place all initial requests into requests inbox
+        for req in self.initial_reqs:
+            await self.req_inbox.put(req)
+
     async def live(self) -> None:
         """
         Performs two concurrent tasks:
@@ -439,6 +443,11 @@ class PlanningModule(InternalModule):
                 incoming_reqs, generated_reqs, misc_messages = await self._wait_for_messages()
                 
                 # --- Create plan ---
+                # Check if reeplanning is needed
+                await self.agent_state_lock.acquire()
+                agent_state = self.agent_state.copy()
+                self.agent_state_lock.release()
+
                 # check if plan has been initialized
                 if (self.preplanner is not None                                         # there is a preplanner assigned to this planner
                     and self.preplanner.needs_initialized_plan(                         # there is a need to construct a new plan
@@ -588,6 +597,7 @@ class PlanningModule(InternalModule):
                                                 generated_reqs,
                                                 misc_messages,
                                                 self.t_plan,
+                                                self._clock_config,
                                                 self.planning_horizon,
                                                 self.orbitdata
                                                 )
@@ -611,7 +621,7 @@ class PlanningModule(InternalModule):
         plan_copy = []
         for action in plan:
             plan_copy.append(action)
-        self.plan_history.append(plan_copy)
+        self.plan_history.append((self.t_plan, plan_copy))
 
         return plan
 
@@ -621,24 +631,23 @@ class PlanningModule(InternalModule):
                         performed_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
-                        incoming_misc : list,
+                        misc_messages : list,
                         level : int = logging.DEBUG
                         ) -> None:
         
         # Modify current Plan      
         await self.agent_state_lock.acquire()
 
-        plan : list = self.replanner.replan(    self.agent_state,
-                                                current_plan, 
-                                                performed_actions,
-                                                incoming_reqs,
-                                                generated_reqs,
-                                                incoming_misc,
-                                                self.t_plan,
-                                                self.planning_horizon,
-                                                self._clock_config,
-                                                self.orbitdata
-                                            )        
+        plan : list = self.replanner.replan(self.agent_state,
+                                            current_plan,
+                                            performed_actions,
+                                            incoming_reqs,
+                                            generated_reqs,
+                                            misc_messages,
+                                            self.t_plan,
+                                            self._clock_config,
+                                            self.planning_horizon,
+                                            self.orbitdata)
         self.agent_state_lock.release()
 
         # update last time plan was updated
@@ -648,7 +657,7 @@ class PlanningModule(InternalModule):
         plan_copy = []
         for action in plan:
             plan_copy.append(action)
-        self.plan_history.append(plan_copy)
+        self.plan_history.append((self.t_plan, plan_copy))
 
         return plan
     

@@ -314,7 +314,7 @@ class FIFOReplanner(AbstractReplanner):
                         ) -> bool:
         
         # update list of known requests
-        new_reqs : list = self._update_known_requests(  current_plan, 
+        new_reqs : list = self.__update_known_requests(  current_plan, 
                                                         incoming_reqs,
                                                         generated_reqs)
         
@@ -338,7 +338,7 @@ class FIFOReplanner(AbstractReplanner):
         return state.t >= t_plan + planning_horizon or len(unscheduled_reqs) > 0
    
     @runtime_tracker
-    def _update_known_requests( self, 
+    def __update_known_requests( self, 
                                 current_plan : list,
                                 incoming_reqs : list,
                                 generated_reqs : list
