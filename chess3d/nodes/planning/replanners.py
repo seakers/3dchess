@@ -19,6 +19,9 @@ class AbstractReplanner(ABC):
                 ) -> None:
         super().__init__()
 
+        self.t_plan = -1
+        self.t_next = np.Inf
+
         self.performed_requests = []
         self.access_times = {}
         self.known_reqs = []
@@ -211,7 +214,6 @@ class AbstractReplanner(ABC):
             if abs(t_move_start - t_move_end) >= 1e-3:
                 if t_move_start > t_move_end:
                     continue
-                    x = 1
 
                 move_action = TravelAction(final_pos, t_move_start, t_move_end)
                 plan_i.append(move_action)
@@ -345,11 +347,9 @@ class FIFOReplanner(AbstractReplanner):
                                                                                         orbitdata)
             
             # update access times if a measurement was completed
-            x = 1
             for req in self.performed_requests:
                 req : MeasurementRequest
                 self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-            x = 1  
 
         else:
             # calculate new access times for new requests
@@ -536,12 +536,13 @@ class FIFOReplanner(AbstractReplanner):
 
             # wait for next planning horizon 
             if len(plan) > 0:
-                if state.t >= t_plan + planning_horizon:
-                    plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
-                elif plan[-1].t_end < t_plan + planning_horizon:
-                    plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
+                # if state.t >= t_plan + planning_horizon:
+                    # plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
+                # if plan[-1].t_end < t_plan + planning_horizon:
+                    # plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
+                plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
             else:
-                plan.append(WaitForMessages(state.t, state.t + planning_horizon))
+                plan.append(WaitForMessages(state.t, t_plan + planning_horizon))
 
             return plan
                 

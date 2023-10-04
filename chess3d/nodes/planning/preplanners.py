@@ -22,7 +22,6 @@ class AbstractPreplanner(ABC):
                 ) -> None:
         super().__init__()
 
-        self.t_plan = -1
         self.t_next = np.Inf
 
         self.performed_requests = []
@@ -56,7 +55,7 @@ class AbstractPreplanner(ABC):
         self.__update_access_times(state, new_reqs, performed_actions, t_plan, planning_horizon, orbitdata)
         
         # check if plan needs to be inialized
-        return (self.t_plan < 0                    # simulation just started
+        return (t_plan < 0                    # simulation just started
                 or state.t >= self.t_next)    # planning horizon has been reached
 
     @runtime_tracker
@@ -498,8 +497,7 @@ class FIFOPreplanner(AbstractPreplanner):
             else:
                 plan.append(WaitForMessages(state.t, state.t + planning_horizon))
 
-            self.t_plan = state.t
-            self.t_next = self.t_plan + planning_horizon
+            self.t_next = state.t + planning_horizon
 
             return plan
                 
