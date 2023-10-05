@@ -414,7 +414,7 @@ class SimulationEnvironment(EnvironmentNode):
                         if (    
                                 abs(lat - row['lat [deg]']) <= 1e-2 and
                                 abs(lon - row['lon [deg]']) <= 1e-2 and
-                                abs(req.t_start - row['start time [s]']) <= 1e-2 and
+                                row['start time [s]'] <= req.t_start and
                                 abs(req.t_end - (row['start time [s]'] + row['duration [s]'])) <= 1e-2 and
                                 abs(req.s_max == row['severity']) <= 1e-2
                         ):
@@ -466,8 +466,7 @@ class SimulationEnvironment(EnvironmentNode):
             unique_observations = []
 
             measurement_reqs = [req.copy() for req in self.measurement_reqs]
-            for req in self.initial_reqs:
-                measurement_reqs.append(req.copy())
+            measurement_reqs.extend([req.copy() for req in self.initial_reqs])
 
             for req in measurement_reqs:
                 req_id : str = req.id
@@ -546,7 +545,10 @@ class SimulationEnvironment(EnvironmentNode):
                     req_end = req.t_end/coverage_data.time_step
                     grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
 
-                    df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index')
+                    df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index & `grid index` == @grid_index')
+
+                    # if not df.empty:
+                    #     print(df['time index'] * coverage_data.time_step)
 
                     for _, row in df.iterrows():
                         instrument : str = row['instrument']
@@ -570,16 +572,16 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_events', n_events],
                         ['n_events_detected', n_events_detected],
                         ['n_events_obs', n_events_obs],
+                        ['n_reqs_total', len(self.measurement_reqs) + len(self.initial_reqs)],
                         ['n_reqs_init', len(self.initial_reqs)],
                         ['n_reqs_gen', len(self.measurement_reqs)],
-                        ['n_reqs_total', len(self.measurement_reqs) + len(self.initial_reqs)],
-                        ['n_obs_max', n_obervations_max],
-                        ['n_obs_pos', n_obervations_pos],
-                        ['n_obs', len(self.measurement_history)],
+                        ['n_obs_unique_max', n_obervations_max],
+                        ['n_obs_unique_pos', n_obervations_pos],
                         ['n_obs_unique', len(unique_observations)],
-                        ['n_co_obs', len(co_observations)],
+                        ['n_obs_co', len(co_observations)],
+                        ['n_obs', len(self.measurement_history)],
                         ['u_max', max_utility], 
-                        ['u', utility_total],
+                        ['u_total', utility_total],
                         ['u_norm', utility_total/max_utility]
                     ]
 

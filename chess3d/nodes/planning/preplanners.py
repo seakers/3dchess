@@ -22,6 +22,7 @@ class AbstractPreplanner(ABC):
                 ) -> None:
         super().__init__()
 
+        self.t_plan = -1
         self.t_next = np.Inf
 
         self.performed_requests = []
@@ -52,7 +53,7 @@ class AbstractPreplanner(ABC):
         self.__update_performed_requests(performed_actions)
 
         # update access times 
-        self.__update_access_times(state, new_reqs, performed_actions, t_plan, planning_horizon, orbitdata)
+        self.__update_access_times(state, t_plan, planning_horizon, orbitdata)
         
         # check if plan needs to be inialized
         return (t_plan < 0                    # simulation just started
@@ -80,70 +81,44 @@ class AbstractPreplanner(ABC):
         for action in performed_actions:
             if isinstance(action, MeasurementAction):
                 req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                if action.status == action.COMPLETED and req not in self.performed_requests:
-                    self.performed_requests.append(req)
+                if action.status == action.COMPLETED and (req, action.instrument_name) not in self.performed_requests:
+                    self.performed_requests.append((req, action.instrument_name))
 
         return
 
     @runtime_tracker
     def __update_access_times(  self,
                                 state : SimulationAgentState,
-                                new_reqs : list,
-                                performed_actions : list,  
                                 t_plan : float,
                                 planning_horizon : float,
                                 orbitdata : OrbitData) -> None:
         """
         Calculates and saves the access times of all known requests
         """
-        t_plan = t_plan if t_plan >= 0 else 0
-
-        if state.t < self.t_next:
-            # calculate new access times for new requests
-            for req in new_reqs:
-                if req.id not in self.access_times:
-                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-                    for instrument in self.access_times[req.id]:
-                        self.access_times[req.id][instrument] = self._calc_arrival_times(   state, 
-                                                                                            req,
-                                                                                            instrument, 
-                                                                                            t_plan, 
-                                                                                            planning_horizon, 
-                                                                                            orbitdata)
-                            
-            # update access times if a measurement was completed
-            for action in performed_actions:
-                if isinstance(action, MeasurementAction):
-                    req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                    if action.status == action.COMPLETED:
-                        self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-
-            # update latest available access time for each known request
-            for req_id in self.access_times:
-                for instrument in self.access_times[req_id]:
-                    t_arrivals : list = self.access_times[req_id][instrument]
-                    while len(t_arrivals) > 0 and t_arrivals[0] < state.t:
-                        t_arrivals.pop(0)
-
-        else:
+        if state.t >= self.t_next or t_plan < 0:
             # recalculate access times for all known requests
-            unperformed_reqs = list(filter(lambda req : req not in self.performed_requests, self.known_reqs))
-
-            for req in unperformed_reqs:
-                self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-                for instrument in self.access_times[req.id]:
-                    self.access_times[req.id][instrument] = self._calc_arrival_times(   state, 
-                                                                                        req, 
-                                                                                        instrument,
-                                                                                        state.t,
-                                                                                        planning_horizon, 
-                                                                                        orbitdata)
+            # unperformed_reqs = list(filter(lambda req : req not in self.performed_requests, self.known_reqs))
             
-            # update access times if a measurement was completed
-            for req in self.performed_requests:
+            for req in self.known_reqs:
                 req : MeasurementRequest
                 self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-    
+                for instrument in self.access_times[req.id]:
+                    if instrument not in state.payload:
+                        # agent cannot perform this request
+                        continue
+
+                    if (req, instrument) in self.performed_requests:
+                        # agent has already performed this request
+                        continue
+
+                    t_arrivals : list = self._calc_arrival_times(   state, 
+                                                                    req, 
+                                                                    instrument,
+                                                                    state.t,
+                                                                    planning_horizon, 
+                                                                    orbitdata)
+                    self.access_times[req.id][instrument] = t_arrivals
+
     @runtime_tracker
     def _calc_arrival_times(self, 
                             state : SimulationAgentState, 
@@ -489,15 +464,16 @@ class FIFOPreplanner(AbstractPreplanner):
             plan = self._plan_from_path(state, path, orbitdata, t_plan, clock_config)
 
             # wait for next planning horizon 
-            if len(plan) > 0:
-                if state.t >= t_plan + planning_horizon:
-                    plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
-                elif plan[-1].t_end < t_plan + planning_horizon:
-                    plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
-            else:
-                plan.append(WaitForMessages(state.t, state.t + planning_horizon))
+            # if len(plan) > 0:
+            #     if state.t >= t_plan + planning_horizon:
+            #         plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
+            #     elif plan[-1].t_end < t_plan + planning_horizon:
+            #         plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
+            # else:
+            #     plan.append(WaitForMessages(state.t, state.t + planning_horizon))
 
-            self.t_next = state.t + planning_horizon
+            self.t_plan = state.t
+            self.t_next = self.t_plan + planning_horizon
 
             return plan
                 

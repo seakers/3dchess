@@ -38,7 +38,7 @@ class AbstractReplanner(ABC):
                             generated_reqs : list,
                             misc_messages : list,
                             t_plan : float,
-                            planning_horizon : float = np.Inf,
+                            t_next : float = np.Inf,
                             orbitdata : OrbitData = None
                         ) -> bool:
         """
@@ -247,10 +247,13 @@ class FIFOReplanner(AbstractReplanner):
                             generated_reqs : list,
                             misc_messages : list,
                             t_plan : float,
-                            planning_horizon : float,
+                            t_next : float = np.Inf,
                             orbitdata : OrbitData = None
                         ) -> bool:
         
+        if len(generated_reqs) > 0 and generated_reqs[0].s_max > 0:
+            x = 1
+
         # update list of known requests
         new_reqs : list = self.__update_known_requests(  current_plan, 
                                                         incoming_reqs,
@@ -263,7 +266,7 @@ class FIFOReplanner(AbstractReplanner):
                                     new_reqs, 
                                     performed_actions,
                                     t_plan,
-                                    planning_horizon,
+                                    t_next,
                                     orbitdata)        
 
         # check if incoming or generated measurement requests are already accounted for
@@ -325,12 +328,13 @@ class FIFOReplanner(AbstractReplanner):
                                 new_reqs : list,
                                 performed_actions : list,  
                                 t_plan : float,
-                                planning_horizon : float,
+                                t_next : float,
                                 orbitdata : OrbitData) -> None:
         """
         Calculates and saves the access times of all known requests
         """
         t_plan = t_plan if t_plan >= 0 else 0
+        planning_horizon = t_next - state.t
 
         if abs(state.t - t_plan) < 1e-3:
             # recalculate access times for all known requests
@@ -357,13 +361,14 @@ class FIFOReplanner(AbstractReplanner):
                 if req.id not in self.access_times:
                     self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
                     for instrument in self.access_times[req.id]:
-                        self.access_times[req.id][instrument] = self._calc_arrival_times(   state, 
-                                                                                            req,
-                                                                                            instrument, 
-                                                                                            t_plan, 
-                                                                                            planning_horizon, 
-                                                                                            orbitdata)
-                            
+                        t_arrivals : list = self._calc_arrival_times(   state, 
+                                                                        req,
+                                                                        instrument, 
+                                                                        t_plan, 
+                                                                        planning_horizon, 
+                                                                        orbitdata)
+                        self.access_times[req.id][instrument] = t_arrivals
+        
             # update access times if a measurement was completed
             for action in performed_actions:
                 if isinstance(action, MeasurementAction):

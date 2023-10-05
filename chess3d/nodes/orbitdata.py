@@ -218,7 +218,7 @@ class OrbitData:
         grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
 
         access_data = self.gp_access_data \
-                            .query('@t <= `time index` & `time index` <= @t_end & `grid index` == @grid_index & `GP index` == @gp_index & `instrument` == @instrument') \
+                            .query('@t < `time index` & `time index` <= @t_end & `grid index` == @grid_index & `GP index` == @gp_index & `instrument` == @instrument') \
                             .sort_values(by=['time index'])
 
         return access_data

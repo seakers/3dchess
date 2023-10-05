@@ -468,7 +468,7 @@ class PlanningModule(InternalModule):
                                                 level)   
                     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    self.__log_plan(plan, "PLAN", logging.WARNING)
+                    # self.__log_plan(plan, "PLAN", logging.WARNING)
                     # -------------------------------------
 
                 # Check if reeplanning is needed
@@ -486,7 +486,7 @@ class PlanningModule(InternalModule):
                                                     generated_reqs,
                                                     misc_messages,
                                                     self.t_plan,
-                                                    self.planning_horizon,
+                                                    self.t_next,
                                                     self.orbitdata
                                                 )
                     ):
@@ -500,7 +500,7 @@ class PlanningModule(InternalModule):
                                                         misc_messages
                                                     )     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    self.__log_plan(plan, "PLAN", logging.WARNING)
+                    # self.__log_plan(plan, "PLAN", logging.WARNING)
                     # -------------------------------------
 
                 # --- Execute plan ---
@@ -605,19 +605,16 @@ class PlanningModule(InternalModule):
                                                 )
         self.agent_state_lock.release()
 
-        # Remove considered requests from initial request list
-        for action in plan:
-            if isinstance(action, MeasurementAction):
-                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                if req in self.initial_reqs:
-                    self.initial_reqs.remove(req)
-
-        # Forward remaining initial requests to request inbox for possible future consideration
-        while len(self.initial_reqs) > 0:
-            await self.req_inbox.put(self.initial_reqs.pop())
-
         # update last time plan was updated
         self.t_plan = self.get_current_time()
+        self.t_next = self.t_plan + self.planning_horizon
+
+        # wait for next planning horizon 
+        if len(plan) > 0:
+            if plan[-1].t_end < self.t_next:
+                plan.append(WaitForMessages(plan[-1].t_end, self.t_next))
+        else:
+            plan.append(WaitForMessages(self.agent_state.t, self.t_next))
 
         # save copy of plan for post-processing
         plan_copy = []
@@ -647,7 +644,7 @@ class PlanningModule(InternalModule):
                                             generated_reqs,
                                             misc_messages,
                                             self.t_plan,
-                                            self.planning_horizon,
+                                            self.t_next,
                                             self._clock_config,
                                             self.orbitdata) 
         self.agent_state_lock.release()

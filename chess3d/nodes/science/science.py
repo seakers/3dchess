@@ -299,7 +299,12 @@ class ScienceModule(InternalModule):
                     t_start = outlier_data['obs_start']
                     t_corr = outlier_data['obs_duration']
                     t_end = outlier_data['obs_end']
-                    measurement_req = GroundPointMeasurementRequest([lat, lon, 0.0], science_value, desired_variables, t_start, t_end, t_corr)
+                    measurement_req = GroundPointMeasurementRequest(    [lat, lon, 0.0], 
+                                                                        science_value, 
+                                                                        desired_variables, 
+                                                                        self.get_current_time(), 
+                                                                        t_end, 
+                                                                        t_corr)
 
                     self.log(f'sending measurement req to agent...')
                     req_msg = MeasurementRequestMessage(self.get_parent_name(), self.get_parent_name(), measurement_req.to_dict())
