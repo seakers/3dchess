@@ -487,6 +487,7 @@ class PlanningModule(InternalModule):
                                                     misc_messages,
                                                     self.t_plan,
                                                     self.t_next,
+                                                    self.planning_horizon,
                                                     self.orbitdata
                                                 )
                     ):
@@ -514,7 +515,7 @@ class PlanningModule(InternalModule):
 
                 # send plan to parent agent
                 self.log(f'sending {len(plan_out)} actions to parent agent...')
-                plan_msg = PlanMessage(self.get_element_name(), self.get_network_name(), plan_out)
+                plan_msg = PlanMessage(self.get_element_name(), self.get_network_name(), plan_out, self.get_current_time())
                 await self._send_manager_msg(plan_msg, zmq.PUB)
 
                 self.log(f'actions sent!')
@@ -609,7 +610,11 @@ class PlanningModule(InternalModule):
         self.t_plan = self.get_current_time()
         self.t_next = self.t_plan + self.planning_horizon
 
-        # wait for next planning horizon 
+        # remove all elements of the plan that occur after the planning horizon ends
+        while(len(plan) > 0 and plan[-1].t_end > self.t_next):
+            plan.pop()
+
+        # wait for next planning horizon if needed
         if len(plan) > 0:
             if plan[-1].t_end < self.t_next:
                 plan.append(WaitForMessages(plan[-1].t_end, self.t_next))
@@ -651,6 +656,17 @@ class PlanningModule(InternalModule):
 
         # update last time plan was updated
         self.t_plan = self.get_current_time()
+
+        # remove all elements of the plan that occur after the planning horizon ends
+        while(len(plan) > 0 and plan[-1].t_end > self.t_next):
+            plan.pop()
+
+        # wait for next planning horizon if needed
+        if len(plan) > 0:
+            if plan[-1].t_end < self.t_next:
+                plan.append(WaitForMessages(plan[-1].t_end, self.t_next))
+        else:
+            plan.append(WaitForMessages(self.agent_state.t, self.t_next))
 
         # save copy of plan for post-processing
         plan_copy = []
@@ -717,7 +733,10 @@ class PlanningModule(InternalModule):
         # re-attempt pending actions 
         for action in pending_actions:
             action : AgentAction
-            plan_out.insert(0, action.to_dict())
+            if action.to_dict() not in plan_out:
+                plan_out.insert(0, action.to_dict())
+            else:
+                x = 1
 
         # broadcasts all newly generated requests if they have a non-zero scientific value
         for req in generated_reqs:
@@ -732,7 +751,7 @@ class PlanningModule(InternalModule):
 
         # idle if no more actions can be performed
         if len(plan_out) == 0:
-            t_idle = plan[0].t_start if len(plan) > 0 else np.Inf
+            t_idle = plan[0].t_start if len(plan) > 0 else self.t_next
             action = WaitForMessages(t, t_idle)
             plan_out.append(action.to_dict())        
 

@@ -22,7 +22,7 @@ class SimulationAgent(Agent):
     #### Attributes:
         - agent_name (`str`): name of the agent
         - scenario_name (`str`): name of the scenario being simulated
-        - manager_network_config (:obj:`NetworkConfig`): network configuration of the simulation manager
+        - manager_network_config (:obj:`NetworkCdo(nfig`): netwdo(rk configuration of the simulation manager
         - agent_network_config (:obj:`NetworkConfig`): network configuration for this agent
         - initial_state (:obj:`SimulationAgentState`): initial state for this agent
         - payload (`list): list of instruments on-board the spacecraft
@@ -167,20 +167,31 @@ class SimulationAgent(Agent):
                 # update state
                 pos, vel, t = resp_msg.state['pos'], resp_msg.state['vel'], resp_msg.state['t']
             
-                if not self.state.comp_vectors(self.state.pos, pos) or not self.state.comp_vectors(self.state.vel, vel):
-                    self.state.update_state(self.get_current_time(), state=resp_msg.state)
-                    self.state_history.append(self.state.to_dict())
-                    senses.append(resp_msg)
+                # # update time
+                # if abs(t - self.get_current_time()) >= 1e-3:
+                #     x=1
+
+                # if t > self.get_current_time():
+                #     await self.update_current_time(t)                
+
+                # if (not self.state.comp_vectors(self.state.pos, pos) or 
+                #     not self.state.comp_vectors(self.state.vel, vel)
+                #     ):
+                #     self.state.update_state(self.get_current_time(), state=resp_msg.state)
+                #     self.state_history.append(self.state.to_dict())
+                #     senses.append(resp_msg)
                     
-                else:
-                    state_msg = AgentStateMessage(  self.get_element_name(), 
-                                                    self.get_element_name(),
-                                                    self.state.to_dict()
-                                                )
-                    senses.append(state_msg)
-                
-                # update time
-                await self.update_current_time(t)
+                # else:
+                #     state_msg = AgentStateMessage(  self.get_element_name(), 
+                #                                     self.get_element_name(),
+                #                                     self.state.to_dict()
+                #                                 )
+                #     senses.append(state_msg) 
+                state_msg = AgentStateMessage(  self.get_element_name(), 
+                                                self.get_element_name(),
+                                                self.state.to_dict()
+                                            )
+                senses.append(state_msg)               
 
             elif isinstance(resp_msg, AgentConnectivityUpdate):
                 if resp_msg.connected == 1:
@@ -227,7 +238,10 @@ class SimulationAgent(Agent):
             else:
                 senses_dict.append(sense.to_dict())
 
-        senses_msg = SensesMessage(self.get_element_name(), self.get_element_name(), state_dict, senses_dict)
+        senses_msg = SensesMessage( self.get_element_name(), 
+                                    self.get_element_name(),
+                                    state_dict, 
+                                    senses_dict)
         await self.send_internal_message(senses_msg)
 
         # wait for planner to send list of tasks to perform
@@ -239,6 +253,12 @@ class SimulationAgent(Agent):
             
             if content['msg_type'] == SimulationMessageTypes.PLAN.value:
                 msg = PlanMessage(**content)
+
+                if abs(msg.t_plan - self.get_current_time()) > 1e-3:
+                    x = 1
+
+                assert abs(msg.t_plan - self.get_current_time()) <= 1e-3
+
                 for action_dict in msg.plan:
                     self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
                     actions.append(action_dict)  

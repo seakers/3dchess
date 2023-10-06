@@ -143,7 +143,7 @@ class AbstractPreplanner(ABC):
                     dt = t_img - state.t
                 
                     # propagate state
-                    propagated_state : SatelliteAgentState = state.propagate(t_img)
+                    propagated_state : SatelliteAgentState = state.propagate(t_prev)
 
                     # compute off-nadir angle
                     thf = propagated_state.calc_off_nadir_agle(req)
@@ -236,11 +236,11 @@ class AbstractPreplanner(ABC):
             # Estimate previous state
             if i == 0:
                 if isinstance(state, SatelliteAgentState):
-                    t_prev = t_init
+                    t_prev = state.t
                     prev_state : SatelliteAgentState = state.copy()
 
                 elif isinstance(state, UAVAgentState):
-                    t_prev = t_init #TODO consider wait time for convergence
+                    t_prev = state.t #TODO consider wait time for convergence
                     prev_state : UAVAgentState = state.copy()
 
                 else:
@@ -255,6 +255,8 @@ class AbstractPreplanner(ABC):
                 
                 action_prev : AgentAction = plan[-1]
                 t_prev = action_prev.t_end
+                # action_prev : AgentAction = plan[-1] if len(plan) > 0 else None
+                # t_prev = action_prev.t_end if action_prev is not None else t_init
 
                 if isinstance(state, SatelliteAgentState):
                     prev_state : SatelliteAgentState = state.propagate(t_prev)
@@ -367,10 +369,21 @@ class AbstractPreplanner(ABC):
                                                     )
             plan_i.append(measurement_action)  
 
+            for action in plan_i:
+                if t_prev is not None and action.t_start != t_prev:
+                    x=1
+                t_prev = action.t_end
+
             # TODO inform others of request completion
 
             plan.extend(plan_i)
         
+        t_prev = None
+        for action in plan:
+            if t_prev is not None and action.t_start != t_prev:
+                x=1
+            t_prev = action.t_end
+
         return plan
 
 class IdlePlanner(AbstractPreplanner):
@@ -462,15 +475,6 @@ class FIFOPreplanner(AbstractPreplanner):
 
             # generate plan from path
             plan = self._plan_from_path(state, path, orbitdata, t_plan, clock_config)
-
-            # wait for next planning horizon 
-            # if len(plan) > 0:
-            #     if state.t >= t_plan + planning_horizon:
-            #         plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
-            #     elif plan[-1].t_end < t_plan + planning_horizon:
-            #         plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
-            # else:
-            #     plan.append(WaitForMessages(state.t, state.t + planning_horizon))
 
             self.t_plan = state.t
             self.t_next = self.t_plan + planning_horizon

@@ -194,7 +194,7 @@ class SimulationEnvironment(EnvironmentNode):
                             # Do NOT update state
                             updated_state = GroundStationAgentState(**msg.state)
 
-                        updated_state.t = self.get_current_time()
+                        updated_state.t = max(self.get_current_time(), current_state.t)
                         
                         updated_state_msg = AgentStateMessage(self.get_element_name(), src, updated_state.to_dict())
                         resp_msgs.append(updated_state_msg.to_dict())

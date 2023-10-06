@@ -167,9 +167,10 @@ class PlanMessage(SimulationMessage):
         - dst (`str`): name of the intended simulation element to receive this message
         - plan (`list`): list of agent actions to perform
         - msg_type (`str`): type of message being sent
+        - t_plan (`float`): time at which the plan was created
         - id (`str`) : Universally Unique IDentifier for this message
     """
-    def __init__(self, src: str, dst: str, plan : list, id: str = None, **_):
+    def __init__(self, src: str, dst: str, plan : list, t_plan : float, id: str = None, **_):
         """
         Creates an instance of a plan message
 
@@ -177,10 +178,12 @@ class PlanMessage(SimulationMessage):
             - src (`str`): name of the simulation element sending this message
             - dst (`str`): name of the intended simulation element to receive this message
             - plan (`list`): list of agent actions to perform
+            - t_plan (`float`): time at which the plan was created
             - id (`str`) : Universally Unique IDentifier for this message
         """
         super().__init__(src, dst, SimulationMessageTypes.PLAN.value, id)
         self.plan = plan
+        self.t_plan = t_plan
 
 class SensesMessage(SimulationMessage):
     """

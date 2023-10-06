@@ -38,7 +38,8 @@ class AbstractReplanner(ABC):
                             generated_reqs : list,
                             misc_messages : list,
                             t_plan : float,
-                            t_next : float = np.Inf,
+                            t_next : float,
+                            planning_horizon = np.Inf,
                             orbitdata : OrbitData = None
                         ) -> bool:
         """
@@ -54,7 +55,7 @@ class AbstractReplanner(ABC):
                 generated_reqs : list,
                 misc_messages : list,
                 t_plan : float,
-                planning_horizon : float,
+                t_next : float,
                 clock_config : ClockConfig,
                 orbitdata : OrbitData = None
             ) -> list:
@@ -100,11 +101,11 @@ class AbstractReplanner(ABC):
             # Estimate previous state
             if i == 0:
                 if isinstance(state, SatelliteAgentState):
-                    t_prev = t_init
+                    t_prev = state.t
                     prev_state : SatelliteAgentState = state.copy()
 
                 elif isinstance(state, UAVAgentState):
-                    t_prev = t_init #TODO consider wait time for convergence
+                    t_prev = state.t #TODO consider wait time for convergence
                     prev_state : UAVAgentState = state.copy()
 
                 else:
@@ -117,8 +118,8 @@ class AbstractReplanner(ABC):
                         prev_req = MeasurementRequest.from_dict(action.measurement_req)
                         break
                 
-                action_prev : AgentAction = plan[-1]
-                t_prev = action_prev.t_end
+                action_prev : AgentAction = plan[-1] if len(plan) > 0 else None
+                t_prev = action_prev.t_end if action_prev is not None else t_init
 
                 if isinstance(state, SatelliteAgentState):
                     prev_state : SatelliteAgentState = state.propagate(t_prev)
@@ -152,7 +153,7 @@ class AbstractReplanner(ABC):
                 dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
                 t_maneuver_end = t_maneuver_start + dt
 
-                if abs(t_maneuver_start - t_maneuver_end) > 0.0:
+                if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
                     maneuver_action = ManeuverAction([th_f, 0, 0], t_maneuver_start, t_maneuver_end)
                     plan_i.append(maneuver_action)   
                 else:
@@ -228,12 +229,23 @@ class AbstractReplanner(ABC):
                                                     t_img_start, 
                                                     t_img_end
                                                     )
-            plan_i.append(measurement_action)  
+            plan_i.append(measurement_action) 
+
+            for action in plan_i:
+                if t_prev is not None and action.t_start != t_prev:
+                    x=1
+                t_prev = action.t_end
 
             # TODO inform others of request completion
 
             plan.extend(plan_i)
         
+        t_prev = None
+        for action in plan:
+            if t_prev is not None and action.t_start != t_prev:
+                x=1
+            t_prev = action.t_end
+
         return plan
 
 class FIFOReplanner(AbstractReplanner):
@@ -247,13 +259,11 @@ class FIFOReplanner(AbstractReplanner):
                             generated_reqs : list,
                             misc_messages : list,
                             t_plan : float,
-                            t_next : float = np.Inf,
+                            t_next : float,
+                            planning_horizon : float = np.Inf,
                             orbitdata : OrbitData = None
                         ) -> bool:
         
-        if len(generated_reqs) > 0 and generated_reqs[0].s_max > 0:
-            x = 1
-
         # update list of known requests
         new_reqs : list = self.__update_known_requests(  current_plan, 
                                                         incoming_reqs,
@@ -267,12 +277,15 @@ class FIFOReplanner(AbstractReplanner):
                                     performed_actions,
                                     t_plan,
                                     t_next,
+                                    planning_horizon,
                                     orbitdata)        
 
         # check if incoming or generated measurement requests are already accounted for
         _, unscheduled_reqs = self._compare_requests(current_plan)
 
         # replan if there are new requests to be scheduled
+        if len(unscheduled_reqs) > 0:
+            x = 1
         return len(unscheduled_reqs) > 0
    
     @runtime_tracker
@@ -285,28 +298,31 @@ class FIFOReplanner(AbstractReplanner):
         Reads incoming requests and current plan to keep track of all known requests
         """
         ## list all requests in current plan
+        measurement_actions = filter(lambda action : isinstance(action, MeasurementAction), current_plan)
         scheduled_reqs = []
-        for action in current_plan:
-            if isinstance(action, MeasurementAction):
-                req = MeasurementRequest.from_dict(action.measurement_req)
-                if req not in scheduled_reqs:
-                    scheduled_reqs.append(req)
+        for action in measurement_actions:
+            action : MeasurementAction
+            if action not in scheduled_reqs:
+                scheduled_reqs.append(MeasurementRequest.from_dict(action.measurement_req))       
+        new_scheduled_reqs = filter(lambda req : req not in self.known_reqs, scheduled_reqs)
+        
+        # update intenal list of known requests with scheduled requests
+        self.known_reqs.extend(new_scheduled_reqs)
 
         ## compare with incoming or generated requests
         new_reqs = []
-        for req in incoming_reqs:
-            req : MeasurementRequest
-            if req not in scheduled_reqs and req.s_max > 0.0:
-                new_reqs.append(req)
-        for req in generated_reqs:
-            if req not in scheduled_reqs and req.s_max > 0.0:
-                new_reqs.append(req)
+        new_incoming_reqs = list(filter(lambda req :    req not in self.known_reqs and
+                                                        req not in new_reqs and 
+                                                        req.s_max > 0.0, 
+                                        incoming_reqs))
+        new_reqs.extend(new_incoming_reqs)
+        new_generated_reqs= list(filter(lambda req :    req not in self.known_reqs and
+                                                        req not in new_reqs and 
+                                                        req.s_max > 0.0, 
+                                        generated_reqs))        
+        new_reqs.extend(new_generated_reqs)
 
-        scheduled_reqs = list(filter(lambda req : req not in self.known_reqs, scheduled_reqs))
-        new_reqs = list(filter(lambda req : req not in self.known_reqs, new_reqs))
-        new_reqs.extend(scheduled_reqs)
-
-        # update intenal list of known requests
+        # update intenal list of known requests with new requests
         self.known_reqs.extend(new_reqs)
 
         return new_reqs
@@ -317,8 +333,10 @@ class FIFOReplanner(AbstractReplanner):
         for action in performed_actions:
             if isinstance(action, MeasurementAction):
                 req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                if action.status == action.COMPLETED and req not in self.performed_requests:
-                    self.performed_requests.append(req)
+                if( action.status == action.COMPLETED                                   
+                    and (req, action.instrument_name) not in self.performed_requests
+                    ):
+                    self.performed_requests.append((req, action.instrument_name))
 
         return
 
@@ -329,60 +347,77 @@ class FIFOReplanner(AbstractReplanner):
                                 performed_actions : list,  
                                 t_plan : float,
                                 t_next : float,
+                                planning_horizon : float,
                                 orbitdata : OrbitData) -> None:
         """
         Calculates and saves the access times of all known requests
         """
-        t_plan = t_plan if t_plan >= 0 else 0
-        planning_horizon = t_next - state.t
 
-        if abs(state.t - t_plan) < 1e-3:
+        if t_next - state.t >= planning_horizon:
             # recalculate access times for all known requests
-            unperformed_reqs = list(filter(lambda req : req not in self.performed_requests, self.known_reqs))
-
-            for req in unperformed_reqs:
-                self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-                for instrument in self.access_times[req.id]:
-                    self.access_times[req.id][instrument] = self._calc_arrival_times(   state, 
-                                                                                        req, 
-                                                                                        instrument,
-                                                                                        state.t,
-                                                                                        planning_horizon, 
-                                                                                        orbitdata)
-            
-            # update access times if a measurement was completed
-            for req in self.performed_requests:
+            for req in self.known_reqs:
                 req : MeasurementRequest
-                self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+                if req.id in self.access_times:
+                    self.access_times.pop(req.id)
+                # self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+                # for instrument in self.access_times[req.id]:
+                #     if instrument not in state.payload:
+                #         # agent cannot perform this request
+                #         continue
 
-        else:
-            # calculate new access times for new requests
-            for req in new_reqs:
-                if req.id not in self.access_times:
+                #     if (req, instrument) in self.performed_requests:
+                #         # agent has already performed this request
+                #         continue
+
+                #     t_arrivals : list = self._calc_arrival_times(   state, 
+                #                                                     req, 
+                #                                                     instrument,
+                #                                                     state.t,
+                #                                                     planning_horizon, 
+                #                                                     orbitdata)
+                #     self.access_times[req.id][instrument] = t_arrivals
+            x = 1
+
+        # else:
+        # calculate new access times for new requests
+        uncalculated_reqs = list(filter(lambda req : req.id not in self.access_times, self.known_reqs))
+        for req in uncalculated_reqs:
+            req : MeasurementRequest
+            self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+            for instrument in self.access_times[req.id]:
+                if instrument not in state.payload:
+                    # agent cannot perform this request
+                    continue
+
+                if (req, instrument) in self.performed_requests:
+                    # agent has already performed this request
+                    continue
+
+                t_arrivals : list = self._calc_arrival_times(   state, 
+                                                                req,
+                                                                instrument, 
+                                                                state.t, 
+                                                                t_next - state.t, 
+                                                                orbitdata)
+                self.access_times[req.id][instrument] = t_arrivals
+
+        # update access times if a measurement was completed
+        for action in performed_actions:
+            if isinstance(action, MeasurementAction):
+                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+                if action.status == action.COMPLETED:
                     self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-                    for instrument in self.access_times[req.id]:
-                        t_arrivals : list = self._calc_arrival_times(   state, 
-                                                                        req,
-                                                                        instrument, 
-                                                                        t_plan, 
-                                                                        planning_horizon, 
-                                                                        orbitdata)
-                        self.access_times[req.id][instrument] = t_arrivals
-        
-            # update access times if a measurement was completed
-            for action in performed_actions:
-                if isinstance(action, MeasurementAction):
-                    req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                    if action.status == action.COMPLETED:
-                        self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+                    # self.access_times.pop(req.id)
 
-            # update latest available access time for each known request
-            for req_id in self.access_times:
-                for instrument in self.access_times[req_id]:
-                    t_arrivals : list = self.access_times[req_id][instrument]
-                    while len(t_arrivals) > 0 and t_arrivals[0] < state.t:
-                        t_arrivals.pop(0)
+        # update latest available access time for each known request
+        for req_id in self.access_times:
+            for instrument in self.access_times[req_id]:
+                t_arrivals : list = self.access_times[req_id][instrument]
+                while len(t_arrivals) > 0 and t_arrivals[0] < state.t:
+                    t_arrivals.pop(0)
+        x = 1
     
+    @runtime_tracker
     def _calc_arrival_times(self, 
                             state : SimulationAgentState, 
                             req : MeasurementRequest, 
@@ -406,7 +441,7 @@ class FIFOReplanner(AbstractReplanner):
                     dt = t_img - state.t
                 
                     # propagate state
-                    propagated_state : SatelliteAgentState = state.propagate(t_img)
+                    propagated_state : SatelliteAgentState = state.propagate(t_prev)
 
                     # compute off-nadir angle
                     thf = propagated_state.calc_off_nadir_agle(req)
@@ -434,20 +469,23 @@ class FIFOReplanner(AbstractReplanner):
                         ) -> tuple:
         """ Separates scheduled and unscheduled requests """
         
-        ## list all requests in current plan
+        ## list all unique requests in current plan
         scheduled_reqs = []
         for action in current_plan:
             if isinstance(action, MeasurementAction):
                 req = MeasurementRequest.from_dict(action.measurement_req)
-                if req not in scheduled_reqs:
-                    scheduled_reqs.append(req)
+                if (req, action.instrument_name) not in scheduled_reqs:
+                    scheduled_reqs.append((req, action.instrument_name))
 
         ## list all known available request that have not been scheduled yet
         def is_new_req(req : MeasurementRequest) -> bool:
-            if req in scheduled_reqs:
-                return False
-            
-            for instrument in self.access_times[req.id]:
+            scheduled_measurements = []
+            for instrument in req.measurements:
+                if (req, instrument) in scheduled_reqs:
+                    scheduled_measurements.append(instrument)
+            unscheduled_measurement = list(filter(lambda measurement : measurement not in scheduled_measurements, req.measurements))
+                        
+            for instrument in unscheduled_measurement:
                 t_arrivals = self.access_times[req.id][instrument]
                 if len(t_arrivals) > 0:
                     return True
@@ -466,7 +504,7 @@ class FIFOReplanner(AbstractReplanner):
                 generated_reqs : list,
                 misc_messages : list,
                 t_plan : float,
-                planning_horizon : float,
+                t_next : float,
                 clock_config : ClockConfig,
                 orbitdata : OrbitData = None
             ) -> list:
@@ -538,16 +576,6 @@ class FIFOReplanner(AbstractReplanner):
 
             # generate plan from path
             plan = self._plan_from_path(state, path, orbitdata, t_plan, clock_config)
-
-            # wait for next planning horizon 
-            if len(plan) > 0:
-                # if state.t >= t_plan + planning_horizon:
-                    # plan.append(WaitForMessages(plan[-1].t_end, state.t + planning_horizon))
-                # if plan[-1].t_end < t_plan + planning_horizon:
-                    # plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
-                plan.append(WaitForMessages(plan[-1].t_end, t_plan + planning_horizon))
-            else:
-                plan.append(WaitForMessages(state.t, t_plan + planning_horizon))
 
             return plan
                 

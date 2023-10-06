@@ -3,15 +3,15 @@ t_start,2020-01-01 00:00:00+00:00
 t_end,2020-01-02 00:00:00+00:00
 n_events,790
 n_events_detected,5
-n_events_obs,1
-n_reqs_total,106
+n_events_obs,2
+n_reqs_total,107
 n_reqs_init,101
-n_reqs_gen,5
-n_obs_unique_max,318
-n_obs_unique_pos,88
-n_obs_unique,86
+n_reqs_gen,6
+n_obs_unique_max,321
+n_obs_unique_pos,89
+n_obs_unique,87
 n_obs_co,0
-n_obs,86
-u_max,128.83407161364707
-u_total,5.713130144032919
-u_norm,0.04434486989719373
+n_obs,87
+u_max,136.06965840557618
+u_total,6.505685664396281
+u_norm,0.04781143526505448
