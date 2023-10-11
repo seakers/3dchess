@@ -171,12 +171,8 @@ class PlanningModule(InternalModule):
                             # unpack message 
                             state_msg : AgentStateMessage = AgentStateMessage(**sense)
                             self.log(f"received agent state message!")
-                                                        
-                            # update current state
-                            await self.agent_state_lock.acquire()
+                              
                             state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
-                            await self.update_current_time(state.t)
-                            self.agent_state = state
 
                             if self.parent_agent_type is None:
                                 if isinstance(state, SatelliteAgentState):
@@ -190,7 +186,6 @@ class PlanningModule(InternalModule):
                                 else:
                                     raise NotImplementedError(f"states of type {state_msg.state['state_type']} not supported for planners.")
                             
-                            self.agent_state_lock.release()
                             await self.states_inbox.put(state)
 
                         elif sense['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
@@ -425,7 +420,12 @@ class PlanningModule(InternalModule):
 
             while True:
                 # wait for agent to update state
-                _ : AgentStateMessage = await self.states_inbox.get()
+                state : SimulationAgentState = await self.states_inbox.get()
+                await self.agent_state_lock.acquire()
+                await self.update_current_time(state.t)
+                self.agent_state = state
+                self.agent_state_lock.release()
+
                 assert abs(self.get_current_time() - self.agent_state.t) <= 1e-2
 
                 # --- Check incoming information ---
@@ -500,6 +500,10 @@ class PlanningModule(InternalModule):
                                                         generated_reqs, 
                                                         misc_messages
                                                     )     
+                    
+                    # clar pending actions
+                    pending_actions = []
+
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
                     # self.__log_plan(plan, "PLAN", logging.WARNING)
                     # -------------------------------------
@@ -509,7 +513,13 @@ class PlanningModule(InternalModule):
                 # get next action to perform
                 plan_out = self._get_next_actions(plan, pending_actions, generated_reqs, self.get_current_time())
 
+                # check plan feasibility
+                
+
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # if self.get_current_time() >= 3670.0 and "thm_1" in self.get_parent_name():
+                #     x =1 
+                #     self.__log_plan(plan, "PLAN", logging.WARNING)
                 # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
@@ -735,8 +745,6 @@ class PlanningModule(InternalModule):
             action : AgentAction
             if action.to_dict() not in plan_out:
                 plan_out.insert(0, action.to_dict())
-            else:
-                x = 1
 
         # broadcasts all newly generated requests if they have a non-zero scientific value
         for req in generated_reqs:
@@ -753,7 +761,17 @@ class PlanningModule(InternalModule):
         if len(plan_out) == 0:
             t_idle = plan[0].t_start if len(plan) > 0 else self.t_next
             action = WaitForMessages(t, t_idle)
-            plan_out.append(action.to_dict())        
+            plan_out.append(action.to_dict())     
+
+        if len(plan_out) > 1:
+            x = 1
+
+            plan_out.sort(key=lambda a: a['t_start'])
+
+            x = 1
+
+        if self.get_current_time() >= 3670.0 and "thm_1" in self.get_parent_name():
+            x = 1
 
         return plan_out
     

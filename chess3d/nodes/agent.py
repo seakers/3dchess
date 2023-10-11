@@ -254,10 +254,7 @@ class SimulationAgent(Agent):
             if content['msg_type'] == SimulationMessageTypes.PLAN.value:
                 msg = PlanMessage(**content)
 
-                if abs(msg.t_plan - self.get_current_time()) > 1e-3:
-                    x = 1
-
-                assert abs(msg.t_plan - self.get_current_time()) <= 1e-3
+                assert self.get_current_time() - msg.t_plan <= 1e-3
 
                 for action_dict in msg.plan:
                     self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
@@ -285,15 +282,19 @@ class SimulationAgent(Agent):
             action = action_from_dict(**action_dict)
 
             if (action.t_start - self.get_current_time()) > np.finfo(np.float32).eps:
-                self.log(f"action of type {action_dict['action_type']} has NOT started yet. waiting for start time...", level=logging.INFO)
+                self.log(f"action of type {action_dict['action_type']} has NOT started yet (start time {action.t_start}[s]). waiting for start time...", level=logging.ERROR)
                 action.status = AgentAction.PENDING
                 statuses.append((action, action.status))
-                continue
+
+                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action_dict['action_type']} before it started (start time {action.t_start}[s]) at time {self.get_current_time()}[s]")
+                # continue
             
             if (self.get_current_time() - action.t_end) > np.finfo(np.float32).eps:
-                self.log(f"action of type {action_dict['action_type']} has already occureed. could not perform task before...", level=logging.INFO)
+                self.log(f"action of type {action_dict['action_type']} has already occureed (start/end times {action.t_start}[s], {action.t_end}[s]). could not perform task before...", level=logging.ERROR)
                 action.status = AgentAction.ABORTED
                 statuses.append((action, action.status))
+
+                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action_dict['action_type']} after it ended (start/end times {action.t_start}[s], {action.t_end}[s]) at time {self.get_current_time()}[s]")
                 continue
 
             self.log(f"performing action of type {action_dict['action_type']}...", level=logging.INFO)    

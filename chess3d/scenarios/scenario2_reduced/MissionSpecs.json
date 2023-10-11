@@ -101,7 +101,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
@@ -198,7 +198,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
@@ -295,7 +295,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
@@ -392,7 +392,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
@@ -489,7 +489,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
@@ -586,7 +586,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
@@ -683,7 +683,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
@@ -780,7 +780,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
@@ -877,7 +877,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
+                "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"
