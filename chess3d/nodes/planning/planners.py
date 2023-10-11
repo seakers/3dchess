@@ -510,16 +510,21 @@ class PlanningModule(InternalModule):
 
                 # --- Execute plan ---
 
+                # check plan feasibility
+                if not self.is_plan_feasible(plan):
+                    raise RuntimeError("Planner generated an unfeasible plan.")
+
                 # get next action to perform
                 plan_out = self._get_next_actions(plan, pending_actions, generated_reqs, self.get_current_time())
 
                 # check plan feasibility
-                
+                if not self.is_plan_feasible(plan_out):
+                    raise RuntimeError("Planner generated an unfeasible plan.")
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # if self.get_current_time() >= 3670.0 and "thm_1" in self.get_parent_name():
-                #     x =1 
                 #     self.__log_plan(plan, "PLAN", logging.WARNING)
+                #     x =1 
                 # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
@@ -532,6 +537,32 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
+        
+    def is_plan_feasible(self, plan : list) -> bool:
+        """ Checks if the plan generated can be performed by the agent """
+
+        # check if actions dont overlap
+        t_start_prev, t_end_prev = None, None
+        for action in plan:
+            if isinstance(action, AgentAction):
+                t_start = action.t_start
+                t_end = action.t_end
+            elif isinstance(action, dict):
+                t_start = action['t_start']
+                t_end = action['t_end']
+            else:
+                raise ValueError(f"Cannot check plan of actions of type {type(action)}")
+
+            if t_start_prev is not None and t_end_prev is not None:
+                if t_start_prev > t_start:
+                    return False
+                elif t_end_prev > t_start:
+                    return False
+
+            t_start_prev = t_start
+            t_end_prev = t_end
+
+        return True
         
     @runtime_tracker
     async def __check_action_completion(self, current_plan : list, level : int = logging.DEBUG) -> tuple:
@@ -737,7 +768,7 @@ class PlanningModule(InternalModule):
         """ Parses current plan and outputs list of actions that are to be performed at a given time"""
 
         # get next available action to perform
-        plan_out = list(filter(lambda action : action.t_start <= t, plan))
+        plan_out = list(filter(lambda action : action.t_start <= t <= action.t_end, plan))
         plan_out = [action.to_dict() for action in plan_out]
 
         # re-attempt pending actions 
@@ -763,17 +794,11 @@ class PlanningModule(InternalModule):
             action = WaitForMessages(t, t_idle)
             plan_out.append(action.to_dict())     
 
+        # sort plan in order of ascending start time 
         if len(plan_out) > 1:
-            x = 1
-
             plan_out.sort(key=lambda a: a['t_start'])
 
-            x = 1
-
-        if self.get_current_time() >= 3670.0 and "thm_1" in self.get_parent_name():
-            x = 1
-
-        return plan_out
+        return plan_out     
     
     def __log_plan(self, plan : list, title : str, level : int = logging.DEBUG) -> None:
         out = f'\n{title}\nid\taction type\tt_start\tt_end\n'

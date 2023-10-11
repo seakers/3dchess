@@ -169,7 +169,7 @@ class BroadcastMessageAction(AgentAction):
             - status (`str`): completion status of the task
             - id (`str`) : identifying number for this task in uuid format
         """
-        super().__init__(ActionTypes.BROADCAST_MSG.value, t_start, status=status, id=id)
+        super().__init__(ActionTypes.BROADCAST_MSG.value, t_start, t_start, status=status, id=id)
         self.msg = msg
 
 class MeasurementAction(AgentAction):
@@ -227,7 +227,7 @@ class WaitForMessages(AgentAction):
     """
     def __init__(   self, 
                     t_start: Union[float, int], 
-                    t_end: Union[float, int], 
+                    t_end: Union[float, int] = np.Inf, 
                     status: str = 'PENDING', 
                     id: str = None, 
                     **_

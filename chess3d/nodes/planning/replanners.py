@@ -575,7 +575,7 @@ class FIFOReplanner(AbstractReplanner):
             # print(out)
 
             # generate plan from path
-            plan = self._plan_from_path(state, path, orbitdata, t_plan, clock_config)
+            plan = self._plan_from_path(state, path, orbitdata, state.t, clock_config)
 
             return plan
                 
