@@ -468,7 +468,7 @@ class PlanningModule(InternalModule):
                                                 level)   
                     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    # self.__log_plan(plan, "PLAN", logging.WARNING)
+                    self.__log_plan(plan, "PLAN", logging.WARNING)
                     # -------------------------------------
 
                 # Check if reeplanning is needed
@@ -501,11 +501,11 @@ class PlanningModule(InternalModule):
                                                         misc_messages
                                                     )     
                     
-                    # clar pending actions
+                    # clear pending actions
                     pending_actions = []
 
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    # self.__log_plan(plan, "PLAN", logging.WARNING)
+                    self.__log_plan(plan, "PLAN", logging.WARNING)
                     # -------------------------------------
 
                 # --- Execute plan ---

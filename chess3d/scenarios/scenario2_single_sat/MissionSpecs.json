@@ -101,7 +101,7 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
+                "horizon" : 36000,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
                 "utility" : "LINEAR"

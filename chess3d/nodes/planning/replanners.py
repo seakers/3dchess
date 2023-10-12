@@ -231,20 +231,9 @@ class AbstractReplanner(ABC):
                                                     )
             plan_i.append(measurement_action) 
 
-            for action in plan_i:
-                if t_prev is not None and action.t_start != t_prev:
-                    x=1
-                t_prev = action.t_end
-
             # TODO inform others of request completion
 
             plan.extend(plan_i)
-        
-        t_prev = None
-        for action in plan:
-            if t_prev is not None and action.t_start != t_prev:
-                x=1
-            t_prev = action.t_end
 
         return plan
 

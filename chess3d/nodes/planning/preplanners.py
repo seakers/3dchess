@@ -136,7 +136,7 @@ class AbstractPreplanner(ABC):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
                 t_end = min(t_prev + planning_horizon, req.t_end)
-                t_start = min(max(t_prev, req.t_start), t_prev + planning_horizon)
+                t_start = min( max(t_prev, req.t_start), t_prev + planning_horizon)
                 df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
 
                 for _, row in df.iterrows():
@@ -206,6 +206,7 @@ class AbstractPreplanner(ABC):
         return available_reqs
 
     @runtime_tracker
+    
     def _plan_from_path(    self, 
                             state : SimulationAgentState, 
                             path : list,
@@ -254,10 +255,8 @@ class AbstractPreplanner(ABC):
                         prev_req = MeasurementRequest.from_dict(action.measurement_req)
                         break
                 
-                action_prev : AgentAction = plan[-1]
-                t_prev = action_prev.t_end
-                # action_prev : AgentAction = plan[-1] if len(plan) > 0 else None
-                # t_prev = action_prev.t_end if action_prev is not None else t_init
+                action_prev : AgentAction = plan[-1] if len(plan) > 0 else None
+                t_prev = action_prev.t_end if action_prev is not None else t_init
 
                 if isinstance(state, SatelliteAgentState):
                     prev_state : SatelliteAgentState = state.propagate(t_prev)
@@ -291,7 +290,7 @@ class AbstractPreplanner(ABC):
                 dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
                 t_maneuver_end = t_maneuver_start + dt
 
-                if abs(t_maneuver_start - t_maneuver_end) > 0.0:
+                if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
                     maneuver_action = ManeuverAction([th_f, 0, 0], t_maneuver_start, t_maneuver_end)
                     plan_i.append(maneuver_action)   
                 else:
@@ -300,24 +299,6 @@ class AbstractPreplanner(ABC):
             # move to target
             t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
             if isinstance(state, SatelliteAgentState):
-                # lat, lon, _ = measurement_req.lat_lon_pos
-                # instrument, _ = measurement_req.measurement_groups[subtask_index]  
-                # t_arrivals = self.access_times[measurement_req.id][instrument]
-                
-                # t_move_end = None
-                # # for _, row in df.iterrows():
-                # for t_arrival in t_arrivals:
-                #     if t_arrival >= t_img:
-                #         t_move_end = t_arrival
-                #         break
-
-                # if t_move_end is None:
-                #     # unpheasible path
-                #     # self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
-                #     continue
-
-                # if t_img < t_move_start:
-
                 t_move_end = t_img
                 future_state : SatelliteAgentState = state.propagate(t_move_end)
                 final_pos = future_state.pos
@@ -353,7 +334,6 @@ class AbstractPreplanner(ABC):
             if abs(t_move_start - t_move_end) >= 1e-3:
                 if t_move_start > t_move_end:
                     continue
-                    x = 1
 
                 move_action = TravelAction(final_pos, t_move_start, t_move_end)
                 plan_i.append(move_action)
@@ -368,7 +348,9 @@ class AbstractPreplanner(ABC):
                                                     t_img_start, 
                                                     t_img_end
                                                     )
-            plan_i.append(measurement_action)  
+            plan_i.append(measurement_action) 
+
+            # TODO inform others of request completion
 
             plan.extend(plan_i)
 
