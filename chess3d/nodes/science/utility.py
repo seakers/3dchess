@@ -8,7 +8,10 @@ from nodes.agent import SimulationAgentState
 List of utility functions used to evalute the value of observations
 """
 
-def synergy_factor(req : MeasurementRequest, subtask_index : int, **_) -> float:
+def synergy_factor(req : dict, subtask_index : int, **_) -> float:
+    # unpack request
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
+    
     _, dependent_measurements = req.measurement_groups[subtask_index]
     k = len(dependent_measurements) + 1
 
@@ -20,16 +23,22 @@ def synergy_factor(req : MeasurementRequest, subtask_index : int, **_) -> float:
 def no_utility(**_) -> float:
     return 0.0
 
-def fixed_utility(req : MeasurementRequest, **_) -> float:
+def fixed_utility(req : dict, **_) -> float:
+    # unpack request
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
+
     return req.s_max
 
-def random_utility(req : MeasurementRequest, **_) -> float:
+def random_utility(req : dict, **_) -> float:    
+    # unpack request
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
+
     return req.s_max * random.random()
 
 def linear_utility(   
-                    req : MeasurementRequest, 
+                    req : dict, 
                     t_img : float,
-                    **_
+                    **kwargs
                 ) -> float:
     """
     Calculates the expected utility of performing a measurement task.
@@ -44,9 +53,8 @@ def linear_utility(
     ### Retrurns:
         - utility (`float`): estimated normalized utility 
     """
-    # check time constraints
-    if t_img < req.t_start or req.t_end < t_img:
-        return 0.0
+    # unpack request
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
     
     # calculate urgency factor from task
     utility = req.s_max * (t_img - req.t_end) / (req.t_start - req.t_end)
@@ -54,7 +62,7 @@ def linear_utility(
     return utility / len(req.measurements)
 
 def exp_utility(   
-                    req : MeasurementRequest, 
+                    req : dict, 
                     t_img : float,
                     **_
                 ) -> float:
@@ -71,6 +79,9 @@ def exp_utility(
     ### Retrurns:
         - utility (`float`): estimated normalized utility 
     """
+    # unpack request
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
+
     # check time constraints
     if t_img < req.t_start or req.t_end < t_img:
         return 0.0

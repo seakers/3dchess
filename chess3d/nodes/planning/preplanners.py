@@ -135,8 +135,9 @@ class AbstractPreplanner(ABC):
             if isinstance(state, SatelliteAgentState):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
-                t_end = t_prev + planning_horizon
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_prev, t_end)
+                t_end = min(t_prev + planning_horizon, req.t_end)
+                t_start = min(max(t_prev, req.t_start), t_prev + planning_horizon)
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
 
                 for _, row in df.iterrows():
                     t_img = row['time index'] * orbitdata.time_step
@@ -369,20 +370,7 @@ class AbstractPreplanner(ABC):
                                                     )
             plan_i.append(measurement_action)  
 
-            for action in plan_i:
-                if t_prev is not None and action.t_start != t_prev:
-                    x=1
-                t_prev = action.t_end
-
-            # TODO inform others of request completion
-
             plan.extend(plan_i)
-        
-        t_prev = None
-        for action in plan:
-            if t_prev is not None and action.t_start != t_prev:
-                x=1
-            t_prev = action.t_end
 
         return plan
 

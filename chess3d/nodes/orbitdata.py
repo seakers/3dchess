@@ -60,7 +60,7 @@ class OrbitData:
         # ground point access times
         self.gp_access_data = gp_access_data.sort_values(by=['time index'])
 
-        # grid indofmation
+        # grid information
         self.grid_data = grid_data
     
     """
@@ -152,13 +152,9 @@ class OrbitData:
 
         nrows, _ = access_data.shape
 
-        if nrows == 0:
-            return False
-        elif nrows == 1:
-            for _, row in access_data.iterrows():
-                return bool(np.absolute(row['time index'] - t) <= 1e-6)
-        else:
-            return True            
+        for _, row in access_data.iterrows():
+            return bool(np.absolute(row['time index'] - t) <= 1e-6)
+        return False
 
     def is_eclipse(self, t: float):
         t = t/self.time_step
@@ -222,6 +218,30 @@ class OrbitData:
                             .sort_values(by=['time index'])
 
         return access_data
+
+    def get_groundpoint_access_data(self, lat : float, lon : float, instrument : str, t : float) -> dict:
+        t = t/self.time_step
+        t_u = t + 1
+        t_l = t - 1
+
+        grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
+
+        access_data : pd.DataFrame = self.gp_access_data \
+                                    .query('@t_l < `time index` < @t_u & `grid index` == @grid_index & `GP index` == @gp_index') \
+                                    .sort_values(by=['time index'])
+
+        for _, row in access_data.iterrows():
+            if np.absolute(row['time index'] - t) <= 1e-6:
+                return {header : row[header] for header in access_data.columns}
+
+        out = {header : None for header in access_data.columns}
+        out['lat [deg]'] = lat
+        out['lon [deg]'] = lon
+        out['grid index'] = grid_index
+        out['GP index'] = gp_index
+        out['instrument'] = instrument
+        
+        return out
     
     def find_gp_index(self, lat: float, lon: float) -> tuple:
         """

@@ -433,8 +433,12 @@ class FIFOReplanner(AbstractReplanner):
             if isinstance(state, SatelliteAgentState):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
-                t_end = t_prev + planning_horizon
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_prev, t_end)
+                # t_end = t_prev + planning_horizon
+                # df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_prev, t_end)
+
+                t_end = min(t_prev + planning_horizon, req.t_end)
+                t_start = min(max(t_prev, req.t_start), t_prev + planning_horizon)
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
 
                 for _, row in df.iterrows():
                     t_img = row['time index'] * orbitdata.time_step

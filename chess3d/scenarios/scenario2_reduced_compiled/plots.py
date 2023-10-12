@@ -1,5 +1,6 @@
 import csv
 import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -27,7 +28,7 @@ if __name__ == "__main__":
                 results[dir] = result
     
     # create case-to-directory map
-    cases = ['No Replanning', 'Periodic\nPlanning [1hr]', 'Event-driven\nReplanning', 'Periodic Planning [1hr] \nw/Event-driven Replanning']
+    cases = ['No Replanning', 'Periodic\nPlanning [1hr]', 'Event-driven\nReplanning', 'Periodic Planning [1hr] \nw/Event-driven\nReplanning']
     case_dirs = list(filter(lambda case : os.path.isdir(f'./{case}'), os.listdir()))
 
     cases_map = {}
@@ -44,7 +45,7 @@ if __name__ == "__main__":
                 cases_map[cases[2]] = case_dir
 
     # plot events detected/observed 
-    print('plotting events detected/observed...')
+    sys.stdout.write("\r" + "plotting events detected/observed...")
     events_detected = [int(results[cases_map[case_name]]['n_events_detected']) 
                         for case_name in cases]
     events_observed = [int(results[cases_map[case_name]]['n_events_obs']) 
@@ -73,12 +74,13 @@ if __name__ == "__main__":
     ax.legend(loc='upper right', ncols=2)
     ax.set_ylim(0, max(events_detected) + 2)
 
-    print('plot done.')
-    # plt.savefig('./events.png')
-    # plt.show()
+    sys.stdout.flush()
+    sys.stdout.write("\r" + "plotting events detected/observed... DONE\n")
+    plt.savefig('./events.png')
+    
     
     # plot observations possible/made
-    print('plotting observations...')
+    sys.stdout.write("\r" + "plotting gp observations...")
     obs_unique_max = [int(results[cases_map[case_name]]['n_obs_unique_max']) 
                         for case_name in cases]
     obs_unique_pos = [int(results[cases_map[case_name]]['n_obs_unique_pos']) 
@@ -99,7 +101,7 @@ if __name__ == "__main__":
                 }
 
     x = np.arange(len(cases))  # the label locations
-    width = 0.10  # the width of the bars
+    width = 0.20  # the width of the bars
     multiplier = 0
 
     fig, ax = plt.subplots(layout='constrained')
@@ -117,10 +119,10 @@ if __name__ == "__main__":
     ax.set_ylim(0, max(obs) + 250)
 
 
-    print('plot done.')
+    sys.stdout.flush()
+    sys.stdout.write("\r" + "plotting gp observations... DONE\n")
     fig.set_figwidth(8)
-    plt.show()
     plt.savefig('./observations.png')
 
-    print('DONE')
-    x = 1
+    plt.show()
+    print('PLOTTING DONE')
