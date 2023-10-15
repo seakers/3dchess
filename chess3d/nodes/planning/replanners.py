@@ -162,23 +162,6 @@ class AbstractReplanner(ABC):
             # move to target
             t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
             if isinstance(state, SatelliteAgentState):
-                # lat, lon, _ = measurement_req.lat_lon_pos
-                # instrument, _ = measurement_req.measurement_groups[subtask_index]  
-                # t_arrivals = self.access_times[measurement_req.id][instrument]
-                
-                # t_move_end = None
-                # # for _, row in df.iterrows():
-                # for t_arrival in t_arrivals:
-                #     if t_arrival >= t_img:
-                #         t_move_end = t_arrival
-                #         break
-
-                # if t_move_end is None:
-                #     # unpheasible path
-                #     # self.log(f'Unheasible element in path. Cannot perform observation.', level=logging.DEBUG)
-                #     continue
-
-                # if t_img < t_move_start:
 
                 t_move_end = t_img
                 future_state : SatelliteAgentState = state.propagate(t_move_end)
@@ -348,24 +331,6 @@ class FIFOReplanner(AbstractReplanner):
                 req : MeasurementRequest
                 if req.id in self.access_times:
                     self.access_times.pop(req.id)
-                # self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-                # for instrument in self.access_times[req.id]:
-                #     if instrument not in state.payload:
-                #         # agent cannot perform this request
-                #         continue
-
-                #     if (req, instrument) in self.performed_requests:
-                #         # agent has already performed this request
-                #         continue
-
-                #     t_arrivals : list = self._calc_arrival_times(   state, 
-                #                                                     req, 
-                #                                                     instrument,
-                #                                                     state.t,
-                #                                                     planning_horizon, 
-                #                                                     orbitdata)
-                #     self.access_times[req.id][instrument] = t_arrivals
-            x = 1
 
         # else:
         # calculate new access times for new requests
