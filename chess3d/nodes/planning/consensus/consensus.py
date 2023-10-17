@@ -50,7 +50,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     ) -> bool:
 
         # update list of known requests
-        new_reqs : list = self._update_known_requests( current_plan, 
+        new_reqs : list = self._update_known_requests(  current_plan, 
                                                         incoming_reqs,
                                                         generated_reqs)
 
@@ -65,81 +65,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # compile received bids
         bids_received = self._compile_bids( incoming_reqs, 
-                                        generated_reqs, 
-                                        misc_messages, 
-                                        state.t)
+                                            generated_reqs, 
+                                            misc_messages, 
+                                            state.t)
         
         # perform consesus phase
         self.results, self.bundle, self.path, _, self.rebroadcasts = self.consensus_phase(self.results, self.bundle, self.path, state.t, bids_received)
 
         # replan if relevant changes have been made to the bundle
         return len(self.rebroadcasts) > 0
-
-    def _save_previous_bundle(self, results : dict, bundle : list) -> tuple:
-        """ saves  """
-        prev_results = {}
-        prev_bundle = []
-        for req, subtask_index in bundle:
-            req : MeasurementRequest; subtask_index : int
-            prev_bundle.append((req, subtask_index))
-            
-            if req.id not in prev_results:
-                prev_results[req.id] = [None for _ in results[req.id]]
-
-            prev_results[req.id][subtask_index] = results[req.id][subtask_index].copy()
-        
-        return prev_results, prev_bundle
-
-    def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
-        """
-        Compares two bundles. Returns true if they are equal and false if not.
-        """
-        if len(bundle_1) == len(bundle_2):
-            for req, subtask in bundle_1:
-                if (req, subtask) not in bundle_2:            
-                    return False
-            return True
-        return False
-
-    def replan( self, 
-                state: SimulationAgentState,
-                current_plan: list, 
-                performed_actions: list, 
-                incoming_reqs: list, 
-                generated_reqs: list, 
-                misc_messages: list, 
-                t_plan: float, 
-                t_next: float, 
-                clock_config: ClockConfig, 
-                orbitdata: OrbitData = None
-            ) -> list:
-
-        # save previous bundle for future convergence checks
-        _, prev_bundle = self._save_previous_bundle(results, bundle)
-        
-        # perform bundle-building phase
-        results, bundle, path, planner_changes = self.planning_phase(   state, 
-                                                                        current_plan,
-                                                                        t_next
-                                                                    )
-
-
-        # generate new plan if converged
-        plan : list = [] if not self._compare_bundles(bundle, prev_bundle) else self._plan_from_path(state, path, state.t, clock_config)
-        
-        # compile changes to brodacst
-        broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
-        for bid in broadcast_bids:
-            bid : Bid
-            msg = MeasurementBidMessage(self.parent_name, self.parent_name, bid.to_dict())
-            broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
-            plan.insert(0, broadcast_action)
-
-        # reset broadcast list
-        self.rebroadcasts = []
-        
-        # return plan
-        return plan
 
     def _compile_bids(self, incoming_reqs : list, generated_reqs : list, misc_messages : list, t : float) -> list:
         """ Reads incoming messages and requests and checks if bids were received """
@@ -157,19 +91,104 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # generate bids for new requests
         for new_req in new_reqs:
             new_req : MeasurementRequest
-            req_bids : list = self._generate_bids_from_request(new_req, t)
+            req_bids : list = self._generate_bids_from_request(new_req)
             bids.extend(req_bids)
 
         return bids
 
-    def _compile_broadcast_bids(self, planner_changes : list) -> list:
-        broadcast_bids : list = [msg for msg in self.rebroadcasts]
-        broadcast_bids.extend(planner_changes)
+    def replan( self, 
+                state: SimulationAgentState,
+                current_plan: list, 
+                performed_actions: list, 
+                incoming_reqs: list, 
+                generated_reqs: list, 
+                misc_messages: list, 
+                t_plan: float, 
+                t_next: float, 
+                clock_config: ClockConfig, 
+                orbitdata: OrbitData = None
+            ) -> list:
 
-        return broadcast_bids
+        # save previous bundle for future convergence checks
+        _, prev_bundle = self._save_previous_bundle(self.results, self.bundle)
+        
+        # perform bundle-building phase
+        self.results, self.bundle, self.path, planner_changes \
+                = self.planning_phase(  state, 
+                                        current_plan,
+                                        t_next
+                                    )
+
+        # generate new plan if converged
+        plan : list = [] if not self._compare_bundles(self.bundle, prev_bundle) \
+                         else self._plan_from_path(state, self.path, state.t, clock_config)
+        
+        # add broadcast changes to plan
+        broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
+        for bid in broadcast_bids:
+            bid : Bid
+            msg = MeasurementBidMessage(self.parent_name, self.parent_name, bid.to_dict())
+            broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
+            plan.insert(0, broadcast_action)
+
+        # reset broadcast list
+        self.rebroadcasts = []
+        
+        # return plan
+        return plan
+
+    def _save_previous_bundle(self, results : dict, bundle : list) -> tuple:
+        """ creates a copy of the current bids of a given bundle  """
+        prev_results = {}
+        prev_bundle = []
+        for req, subtask_index in bundle:
+            req : MeasurementRequest; subtask_index : int
+            prev_bundle.append((req, subtask_index))
+            
+            if req.id not in prev_results:
+                prev_results[req.id] = [None for _ in results[req.id]]
+
+            prev_results[req.id][subtask_index] = results[req.id][subtask_index].copy()
+        
+        return prev_results, prev_bundle
+
+    def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
+        """ Compares two bundles. Returns true if they are equal and false if not. """
+        if len(bundle_1) == len(bundle_2):
+            for req, subtask in bundle_1:
+                if (req, subtask) not in bundle_2:            
+                    return False
+            return True
+        return False
+
+    def _compile_broadcast_bids(self, planner_changes : list) -> list:        
+        """ Compiles changes in bids from consensus and planning phase and returns a list of the most updated bids """
+        broadcast_bids = {}
+
+        planner_changes.extend([bid for bid in self.rebroadcasts])
+        for new_bid in planner_changes:
+            new_bid : Bid
+
+            if new_bid.req_id not in broadcast_bids:
+                req : MeasurementRequest = MeasurementRequest.from_dict(new_bid.req)
+                broadcast_bids[new_bid.req_id] = [None for _ in req.dependency_matrix]
+
+            current_bid : Bid = broadcast_bids[new_bid.req_id][new_bid.subtask_index]
+            
+            if (current_bid is None 
+                or new_bid.bidder == current_bid.bidder
+                or new_bid.t_update >= current_bid.t_update
+                ):
+                broadcast_bids[new_bid.req_id][new_bid.subtask_index] = new_bid.copy()       
+
+        out = []
+        for req_id in broadcast_bids:
+            out.extend(filter(lambda bid : bid is not None, broadcast_bids[req_id]))
+            
+        return out
     
     @abstractmethod
-    def _generate_bids_from_request(self, req : MeasurementRequest, t : float) -> list:
+    def _generate_bids_from_request(self, req : MeasurementRequest) -> list:
         """ Creages bids from given measurement request """
         pass
 
