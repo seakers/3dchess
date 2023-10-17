@@ -219,48 +219,8 @@ class AbstractReplanner(ABC):
 
         return plan
 
-class FIFOReplanner(AbstractReplanner):
-
     @runtime_tracker
-    def needs_replanning(   self, 
-                            state : SimulationAgentState,
-                            current_plan : list,
-                            performed_actions : list,
-                            incoming_reqs : list,
-                            generated_reqs : list,
-                            misc_messages : list,
-                            t_plan : float,
-                            t_next : float,
-                            planning_horizon : float = np.Inf,
-                            orbitdata : OrbitData = None
-                        ) -> bool:
-        
-        # update list of known requests
-        new_reqs : list = self.__update_known_requests( current_plan, 
-                                                        incoming_reqs,
-                                                        generated_reqs)
-        
-        # update list of performed measurements
-        self.__update_performed_requests(performed_actions)
-
-        self.__update_access_times( state, 
-                                    new_reqs, 
-                                    performed_actions,
-                                    t_plan,
-                                    t_next,
-                                    planning_horizon,
-                                    orbitdata)        
-
-        # check if incoming or generated measurement requests are already accounted for
-        _, unscheduled_reqs = self._compare_requests(current_plan)
-
-        # replan if there are new requests to be scheduled
-        if len(unscheduled_reqs) > 0:
-            x = 1
-        return len(unscheduled_reqs) > 0
-   
-    @runtime_tracker
-    def __update_known_requests( self, 
+    def _update_known_requests( self, 
                                 current_plan : list,
                                 incoming_reqs : list,
                                 generated_reqs : list
@@ -297,22 +257,9 @@ class FIFOReplanner(AbstractReplanner):
         self.known_reqs.extend(new_reqs)
 
         return new_reqs
-    
-    @runtime_tracker
-    def __update_performed_requests(self, performed_actions : list) -> None:
-        """ Updates an internal list of requests performed by the parent agent """
-        for action in performed_actions:
-            if isinstance(action, MeasurementAction):
-                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                if( action.status == action.COMPLETED                                   
-                    and (req, action.instrument_name) not in self.performed_requests
-                    ):
-                    self.performed_requests.append((req, action.instrument_name))
-
-        return
 
     @runtime_tracker
-    def __update_access_times(  self,
+    def _update_access_times(  self,
                                 state : SimulationAgentState,
                                 new_reqs : list,
                                 performed_actions : list,  
@@ -331,7 +278,6 @@ class FIFOReplanner(AbstractReplanner):
                 if req.id in self.access_times:
                     self.access_times.pop(req.id)
 
-        # else:
         # calculate new access times for new requests
         uncalculated_reqs = list(filter(lambda req : req.id not in self.access_times, self.known_reqs))
         for req in uncalculated_reqs:
@@ -346,7 +292,7 @@ class FIFOReplanner(AbstractReplanner):
                     # agent has already performed this request
                     continue
 
-                t_arrivals : list = self._calc_arrival_times(   state, 
+                t_arrivals : list = self.__calc_arrival_times(   state, 
                                                                 req,
                                                                 instrument, 
                                                                 state.t, 
@@ -370,7 +316,7 @@ class FIFOReplanner(AbstractReplanner):
                     t_arrivals.pop(0)
     
     @runtime_tracker
-    def _calc_arrival_times(self, 
+    def __calc_arrival_times(self, 
                             state : SimulationAgentState, 
                             req : MeasurementRequest, 
                             instrument : str,
@@ -420,6 +366,60 @@ class FIFOReplanner(AbstractReplanner):
         else:
             raise NotImplementedError(f"cannot calculate imaging time for measurement requests of type {type(req)}")       
 
+
+class FIFOReplanner(AbstractReplanner):
+
+    @runtime_tracker
+    def needs_replanning(   self, 
+                            state : SimulationAgentState,
+                            current_plan : list,
+                            performed_actions : list,
+                            incoming_reqs : list,
+                            generated_reqs : list,
+                            misc_messages : list,
+                            t_plan : float,
+                            t_next : float,
+                            planning_horizon : float = np.Inf,
+                            orbitdata : OrbitData = None
+                        ) -> bool:
+        
+        # update list of known requests
+        new_reqs : list = self._update_known_requests( current_plan, 
+                                                        incoming_reqs,
+                                                        generated_reqs)
+        
+        # update list of performed measurements
+        self.__update_performed_requests(performed_actions)
+
+        # update access times for known requests
+        self._update_access_times( state, 
+                                    new_reqs, 
+                                    performed_actions,
+                                    t_plan,
+                                    t_next,
+                                    planning_horizon,
+                                    orbitdata)        
+
+        # check if incoming or generated measurement requests are already accounted for
+        _, unscheduled_reqs = self._compare_requests(current_plan)
+
+        # replan if there are new requests to be scheduled
+        return len(unscheduled_reqs) > 0
+    
+    @runtime_tracker
+    def __update_performed_requests(self, performed_actions : list) -> None:
+        """ Updates an internal list of requests performed by the parent agent """
+        for action in performed_actions:
+            if isinstance(action, MeasurementAction):
+                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+                if( action.status == action.COMPLETED                                   
+                    and (req, action.instrument_name) not in self.performed_requests
+                    ):
+                    self.performed_requests.append((req, action.instrument_name))
+
+        return
+
+    
     def _compare_requests(  self, 
                             current_plan : list
                         ) -> tuple:

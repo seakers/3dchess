@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import Any, Callable
+import pandas as pd
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
@@ -47,8 +48,23 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         planning_horizon=np.Inf, 
                         orbitdata: OrbitData = None
                     ) -> bool:
-        # see if bids were received
-        bids_received = self._get_bids( incoming_reqs, 
+
+        # update list of known requests
+        new_reqs : list = self._update_known_requests( current_plan, 
+                                                        incoming_reqs,
+                                                        generated_reqs)
+
+        # update access times for known requests
+        self._update_access_times(  state, 
+                                    new_reqs, 
+                                    performed_actions,
+                                    t_plan,
+                                    t_next,
+                                    planning_horizon,
+                                    orbitdata)        
+
+        # compile received bids
+        bids_received = self._compile_bids( incoming_reqs, 
                                         generated_reqs, 
                                         misc_messages, 
                                         state.t)
@@ -99,7 +115,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             ) -> list:
 
         # save previous bundle for future convergence checks
-        prev_results, prev_bundle = self._save_previous_bundle(results, bundle)
+        _, prev_bundle = self._save_previous_bundle(results, bundle)
         
         # perform bundle-building phase
         results, bundle, path, planner_changes = self.planning_phase(   state, 
@@ -109,7 +125,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
 
         # generate new plan if converged
-        plan : list = self._plan_from_path(state, path, state.t, clock_config) if not self._compare_bundles(bundle, prev_bundle) else []
+        plan : list = [] if not self._compare_bundles(bundle, prev_bundle) else self._plan_from_path(state, path, state.t, clock_config)
         
         # compile changes to brodacst
         broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
@@ -118,12 +134,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
             msg = MeasurementBidMessage(self.parent_name, self.parent_name, bid.to_dict())
             broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
             plan.insert(0, broadcast_action)
+
+        # reset broadcast list
         self.rebroadcasts = []
         
+        # return plan
         return plan
 
-    def _get_bids(self, incoming_reqs, generated_reqs, misc_messages, t) -> list:
-        """ Reads incoming messages and requests and checks if bids were received"""
+    def _compile_bids(self, incoming_reqs : list, generated_reqs : list, misc_messages : list, t : float) -> list:
+        """ Reads incoming messages and requests and checks if bids were received """
         # get bids from misc messages
         bids = [Bid.from_dict(msg.bid) 
                 for msg in filter(lambda msg : isinstance(msg, MeasurementBidMessage), misc_messages)
@@ -138,7 +157,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # generate bids for new requests
         for new_req in new_reqs:
             new_req : MeasurementRequest
-            req_bids : list = self._generate_bids_from_request(new_req)
+            req_bids : list = self._generate_bids_from_request(new_req, t)
             bids.extend(req_bids)
 
         return bids
@@ -150,13 +169,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
         return broadcast_bids
     
     @abstractmethod
-    def _generate_bids_from_request(self, req : MeasurementRequest) -> list:
+    def _generate_bids_from_request(self, req : MeasurementRequest, t : float) -> list:
         """ Creages bids from given measurement request """
         pass
 
     def _get_available_requests(self) -> list:
         return []
-
 
     """
     -----------------------
@@ -420,29 +438,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
     # def conflict_free(self, path) -> bool:
     #     """ Checks if path is conflict free """
 
-    # @abstractmethod
-    # async def planning_phase(self) -> None:
-    #     pass
+    def sum_path_utility(self, path : list) -> float:
+        utility = 0.0
+        for _, _, _, u in path:
+            utility += u
 
-    # def compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
-    #     """
-    #     Compares two bundles. Returns true if they are equal and false if not.
-    #     """
-    #     if len(bundle_1) == len(bundle_2):
-    #         for req, subtask in bundle_1:
-    #             if (req, subtask) not in bundle_2:            
-    #                 return False
-    #         return True
-    #     return False
-    
-    # def sum_path_utility(self, path : list, bids : dict) -> float:
-    #     utility = 0.0
-    #     for req, subtask_index in path:
-    #         req : MeasurementRequest
-    #         bid : Bid = bids[req.id][subtask_index]
-    #         utility += bid.own_bid
-
-    #     return utility
+        return utility
 
     # def get_available_requests( self, 
     #                             state : SimulationAgentState, 
@@ -471,70 +472,67 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
     #     return available
 
-    # def can_bid(self, 
-    #             state : SimulationAgentState, 
-    #             req : MeasurementRequest, 
-    #             subtask_index : int, 
-    #             subtaskbids : list,
-    #             planning_horizon : float
-    #             ) -> bool:
-    #     """
-    #     Checks if an agent has the ability to bid on a measurement task
-    #     """
-    #     # check planning horizon
-    #     if state.t + self.planning_horizon < req.t_start:
-    #         return False
+    def can_bid(self, 
+                state : SimulationAgentState, 
+                req : MeasurementRequest, 
+                subtask_index : int, 
+                subtaskbids : list,
+                t_next : float,
+                orbitdata : OrbitData
+                ) -> bool:
+        """
+        Checks if an agent has the ability to bid on a measurement task
+        """
+        # check capabilities - TODO: Replace with knowledge graph
+        subtaskbid : Bid = subtaskbids[subtask_index]
+        if subtaskbid.main_measurement not in [instrument.name for instrument in self.payload]:
+            return False 
 
-    #     # check capabilities - TODO: Replace with knowledge graph
-    #     subtaskbid : Bid = subtaskbids[subtask_index]
-    #     if subtaskbid.main_measurement not in [instrument.name for instrument in self.payload]:
-    #         return False 
+        # check time constraints
+        ## Constraint 1: task must be able to be performed during or after the current time
+        if req.t_end < state.t:
+            return False
 
-    #     # check time constraints
-    #     ## Constraint 1: task must be able to be performed during or after the current time
-    #     if req.t_end < state.t:
-    #         return False
-
-    #     elif isinstance(req, GroundPointMeasurementRequest):
-    #         if isinstance(state, SatelliteAgentState):
-    #             # check if agent can see the request location
-    #             lat,lon,_ = req.lat_lon_pos
-    #             df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, state.t).sort_values(by='time index')
+        elif isinstance(req, GroundPointMeasurementRequest):
+            if isinstance(state, SatelliteAgentState):
+                # check if agent can see the request location
+                lat,lon,_ = req.lat_lon_pos
+                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, state.t, t_next).sort_values(by='time index')
                 
-    #             can_access = False
-    #             if not df.empty:                
-    #                 times = df.get('time index')
-    #                 for time in times:
-    #                     time *= self.orbitdata.time_step 
+                can_access = False
+                if not df.empty:                
+                    times = df.get('time index')
+                    for time in times:
+                        time *= orbitdata.time_step 
 
-    #                     if state.t + planning_horizon < time:
-    #                         break
+                        if state.t + planning_horizon < time:
+                            break
 
-    #                     if req.t_start <= time <= req.t_end:
-    #                         # there exists an access time before the request's availability ends
-    #                         can_access = True
-    #                         break
+                        if req.t_start <= time <= req.t_end:
+                            # there exists an access time before the request's availability ends
+                            can_access = True
+                            break
                 
-    #             if not can_access:
-    #                 return False
+                if not can_access:
+                    return False
         
-    #     return True
+        return True
 
-    # def check_if_in_bundle(self, req : MeasurementRequest, subtask_index : int, bundle : list) -> bool:
-    #     for req_i, subtask_index_j in bundle:
-    #         if req_i.id == req.id and subtask_index == subtask_index_j:
-    #             return True
+    def check_if_in_bundle(self, req : MeasurementRequest, subtask_index : int, bundle : list) -> bool:
+        for req_i, subtask_index_j in bundle:
+            if req_i.id == req.id and subtask_index == subtask_index_j:
+                return True
     
-    #     return False
+        return False
 
-    # def request_has_been_performed(self, results : dict, req : MeasurementRequest, subtask_index : int, t : Union[int, float]) -> bool:
-    #     # check if subtask at hand has been performed
-    #     current_bid : Bid = results[req.id][subtask_index]
-    #     subtask_already_performed = t > current_bid.t_img >= 0 + req.duration and current_bid.winner != Bid.NONE
-    #     if subtask_already_performed or current_bid.performed:
-    #         return True
+    def request_has_been_performed(self, results : dict, req : MeasurementRequest, subtask_index : int, t : Union[int, float]) -> bool:
+        # check if subtask at hand has been performed
+        current_bid : Bid = results[req.id][subtask_index]
+        subtask_already_performed = t > current_bid.t_img >= 0 + req.duration and current_bid.winner != Bid.NONE
+        if subtask_already_performed or current_bid.performed:
+            return True
        
-    #     return False
+        return False
 
     # def calc_path_bid(
     #                     self, 
@@ -594,7 +592,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
     #             winning_path_utility = path_utility
 
     #     return winning_path, winning_bids, winning_path_utility
-
 
     # def calc_imaging_time(self, state : SimulationAgentState, path : list, bids : dict, req : MeasurementRequest, subtask_index : int) -> float:
     #     """
