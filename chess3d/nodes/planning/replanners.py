@@ -48,7 +48,7 @@ class AbstractReplanner(ABC):
 
     @abstractmethod
     def replan( self, 
-                state : AbstractAgentState, 
+                state : SimulationAgentState, 
                 current_plan : list,
                 performed_actions : list,
                 incoming_reqs : list, 
@@ -73,7 +73,6 @@ class AbstractReplanner(ABC):
     def _plan_from_path(    self, 
                             state : SimulationAgentState, 
                             path : list,
-                            orbitdata : OrbitData,
                             t_init : float,
                             clock_config : ClockConfig
                     ) -> list:
@@ -237,7 +236,7 @@ class FIFOReplanner(AbstractReplanner):
                         ) -> bool:
         
         # update list of known requests
-        new_reqs : list = self.__update_known_requests(  current_plan, 
+        new_reqs : list = self.__update_known_requests( current_plan, 
                                                         incoming_reqs,
                                                         generated_reqs)
         
@@ -369,7 +368,6 @@ class FIFOReplanner(AbstractReplanner):
                 t_arrivals : list = self.access_times[req_id][instrument]
                 while len(t_arrivals) > 0 and t_arrivals[0] < state.t:
                     t_arrivals.pop(0)
-        x = 1
     
     @runtime_tracker
     def _calc_arrival_times(self, 
@@ -533,7 +531,7 @@ class FIFOReplanner(AbstractReplanner):
             # print(out)
 
             # generate plan from path
-            plan = self._plan_from_path(state, path, orbitdata, state.t, clock_config)
+            plan = self._plan_from_path(state, path, state.t, clock_config)
 
             return plan
                 

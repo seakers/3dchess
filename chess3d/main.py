@@ -14,6 +14,7 @@ import concurrent.futures
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
 from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
+from nodes.planning.consensus.acbba import ACBBAReplanner
 from nodes.planning.preplanners import *
 from nodes.planning.replanners import *
 from manager import SimulationManager
@@ -174,6 +175,7 @@ def agent_factory(  scenario_name : str,
                     results_path : str,
                     orbitdata_dir : str,
                     agent_dict : dict, 
+                    agent_index : int,
                     manager_network_config : NetworkConfig, 
                     port : int, 
                     agent_type : SimulationAgentTypes,
@@ -252,6 +254,9 @@ def agent_factory(  scenario_name : str,
         if replanner_type is not None:
             if replanner_type == 'FIFO':
                 replanner = FIFOReplanner()
+            elif replanner_type == 'ACBBA':
+                max_bundle_size = planner_dict.get('bundle size', 3)
+                replanner = ACBBAReplanner(agent_name, utility_function, max_bundle_size)
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_type}` not yet supported.')
         else:
@@ -266,7 +271,8 @@ def agent_factory(  scenario_name : str,
                                 preplanner,
                                 replanner,
                                 planning_horizon,
-                                initial_reqs)    
+                                initial_reqs
+                            )    
         
     ## create agent
     if agent_type == SimulationAgentTypes.UAV:
@@ -296,13 +302,12 @@ def agent_factory(  scenario_name : str,
                             )
 
     elif agent_type == SimulationAgentTypes.SATELLITE:
-        agent_folder = "sat" + str(0) + '/'
+        agent_folder = "sat" + str(agent_index) + '/'
 
         position_file = orbitdata_dir + agent_folder + 'state_cartesian.csv'
         time_data =  pd.read_csv(position_file, nrows=3)
         l : str = time_data.at[1,time_data.axes[1][0]]
-        _, _, _, _, dt = l.split(' ')
-        dt = float(dt)
+        _, _, _, _, dt = l.split(' '); dt = float(dt)
 
         initial_state = SatelliteAgentState(orbit_state_dict, 
                                             [instrument.name for instrument in payload], 
@@ -514,7 +519,8 @@ def main(   scenario_name : str,
                                     scenario_path, 
                                     results_path, 
                                     orbitdata_dir, 
-                                    d, 
+                                    d,
+                                    spacecraft_dict.index(d), 
                                     manager_network_config, 
                                     agent_port, 
                                     SimulationAgentTypes.SATELLITE, 
@@ -534,6 +540,7 @@ def main(   scenario_name : str,
                                     results_path, 
                                     orbitdata_dir, 
                                     d, 
+                                    uav_dict.index(d),
                                     manager_network_config, 
                                     agent_port, 
                                     SimulationAgentTypes.UAV, 
