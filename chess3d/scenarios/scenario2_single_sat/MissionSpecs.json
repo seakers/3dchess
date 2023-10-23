@@ -103,7 +103,7 @@
             "planner" : {
                 "horizon" : 360000,
                 "preplanner" : "FIFO",
-                
+                "replanner" : "ACBBA",
                 "utility" : "LINEAR"
             },
             "science" : "True",
