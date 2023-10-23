@@ -1,0 +1,13 @@
+routine,t_avg,t_std,t_med,n
+__check_action_completion,0.0,0.0,0.0,198
+_wait_for_messages,0.0,0.0,0.0,198
+_preplan,0.401,0.0,0.401,1
+_get_next_actions,0.0,0.0,0.0,198
+preplanner/__get_new_requests,0.0,0.0,0.0,198
+preplanner/__update_performed_requests,0.0,0.001,0.0,198
+preplanner/_calc_arrival_times,0.026,0.006,0.025,101
+preplanner/__update_access_times,0.013,0.185,0.0,198
+preplanner/needs_initialized_plan,0.014,0.185,0.0,198
+preplanner/_get_available_requests,0.0,0.0,0.0,1
+preplanner/_plan_from_path,0.133,0.0,0.133,1
+preplanner/initialize_plan,0.4,0.0,0.4,1

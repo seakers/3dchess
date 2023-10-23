@@ -1,8 +1,6 @@
 import random
 import numpy as np
-from typing import Union
 from nodes.science.reqs import MeasurementRequest
-from nodes.agent import SimulationAgentState
 
 """
 List of utility functions used to evalute the value of observations
@@ -27,13 +25,13 @@ def fixed_utility(req : dict, **_) -> float:
     # unpack request
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
-    return req.s_max
+    return req.s_max / len(req.measurements)
 
 def random_utility(req : dict, **_) -> float:    
     # unpack request
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
-    return req.s_max * random.random()
+    return req.s_max * random.random() / len(req.measurements)
 
 def linear_utility(   
                     req : dict, 

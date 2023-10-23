@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
 import math
+from typing import Any, Callable
 import pandas as pd
 
 from dmas.utils import runtime_tracker
@@ -8,6 +9,7 @@ from dmas.clocks import *
 
 from nodes.orbitdata import OrbitData
 from nodes.science.reqs import *
+from nodes.science.utility import synergy_factor
 from nodes.states import *
 
 class AbstractReplanner(ABC):
@@ -15,6 +17,7 @@ class AbstractReplanner(ABC):
     # Replanner    
     """
     def __init__(   self, 
+                    utility_func : Callable[[], Any], 
                     logger: logging.Logger = None
                 ) -> None:
         super().__init__()
@@ -27,6 +30,8 @@ class AbstractReplanner(ABC):
         self.known_reqs = []
         
         self.stats = {}
+
+        self.utility_func = utility_func
         self._logger = logger
 
     @abstractmethod 
@@ -65,7 +70,7 @@ class AbstractReplanner(ABC):
         pass
 
     @abstractmethod
-    def _get_available_requests(self) -> list:
+    def _get_available_requests(self, *args, **kwargs) -> list:
         """ Returns a list of known requests that can be performed within the current planning horizon """
         pass
 
@@ -479,7 +484,8 @@ class FIFOReplanner(AbstractReplanner):
                 if len(t_arrivals) > 0:
                     t_img = t_arrivals.pop(0)
                     req : MeasurementRequest = reqs[req.id]
-                    path.append((req, subtask_index, t_img, req.s_max/len(req.measurements)))
+                    s_j = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+                    path.append((req, subtask_index, t_img, s_j))
 
             path.sort(key=lambda a: a[2])
 
@@ -507,6 +513,7 @@ class FIFOReplanner(AbstractReplanner):
                         if len(t_arrivals) > 0:
                             # pick next arrival time
                             t_img = t_arrivals.pop(0)
+                            s_j = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
                             path[j] = (req_j, subtask_index_j, t_img, s_j)
                             path.sort(key=lambda a: a[2])

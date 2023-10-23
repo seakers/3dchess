@@ -8,6 +8,7 @@ from dmas.clocks import *
 
 from nodes.planning.consensus.bids import *
 from nodes.planning.replanners import AbstractReplanner
+from nodes.science.utility import *
 from nodes.orbitdata import OrbitData
 from nodes.science.reqs import *
 from nodes.states import *
@@ -20,15 +21,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     utility_func : Callable[[], Any],
                     max_bundle_size : int = 3
                     ) -> None:
-        super().__init__()
+        super().__init__(utility_func)
 
         self.parent_name = parent_name
-        self.utility_func = utility_func
         self.max_bundle_size = max_bundle_size
 
         self.bundle = []
         self.path = []
         self.results = {}
+
+        self.pre_plan = []
+        self.pre_path = []
 
         self.rebroadcasts = []
 
@@ -116,13 +119,18 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.results, self.bundle, self.path, planner_changes \
                 = self.planning_phase(  state, 
                                         current_plan,
+                                        self.results,
+                                        self.bundle,
+                                        # self.path,
+                                        t_plan,
                                         t_next
-                                    )
+                )       
 
-        # generate new plan if converged
-        plan : list = [] if not self._compare_bundles(self.bundle, prev_bundle) \
-                         else self._plan_from_path(state, self.path, state.t, clock_config)
-        
+        # chose modified plan if planning has converged
+        converged = self._compare_bundles(self.bundle, prev_bundle)
+        # converged = False
+        plan = current_plan if not converged else self._plan_from_path(state, self.path, state.t, clock_config)
+
         # add broadcast changes to plan
         broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
         for bid in broadcast_bids:
@@ -130,7 +138,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             msg = MeasurementBidMessage(self.parent_name, self.parent_name, bid.to_dict())
             broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
             plan.insert(0, broadcast_action)
-
+            
         # reset broadcast list
         self.rebroadcasts = []
         
@@ -151,6 +159,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             prev_results[req.id][subtask_index] = results[req.id][subtask_index].copy()
         
         return prev_results, prev_bundle
+
 
     def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
         """ Compares two bundles. Returns true if they are equal and false if not. """
@@ -192,8 +201,80 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ Creages bids from given measurement request """
         pass
 
-    def _get_available_requests(self) -> list:
-        return []
+    def _get_available_requests(self, 
+                                state : SimulationAgentState, 
+                                results : dict, 
+                                bundle : list,
+                                path : list
+                                ) -> list:
+        """ Returns a list of known requests that can be performed within the current planning horizon """
+        path_reqs = [(req, subtask_index) for req, subtask_index, _, _ in path]
+        available = []        
+
+        for req_id in results:
+            for subtask_index in range(len(results[req_id])):
+                subtaskbid : Bid = results[req_id][subtask_index]; 
+                req = MeasurementRequest.from_dict(subtaskbid.req)
+
+                is_accessible = self.__can_access(state, req, subtask_index)
+                is_biddable = self._can_bid(state, results, req, subtask_index)
+                already_in_bundle = self.__check_if_in_bundle(req, subtask_index, bundle)
+                already_in_path = (req, subtask_index) in path_reqs
+                already_performed = self.__request_has_been_performed(results, req, subtask_index, state.t)
+                
+                if (is_accessible 
+                    and is_biddable 
+                    and not already_in_bundle 
+                    and not already_in_path
+                    and not already_performed
+                    ):
+                    available.append((req, subtaskbid.subtask_index))       
+                
+        return available
+
+    def __can_access(self, state : SimulationAgentState, req : MeasurementRequest, subtask_index : int) -> bool:
+        """ Checks if an agent can access the location of a measurement request """
+        if isinstance(state, SatelliteAgentState):
+            main_instrument, _ = req.measurement_groups[subtask_index]
+            t_arrivals = list(filter(lambda t : req.t_start <= t <= req.t_end, 
+                                        self.access_times[req.id][main_instrument])
+                            )
+
+            return len(t_arrivals)
+        else:
+            # available_reqs = self.known_reqs
+            raise NotImplementedError(f"listing of available requests for agents with state of type {type(state)} not yet supported.")
+
+    @abstractmethod
+    def _can_bid(self, 
+                state : SimulationAgentState, 
+                results : dict,
+                req : MeasurementRequest, 
+                subtask_index : int
+                ) -> bool:
+        """ Checks if an agent has the ability to bid on a measurement task """
+        pass
+
+    def __check_if_in_bundle(   self, 
+                                req : MeasurementRequest, 
+                                subtask_index : int, 
+                                bundle : list
+                                ) -> bool:
+        for req_i, subtask_index_j in bundle:
+            if req_i.id == req.id and subtask_index == subtask_index_j:
+                return True
+    
+        return False
+
+    def __request_has_been_performed(self, results : dict, req : MeasurementRequest, subtask_index : int, t : Union[int, float]) -> bool:
+        # check if subtask at hand has been performed
+        current_bid : Bid = results[req.id][subtask_index]
+        subtask_already_performed = t > current_bid.t_img >= 0 + req.duration and current_bid.winner != Bid.NONE
+        if subtask_already_performed or current_bid.performed:
+            return True
+       
+        return False
+
 
     """
     -----------------------
@@ -436,9 +517,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         return results, bundle, path, changes, rebroadcasts
 
     def is_bid_completed(self, req : MeasurementRequest, bid : Bid, t : float) -> bool:
-        """
-        Checks if a bid has been completed or not
-        """
+        """ Checks if a bid has already been completed or not """
         return (bid.t_img >= 0.0 and bid.t_img + req.duration < t) or bid.performed
     
     """
@@ -446,171 +525,171 @@ class AbstractConsensusReplanner(AbstractReplanner):
         PLANNING PHASE
     -----------------------
     """
-    @abstractmethod
-    def planning_phase(self, state : SimulationAgentState, current_plan : list, t_next : float) -> tuple:
+    def planning_phase( self, 
+                        state : SimulationAgentState, 
+                        current_plan : list,
+                        results : dict, 
+                        bundle : list,
+                        # path : list,
+                        t_plan : float,
+                        t_next : float
+                    ) -> tuple:
         """
         Creates a modified plan from all known requests and current plan
         """
-        pass
+        # return results, [], path, [] # FOR DEBUGGING PURPOSES
 
-    # @runtime_tracker
-    # def conflict_free(self, path) -> bool:
-    #     """ Checks if path is conflict free """
+        changes, changes_to_bundle = [], []
 
-    def sum_path_utility(self, path : list) -> float:
-        utility = 0.0
-        for _, _, _, u in path:
-            utility += u
+        path = []
+        for measurement_action in filter(lambda action : isinstance(action, MeasurementAction), current_plan):
+            measurement_action : MeasurementAction
+            req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
+            path.append((req, measurement_action.subtask_index, measurement_action.t_start, measurement_action.u_exp))
 
-        return utility
+        if len(bundle) >= self.max_bundle_size:
+            # Bundle is full; cannot modify 
+            return results, bundle, path, changes
 
-    # def get_available_requests( self, 
-    #                             state : SimulationAgentState, 
-    #                             bundle : list, 
-    #                             results : dict, 
-    #                             planning_horizon : float = np.Inf
-    #                             ) -> list:
-    #     """
-    #     Checks if there are any requests available to be performed
+        available_reqs : list = self._get_available_requests(state, results, bundle, path)
 
-    #     ### Returns:
-    #         - list containing all available and bidable tasks to be performed by the parent agent
-    #     """
-    #     available = []
-    #     for req_id in results:
-    #         for subtask_index in range(len(results[req_id])):
-    #             subtaskbid : Bid = results[req_id][subtask_index]; 
-    #             req = MeasurementRequest.from_dict(subtaskbid.req)
+        current_bids = {req.id : {} for req, _ in bundle}
+        for req, subtask_index in bundle:
+            req : MeasurementRequest
+            current_bid : UnconstrainedBid = results[req.id][subtask_index]
+            current_bids[req.id][subtask_index] = current_bid.copy()
 
-    #             is_biddable = self.can_bid(state, req, subtask_index, results[req_id], planning_horizon) 
-    #             already_in_bundle = self.check_if_in_bundle(req, subtask_index, bundle)
-    #             already_performed = self.request_has_been_performed(results, req, subtask_index, state.t)
+        max_path = [(req, subtask_index, t_img, u_exp) for req, subtask_index, t_img, u_exp in path]; 
+        max_path_bids = {req.id : {} for req, _ in path}
+        for req, subtask_index in path:
+            req : MeasurementRequest
+            max_path_bids[req.id][subtask_index] = results[req.id][subtask_index]
+
+        max_req = -1
+
+        while ( len(available_reqs) > 0                     # there are available tasks to be bid on
+                and len(bundle) < self.max_bundle_size      # there is space in the bundle
+                and max_req is not None                     # there is a request that maximizes utility
+            ):   
+             # find next best task to put in bundle (greedy)
+            max_task = None 
+            max_subtask = None
+            for req, subtask_index in available_reqs:
                 
-    #             if is_biddable and not already_in_bundle and not already_performed:
-    #                 available.append((req, subtaskbid.subtask_index))
+                # calculate best bid and path for a given request and subtask
+                projected_path, projected_bids, projected_path_utility \
+                     = self.calc_path_bid(  state, 
+                                            results, 
+                                            path, 
+                                            req, 
+                                            subtask_index)
 
-    #     return available
+                # check if path was found
+                if projected_path is None:
+                    continue
 
-    def can_bid(self, 
-                state : SimulationAgentState, 
-                req : MeasurementRequest, 
-                subtask_index : int, 
-                subtaskbids : list,
-                t_next : float,
-                orbitdata : OrbitData
-                ) -> bool:
-        """
-        Checks if an agent has the ability to bid on a measurement task
-        """
-        # check capabilities - TODO: Replace with knowledge graph
-        subtaskbid : Bid = subtaskbids[subtask_index]
-        if subtaskbid.main_measurement not in [instrument.name for instrument in self.payload]:
-            return False 
+                # compare to maximum task
+                projected_utility = projected_bids[req.id][subtask_index].winning_bid
+                current_utility = results[req.id][subtask_index].winning_bid
+                if (
+                    max_task is None or projected_path_utility > max_path_utility
+                    # and projected_utility > current_utility
+                    ):
 
-        # check time constraints
-        ## Constraint 1: task must be able to be performed during or after the current time
-        if req.t_end < state.t:
-            return False
-
-        elif isinstance(req, GroundPointMeasurementRequest):
-            if isinstance(state, SatelliteAgentState):
-                # check if agent can see the request location
-                lat,lon,_ = req.lat_lon_pos
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, state.t, t_next).sort_values(by='time index')
-                
-                can_access = False
-                if not df.empty:                
-                    times = df.get('time index')
-                    for time in times:
-                        time *= orbitdata.time_step 
-
-                        if state.t + planning_horizon < time:
-                            break
-
-                        if req.t_start <= time <= req.t_end:
-                            # there exists an access time before the request's availability ends
-                            can_access = True
-                            break
-                
-                if not can_access:
-                    return False
-        
-        return True
-
-    def check_if_in_bundle(self, req : MeasurementRequest, subtask_index : int, bundle : list) -> bool:
-        for req_i, subtask_index_j in bundle:
-            if req_i.id == req.id and subtask_index == subtask_index_j:
-                return True
-    
-        return False
-
-    def request_has_been_performed(self, results : dict, req : MeasurementRequest, subtask_index : int, t : Union[int, float]) -> bool:
-        # check if subtask at hand has been performed
-        current_bid : Bid = results[req.id][subtask_index]
-        subtask_already_performed = t > current_bid.t_img >= 0 + req.duration and current_bid.winner != Bid.NONE
-        if subtask_already_performed or current_bid.performed:
-            return True
-       
-        return False
-
-    # def calc_path_bid(
-    #                     self, 
-    #                     state : SimulationAgentState, 
-    #                     original_results : dict,
-    #                     original_path : list, 
-    #                     req : MeasurementRequest, 
-    #                     subtask_index : int
-    #                 ) -> tuple:
-    #     state : SimulationAgentState = state.copy()
-    #     winning_path = None
-    #     winning_bids = None
-    #     winning_path_utility = 0.0
-
-    #     # check if the subtask is mutually exclusive with something in the bundle
-    #     for req_i, subtask_j in original_path:
-    #         req_i : MeasurementRequest; subtask_j : int
-    #         if req_i.id == req.id:
-    #             if req.dependency_matrix[subtask_j][subtask_index] < 0:
-    #                 return winning_path, winning_bids, winning_path_utility
-
-    #     # find best placement in path
-    #     # self.log_task_sequence('original path', original_path, level=logging.WARNING)
-    #     for i in range(len(original_path)+1):
-    #         # generate possible path
-    #         path = [scheduled_obs for scheduled_obs in original_path]
+                    # check for cualition and mutex satisfaction
+                    proposed_bid : UnconstrainedBid = projected_bids[req.id][subtask_index]
+                    
+                    max_path = projected_path
+                    max_task = req
+                    max_subtask = subtask_index
+                    max_path_bids = projected_bids
+                    max_path_utility = projected_path_utility
+                    max_utility = proposed_bid.winning_bid
             
-    #         path.insert(i, (req, subtask_index))
-    #         # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
+            if max_task is not None:
+                # max bid found! place task with the best bid in the bundle and the path
+                bundle.append((max_task, max_subtask))
+                path = max_path
 
-    #         # calculate bids for each task in the path
-    #         bids = {}
-    #         for req_i, subtask_j in path:
-    #             # calculate imaging time
-    #             req_i : MeasurementRequest
-    #             subtask_j : int
-    #             t_img = self.calc_imaging_time(state, path, bids, req_i, subtask_j)
+            # update results
+            for req, subtask_index in path:
+                req : MeasurementRequest
+                subtask_index : int
+                new_bid : UnconstrainedBid = max_path_bids[req.id][subtask_index]
+                old_bid : UnconstrainedBid = results[req.id][subtask_index]
 
-    #             # calc utility
-    #             params = {"req" : req_i, "subtask_index" : subtask_j, "t_img" : t_img}
-    #             utility = self.utility_func(**params) if t_img >= 0 else np.NINF
-    #             utility *= synergy_factor(**params)
+                if old_bid != new_bid:
+                    changes_to_bundle.append((req, subtask_index))
 
-    #             # create bid
-    #             bid : Bid = original_results[req_i.id][subtask_j].copy()
-    #             bid.set_bid(utility, t_img, state.t)
+                results[req.id][subtask_index] = new_bid
+
+
+            x = 1
+
+        return results, bundle, path, changes
+
+    def __sum_path_utility(self, path : list) -> float:
+        """ Gives the total utility of a proposed observations sequence """
+        return sum([u for _,_,_,u in path])   
+   
+    def calc_path_bid(
+                        self, 
+                        state : SimulationAgentState, 
+                        original_results : dict,
+                        original_path : list, 
+                        req : MeasurementRequest, 
+                        subtask_index : int
+                    ) -> tuple:
+        state : SimulationAgentState = state.copy()
+        winning_path = None
+        winning_bids = None
+        winning_path_utility = 0.0
+
+        # check if the subtask is mutually exclusive with something in the bundle
+        for req_i, subtask_j in original_path:
+            req_i : MeasurementRequest; subtask_j : int
+            if req_i.id == req.id:
+                if req.dependency_matrix[subtask_j][subtask_index] < 0:
+                    return winning_path, winning_bids, winning_path_utility
+
+        # find best placement in path
+        # self.log_task_sequence('original path', original_path, level=logging.WARNING)
+        for i in range(len(original_path)+1):
+            # generate possible path
+            path = [scheduled_obs for scheduled_obs in original_path]
+            
+            path.insert(i, (req, subtask_index))
+            # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
+
+            # calculate bids for each task in the path
+            bids = {}
+            for req_i, subtask_j in path:
+                # calculate imaging time
+                req_i : MeasurementRequest
+                subtask_j : int
+                t_img = self.calc_imaging_time(state, path, bids, req_i, subtask_j)
+
+                # calc utility
+                params = {"req" : req_i, "subtask_index" : subtask_j, "t_img" : t_img}
+                utility = self.utility_func(**params) if t_img >= 0 else np.NINF
+                utility *= synergy_factor(**params)
+
+                # create bid
+                bid : Bid = original_results[req_i.id][subtask_j].copy()
+                bid.set_bid(utility, t_img, state.t)
                 
-    #             if req_i.id not in bids:
-    #                 bids[req_i.id] = {}    
-    #             bids[req_i.id][subtask_j] = bid                
+                if req_i.id not in bids:
+                    bids[req_i.id] = {}    
+                bids[req_i.id][subtask_j] = bid                
 
-    #         # look for path with the best utility
-    #         path_utility = self.sum_path_utility(path, bids)
-    #         if path_utility > winning_path_utility:
-    #             winning_path = path
-    #             winning_bids = bids
-    #             winning_path_utility = path_utility
+            # look for path with the best utility
+            path_utility = self.__sum_path_utility(path, bids)
+            if path_utility > winning_path_utility:
+                winning_path = path
+                winning_bids = bids
+                winning_path_utility = path_utility
 
-    #     return winning_path, winning_bids, winning_path_utility
+        return winning_path, winning_bids, winning_path_utility
 
     # def calc_imaging_time(self, state : SimulationAgentState, path : list, bids : dict, req : MeasurementRequest, subtask_index : int) -> float:
     #     """

@@ -242,10 +242,11 @@ def agent_factory(  scenario_name : str,
         preplanner_type = planner_dict.get('preplanner', None)
         replanner_type = planner_dict.get('replanner', None)
         planning_horizon = planner_dict.get('horizon', np.Inf)
+        utility = utility_function[planner_dict.get('utility', 'NONE')]
         
         if preplanner_type is not None:
             if preplanner_type == 'FIFO':
-                preplanner = FIFOPreplanner()
+                preplanner = FIFOPreplanner(utility)
             else:
                 raise NotImplementedError(f'preplanner of type `{preplanner_type}` not yet supported.')
         else:
@@ -253,10 +254,10 @@ def agent_factory(  scenario_name : str,
 
         if replanner_type is not None:
             if replanner_type == 'FIFO':
-                replanner = FIFOReplanner()
+                replanner = FIFOReplanner(utility)
             elif replanner_type == 'ACBBA':
                 max_bundle_size = planner_dict.get('bundle size', 3)
-                replanner = ACBBAReplanner(agent_name, utility_function, max_bundle_size)
+                replanner = ACBBAReplanner(agent_name, utility, max_bundle_size)
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_type}` not yet supported.')
         else:
@@ -267,7 +268,7 @@ def agent_factory(  scenario_name : str,
     planner = PlanningModule(   results_path, 
                                 agent_name, 
                                 agent_network_config, 
-                                utility_function, 
+                                utility, 
                                 preplanner,
                                 replanner,
                                 planning_horizon,

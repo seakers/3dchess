@@ -401,7 +401,7 @@ class SimulationEnvironment(EnvironmentNode):
 
                 ## calculate utility
                 else:
-                    observation_data['u'] = self.utility_func(**observation_data)
+                    observation_data['u'] = self.utility_func(**observation_data) * synergy_factor(**observation_data)
 
                 return observation_data
 
