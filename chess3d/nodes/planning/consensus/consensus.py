@@ -125,8 +125,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 )       
 
         # chose modified plan if planning has converged
-        converged = self._compare_bundles(self.bundle, prev_bundle)
-        # converged = False
+        converged = self._is_bundle_converged(state, self.results, self.bundle, prev_bundle)
         plan = current_plan if not converged else self._plan_from_path(state, self.path, state.t, clock_config)
 
         # add broadcast changes to plan
@@ -158,15 +157,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         return prev_results, prev_bundle
 
-
-    def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
-        """ Compares two bundles. Returns true if they are equal and false if not. """
-        if len(bundle_1) == len(bundle_2):
-            for req, subtask in bundle_1:
-                if (req, subtask) not in bundle_2:            
-                    return False
-            return True
-        return False
+    @abstractmethod
+    def _is_bundle_converged(   self, 
+                                state : SimulationAgentState, 
+                                results : dict, 
+                                bundle : list, 
+                                prev_bundle: list
+                            ) -> bool:
+        """ Checks if the constructed bundle is ready for excution"""
+        pass
 
     def _compile_broadcast_bids(self, planner_changes : list) -> list:        
         """ Compiles changes in bids from consensus and planning phase and returns a list of the most updated bids """
@@ -447,15 +446,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         changes = []
         rebroadcasts = []
-        task_to_remove = None
-        task_to_reset = None
+        req_to_remove = None
+        req_to_reset = None
         for req, subtask_index in bundle:
             req : MeasurementRequest
 
             # check if bid has been performed 
             subtask_bid : Bid = results[req.id][subtask_index]
             if self.is_bid_completed(req, subtask_bid, t):
-                task_to_remove = (req, subtask_index)
+                req_to_remove = (req, subtask_index)
                 break
 
             # check if a mutually exclusive bid has been performed
@@ -467,16 +466,16 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 bid : Bid = bids[bid_index]
 
                 if self.is_bid_completed(req, bid, t) and req.dependency_matrix[subtask_index][bid_index] < 0:
-                    task_to_remove = (req, subtask_index)
-                    task_to_reset = (req, subtask_index) 
+                    req_to_remove = (req, subtask_index)
+                    req_to_reset = (req, subtask_index) 
                     break   
 
-            if task_to_remove is not None:
+            if req_to_remove is not None:
                 break
 
-        if task_to_remove is not None:
-            if task_to_reset is not None:
-                bundle_index = bundle.index(task_to_remove)
+        if req_to_remove is not None:
+            if req_to_reset is not None:
+                bundle_index = bundle.index(req_to_remove)
                 
                 # level=logging.WARNING
                 # self.log_results('PRELIMINARY PREVIOUS PERFORMER CHECKED RESULTS', results, level)
@@ -499,10 +498,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     # self.log_task_sequence('bundle', bundle, level)
                     # self.log_task_sequence('path', path, level)
             else: 
-                # remove performed subtask from bundle and path 
-                bundle_index = bundle.index(task_to_remove)
-                req, subtask_index = bundle.pop(bundle_index)
-                path.remove((req, subtask_index))
+                # remove performed subtask from bundle
+                if req_to_remove in bundle:
+                    bundle_index = bundle.index(req_to_remove)
+                    req, subtask_index = bundle.pop(bundle_index)
+
+                # remove performed subtask from path
+                req, subtask_index = req_to_remove
+                path_elements = [item for item in path if item[0] == req and item[1] == subtask_index]
+                path.remove(path_elements[0])
 
                 # set bid as completed
                 bid : Bid = results[req.id][subtask_index]
@@ -532,11 +536,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """
         Creates a modified plan from all known requests and current plan
         """
-        # return results, [], path, [] # FOR DEBUGGING PURPOSES
-
-        changes, changes_to_bundle = [], []
-
+        changes = []
         path = []
+
         for measurement_action in [action for action in current_plan if isinstance(action, MeasurementAction)]:
         
             measurement_action : MeasurementAction
@@ -562,18 +564,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
             max_path_bids[req.id][subtask_index] = results[req.id][subtask_index]
 
         max_req = -1
-
         while ( len(available_reqs) > 0                     # there are available tasks to be bid on
                 and len(bundle) < self.max_bundle_size      # there is space in the bundle
                 and max_req is not None                     # there is a request that maximizes utility
             ):   
              # find next best task to put in bundle (greedy)
-            max_task = None 
+            max_req = None 
             max_subtask = None
             for req, subtask_index in available_reqs:
                 
                 # calculate best bid and path for a given request and subtask
-                projected_path, projected_bids, projected_path_utility \
+                projected_path, projected_path_utility \
                      = self.calc_path_bid(  state, 
                                             results, 
                                             path, 
@@ -585,41 +586,36 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     continue
 
                 # compare to maximum task
-                projected_utility = projected_bids[req.id][subtask_index].winning_bid
-                current_utility = results[req.id][subtask_index].winning_bid
                 if (
-                    max_task is None or projected_path_utility > max_path_utility
-                    # and projected_utility > current_utility
+                    max_req is None or projected_path_utility > max_path_utility
                     ):
 
-                    # check for cualition and mutex satisfaction
-                    proposed_bid : UnconstrainedBid = projected_bids[req.id][subtask_index]
-                    
+                    # check for cualition and mutex satisfaction                    
                     max_path = projected_path
-                    max_task = req
-                    max_subtask = subtask_index
-                    max_path_bids = projected_bids
                     max_path_utility = projected_path_utility
-                    max_utility = proposed_bid.winning_bid
+                    max_req = req
+                    max_subtask = subtask_index
             
-            if max_task is not None:
+            if max_req is not None:
                 # max bid found! place task with the best bid in the bundle and the path
-                bundle.append((max_task, max_subtask))
+                bundle.append((max_req, max_subtask))
                 path = max_path
 
-            # update results
-            for req, subtask_index, _, _ in path:
-                req : MeasurementRequest
-                subtask_index : int
-                new_bid : UnconstrainedBid = max_path_bids[req.id][subtask_index]
-                old_bid : UnconstrainedBid = results[req.id][subtask_index]
+                # update results
+                for req, subtask_index in bundle:
+                    req : MeasurementRequest
+                    subtask_index : int
+                    
+                    path_elements = [item for item in path if item[0] == req and item[1] == subtask_index]
+                    _, _, t_img, u_exp = path_elements[0]
 
-                if old_bid != new_bid:
-                    changes_to_bundle.append((req, subtask_index))
+                    old_bid : Bid = results[req.id][subtask_index]
+                    new_bid : Bid = old_bid.copy()
+                    new_bid.set_bid(u_exp, t_img, state.t)
 
-                results[req.id][subtask_index] = new_bid
-
-            x = 1
+                    if old_bid != new_bid:
+                        changes.append(new_bid.copy())
+                        results[req.id][subtask_index] = new_bid
 
         return results, bundle, path, changes 
    
@@ -690,16 +686,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                     if abs(t_img - t_img_prev) <= 1e-3:
                         # path was unchanged; keep the remaining elements of the previous path                    
-                        break
+                        pass
                     else:
-                        # path was changed; modify bid
-                        ## calc utility
-                        params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
-                        utility = self.utility_func(**params) if t_img >= 0 else np.NINF
-                        utility *= synergy_factor(**params)
-
-                        ## place bid in path
-                        path[j] = (req, subtask_index, t_img, utility)
+                        # path was changed; set as unfeasible 
+                        path[j] = (req, subtask_index, -1, -1)
+                    break
 
             # look for path with the best utility
             path_utility = self.__sum_path_utility(path)

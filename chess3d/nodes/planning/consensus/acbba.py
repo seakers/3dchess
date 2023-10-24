@@ -106,6 +106,24 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         else:
             raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
+    def _is_bundle_converged(   self, 
+                                state : SimulationAgentState, 
+                                results : dict, 
+                                bundle : list, 
+                                prev_bundle: list
+                            ) -> bool:
+        """ Checks if the constructed bundle is ready for excution"""
+        return self._compare_bundles(bundle, prev_bundle)
+
+    def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
+        """ Compares two bundles. Returns true if they are equal and false if not. """
+        if len(bundle_1) == len(bundle_2):
+            for req, subtask in bundle_1:
+                if (req, subtask) not in bundle_2:            
+                    return False
+            return True
+        return False
+
 
     # def calc_arrival_times(self, state : SimulationAgentState, req : MeasurementRequest, t_prev : Union[int, float]) -> float:
     #     """
