@@ -81,15 +81,13 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def _compile_bids(self, incoming_reqs : list, generated_reqs : list, misc_messages : list, t : float) -> list:
         """ Reads incoming messages and requests and checks if bids were received """
         # get bids from misc messages
-        bids = [Bid.from_dict(msg.bid) 
-                for msg in filter(lambda msg : isinstance(msg, MeasurementBidMessage), misc_messages)
-                ]
+        bids = [Bid.from_dict(msg.bid) for msg in misc_messages if isinstance(msg, MeasurementBidMessage)]
         
         # check for new requests from incoming requests
-        new_reqs = list(filter(lambda req : req.id not in self.results, incoming_reqs))
+        new_reqs = [req for req in incoming_reqs if req.id not in self.results]
         
         #check for new requests from generated requests
-        new_reqs.extend(list(filter(lambda req : req.id not in self.results and req not in new_reqs, generated_reqs)))
+        new_reqs.extend([req for req in generated_reqs if req.id not in self.results and req not in new_reqs])
         
         # generate bids for new requests
         for new_req in new_reqs:
@@ -192,7 +190,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         out = []
         for req_id in broadcast_bids:
-            out.extend(filter(lambda bid : bid is not None, broadcast_bids[req_id]))
+            out.extend([bid for bid in broadcast_bids[req_id] if bid is not None])
             
         return out
     
@@ -236,9 +234,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ Checks if an agent can access the location of a measurement request """
         if isinstance(state, SatelliteAgentState):
             main_instrument, _ = req.measurement_groups[subtask_index]
-            t_arrivals = list(filter(lambda t : req.t_start <= t <= req.t_end, 
-                                        self.access_times[req.id][main_instrument])
-                            )
+            t_arrivals = [t for t in self.access_times[req.id][main_instrument] if req.t_start <= t <= req.t_end]
 
             return len(t_arrivals)
         else:
@@ -524,12 +520,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
         PLANNING PHASE
     -----------------------
     """
+    @runtime_tracker
     def planning_phase( self, 
                         state : SimulationAgentState, 
                         current_plan : list,
                         results : dict, 
                         bundle : list,
-                        # path : list,
                         t_plan : float,
                         t_next : float
                     ) -> tuple:
@@ -541,7 +537,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
         changes, changes_to_bundle = [], []
 
         path = []
-        for measurement_action in filter(lambda action : isinstance(action, MeasurementAction), current_plan):
+        for measurement_action in [action for action in current_plan if isinstance(action, MeasurementAction)]:
+        
             measurement_action : MeasurementAction
             req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
             path.append((req, measurement_action.subtask_index, measurement_action.t_start, measurement_action.u_exp))
@@ -611,7 +608,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 path = max_path
 
             # update results
-            for req, subtask_index in path:
+            for req, subtask_index, _, _ in path:
                 req : MeasurementRequest
                 subtask_index : int
                 new_bid : UnconstrainedBid = max_path_bids[req.id][subtask_index]
@@ -622,15 +619,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                 results[req.id][subtask_index] = new_bid
 
-
             x = 1
 
-        return results, bundle, path, changes
-
-    def __sum_path_utility(self, path : list) -> float:
-        """ Gives the total utility of a proposed observations sequence """
-        return sum([u for _,_,_,u in path])   
+        return results, bundle, path, changes 
    
+    @runtime_tracker
     def calc_path_bid(
                         self, 
                         state : SimulationAgentState, 
@@ -641,63 +634,101 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     ) -> tuple:
         state : SimulationAgentState = state.copy()
         winning_path = None
-        winning_bids = None
         winning_path_utility = 0.0
 
-        # check if the subtask is mutually exclusive with something in the bundle
+        # check if the subtask to be added is mutually exclusive with something in the bundle
         for req_i, subtask_j, _, _ in original_path:
             req_i : MeasurementRequest; subtask_j : int
             if req_i.id == req.id:
                 if req.dependency_matrix[subtask_j][subtask_index] < 0:
-                    return winning_path, winning_bids, winning_path_utility
+                    return winning_path, winning_path_utility
 
         # find best placement in path
         # self.log_task_sequence('original path', original_path, level=logging.WARNING)
+
+        ## insert strategy
         for i in range(len(original_path)+1):
             # generate possible path
             path = [scheduled_obs for scheduled_obs in original_path]
             
-            path.insert(i, (req, subtask_index))
+            path.insert(i, (req, subtask_index, -1, -1))
             # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
 
-            # calculate bids for each task in the path
-            bids = {}
-            for req_i, subtask_j in path:
-                # calculate imaging time
-                req_i : MeasurementRequest
-                subtask_j : int
-                t_img = self.calc_imaging_time(state, path, bids, req_i, subtask_j)
+            # recalculate bids for each task in the path if needed
+            for j in range(len(path)):
+                req_i, subtask_j, t_img, u = path[j]
 
-                # calc utility
-                params = {"req" : req_i, "subtask_index" : subtask_j, "t_img" : t_img}
-                utility = self.utility_func(**params) if t_img >= 0 else np.NINF
-                utility *= synergy_factor(**params)
+                if j < i:
+                    # element from previous path is unchanged; maintain current bid
+                    path[j] = (req, subtask_index, t_img, u)
+                    
+                elif j == i:
+                    # new request and subtask are being added; recalculate bid
 
-                # create bid
-                bid : Bid = original_results[req_i.id][subtask_j].copy()
-                bid.set_bid(utility, t_img, state.t)
-                
-                if req_i.id not in bids:
-                    bids[req_i.id] = {}    
-                bids[req_i.id][subtask_j] = bid                
+                    ## calculate imaging time
+                    req_i : MeasurementRequest
+                    subtask_j : int
+                    t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
+
+                    ## calc utility
+                    params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
+                    utility = self.utility_func(**params) if t_img >= 0 else np.NINF
+                    utility *= synergy_factor(**params)
+
+                    ## place bid in path
+                    path[j] = (req, subtask_index, t_img, utility)
+
+                else:
+                    # elements from previous path are being adapted to new path
+
+                    ## calculate imaging time
+                    req_i : MeasurementRequest
+                    subtask_j : int
+                    t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
+
+                    _, _, t_img_prev, _ = original_path[j - 1]
+
+                    if abs(t_img - t_img_prev) <= 1e-3:
+                        # path was unchanged; keep the remaining elements of the previous path                    
+                        break
+                    else:
+                        # path was changed; modify bid
+                        ## calc utility
+                        params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
+                        utility = self.utility_func(**params) if t_img >= 0 else np.NINF
+                        utility *= synergy_factor(**params)
+
+                        ## place bid in path
+                        path[j] = (req, subtask_index, t_img, utility)
 
             # look for path with the best utility
-            path_utility = self.__sum_path_utility(path, bids)
+            path_utility = self.__sum_path_utility(path)
             if path_utility > winning_path_utility:
                 winning_path = path
-                winning_bids = bids
                 winning_path_utility = path_utility
+        
+        ## replacement strategy
+        if winning_path is None:
+            # TODO add replacement strategy
+            pass
 
-        return winning_path, winning_bids, winning_path_utility
+        return winning_path, winning_path_utility
 
     @abstractmethod
-    def calc_imaging_time(self, state : SimulationAgentState, path : list, bids : dict, req : MeasurementRequest, subtask_index : int) -> float:
+    def calc_imaging_time(self, state : SimulationAgentState, path : list, req : MeasurementRequest, subtask_index : int) -> float:
         """
         Computes the ideal" time when a task in the path would be performed
         ### Returns
             - t_img (`float`): earliest available imaging time
         """
         pass 
+
+    def __sum_path_utility(self, path : list) -> float:
+        """ Gives the total utility of a proposed observations sequence """
+        if -1 in [t_img for _,_,t_img,_ in path]:
+            return 0.0
+        
+        return sum([u for _,_,_,u in path])  
     
     """
     --------------------

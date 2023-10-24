@@ -75,11 +75,7 @@ class AbstractPreplanner(ABC):
         reqs = [req for req in incoming_reqs]
         reqs.extend(generated_reqs)
 
-        new_reqs = list(filter(lambda req : req not in self.known_reqs 
-                                            and req.s_max > 0, reqs)
-                        )
-
-        return new_reqs
+        return [req for req in reqs if req not in self.known_reqs and req.s_max > 0]
 
     @runtime_tracker
     def __update_performed_requests(self, performed_actions : list) -> None:
@@ -102,9 +98,7 @@ class AbstractPreplanner(ABC):
         Calculates and saves the access times of all known requests
         """
         if state.t >= self.t_next or t_plan < 0:
-            # recalculate access times for all known requests
-            # unperformed_reqs = list(filter(lambda req : req not in self.performed_requests, self.known_reqs))
-            
+            # recalculate access times for all known requests            
             for req in self.known_reqs:
                 req : MeasurementRequest
                 self.access_times[req.id] = {instrument : [] for instrument in req.measurements}

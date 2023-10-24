@@ -1,6 +1,8 @@
 import numpy as np
 
-from nodes.states import SimulationAgentState, SatelliteAgentState
+from dmas.utils import runtime_tracker
+
+from nodes.states import *
 from nodes.planning.consensus.bids import UnconstrainedBid
 from nodes.planning.consensus.consensus import AbstractConsensusReplanner
 from nodes.science.reqs import MeasurementRequest
@@ -35,22 +37,36 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         
         return True
 
-    def calc_imaging_time(self, state : SimulationAgentState, path : list, bids : dict, req : MeasurementRequest, subtask_index : int) -> float:
+    @runtime_tracker
+    def calc_imaging_time(  self, 
+                            state : SimulationAgentState, 
+                            path : list,
+                            req : MeasurementRequest, 
+                            subtask_index : int
+                         ) -> float:
         """
         Computes the ideal" time when a task in the path would be performed
         ### Returns
             - t_img (`float`): earliest available imaging time
         """
         # calculate the state of the agent prior to performing the measurement request
-        i = path.index((req, subtask_index))
+        def is_path_element(path_element) -> bool:
+            path_req, path_subtask_index, _, _ = path_element
+            return path_req == req and path_subtask_index == subtask_index
+
+        path_element = list(filter(is_path_element, path))
+        if len(path_element) != 1:
+            # path contains more than one measurement of the same request and subtask or does not contain it at all
+            return -1
+
+        i = path.index(path_element[0])
         if i == 0:
             t_prev = state.t
             prev_state = state.copy()
         else:
-            prev_req, prev_subtask_index = path[i-1]
-            prev_req : MeasurementRequest; prev_subtask_index : int
-            bid_prev : UnconstrainedBid = bids[prev_req.id][prev_subtask_index]
-            t_prev : float = bid_prev.t_img + prev_req.duration
+            prev_req, _, t_img, _ = path[i-1]
+            prev_req : MeasurementRequest
+            t_prev : float = t_img + prev_req.duration
 
             if isinstance(state, SatelliteAgentState):
                 prev_state : SatelliteAgentState = state.propagate(t_prev)
@@ -60,14 +76,14 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                                         0.0,
                                         0.0
                                     ]
-            # elif isinstance(state, UAVAgentState):
-            #     prev_state = state.copy()
-            #     prev_state.t = t_prev
+            elif isinstance(state, UAVAgentState):
+                prev_state = state.copy()
+                prev_state.t = t_prev
                 
-            #     if isinstance(prev_req, GroundPointMeasurementRequest):
-            #         prev_state.pos = prev_req.pos
-            #     else:
-            #         raise NotImplementedError
+                if isinstance(prev_req, GroundPointMeasurementRequest):
+                    prev_state.pos = prev_req.pos
+                else:
+                    raise NotImplementedError
             else:
                 raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
@@ -75,15 +91,18 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             instrument, _ = req.measurement_groups[subtask_index]
             t_img = -1
 
-            for t_arrival in self.access_times[req.id][instrument]:
+            for t_arrival in [t for t in self.access_times[req.id][instrument] if t >= t_prev] :
                 th_i = prev_state.attitude[0]
                 th_j = state.calc_off_nadir_agle(req)
                 
-                if (t_arrival >= t_prev and 
-                    abs(th_i - th_j) / state.max_slew_rate > t_arrival - t_prev):
+                if abs(th_j - th_i) / state.max_slew_rate <= t_arrival - t_prev:
                     return t_arrival
 
             return t_img
+
+        # elif isinstance(state, UAVAgentState):
+        #     pass
+        
         else:
             raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 

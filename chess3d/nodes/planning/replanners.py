@@ -233,29 +233,27 @@ class AbstractReplanner(ABC):
         """
         Reads incoming requests and current plan to keep track of all known requests
         """
-        ## list all requests in current plan
-        measurement_actions = filter(lambda action : isinstance(action, MeasurementAction), current_plan)
+        ## list all requests in current plan)
+        measurement_actions = [action for action in current_plan if isinstance(action, MeasurementAction)]
         scheduled_reqs = []
         for action in measurement_actions:
             action : MeasurementAction
             if action not in scheduled_reqs:
-                scheduled_reqs.append(MeasurementRequest.from_dict(action.measurement_req))       
-        new_scheduled_reqs = filter(lambda req : req not in self.known_reqs, scheduled_reqs)
+                scheduled_reqs.append(MeasurementRequest.from_dict(action.measurement_req)) 
+        new_scheduled_reqs = [req for req in scheduled_reqs if req not in self.known_reqs]
         
         # update intenal list of known requests with scheduled requests
         self.known_reqs.extend(new_scheduled_reqs)
 
         ## compare with incoming or generated requests
         new_reqs = []
-        new_incoming_reqs = list(filter(lambda req :    req not in self.known_reqs and
-                                                        req not in new_reqs and 
-                                                        req.s_max > 0.0, 
-                                        incoming_reqs))
+        new_incoming_reqs = [req for req in incoming_reqs if    req not in self.known_reqs and
+                                                                req not in new_reqs and 
+                                                                req.s_max > 0.0]
         new_reqs.extend(new_incoming_reqs)
-        new_generated_reqs= list(filter(lambda req :    req not in self.known_reqs and
-                                                        req not in new_reqs and 
-                                                        req.s_max > 0.0, 
-                                        generated_reqs))        
+        new_generated_reqs = [req for req in generated_reqs if  req not in self.known_reqs and
+                                                                req not in new_reqs and 
+                                                                req.s_max > 0.0]
         new_reqs.extend(new_generated_reqs)
 
         # update intenal list of known requests with new requests
@@ -284,7 +282,7 @@ class AbstractReplanner(ABC):
                     self.access_times.pop(req.id)
 
         # calculate new access times for new requests
-        uncalculated_reqs = list(filter(lambda req : req.id not in self.access_times, self.known_reqs))
+        uncalculated_reqs = [req for req in self.known_reqs if req.id not in self.access_times]
         for req in uncalculated_reqs:
             req : MeasurementRequest
             self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
@@ -444,7 +442,7 @@ class FIFOReplanner(AbstractReplanner):
             for instrument in req.measurements:
                 if (req, instrument) in scheduled_reqs:
                     scheduled_measurements.append(instrument)
-            unscheduled_measurement = list(filter(lambda measurement : measurement not in scheduled_measurements, req.measurements))
+            unscheduled_measurement = [measurement for measurement in req.measurements if measurement not in scheduled_measurements]
                         
             for instrument in unscheduled_measurement:
                 t_arrivals = self.access_times[req.id][instrument]
