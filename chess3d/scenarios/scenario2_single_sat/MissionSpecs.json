@@ -104,6 +104,7 @@
                 "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "ACBBA",
+                "dt_convergence" : 0.0,
                 "utility" : "LINEAR"
             },
             "science" : "True",

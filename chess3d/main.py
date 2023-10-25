@@ -257,7 +257,8 @@ def agent_factory(  scenario_name : str,
                 replanner = FIFOReplanner(utility)
             elif replanner_type == 'ACBBA':
                 max_bundle_size = planner_dict.get('bundle size', 3)
-                replanner = ACBBAReplanner(agent_name, utility, max_bundle_size)
+                dt_converge = planner_dict.get('dt_convergence', 0.0)
+                replanner = ACBBAReplanner(agent_name, utility, max_bundle_size, dt_converge)
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_type}` not yet supported.')
         else:
