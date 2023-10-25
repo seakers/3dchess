@@ -607,7 +607,7 @@ class UnconstrainedBid(Bid):
                             performed
                             )
     
-    def new_bids_from_request(req : MeasurementRequest, bidder : str) -> list:
+    def new_bids_from_request(req : MeasurementRequest, bidder : str, dt_converge : float = 0.0) -> list:
         """
         Generates subtask bids from a measurement request
         """
@@ -621,7 +621,9 @@ class UnconstrainedBid(Bid):
             subtasks.append(UnconstrainedBid(   req.to_dict(), 
                                                 subtask_index,
                                                 main_measurement,
-                                                bidder))
+                                                bidder,
+                                                dt_converge=dt_converge
+                                            ))
         return subtasks
 
 class ConstrainedBid(Bid):

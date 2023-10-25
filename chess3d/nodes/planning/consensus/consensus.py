@@ -6,7 +6,7 @@ import pandas as pd
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from nodes.planning.consensus.bids import *
+from nodes.planning.consensus.bids import Bid
 from nodes.planning.replanners import AbstractReplanner
 from nodes.science.utility import *
 from nodes.orbitdata import OrbitData
@@ -19,12 +19,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def __init__(   self,
                     parent_name : str,
                     utility_func : Callable[[], Any],
-                    max_bundle_size : int = 3
+                    max_bundle_size : int = 3,
+                    dt_converge : float = 0.0
                     ) -> None:
         super().__init__(utility_func)
 
         self.parent_name = parent_name
         self.max_bundle_size = max_bundle_size
+        self.dt_converge = dt_converge
 
         self.bundle = []
         self.path = []
@@ -34,6 +36,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.pre_path = []
 
         self.rebroadcasts = []
+        self.converged = True
 
     def get_parent_name(self) -> str:
         return self.parent_name
@@ -76,7 +79,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.results, self.bundle, self.path, _, self.rebroadcasts = self.consensus_phase(self.results, self.bundle, self.path, state.t, bids_received)
 
         # replan if relevant changes have been made to the bundle
-        return len(self.rebroadcasts) > 0
+        if not self.converged:
+            x = 1
+        if len(self.rebroadcasts) > 0:
+            x = 1
+
+        return len(self.rebroadcasts) > 0 or not self.converged
 
     def _compile_bids(self, incoming_reqs : list, generated_reqs : list, misc_messages : list, t : float) -> list:
         """ Reads incoming messages and requests and checks if bids were received """
@@ -99,7 +107,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
     def replan( self, 
                 state: SimulationAgentState,
-                current_plan: list, 
+                original_plan: list, 
                 performed_actions: list, 
                 incoming_reqs: list, 
                 generated_reqs: list, 
@@ -109,6 +117,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 clock_config: ClockConfig, 
                 orbitdata: OrbitData = None
             ) -> list:
+        # reset convergence if needed
+        # self.converged = False if self.converged else self.converged
 
         # save previous bundle for future convergence checks
         _, prev_bundle = self._save_previous_bundle(self.results, self.bundle)
@@ -116,18 +126,26 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # perform bundle-building phase
         self.results, self.bundle, self.path, planner_changes \
                 = self.planning_phase(  state, 
-                                        current_plan,
+                                        original_plan,
                                         self.results,
                                         self.bundle,
-                                        # self.path,
                                         t_plan,
                                         t_next
                 )       
 
         # chose modified plan if planning has converged
-        converged = self._is_bundle_converged(state, self.results, self.bundle, prev_bundle)
-        plan = current_plan if not converged else self._plan_from_path(state, self.path, state.t, clock_config)
-
+        self.converged = self._is_bundle_converged(state, self.results, self.bundle, prev_bundle)
+        # plan = [action for action in original_plan] if not self.converged else self._plan_from_path(state, self.path, state.t, clock_config)
+        if self.converged:
+            dt_converge = 0.0 
+        else:
+            dt_converge = min([self.results[req.id][subtask_index].dt_converge 
+                                + self.results[req.id][subtask_index].t_update 
+                                for req, subtask_index in self.bundle
+                                ]
+                            ) - state.t
+        plan = self._plan_from_path(state, self.path, state.t, clock_config, dt_converge)
+        
         # add broadcast changes to plan
         broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
         for bid in broadcast_bids:
@@ -140,6 +158,21 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.rebroadcasts = []
         
         # return plan
+        # print('Observations in Original Path:')
+        # original_obs_actions = [action for action in original_plan if isinstance(action, MeasurementAction)]
+        # for action in original_obs_actions:
+        #     print(action.measurement_req['id'].split('-')[0], action.subtask_index)
+        # print(len(original_obs_actions))
+            
+        # print('Observations in Modified Path:')
+        # obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
+        # for action in obs_actions:
+        #     print(action.measurement_req['id'].split('-')[0], action.subtask_index)
+        # print(len(obs_actions))
+
+        # if len(original_obs_actions) != len(obs_actions):
+        #     x = 1
+
         return plan
 
     def _save_previous_bundle(self, results : dict, bundle : list) -> tuple:
@@ -448,6 +481,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         rebroadcasts = []
         req_to_remove = None
         req_to_reset = None
+
         for req, subtask_index in bundle:
             req : MeasurementRequest
 
@@ -537,10 +571,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
         Creates a modified plan from all known requests and current plan
         """
         changes = []
-        path = []
 
+        path = []
         for measurement_action in [action for action in current_plan if isinstance(action, MeasurementAction)]:
-        
             measurement_action : MeasurementAction
             req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
             path.append((req, measurement_action.subtask_index, measurement_action.t_start, measurement_action.u_exp))

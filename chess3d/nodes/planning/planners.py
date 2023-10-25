@@ -468,7 +468,7 @@ class PlanningModule(InternalModule):
                                                 level)   
                     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    self.__log_plan(plan, "PLAN", logging.WARNING)
+                    self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                     # -------------------------------------
 
                 # Check if reeplanning is needed
@@ -492,6 +492,10 @@ class PlanningModule(InternalModule):
                                                 )
                     ):
                     
+                    # --- FOR DEBUGGING PURPOSES ONLY: ---
+                    # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                    # -------------------------------------
+
                     # replan
                     plan : list = await self._replan(   
                                                         plan, 
@@ -505,7 +509,8 @@ class PlanningModule(InternalModule):
                     pending_actions = []
 
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    self.__log_plan(plan, "PLAN", logging.WARNING)
+                    # self.__log_plan(plan, "REPLAN", logging.WARNING)
+                    x = 1
                     # -------------------------------------
 
                 # --- Execute plan ---
@@ -522,9 +527,6 @@ class PlanningModule(InternalModule):
                     raise RuntimeError("Planner generated an unfeasible plan.")
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # if self.get_current_time() >= 3670.0 and "thm_1" in self.get_parent_name():
-                #     self.__log_plan(plan, "PLAN", logging.WARNING)
-                #     x =1 
                 # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
@@ -768,7 +770,11 @@ class PlanningModule(InternalModule):
         """ Parses current plan and outputs list of actions that are to be performed at a given time"""
 
         # get next available action to perform
-        plan_out = list(filter(lambda action : action.t_start <= t <= action.t_end, plan))
+        plan_out = [action for action in plan if action.t_start <= t <= action.t_end]
+
+        # if broadcasts are to be done, perform them first before any other actions
+        broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction) or isinstance(action, WaitForMessages)]
+        plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
         plan_out = [action.to_dict() for action in plan_out]
 
         # re-attempt pending actions 

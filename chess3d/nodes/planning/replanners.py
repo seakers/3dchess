@@ -79,7 +79,8 @@ class AbstractReplanner(ABC):
                             state : SimulationAgentState, 
                             path : list,
                             t_init : float,
-                            clock_config : ClockConfig
+                            clock_config : ClockConfig,
+                            dt_wait : float = 0.0
                     ) -> list:
         """
         Generates a list of AgentActions from the current path.
@@ -105,12 +106,17 @@ class AbstractReplanner(ABC):
             # Estimate previous state
             if i == 0:
                 if isinstance(state, SatelliteAgentState):
-                    t_prev = state.t
-                    prev_state : SatelliteAgentState = state.copy()
+                    if dt_wait >= 1e-3:
+                        t_prev = state.t + dt_wait
+                        prev_state : SatelliteAgentState = state.propagate(t_prev)
+                        plan_i.append(WaitForMessages(state.t, t_prev))
+                    else:
+                        t_prev = state.t
+                        prev_state : SatelliteAgentState = state.copy()
 
-                elif isinstance(state, UAVAgentState):
-                    t_prev = state.t #TODO consider wait time for convergence
-                    prev_state : UAVAgentState = state.copy()
+                # elif isinstance(state, UAVAgentState):
+                #     t_prev = state.t #TODO consider wait time for convergence
+                #     prev_state : UAVAgentState = state.copy()
 
                 else:
                     raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")

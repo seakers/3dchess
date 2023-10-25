@@ -11,7 +11,7 @@ from nodes.science.reqs import MeasurementRequest
 class ACBBAReplanner(AbstractConsensusReplanner):
     
     def _generate_bids_from_request(self, req : MeasurementRequest) -> list:
-        return UnconstrainedBid.new_bids_from_request(req, self.parent_name)
+        return UnconstrainedBid.new_bids_from_request(req, self.parent_name, self.dt_converge)
 
     # def planning_phase(self, state: SimulationAgentState, current_plan: list, t_next: float) -> tuple:
     #     return [], [], [], []
