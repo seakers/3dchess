@@ -34,6 +34,8 @@ This section outlines the start date of the simulation and scenario duration **i
 ### Spacecraft Description
 Outlines the list of satellites present in the simulation. Describes the satellites components, orbit, instruments, planner settings, and science module capabilities. 
 
+Satellites are not required for the simulation to be run.
+
 > Example:
 ```
 spacecraft": [
@@ -133,4 +135,52 @@ spacecraft": [
             "missionProfile": "3D-CHESS"
         }
     ]
+```
+
+### UAVs 
+Description pending
+
+UAVs are not required for the simulation to be run.
+
+### Ground Stations
+Description pending. 
+
+Ground Stations are not required for the simulation to be run.
+
+### Grid
+Description pending
+
+> Example:
+```
+"grid": [
+        {
+            "@type": "customGrid",
+            "covGridFilePath": "./scenarios/scenario2/resources/lake_event_points.csv"
+        }
+    ]
+```
+
+### Additional Scenario Settings
+Description pending
+
+> Example:
+```
+"scenario": {   
+                    "@type": "PREDEF", 
+                    "initialRequestsPath" : "./scenarios/scenario2_single_sat/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/scenario2_single_sat/resources/all_events_formatted.csv", 
+                    "duration": 30.0, 
+                    "connectivity" : "FULL", 
+                    "utility" : "LINEAR"
+                },
+```
+
+### Additional Coverage Propagator Settings
+Description pending
+
+> Example:
+```
+"settings": {
+        "coverageType": "GRID COVERAGE"
+    }
 ```
