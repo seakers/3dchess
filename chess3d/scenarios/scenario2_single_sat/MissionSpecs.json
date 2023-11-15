@@ -15,8 +15,8 @@
     },
     "spacecraft": [
         {
-            "@id": "imaging_sat_0_0",
-            "name": "img_0",
+            "@id": "imaging_sat_0_1",
+            "name": "img_1",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -97,19 +97,19 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 120.0
                 }
             },
             "planner" : {
                 "horizon" : 3600,
                 "preplanner" : "FIFO",
-                "replanner" : "ACBBA",
-                "dt_convergence" : 0.0,
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "science" : "True",
             "notifier": "False",
-            "missionProfile": "3D-CHESS"
+            "missionProfile": "3D-CHESS",
+            "preplan": "False"
         }
     ],
     "groundStation": [

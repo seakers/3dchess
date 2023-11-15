@@ -32,7 +32,7 @@ from nodes.science.reqs import GroundPointMeasurementRequest
 from nodes.environment import SimulationEnvironment
 from utils import *
 
-from satplan.visualizer import Visualizer
+# from satplan.visualizer import Visualizer
 
 """
 ======================================================

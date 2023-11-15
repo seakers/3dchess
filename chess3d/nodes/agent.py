@@ -276,13 +276,12 @@ class SimulationAgent(Agent):
     async def do(self, actions: list) -> dict:
         statuses = []
         self.log(f'performing {len(actions)} actions', level=logging.DEBUG)
-        
-        for action_dict in actions:
-            action_dict : dict
-            action = action_from_dict(**action_dict)
+
+        for action in [action_from_dict(**action_dict) for action_dict in actions]:
+            action : AgentAction
 
             if (action.t_start - self.get_current_time()) > np.finfo(np.float32).eps:
-                self.log(f"action of type {action_dict['action_type']} has NOT started yet (start time {action.t_start}[s]). waiting for start time...", level=logging.ERROR)
+                self.log(f"action of type {action.action_type} has NOT started yet (start time {action.t_start}[s]). waiting for start time...", level=logging.ERROR)
                 action.status = AgentAction.PENDING
                 statuses.append((action, action.status))
 
@@ -290,52 +289,40 @@ class SimulationAgent(Agent):
                 # continue
             
             if (self.get_current_time() - action.t_end) > np.finfo(np.float32).eps:
-                self.log(f"action of type {action_dict['action_type']} has already occureed (start/end times {action.t_start}[s], {action.t_end}[s]). could not perform task before...", level=logging.ERROR)
+                self.log(f"action of type {action.action_type} has already occureed (start/end times {action.t_start}[s], {action.t_end}[s]). could not perform task before...", level=logging.ERROR)
                 action.status = AgentAction.ABORTED
                 statuses.append((action, action.status))
 
                 raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action_dict['action_type']} after it ended (start/end times {action.t_start}[s], {action.t_end}[s]) at time {self.get_current_time()}[s]")
                 continue
 
-            self.log(f"performing action of type {action_dict['action_type']}...", level=logging.INFO)    
-            if (action_dict['action_type'] == ActionTypes.IDLE.value 
-                or action_dict['action_type'] == ActionTypes.TRAVEL.value
-                or action_dict['action_type'] == ActionTypes.MANEUVER.value):                
+            self.log(f"performing action of type {action.action_type}...", level=logging.INFO)    
+            if (action.action_type == ActionTypes.IDLE.value 
+                or action.action_type == ActionTypes.TRAVEL.value
+                or action.action_type == ActionTypes.MANEUVER.value):                
                 # this action affects the agent's state
-
-                # unpackage action
-                action = action_from_dict(**action_dict)
 
                 # update action completion status
                 action.status = await self.perform_state_change(action)
 
-            elif action_dict['action_type'] == ActionTypes.BROADCAST_MSG.value:
-                # unpack action
-                action = BroadcastMessageAction(**action_dict)
-
+            elif action.action_type == ActionTypes.BROADCAST_MSG.value:
                 # set action complation status
                 action.status = await self.perform_broadcast(action)
             
-            elif action_dict['action_type'] == ActionTypes.WAIT_FOR_MSG.value:
-                # unpack action 
-                action = WaitForMessages(**action_dict)
-                
+            elif action.action_type == ActionTypes.WAIT_FOR_MSG.value:
                 # set action complation status
                 action.status = await self.perform_wait_for_messages(action)
 
-            elif action_dict['action_type'] == ActionTypes.MEASURE.value:
-                # unpack action 
-                action = MeasurementAction(**action_dict)
-                              
+            elif action.action_type == ActionTypes.MEASURE.value:                              
                 # update action completion status
                 action.status = await self.perform_measurement(action)
                 
             else:
                 # ignore action
-                self.log(f"action of type {action_dict['action_type']} not yet supported. ignoring...", level=logging.INFO)
+                self.log(f"action of type {action.action_type} not yet supported. ignoring...", level=logging.INFO)
                 action.status = AgentAction.ABORTED  
                 
-            self.log(f"finished performing action of type {action_dict['action_type']}! action completion status: {action.status}", level=logging.INFO)
+            self.log(f"finished performing action of type {action.action_type}! action completion status: {action.status}", level=logging.INFO)
             statuses.append((action, action.status))
 
         self.log(f'returning {len(statuses)} statuses', level=logging.DEBUG)
