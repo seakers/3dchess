@@ -7,7 +7,7 @@ import pandas as pd
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from messages import MeasurementResultsRequestMessage
+from messages import MeasurementPerformedMessage, MeasurementResultsRequestMessage
 
 from nodes.orbitdata import OrbitData
 from nodes.states import *
@@ -86,15 +86,23 @@ class AbstractPreplanner(ABC):
     def __update_performed_requests(self, performed_actions : list, misc_messages : list) -> list:
         """ Updates an internal list of requests performed by the parent agent """
         performed_requests = []
-        for action in [action for action in performed_actions if isinstance(action, MeasurementAction)]:
+
+        # compile measurements performed by parent agent
+        my_measurements = [action for action in performed_actions if isinstance(action, MeasurementAction)]
+        
+        # compile measurements performed by other agents
+        their_measurements = [MeasurementAction(**msg.measurement_action) for msg in misc_messages if isinstance(MeasurementPerformedMessage)]
+        
+        # compile performed measurements  
+        performed_measurements = my_measurements; performed_measurements.extend(their_measurements)
+
+        # check if measurements are attributed to a known measurement request
+        for action in performed_measurements:
+            action : MeasurementAction 
             req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-            if action.status == action.COMPLETED and (req, action.instrument_name) not in self.performed_requests:
+            if (action.status == action.COMPLETED 
+                ):
                 performed_requests.append((req, action.instrument_name))
-
-        for msg in [msg for msg in misc_messages if isinstance(MeasurementResultsRequestMessage)]:
-            msg : MeasurementResultsRequestMessage
-            req : MeasurementRequest = MeasurementRequest.from_dict(msg.measurement_action)
-
 
         return performed_requests
 
@@ -112,6 +120,8 @@ class AbstractPreplanner(ABC):
             for req in self.known_reqs:
                 req : MeasurementRequest
                 self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+
+                # check access for each required measurement
                 for instrument in self.access_times[req.id]:
                     if instrument not in state.payload:
                         # agent cannot perform this request TODO add KG support
