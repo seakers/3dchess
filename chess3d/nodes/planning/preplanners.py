@@ -7,6 +7,8 @@ import pandas as pd
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
+from messages import MeasurementResultsRequestMessage
+
 from nodes.orbitdata import OrbitData
 from nodes.states import *
 from nodes.actions import *
@@ -18,6 +20,8 @@ from nodes.orbitdata import OrbitData
 class AbstractPreplanner(ABC):
     """
     # Preplanner
+
+    Conducts observations planning for an agent at the beginning of a planning horizon. 
     """
     def __init__(   self, 
                     utility_func : Callable[[], Any], 
@@ -55,7 +59,8 @@ class AbstractPreplanner(ABC):
         self.known_reqs.extend(new_reqs)
 
         # update list of performed requests
-        self.__update_performed_requests(performed_actions)
+        performed_requests : list = self.__update_performed_requests(performed_actions, misc_messages)
+        self.performed_requests.extend(performed_requests)
 
         # update access times 
         self.__update_access_times(state, t_plan, planning_horizon, orbitdata)
@@ -78,15 +83,20 @@ class AbstractPreplanner(ABC):
         return [req for req in reqs if req not in self.known_reqs and req.s_max > 0]
 
     @runtime_tracker
-    def __update_performed_requests(self, performed_actions : list) -> None:
+    def __update_performed_requests(self, performed_actions : list, misc_messages : list) -> list:
         """ Updates an internal list of requests performed by the parent agent """
-        for action in performed_actions:
-            if isinstance(action, MeasurementAction):
-                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                if action.status == action.COMPLETED and (req, action.instrument_name) not in self.performed_requests:
-                    self.performed_requests.append((req, action.instrument_name))
+        performed_requests = []
+        for action in [action for action in performed_actions if isinstance(action, MeasurementAction)]:
+            req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+            if action.status == action.COMPLETED and (req, action.instrument_name) not in self.performed_requests:
+                performed_requests.append((req, action.instrument_name))
 
-        return
+        for msg in [msg for msg in misc_messages if isinstance(MeasurementResultsRequestMessage)]:
+            msg : MeasurementResultsRequestMessage
+            req : MeasurementRequest = MeasurementRequest.from_dict(msg.measurement_action)
+
+
+        return performed_requests
 
     @runtime_tracker
     def __update_access_times(  self,
@@ -104,7 +114,7 @@ class AbstractPreplanner(ABC):
                 self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
                 for instrument in self.access_times[req.id]:
                     if instrument not in state.payload:
-                        # agent cannot perform this request
+                        # agent cannot perform this request TODO add KG support
                         continue
 
                     if (req, instrument) in self.performed_requests:
@@ -364,6 +374,21 @@ class IdlePlanner(AbstractPreplanner):
         return [IdleAction(0.0, np.Inf)]
 
 class FIFOPreplanner(AbstractPreplanner):
+    def __init__(self, 
+                 utility_func: Callable[[], Any], 
+                 collaboration : bool = False,
+                 logger: logging.Logger = None, 
+                 **kwargs
+                 ) -> None:
+        """
+        # First Come, First Served Preplanner
+
+        Schedules 
+        """
+
+        super().__init__(utility_func, logger, **kwargs)
+        self.collaboration = collaboration
+
     @runtime_tracker
     def initialize_plan(self, 
                         state : SimulationAgentState,
@@ -379,6 +404,7 @@ class FIFOPreplanner(AbstractPreplanner):
                     ) -> bool:
         t_plan = t_plan if t_plan >= 0 else 0
         path = []         
+
         available_reqs : list = self._get_available_requests()
 
         if isinstance(state, SatelliteAgentState):

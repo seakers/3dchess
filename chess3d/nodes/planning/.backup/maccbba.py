@@ -15,7 +15,7 @@ from nodes.actions import *
 from nodes.states import SimulationAgentState
 from nodes.science.utility import synergy_factor
 from nodes.science.reqs import MeasurementRequest
-from nodes.planning.consensus.consesus import ConsensusPlanner
+from nodes.planning.consensus.consensus import ConsensusPlanner
 from nodes.planning.consensus.bids import Bid, BidBuffer
 from messages import *
 

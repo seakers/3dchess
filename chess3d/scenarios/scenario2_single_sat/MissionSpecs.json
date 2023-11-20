@@ -104,7 +104,8 @@
                 "horizon" : 3600,
                 "preplanner" : "FIFO",
                 "replanner" : "FIFO",
-                "utility" : "LINEAR"
+                "utility" : "LINEAR",
+                "collaboration " : "True"
             },
             "science" : "True",
             "notifier": "False",

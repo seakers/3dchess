@@ -25,7 +25,7 @@ from nodes.uav import UAVAgent
 from nodes.agent import SimulationAgent
 from nodes.groundstat import GroundStationAgent
 from nodes.satellite import SatelliteAgent
-from nodes.planning.planners import PlanningModule
+from chess3d.nodes.planning.planner import PlanningModule
 from nodes.science.science import ScienceModule
 from nodes.science.utility import utility_function
 from nodes.science.reqs import GroundPointMeasurementRequest
@@ -246,7 +246,9 @@ def agent_factory(  scenario_name : str,
         
         if preplanner_type is not None:
             if preplanner_type == 'FIFO':
-                preplanner = FIFOPreplanner(utility)
+                collaboration = planner_dict.get('collaboration ', "False") 
+                collaboration = collaboration == "True"
+                preplanner = FIFOPreplanner(utility, collaboration)
             else:
                 raise NotImplementedError(f'preplanner of type `{preplanner_type}` not yet supported.')
         else:
@@ -254,7 +256,7 @@ def agent_factory(  scenario_name : str,
 
         if replanner_type is not None:
             if replanner_type == 'FIFO':
-                replanner = FIFOReplanner(utility)
+                replanner = FIFOReplanner(**planner_dict)
             elif replanner_type == 'ACBBA':
                 max_bundle_size = planner_dict.get('bundle size', 3)
                 dt_converge = planner_dict.get('dt_convergence', 0.0)

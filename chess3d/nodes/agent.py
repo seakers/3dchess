@@ -5,7 +5,7 @@ from pandas import DataFrame
 from instrupy.base import Instrument
 from nodes.states import SimulationAgentState
 from nodes.science.reqs import MeasurementRequest
-from nodes.planning.planners import PlanningModule
+from nodes.planning.planner import PlanningModule
 from nodes.science.science import ScienceModule
 from utils import setup_results_directory
 from nodes.actions import *
@@ -215,9 +215,6 @@ class SimulationAgent(Agent):
     
     @runtime_tracker
     async def get_agent_broadcasts(self) -> list:
-        if self.get_element_name() == 'img_1':
-            x= 1
-
         return await self.__empty_queue(self.external_inbox)
 
     """

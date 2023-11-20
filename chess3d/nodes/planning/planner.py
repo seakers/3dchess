@@ -421,6 +421,7 @@ class PlanningModule(InternalModule):
             while True:
                 # wait for agent to update state
                 state : SimulationAgentState = await self.states_inbox.get()
+                
                 await self.agent_state_lock.acquire()
                 await self.update_current_time(state.t)
                 self.agent_state = state
@@ -753,7 +754,7 @@ class PlanningModule(InternalModule):
 
         generated_reqs = []
         if (self.other_modules_exist                # other modules exist within the parent agent
-            and len(incoming_measurements) > 0      # the agent just performed a measurement
+            and len(incoming_measurements) > 0      # some agent just performed a measurement
             ):
 
             # wait for science module to send their assesment of the measurement 

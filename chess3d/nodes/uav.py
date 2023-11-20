@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Callable
 from nodes.agent import SimulationAgent
-from nodes.planning.planners import PlanningModule
+from nodes.planning.planner import PlanningModule
 from nodes.science.science import ScienceModule
 from nodes.states import SimulationAgentState
 from dmas.network import NetworkConfig

@@ -2,10 +2,9 @@ import asyncio
 import logging
 from typing import Any, Callable
 from nodes.planning.preplanners import FIFOPreplanner, IdlePlanner
-from nodes.planning.planners import PlanningModule
+from chess3d.nodes.planning.planner import PlanningModule
 from nodes.science.reqs import *
 from dmas.network import NetworkConfig
-from chess3d.nodes.planning.backup.groundstat import GroundStationPlanner
 from nodes.science.science import ScienceModule
 from nodes.agent import SimulationAgentState, SimulationAgent
 import pandas as pd

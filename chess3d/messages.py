@@ -10,6 +10,7 @@ class SimulationMessageTypes(Enum):
     PLAN = 'PLAN'
     SENSES = 'SENSES'
     MEASUREMENT = 'MEASUREMENT'
+    MEASUREMENT_PERFORMED = 'MEASUREMENT_PERFORMED'
     BUS = 'BUS'
 
 def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
@@ -32,6 +33,8 @@ def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
         return SensesMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.MEASUREMENT.value:
         return MeasurementResultsRequestMessage(**kwargs)
+    elif msg_type == SimulationMessageTypes.MEASUREMENT_PERFORMED.value:
+        return MeasurementPerformedMessage(**kwargs)
     else:
         raise NotImplementedError(f'Action of type {msg_type} not yet implemented.')
 
@@ -82,7 +85,7 @@ class AgentConnectivityUpdate(SimulationMessage):
 
 class MeasurementRequestMessage(SimulationMessage):
     """
-    ## Task Request Message 
+    ## Measurement Request Message 
 
     Describes a task request being between simulation elements
 
@@ -124,6 +127,23 @@ class MeasurementResultsRequestMessage(SimulationMessage):
         self.measurement_action = measurement_action
         self.agent_state = agent_state
         self.measurement = {}
+
+class MeasurementPerformedMessage(SimulationMessage):
+    """
+    ## Measurement Perfromed Message
+
+    Informs other agents that a measurement action was performed to satisfy a measurement request
+    """
+
+    def __init__(self, 
+                 src: str, 
+                 dst: str, 
+                 measurement_action : dict,
+                 id: str = None,
+                 **_
+                 ):
+        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_PERFORMED.value, id)
+        self.measurement_action = measurement_action
 
 class MeasurementBidMessage(SimulationMessage):
     """

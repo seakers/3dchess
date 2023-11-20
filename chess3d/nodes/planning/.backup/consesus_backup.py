@@ -14,7 +14,7 @@ from messages import *
 from dmas.network import NetworkConfig
 from nodes.states import *
 from nodes.planning.consensus.bids import BidBuffer, Bid
-from nodes.planning.planners import PlanningModule
+from chess3d.nodes.planning.planner import PlanningModule
 from nodes.science.utility import synergy_factor
 
 class ConsensusPlanner(PlanningModule):
