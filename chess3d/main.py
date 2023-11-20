@@ -25,7 +25,7 @@ from nodes.uav import UAVAgent
 from nodes.agent import SimulationAgent
 from nodes.groundstat import GroundStationAgent
 from nodes.satellite import SatelliteAgent
-from chess3d.nodes.planning.planner import PlanningModule
+from nodes.planning.planner import PlanningModule
 from nodes.science.science import ScienceModule
 from nodes.science.utility import utility_function
 from nodes.science.reqs import GroundPointMeasurementRequest
@@ -294,7 +294,8 @@ def agent_factory(  scenario_name : str,
             else:
                 eps = 1e-6
 
-            initial_state = UAVAgentState(  [instrument.name for instrument in payload], 
+            initial_state = UAVAgentState(  agent_name,
+                                            [instrument.name for instrument in payload], 
                                             pos, 
                                             max_speed, 
                                             eps=eps )
@@ -319,7 +320,8 @@ def agent_factory(  scenario_name : str,
         l : str = time_data.at[1,time_data.axes[1][0]]
         _, _, _, _, dt = l.split(' '); dt = float(dt)
 
-        initial_state = SatelliteAgentState(orbit_state_dict, 
+        initial_state = SatelliteAgentState(agent_name,
+                                            orbit_state_dict, 
                                             [instrument.name for instrument in payload], 
                                             time_step=dt) 
         

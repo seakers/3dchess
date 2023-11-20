@@ -88,7 +88,7 @@ class AbstractPreplanner(ABC):
         performed_requests = []
 
         # compile measurements performed by parent agent
-        my_measurements = [action for action in performed_actions if isinstance(action, M_get_available_requestseasurementAction)]
+        my_measurements = [action for action in performed_actions if isinstance(action, MeasurementAction)]
         
         # compile measurements performed by other agents
         their_measurements = [MeasurementAction(**msg.measurement_action) for msg in misc_messages if isinstance(MeasurementPerformedMessage)]
@@ -495,13 +495,13 @@ class FIFOPreplanner(AbstractPreplanner):
                     msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action.to_dict())
                     broadcast_action = BroadcastMessageAction(msg.to_dict(), action.t_end)
 
-                    i = plan.index(action) + 1 
-                    i = i if i < len(plan) else -1
-
-                    plan.insert(i, broadcast_action)
+                    plan.insert(plan.index(action) + 1, broadcast_action)
 
             self.t_plan = state.t
             self.t_next = self.t_plan + planning_horizon
+
+            t_wait_start = state.t if len(plan) == 0 else plan[-1].t_end
+            plan.append(WaitForMessages(t_wait_start, self.t_next))
 
             return plan
                 

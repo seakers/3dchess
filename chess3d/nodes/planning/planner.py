@@ -482,7 +482,7 @@ class PlanningModule(InternalModule):
                                                 level)   
                     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                    self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                     # -------------------------------------
 
                 # Check if reeplanning is needed
@@ -540,7 +540,7 @@ class PlanningModule(InternalModule):
                     raise RuntimeError("Planner generated an unfeasible plan.")
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
                 # send plan to parent agent
@@ -783,18 +783,18 @@ class PlanningModule(InternalModule):
         """ Parses current plan and outputs list of actions that are to be performed at a given time"""
 
         # get next available action to perform
-        plan_out = [action for action in plan if action.t_start <= t <= action.t_end]
+        plan_out = [action.to_dict() for action in plan if action.t_start <= t <= action.t_end]
 
         # if broadcasts are to be done, perform them first before any other actions
-        broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
-        if len(broadcast_actions) > 0:
-            broadcast_actions : list = [action for action in plan_out 
-                                        if isinstance(action, BroadcastMessageAction) 
-                                        or isinstance(action, WaitForMessages)
-                                        ]
+        # broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
+        # if len(broadcast_actions) > 0:
+        #     broadcast_actions : list = [action for action in plan_out 
+        #                                 if isinstance(action, BroadcastMessageAction) 
+        #                                 or isinstance(action, WaitForMessages)
+        #                                 ]
 
-        plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
-        plan_out = [action.to_dict() for action in plan_out]
+        # plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
+        # plan_out = [action.to_dict() for action in plan_out]
 
         # re-attempt pending actions 
         for action in pending_actions:
