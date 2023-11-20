@@ -5,7 +5,7 @@ from nodes.planning.preplanners import FIFOPreplanner, IdlePlanner
 from nodes.planning.planners import PlanningModule
 from nodes.science.reqs import *
 from dmas.network import NetworkConfig
-from nodes.planning.groundstat import GroundStationPlanner
+from chess3d.nodes.planning.backup.groundstat import GroundStationPlanner
 from nodes.science.science import ScienceModule
 from nodes.agent import SimulationAgentState, SimulationAgent
 import pandas as pd

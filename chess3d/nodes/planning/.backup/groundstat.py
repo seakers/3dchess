@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import Any, Callable
-from nodes.planning.fixed import FixedPlanner
+from nodes.planning.backup.fixed import FixedPlanner
 from nodes.states import GroundStationAgentState, SatelliteAgentState, SimulationAgentTypes, UAVAgentState
 from nodes.agent import *
 from messages import *
