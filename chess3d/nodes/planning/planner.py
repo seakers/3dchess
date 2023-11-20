@@ -788,7 +788,10 @@ class PlanningModule(InternalModule):
         # if broadcasts are to be done, perform them first before any other actions
         broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
         if len(broadcast_actions) > 0:
-            broadcast_actions.extend([action for action in plan if isinstance(action, WaitForMessages)])
+            broadcast_actions : list = [action for action in plan_out 
+                                        if isinstance(action, BroadcastMessageAction) 
+                                        or isinstance(action, WaitForMessages)
+                                        ]
 
         plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
         plan_out = [action.to_dict() for action in plan_out]

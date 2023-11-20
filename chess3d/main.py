@@ -239,30 +239,36 @@ def agent_factory(  scenario_name : str,
     ## load planner module
     if planner_dict is not None:
         planner_dict : dict
-        preplanner_type = planner_dict.get('preplanner', None)
-        replanner_type = planner_dict.get('replanner', None)
         planning_horizon = planner_dict.get('horizon', np.Inf)
-        utility = utility_function[planner_dict.get('utility', 'NONE')]
+        utility_func = utility_function[planner_dict.get('utility', 'NONE')]
         
-        if preplanner_type is not None:
-            if preplanner_type == 'FIFO':
-                collaboration = planner_dict.get('collaboration ', "False") 
-                collaboration = collaboration == "True"
-                preplanner = FIFOPreplanner(utility, collaboration)
+        preplanner_dict = planner_dict.get('preplanner', None)
+        if isinstance(preplanner_dict, dict):
+            preplanner_type = preplanner_dict.get('@type', None)
+
+            if preplanner_type == "FIFO":
+                collaboration = preplanner_dict.get('collaboration ', "False") == "True"
+                preplanner = FIFOPreplanner(utility_func, collaboration)
             else:
-                raise NotImplementedError(f'preplanner of type `{preplanner_type}` not yet supported.')
+                raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
         else:
             preplanner = None
 
-        if replanner_type is not None:
-            if replanner_type == 'FIFO':
-                replanner = FIFOReplanner(**planner_dict)
+        replanner_dict = planner_dict.get('replanner', None)
+        if isinstance(replanner_dict, dict):
+            replanner_type = replanner_dict.get('@type', None)
+            
+            if replanner_dict == 'FIFO':
+                collaboration = preplanner_dict.get('collaboration ', "False") == "True"
+                replanner = FIFOReplanner(utility_func, collaboration)
+
             elif replanner_type == 'ACBBA':
-                max_bundle_size = planner_dict.get('bundle size', 3)
-                dt_converge = planner_dict.get('dt_convergence', 0.0)
-                replanner = ACBBAReplanner(agent_name, utility, max_bundle_size, dt_converge)
+                max_bundle_size = replanner_dict.get('bundle size', 3)
+                dt_converge = replanner_dict.get('dt_convergence', 0.0)
+                replanner = ACBBAReplanner(agent_name, utility_func, max_bundle_size, dt_converge)
+
             else:
-                raise NotImplementedError(f'replanner of type `{replanner_type}` not yet supported.')
+                raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
         else:
             replanner = None
     else:
@@ -271,7 +277,7 @@ def agent_factory(  scenario_name : str,
     planner = PlanningModule(   results_path, 
                                 agent_name, 
                                 agent_network_config, 
-                                utility, 
+                                utility_func, 
                                 preplanner,
                                 replanner,
                                 planning_horizon,

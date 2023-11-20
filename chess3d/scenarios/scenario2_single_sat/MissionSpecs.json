@@ -102,10 +102,12 @@
             },
             "planner" : {
                 "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
-                "utility" : "LINEAR",
-                "collaboration " : "True"
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },
+                              
+                "utility" : "LINEAR"                
             },
             "science" : "True",
             "notifier": "False",

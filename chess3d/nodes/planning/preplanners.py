@@ -88,7 +88,7 @@ class AbstractPreplanner(ABC):
         performed_requests = []
 
         # compile measurements performed by parent agent
-        my_measurements = [action for action in performed_actions if isinstance(action, MeasurementAction)]
+        my_measurements = [action for action in performed_actions if isinstance(action, M_get_available_requestseasurementAction)]
         
         # compile measurements performed by other agents
         their_measurements = [MeasurementAction(**msg.measurement_action) for msg in misc_messages if isinstance(MeasurementPerformedMessage)]
@@ -203,6 +203,7 @@ class AbstractPreplanner(ABC):
         """
         Creates an initial plan for the agent to perform
         """
+        pass
 
     @runtime_tracker
     def _get_available_requests(self) -> list:
@@ -226,11 +227,9 @@ class AbstractPreplanner(ABC):
         return available_reqs
 
     @runtime_tracker
-    
     def _plan_from_path(    self, 
                             state : SimulationAgentState, 
                             path : list,
-                            orbitdata : OrbitData,
                             t_init : float,
                             clock_config : ClockConfig
                     ) -> list:
@@ -483,7 +482,23 @@ class FIFOPreplanner(AbstractPreplanner):
             # print(out)
 
             # generate plan from path
-            plan = self._plan_from_path(state, path, orbitdata, t_plan, clock_config)
+            plan = self._plan_from_path(state, path, t_plan, clock_config)
+
+            # check if collaboration is enabled
+            if self.collaboration:
+                # include broadcasts whenever a measurement has been completed in plan
+                planned_measurements = [action for action in plan 
+                                        if isinstance(action, MeasurementAction)]
+                
+                for action in planned_measurements:
+                    action : MeasurementAction
+                    msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action.to_dict())
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), action.t_end)
+
+                    i = plan.index(action) + 1 
+                    i = i if i < len(plan) else -1
+
+                    plan.insert(i, broadcast_action)
 
             self.t_plan = state.t
             self.t_next = self.t_plan + planning_horizon
