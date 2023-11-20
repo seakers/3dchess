@@ -432,6 +432,19 @@ class PlanningModule(InternalModule):
                 # check action completion
                 completed_actions, aborted_actions, pending_actions = await self.__check_action_completion(plan, level)
 
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # all_actions = [action for action in completed_actions]
+                # all_actions.extend([action for action in aborted_actions])
+                # all_actions.extend([action for action in pending_actions])
+
+                # if len(all_actions) > 0:
+                #     out = '\nACTION STATUS:\n'
+                #     for action in all_actions:
+                #         action : AgentAction
+                #         out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+                #     self.log(out, logging.WARNING)
+                # -------------------------------------
+
                 # remove aborted or completed actions from plan
                 plan, performed_actions = self.__remove_performed_actions_from_plan(plan, completed_actions, aborted_actions)
                 
@@ -468,7 +481,7 @@ class PlanningModule(InternalModule):
                                                 level)   
                     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                    # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                     # -------------------------------------
 
                 # Check if reeplanning is needed
@@ -510,7 +523,6 @@ class PlanningModule(InternalModule):
 
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
                     # self.__log_plan(plan, "REPLAN", logging.WARNING)
-                    x = 1
                     # -------------------------------------
 
                 # --- Execute plan ---
@@ -773,7 +785,10 @@ class PlanningModule(InternalModule):
         plan_out = [action for action in plan if action.t_start <= t <= action.t_end]
 
         # if broadcasts are to be done, perform them first before any other actions
-        broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction) or isinstance(action, WaitForMessages)]
+        broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
+        if len(broadcast_actions) > 0:
+            broadcast_actions.extend([action for action in plan if isinstance(action, WaitForMessages)])
+
         plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
         plan_out = [action.to_dict() for action in plan_out]
 
@@ -797,6 +812,7 @@ class PlanningModule(InternalModule):
         # idle if no more actions can be performed
         if len(plan_out) == 0:
             t_idle = plan[0].t_start if len(plan) > 0 else self.t_next
+            # t_idle = plan[0].t_start if len(plan) > 0 and plan[0].t_end <= t else self.t_next
             action = WaitForMessages(t, t_idle)
             plan_out.append(action.to_dict())     
 
