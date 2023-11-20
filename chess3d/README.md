@@ -48,9 +48,7 @@ The data being sensed by the agents when performing a measurement is precomputed
 
 ## Agent:
 
-![DMAS agent architecture layout](./docs/diagrams/architecture/agent.png)
-### Agent Architecture:
-
+![DMAS agent architecture layout](./docs/diagrams/archRepository 
 Agents consist of a main `live()` thread and a three modules. The `Engineering Module` is in charge of keeping track of an agent's components' states, as to simulate the physical aspects of the agent in question. The `Science Module` processes any incoming measurement information and creates new observation requests if it deems it necessary. The `Planning Module` is in charge of receiving said requests and scheduling them in the agent's operations plan. 
 
 At each time-step, the agents' `live()` thread iterates through an internal `sense`->`think`->`do` loop, while the modules are constantly listening for incoming messages.
@@ -111,7 +109,7 @@ This information will be shared to and amongst agents as `TaskRequest` messages.
 
 #
 ## Running DMAS - 3DCHESS
-> NOTE: Install of [`dmas`](https://github.com/seakers/DMASpy) and [`satplan`](https://github.com/bgorr/satplan) libraries and all of their dependencies is required for running these scenarios.
+> NOTE: Install of [`dmas`](https://github.com/seakers/DMASpy) library and all of its dependencies is required for running these scenarios.
 
 Open a terminal in this directory and run `main.py` by entering the following command:
 
