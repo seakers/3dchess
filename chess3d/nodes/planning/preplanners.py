@@ -493,6 +493,8 @@ class FIFOPreplanner(AbstractPreplanner):
                 for action in planned_measurements:
                     action : MeasurementAction
                     msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action.to_dict())
+                    
+                    # TODO schedule broadcasts based on connectivity with the next agent
                     broadcast_action = BroadcastMessageAction(msg.to_dict(), action.t_end)
 
                     plan.insert(plan.index(action) + 1, broadcast_action)

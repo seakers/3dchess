@@ -782,10 +782,13 @@ class PlanningModule(InternalModule):
     def _get_next_actions(self, plan : list, pending_actions : list, generated_reqs : list, t : float) -> list:
         """ Parses current plan and outputs list of actions that are to be performed at a given time"""
 
+        
+
         # get next available action to perform
         plan_out = [action.to_dict() for action in plan if action.t_start <= t <= action.t_end]
 
         # if broadcasts are to be done, perform them first before any other actions
+        # TODO move decision to the pre/replanner level
         # broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
         # if len(broadcast_actions) > 0:
         #     broadcast_actions : list = [action for action in plan_out 
@@ -797,21 +800,17 @@ class PlanningModule(InternalModule):
         # plan_out = [action.to_dict() for action in plan_out]
 
         # re-attempt pending actions 
-        for action in pending_actions:
-            action : AgentAction
-            if action.to_dict() not in plan_out:
-                plan_out.insert(0, action.to_dict())
-
-        # broadcasts all newly generated requests if they have a non-zero scientific value
-        for req in generated_reqs:
-            req : MeasurementRequest
-            if req.s_max <= 0.0:
-                continue
-
-            req_msg = MeasurementRequestMessage("", "", req.to_dict())
-            plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
-                                                        self.get_current_time()).to_dict()
-                                                    )
+        pending_out = [action.to_dict() for action in pending_actions if action.to_dict() not in plan_out]
+        pending_out.extend(plan_out); plan_out = pending_out
+        
+        # broadcasts all newly generated requests if they have a non-zero scientific value 
+        # TODO move to replanners
+        # for req in [req for req in generated_reqs if req.s_max > 0.0]:
+        #     req : MeasurementRequest
+        #     req_msg = MeasurementRequestMessage("", "", req.to_dict())
+        #     plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
+        #                                                 self.get_current_time()).to_dict()
+        #                                             )
 
         # idle if no more actions can be performed
         if len(plan_out) == 0:
