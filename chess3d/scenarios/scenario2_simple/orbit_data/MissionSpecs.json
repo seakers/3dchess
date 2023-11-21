@@ -100,13 +100,12 @@
                     "ta": 40.0
                 }
             },
-            "planner" : {
-                "preplanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "True"
+            "planner": {
+                "preplanner": {
+                    "@type": "FIFO",
+                    "collaboration ": "True"
                 },
-                
-                "utility" : "LINEAR"
+                "utility": "LINEAR"
             },
             "notifier": "False",
             "missionProfile": "3D-CHESS",
@@ -198,12 +197,12 @@
                     "ta": 80.0
                 }
             },
-            "planner" : {
-                "preplanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "True"
-                },                
-                "utility" : "LINEAR"
+            "planner": {
+                "preplanner": {
+                    "@type": "FIFO",
+                    "collaboration ": "True"
+                },
+                "utility": "LINEAR"
             },
             "notifier": "False",
             "missionProfile": "3D-CHESS",
@@ -216,15 +215,16 @@
             "covGridFilePath": "./scenarios/scenario2/resources/lake_event_points.csv"
         }
     ],
-    "scenario": {   
-                    "@type": "PREDEF", 
-                    "initialRequestsPath" : "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
-                    "eventsPath" : "./scenarios/scenario2_simple/resources/all_events_formatted.csv", 
-                    "duration": 30.0, 
-                    "connectivity" : "FULL", 
-                    "utility" : "LINEAR"
-                },
+    "scenario": {
+        "@type": "PREDEF",
+        "initialRequestsPath": "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
+        "eventsPath": "./scenarios/scenario2_simple/resources/all_events_formatted.csv",
+        "duration": 30.0,
+        "connectivity": "FULL",
+        "utility": "LINEAR"
+    },
     "settings": {
-        "coverageType": "GRID COVERAGE"
+        "coverageType": "GRID COVERAGE",
+        "outDir": "./scenarios/scenario2_simple//orbit_data/"
     }
 }

@@ -70,6 +70,7 @@ class PlanningModule(InternalModule):
                     }
 
         self.t_plan = -1.0
+        self.t_next = planning_horizon
         self.agent_state : SimulationAgentState = None
         self.parent_agent_type = None
         self.orbitdata : OrbitData = None
@@ -159,20 +160,16 @@ class PlanningModule(InternalModule):
                     senses.extend(senses_msg.senses)     
 
                     for sense in senses:
-                        if sense['msg_type'] == SimulationMessageTypes.AGENT_ACTION.value:
-                            # unpack message 
-                            action_msg = AgentActionMessage(**sense)
-                            self.log(f"received agent action of status {action_msg.status}!")
-                            
-                            # send to planner
-                            await self.action_status_inbox.put(action_msg)
+                        msg : SimulationMessage = message_from_dict(**sense)
 
-                        elif sense['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-                            # unpack message 
-                            state_msg : AgentStateMessage = AgentStateMessage(**sense)
+                        if isinstance(msg, AgentActionMessage):
+                            # send to planner
+                            self.log(f"received agent action of status {msg.status}!")
+                            await self.action_status_inbox.put(msg)
+
+                        elif isinstance(msg, AgentStateMessage):
                             self.log(f"received agent state message!")
-                              
-                            state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
+                            state : SimulationAgentState = SimulationAgentState.from_dict(msg.state)
 
                             if self.parent_agent_type is None:
                                 if isinstance(state, SatelliteAgentState):
@@ -184,16 +181,13 @@ class PlanningModule(InternalModule):
                                 elif isinstance(state, GroundStationAgentState):
                                     self.parent_agent_type = SimulationAgentTypes.GROUND_STATION.value
                                 else:
-                                    raise NotImplementedError(f"states of type {state_msg.state['state_type']} not supported for planners.")
+                                    raise NotImplementedError(f"states of type {msg.state['state_type']} not supported for planners.")
                             
                             await self.states_inbox.put(state)
 
-                        elif sense['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
+                        elif isinstance(msg, MeasurementRequestMessage):
                             # request received directly from another agent
-                            
-                            # unpack message 
-                            req_msg = MeasurementRequestMessage(**sense)
-                            req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
+                            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
                             self.log(f"received measurement request message!")
                             
                             # send to planner
@@ -203,20 +197,20 @@ class PlanningModule(InternalModule):
 
                         elif sense['msg_type'] == SimulationMessageTypes.MEASUREMENT.value:
                             # measurement was just performed by agent
-                            msg = message_from_dict(**sense)
+                            self.log(f"received measurement data from agent!")
                             await self.measurement_inbox.put(msg)
 
                         else:
                             # other type of message was received
-                            msg = message_from_dict(**sense)
+                            self.log(f"received some other kind of message!")
                             await self.misc_inbox.put(msg)
 
                 else:
-                    # other type of message was received
+                    # other type of message was received from another module that is not the parent agent
                     if not self.other_modules_exist:
                         self.other_modules_exist = True
 
-                    msg = message_from_dict(**content)
+                    msg : SimulationMessage = message_from_dict(**content)
                     await self.internal_inbox.put(msg)
 
         except asyncio.CancelledError:

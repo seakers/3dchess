@@ -74,7 +74,7 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
                 if (
                        scenario_dict['epoch'] != mission_dict['epoch']
                     or scenario_dict['duration'] != mission_dict['duration']
-                    or scenario_dict['groundStation'] != mission_dict['groundStation']
+                    or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
                     or scenario_dict['grid'] != mission_dict['grid']
                     ):
                     return True
@@ -119,7 +119,7 @@ def precompute_orbitdata(scenario_name) -> str:
     data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
    
     changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
-    
+
     if not os.path.exists(data_dir):
         # if directory does not exists, create it
         os.mkdir(data_dir)
@@ -179,7 +179,8 @@ def precompute_orbitdata(scenario_name) -> str:
                             lines.pop()
                         
                         # include single access
-                        lines.append(f"{0.0}, {np.Inf}")
+                        dt : float = timedelta(days=mission_dict["duration"]).seconds
+                        lines.append(f"{0.0}, {dt}")
 
                         comms_file.writelines(lines)
 
