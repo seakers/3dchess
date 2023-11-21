@@ -1,0 +1,4 @@
+routine,t_avg,t_std,t_med,n
+thm_0,0.011,0.003,0.009,302
+sar_0,0.011,0.004,0.009,294
+query_measurement_data,0.012,0.004,0.012,102

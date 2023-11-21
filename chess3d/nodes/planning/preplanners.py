@@ -91,7 +91,10 @@ class AbstractPreplanner(ABC):
         my_measurements = [action for action in performed_actions if isinstance(action, MeasurementAction)]
         
         # compile measurements performed by other agents
-        their_measurements = [MeasurementAction(**msg.measurement_action) for msg in misc_messages if isinstance(MeasurementPerformedMessage)]
+        their_measurements = [
+                                MeasurementAction(**msg.measurement_action)
+                                for msg in misc_messages if isinstance(msg, MeasurementPerformedMessage)
+                               ]
         
         # compile performed measurements  
         performed_measurements = my_measurements; performed_measurements.extend(their_measurements)

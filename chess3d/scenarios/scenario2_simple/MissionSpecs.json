@@ -105,7 +105,7 @@
                     "@type" : "FIFO",
                     "collaboration " : "True"
                 },
-                
+                "horizon" : 3600,
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -203,6 +203,7 @@
                     "@type" : "FIFO",
                     "collaboration " : "True"
                 },                
+                "horizon": 3600,
                 "utility" : "LINEAR"
             },
             "notifier": "False",

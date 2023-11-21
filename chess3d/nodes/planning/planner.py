@@ -183,11 +183,11 @@ class PlanningModule(InternalModule):
                             # update parent agent information if the type of parent agent is unknown
                             if self.parent_agent_type is None:
                                 if isinstance(state, SatelliteAgentState):
-                                    # parent is a satellite-type agent
-                                    self.parent_agent_type = SimulationAgentTypes.SATELLITE.value
-                                    
                                     # import orbit data
                                     self.orbitdata : OrbitData = self._load_orbit_data()
+                                    
+                                    # parent is a satellite-type agent
+                                    self.parent_agent_type = SimulationAgentTypes.SATELLITE.value
                                 elif isinstance(state, UAVAgentState):
                                     # parent is a uav-type agent
                                     self.parent_agent_type = SimulationAgentTypes.UAV.value
