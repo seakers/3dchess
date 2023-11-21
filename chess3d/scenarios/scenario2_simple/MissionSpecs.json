@@ -205,46 +205,6 @@
             "preplan": "False"
         }
     ],
-    "groundStation": [
-        {
-            "@id": "gs1",
-            "name": "Svalbard",
-            "latitude": 78.23083333333334,
-            "longitude": 15.389444444444443,
-            "altitude": 0,
-            "minimumElevation": 7,
-            "antenna": {
-                "bands": [
-                    "s-band",
-                    "x-band"
-                ],
-                "frequency": 2120000000000.0,
-                "eirp": 63.5,
-                "gain": 44.6,
-                "diameter": 10.3,
-                "power": 10
-            }
-        },
-        {
-            "@id": "gs2",
-            "name": "NEN2",
-            "latitude": 0,
-            "longitude": 45,
-            "altitude": 0,
-            "minimumElevation": 7,
-            "antenna": {
-                "bands": [
-                    "s-band",
-                    "x-band"
-                ],
-                "frequency": 2120000000000.0,
-                "eirp": 63.5,
-                "gain": 44.6,
-                "diameter": 10.3,
-                "power": 10
-            }
-        }
-    ],
     "grid": [
         {
             "@type": "customGrid",
@@ -253,7 +213,8 @@
     ],
     "scenario": {   
                     "@type": "PREDEF", 
-                    "gpRequestFilePath": "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
+                    "initialRequestsPath" : "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/scenario2_simple/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
                     "connectivity" : "FULL", 
                     "utility" : "LINEAR"

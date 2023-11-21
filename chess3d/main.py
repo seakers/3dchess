@@ -118,8 +118,8 @@ def precompute_orbitdata(scenario_name) -> str:
     scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
     data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
    
-    changes_to_scenario = check_changes_to_scenario(scenario_dir, data_dir)
-
+    changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
+    
     if not os.path.exists(data_dir):
         # if directory does not exists, create it
         os.mkdir(data_dir)
@@ -135,7 +135,7 @@ def precompute_orbitdata(scenario_name) -> str:
         else:
             print('Orbit data not found.')
 
-        # print('Clearing \'orbitdata\' directory...')    
+        print('Clearing \'orbitdata\' directory...')    
         # clear files if they exist
         if os.path.exists(data_dir):
             for f in os.listdir(data_dir):
@@ -145,7 +145,7 @@ def precompute_orbitdata(scenario_name) -> str:
                     os.rmdir(data_dir + f)
                 else:
                     os.remove(os.path.join(data_dir, f)) 
-        # print('\'orbitddata\' cleared!')
+        print('\'orbitddata\' cleared!')
 
         with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
             # load json file as dictionary
@@ -163,6 +163,25 @@ def precompute_orbitdata(scenario_name) -> str:
             mission : Mission = Mission.from_json(mission_dict)  
             mission.execute()                
             print("Propagation done!")
+
+            # modify connectivity if specified 
+            if ((scenario_dict := mission_dict.get('scenario', None)) 
+                and scenario_dict.get('connectivity', None) == "FULL"):
+                
+                comm_dir = data_dir + '/comm/'
+                for d in os.listdir(comm_dir):
+                    with open(comm_dir + d, 'r') as comms_file:
+                        lines = comms_file.readlines()
+
+                    with open(comm_dir + d, 'w') as comms_file:
+                        # delete access times 
+                        while len(lines) > 4:
+                            lines.pop()
+                        
+                        # include single access
+                        lines.append(f"{0.0}, {np.Inf}")
+
+                        comms_file.writelines(lines)
 
             # save specifications of propagation in the orbit data directory
             with open(data_dir +'MissionSpecs.json', 'w') as mission_specs:

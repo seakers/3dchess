@@ -241,6 +241,8 @@ class AbstractPreplanner(ABC):
         ## Arguments:
             - state (:obj:`SimulationAgentState`): state of the agent at the start of the path
             - path (`list`): list of tuples indicating the sequence of observations to be performed and time of observation
+            - t_init (`float`): start time for plan
+            - clock_config (:obj:`ClockConfig`): clock being used for this simulation
         """
         # create appropriate actions for every measurement in the path
         plan = []
@@ -411,15 +413,45 @@ class FIFOPreplanner(AbstractPreplanner):
                         planning_horizon : float = np.Inf,
                         orbitdata : OrbitData = None
                     ) -> bool:
-        t_plan = t_plan if t_plan >= 0 else 0
-        path = []         
 
+        # update planning time
+        t_plan = t_plan if t_plan >= 0 else 0
+
+        # schedule observation path
+        path : list = self._schedule_observations(state)
+
+        # generate plan from path
+        plan : list = self._plan_from_path(state, path, t_plan, clock_config)
+
+        # check if collaboration is enabled
+        plan : list = self._schedule_broadcasts(state, plan, orbitdata) if self.collaboration else plan            
+
+        # update planning horizon time
+        self.t_plan = state.t
+        self.t_next = self.t_plan + planning_horizon
+
+        # wait for next planning horizon to start
+        t_wait_start = state.t if len(plan) == 0 else plan[-1].t_end
+        plan.append(WaitForMessages(t_wait_start, self.t_next))
+
+        return plan
+
+    def _schedule_observations(self, state : SimulationAgentState) -> list:
+        """ 
+        Schedule a sequence of observations based on the current state of the agent 
+        
+        ### Arguments:
+            - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
+        """
+         
+        path = []         
         available_reqs : list = self._get_available_requests()
 
         if isinstance(state, SatelliteAgentState):
             # Generates a plan for observing GPs on a first-come first-served basis
             reqs = {req.id : req for req, _ in available_reqs}
 
+            # create first assignment of observations
             for req, subtask_index in available_reqs:
                 instrument, _ = req.measurement_groups[subtask_index]  
                 t_arrivals : list = self.access_times[req.id][instrument]
@@ -433,16 +465,19 @@ class FIFOPreplanner(AbstractPreplanner):
 
             path.sort(key=lambda a: a[2])
 
+            # ----- FOR DEBUGGING PURPOSES ONLY ------
             # out = '\n'
             # for req, subtask_index, t_img, s in path:
             #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
             # print(out)
+            # ----------------------------------------
 
-            while True:
-                
+            # ensure conflict-free path
+            while True:                
                 conflict_free = True
                 i_remove = None
 
+                # check every scheduled observation
                 for i in range(len(path) - 1):
                     j = i + 1
                     req_i, _, t_i, __ = path[i]
@@ -451,9 +486,11 @@ class FIFOPreplanner(AbstractPreplanner):
                     th_i = state.calc_off_nadir_agle(req_i)
                     th_j = state.calc_off_nadir_agle(req_j)
 
+                    # check if 
                     if abs(th_i - th_j) / state.max_slew_rate > t_j - t_i:
                         instrument, _ = req.measurement_groups[subtask_index_j]  
                         t_arrivals : list = self.access_times[req_j.id][instrument]
+                        
                         if len(t_arrivals) > 0:
                             # pick next arrival time
                             t_img = t_arrivals.pop(0)
@@ -476,37 +513,40 @@ class FIFOPreplanner(AbstractPreplanner):
                 if conflict_free:
                     break
                     
+            # ----- FOR DEBUGGING PURPOSES ONLY ------
             # out = '\n'
             # for req, subtask_index, t_img, s in path:
             #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
             # print(out)
-
-            # generate plan from path
-            plan = self._plan_from_path(state, path, t_plan, clock_config)
-
-            # check if collaboration is enabled
-            if self.collaboration:
-                # include broadcasts whenever a measurement has been completed in plan
-                planned_measurements = [action for action in plan 
-                                        if isinstance(action, MeasurementAction)]
-                
-                for action in planned_measurements:
-                    action : MeasurementAction
-                    msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action.to_dict())
-                    
-                    # TODO schedule broadcasts based on connectivity with the next agent
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), action.t_end)
-
-                    plan.insert(plan.index(action) + 1, broadcast_action)
-
-            self.t_plan = state.t
-            self.t_next = self.t_plan + planning_horizon
-
-            t_wait_start = state.t if len(plan) == 0 else plan[-1].t_end
-            plan.append(WaitForMessages(t_wait_start, self.t_next))
-
-            return plan
-                
+            # ----------------------------------------
+            
         else:
             raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')
     
+        return path
+    
+    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, orbitdata : OrbitData = None) -> list:
+        """ 
+        Modifies original plan and schedule broadcasts whenever a measurement has been completed in plan 
+        
+        ### Arguments
+            - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
+            - plan (`list`): current plan to be performed
+            - orbitdata (:obj:`OrbitData`): orbit propagation and coverage data for agent (if applicable)
+        """
+        planned_measurements = [action for action in plan 
+                                if isinstance(action, MeasurementAction)]
+        
+        for action in planned_measurements:
+            action : MeasurementAction
+            msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action.to_dict())
+            
+            # TODO schedule broadcasts based on connectivity with the next agent
+            if isinstance(state, SatelliteAgentState):
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), action.t_end)
+            else:
+                raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
+
+            plan.insert(plan.index(action) + 1, broadcast_action)
+        
+        return plan
