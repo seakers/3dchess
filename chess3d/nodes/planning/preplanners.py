@@ -93,8 +93,11 @@ class AbstractPreplanner(ABC):
         # compile measurements performed by other agents
         their_measurements = [
                                 MeasurementAction(**msg.measurement_action)
-                                for msg in misc_messages if isinstance(msg, MeasurementPerformedMessage)
+                                for msg in misc_messages if isinstance(msg,  MeasurementPerformedMessage)
                                ]
+        
+        if their_measurements: 
+            x = 1
         
         # compile performed measurements  
         performed_measurements = my_measurements; performed_measurements.extend(their_measurements)
@@ -542,6 +545,7 @@ class FIFOPreplanner(AbstractPreplanner):
         
         for action in planned_measurements:
             action : MeasurementAction
+            action.status = MeasurementAction.COMPLETED
             msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action.to_dict())
             
             # TODO schedule broadcasts based on connectivity with the next agent

@@ -111,8 +111,7 @@
             },
             "science" : "True",
             "notifier": "False",
-            "missionProfile": "3D-CHESS",
-            "preplan": "False"
+            "missionProfile": "3D-CHESS"
         }
     ],
     "groundStation": [

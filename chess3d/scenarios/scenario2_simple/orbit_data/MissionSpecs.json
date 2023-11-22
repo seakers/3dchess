@@ -105,11 +105,12 @@
                     "@type": "FIFO",
                     "collaboration ": "True"
                 },
+                "horizon": 3600,
                 "utility": "LINEAR"
             },
+            "science": "True",
             "notifier": "False",
-            "missionProfile": "3D-CHESS",
-            "preplan": "False"
+            "missionProfile": "3D-CHESS"
         },
         {
             "@id": "imaging_sat_2_0",
@@ -202,11 +203,12 @@
                     "@type": "FIFO",
                     "collaboration ": "True"
                 },
+                "horizon": 3600,
                 "utility": "LINEAR"
             },
+            "science": "True",
             "notifier": "False",
-            "missionProfile": "3D-CHESS",
-            "preplan": "False"
+            "missionProfile": "3D-CHESS"
         }
     ],
     "grid": [

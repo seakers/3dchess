@@ -569,6 +569,9 @@ class PlanningModule(InternalModule):
 
                 self.log(f'actions sent!')
 
+                if abs(state.t - 630.0) < 1e-3:
+                    x = 1
+
         except asyncio.CancelledError:
             return
         
