@@ -129,12 +129,6 @@ class MeasurementResultsRequestMessage(SimulationMessage):
         self.measurement = {}
 
 class MeasurementPerformedMessage(SimulationMessage):
-    """
-    ## Measurement Perfromed Message
-
-    Informs other agents that a measurement action was performed to satisfy a measurement request
-    """
-
     def __init__(self, 
                  src: str, 
                  dst: str, 
@@ -142,6 +136,11 @@ class MeasurementPerformedMessage(SimulationMessage):
                  id: str = None,
                  **_
                  ):
+        """
+        ## Measurement Perfromed Message
+
+        Informs other agents that a measurement action was performed to satisfy a measurement request
+        """
         super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_PERFORMED.value, id)
         self.measurement_action = measurement_action
 

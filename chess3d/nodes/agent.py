@@ -282,7 +282,7 @@ class SimulationAgent(Agent):
                 action.status = AgentAction.PENDING
                 statuses.append((action, action.status))
 
-                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action_dict['action_type']} before it started (start time {action.t_start}[s]) at time {self.get_current_time()}[s]")
+                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action.action_type} before it started (start time {action.t_start}[s]) at time {self.get_current_time()}[s]")
                 # continue
             
             if (self.get_current_time() - action.t_end) > np.finfo(np.float32).eps:
@@ -290,7 +290,7 @@ class SimulationAgent(Agent):
                 action.status = AgentAction.ABORTED
                 statuses.append((action, action.status))
 
-                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action_dict['action_type']} after it ended (start/end times {action.t_start}[s], {action.t_end}[s]) at time {self.get_current_time()}[s]")
+                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action.action_type} after it ended (start/end times {action.t_start}[s], {action.t_end}[s]) at time {self.get_current_time()}[s]")
                 continue
 
             self.log(f"performing action of type {action.action_type}...", level=logging.INFO)    

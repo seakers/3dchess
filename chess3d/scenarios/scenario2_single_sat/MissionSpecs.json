@@ -104,7 +104,7 @@
                 "horizon" : 3600,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
+                    "collaboration " : "False"
                 },
                               
                 "utility" : "LINEAR"                

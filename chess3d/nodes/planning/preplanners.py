@@ -60,7 +60,7 @@ class AbstractPreplanner(ABC):
 
         # update list of performed requests
         performed_requests : list = self.__update_performed_requests(performed_actions, misc_messages)
-        self.performed_requests.extend(performed_requests)
+        self.performed_requests.extend([req for req in performed_requests if req not in self.performed_requests])
 
         # update access times 
         self.__update_access_times(state, t_plan, planning_horizon, orbitdata)
@@ -84,11 +84,11 @@ class AbstractPreplanner(ABC):
 
     @runtime_tracker
     def __update_performed_requests(self, performed_actions : list, misc_messages : list) -> list:
-        """ Updates an internal list of requests performed by the parent agent """
+        """ Creates a list the of requests that were just performed by the parent agent or by other agents """
         performed_requests = []
 
         # compile measurements performed by parent agent
-        my_measurements = [action for action in performed_actions if isinstance(action, MeasurementAction)]
+        performed_measurements = [action for action in performed_actions if isinstance(action, MeasurementAction)]
         
         # compile measurements performed by other agents
         their_measurements = [
@@ -100,7 +100,7 @@ class AbstractPreplanner(ABC):
             x = 1
         
         # compile performed measurements  
-        performed_measurements = my_measurements; performed_measurements.extend(their_measurements)
+        performed_measurements.extend(their_measurements)
 
         # check if measurements are attributed to a known measurement request
         for action in performed_measurements:
@@ -430,7 +430,7 @@ class FIFOPreplanner(AbstractPreplanner):
         plan : list = self._plan_from_path(state, path, t_plan, clock_config)
 
         # check if collaboration is enabled
-        plan : list = self._schedule_broadcasts(state, plan, orbitdata) if self.collaboration else plan            
+        plan : list = self._schedule_broadcasts(state, plan, orbitdata) 
 
         # update planning horizon time
         self.t_plan = state.t
@@ -540,6 +540,9 @@ class FIFOPreplanner(AbstractPreplanner):
             - plan (`list`): current plan to be performed
             - orbitdata (:obj:`OrbitData`): orbit propagation and coverage data for agent (if applicable)
         """
+        if not self.collaboration:
+            return plan
+
         planned_measurements = [action for action in plan 
                                 if isinstance(action, MeasurementAction)]
         

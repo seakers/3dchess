@@ -542,7 +542,7 @@ class PlanningModule(InternalModule):
                     pending_actions = []
 
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    # self.__log_plan(plan, "REPLAN", logging.WARNING)
+                    self.__log_plan(plan, "REPLAN", logging.WARNING)
                     # -------------------------------------
 
                 # --- Execute plan ---
@@ -775,26 +775,23 @@ class PlanningModule(InternalModule):
             incoming_measurements.append(await self.measurement_inbox.get())
 
         generated_reqs = []
+        misc_messages = []
         if (self.other_modules_exist                # other modules exist within the parent agent
             and len(incoming_measurements) > 0      # some agent just performed a measurement
             ):
 
             # wait for science module to send their assesment of the measurement 
-            internal_msg = await self.internal_inbox.get()
-
-            if not isinstance(internal_msg, MeasurementRequestMessage):
-                await self.misc_inbox.put(internal_msg)
-            else:
-                generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
-
-            while not self.misc_inbox.empty():
+            while True:
                 internal_msg = await self.internal_inbox.get()
+
                 if not isinstance(internal_msg, MeasurementRequestMessage):
                     await self.misc_inbox.put(internal_msg)
                 else:
                     generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
 
-        misc_messages = []
+                if self.internal_inbox.empty():
+                    break
+
         while not self.misc_inbox.empty():
             misc_messages.append(await self.misc_inbox.get())
 
@@ -827,12 +824,12 @@ class PlanningModule(InternalModule):
         
         # broadcasts all newly generated requests if they have a non-zero scientific value 
         # TODO move to replanners
-        # for req in [req for req in generated_reqs if req.s_max > 0.0]:
-        #     req : MeasurementRequest
-        #     req_msg = MeasurementRequestMessage("", "", req.to_dict())
-        #     plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
-        #                                                 self.get_current_time()).to_dict()
-        #                                             )
+        for req in [req for req in generated_reqs if req.s_max > 0.0]:
+            req : MeasurementRequest
+            req_msg = MeasurementRequestMessage("", "", req.to_dict())
+            plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
+                                                        self.get_current_time()).to_dict()
+                                                    )
 
         # idle if no more actions can be performed
         if len(plan_out) == 0:
