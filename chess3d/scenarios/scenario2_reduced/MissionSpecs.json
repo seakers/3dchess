@@ -101,9 +101,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                "horizon" : 360000,
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -198,9 +200,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                "horizon" : 360000,
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -295,9 +299,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                "horizon" : 360000,
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -392,9 +398,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                "horizon" : 360000,
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -489,9 +497,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                "horizon" : 360000,
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -586,9 +596,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                "horizon" : 360000,
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -683,9 +695,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                "horizon" : 360000,
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -780,9 +794,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
+                "horizon" : 360000,
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -878,7 +894,10 @@
             },
             "planner" : {
                 "horizon" : 360000,
-                "preplanner" : "FIFO",
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },     
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -901,7 +920,7 @@
                     "initialRequestsPath" : "./scenarios/scenario2_reduced/resources/initial_requests_merged.csv",
                     "eventsPath" : "./scenarios/scenario2_reduced/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
-                    "connectivity" : "FULL", 
+                    "connectivity" : "LINE-OF-SIGHT", 
                     "utility" : "LINEAR"
                 },
     "settings": {

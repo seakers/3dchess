@@ -21,7 +21,25 @@ class TimeInterval:
 
     def is_during(self, t):
         return self.start <= t <= self.end
+    
+    def has_overlap(self, __other : object) -> bool:
+        """ checks if a this time interval has an overlap with another """
+        return (    __other.start <= self.start <= __other.end
+                or  __other.start <= self.end <= __other.end 
+                or  (self.start <= __other.start and __other.end <= self.end)) 
 
+    def merge(self, __other : object) -> object:
+        """ merges two time intervals and returns their intersect """
+
+        __other : TimeInterval
+        if not self.has_overlap(__other):
+            raise ValueError("cannot merge two time intervals with no overlap")
+
+        start = max(self.start, __other.start)
+        end = min(self.min, __other.min)
+
+    def __eq__(self, __value: object) -> bool:
+        return self.start == __value.start and self.end == __value.end
 
 class OrbitData:
     """
@@ -72,7 +90,7 @@ class OrbitData:
         if target in self.isl_data.keys():
             return self.get_next_isl_access_interval(target, t)
         else:
-            raise Exception(f'Access between {src} and {target} not supported.')
+            raise ValueError(f'{src} cannot access {target}.')
 
     def get_next_isl_access_interval(self, target, t) -> TimeInterval:
         isl_data : pd.DataFrame = self.isl_data[target]

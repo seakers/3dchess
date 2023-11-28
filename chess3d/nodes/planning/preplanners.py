@@ -9,7 +9,7 @@ from dmas.clocks import *
 
 from messages import MeasurementPerformedMessage, MeasurementResultsRequestMessage
 
-from nodes.orbitdata import OrbitData
+from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
 from nodes.actions import *
 from nodes.science.reqs import *
@@ -531,7 +531,7 @@ class FIFOPreplanner(AbstractPreplanner):
     
         return path
     
-    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, orbitdata : OrbitData = None) -> list:
+    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, orbitdata : OrbitData) -> list:
         """ 
         Modifies original plan and schedule broadcasts whenever a measurement has been completed in plan 
         
@@ -551,12 +551,63 @@ class FIFOPreplanner(AbstractPreplanner):
             action.status = MeasurementAction.COMPLETED
             msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action.to_dict())
             
-            # TODO schedule broadcasts based on connectivity with the next agent
             if isinstance(state, SatelliteAgentState):
-                broadcast_action = BroadcastMessageAction(msg.to_dict(), action.t_end)
+                if not orbitdata:
+                    raise ValueError('orbitdata required for satellite agents')
+                
+                # get next access windows to all agents
+                isl_accesses = [orbitdata.get_next_agent_access(target, state.t) for target in orbitdata.isl_data]
+
+                # TODO merge accesses
+                isl_accesses_merged = isl_accesses
+
+                # place broadcasts in plan
+                for t_msg in [interval.start for interval in isl_accesses_merged]:
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(t_msg, state.t))
+
+                    # place broadcast action in plan
+                    ## check if access occurs during an action being performed
+                    interrupted_actions = [action for action in plan if action.t_start < t_msg < action.t_end]
+                    if interrupted_actions:
+                        interrupted_action : AgentAction = interrupted_actions.pop(0)
+                        if (    
+                                isinstance(interrupted_action, MeasurementAction) 
+                            or  isinstance(interrupted_action, BroadcastMessageAction)
+                            ):
+                            plan.insert(plan.index(interrupted_action) + 1, broadcast_action)
+                            
+                        else:
+                            # split action into two 
+                            i_plan = plan.index(interrupted_action)
+
+                            continued_action : AgentAction = action_from_dict(**interrupted_action.to_dict())
+                            continued_action.t_start = t_msg
+                            continued_action.id = str(uuid.uuid1())
+
+                            interrupted_action.t_end = t_msg
+
+                            plan[i_plan] = interrupted_action
+                            plan.insert(i_plan + 1, continued_action)
+                            plan.insert(i_plan + 1, broadcast_action)
+
+                        continue
+
+                    ## check if access occurs after an action was performed 
+                    last_actions = [action for action in plan if action.t_end <= t_msg]
+                    if last_actions:
+                        last_action : AgentAction = last_actions.pop()
+                        plan.insert(plan.index(last_action) + 1, broadcast_action)
+                        continue
+
+                    plan.insert(0, broadcast_action)
+
+                    # for action in [action for action in plan if action.t_end >= t_msg]:
+                    #     plan.insert(plan.index(action) + 1, broadcast_action)
+                    #     break
+
+                x = 1
             else:
                 raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
+       
 
-            plan.insert(plan.index(action) + 1, broadcast_action)
-        
         return plan

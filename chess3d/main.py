@@ -76,6 +76,7 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
                     or scenario_dict['duration'] != mission_dict['duration']
                     or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
                     or scenario_dict['grid'] != mission_dict['grid']
+                    or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
                     ):
                     return True
                 
