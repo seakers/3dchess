@@ -222,7 +222,7 @@ class AbstractPreplanner(ABC):
         self.t_next = self.t_plan + planning_horizon
 
         # check if collaboration is enabled
-        plan : list = self._schedule_broadcasts(state, plan, orbitdata) 
+        plan : list = self._schedule_broadcasts(state, plan, generated_reqs, orbitdata) 
 
         # wait for next planning horizon to start
         t_wait_start = state.t if not plan else plan[-1].t_end
@@ -234,7 +234,7 @@ class AbstractPreplanner(ABC):
     def _schedule_observations(self, state : AbstractAgentState) -> list:
         """ initializes an observation plan """
 
-    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, orbitdata : OrbitData) -> list:
+    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, generated_reqs : list, orbitdata : OrbitData) -> list:
         """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
         left_pending = []
         for broadcast_action in self.pending_broadcasts:
@@ -570,7 +570,7 @@ class FIFOPreplanner(AbstractPreplanner):
         return path
     
     @runtime_tracker
-    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, orbitdata : OrbitData) -> list:
+    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, generated_reqs : list, orbitdata : OrbitData) -> list:
         """ 
         Modifies original plan and schedule broadcasts whenever a measurement has been completed in plan 
         
@@ -580,7 +580,7 @@ class FIFOPreplanner(AbstractPreplanner):
             - orbitdata (:obj:`OrbitData`): orbit propagation and coverage data for agent (if applicable)
         """
         # schedule pending broadcasts
-        plan = super()._schedule_broadcasts(state, plan, orbitdata)
+        plan = super()._schedule_broadcasts(state, plan, generated_reqs, orbitdata)
 
         if not self.collaboration:
             return plan
@@ -657,5 +657,10 @@ class FIFOPreplanner(AbstractPreplanner):
                     
             else:
                 raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
-       
+        
+        for req in generated_reqs:
+            req : MeasurementRequest
+            # TODO
+            x = 1
+
         return plan
