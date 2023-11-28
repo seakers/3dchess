@@ -33,6 +33,7 @@ class AbstractPreplanner(ABC):
         self.t_next = np.Inf
 
         self.performed_requests = []
+        self.pending_broadcasts = []
         self.access_times = {}
         self.known_reqs = []
         
@@ -193,7 +194,7 @@ class AbstractPreplanner(ABC):
         else:
             raise NotImplementedError(f"cannot calculate imaging time for measurement requests of type {type(req)}")       
 
-    @abstractmethod
+    @runtime_tracker
     def initialize_plan(self, 
                         state : SimulationAgentState,
                         current_plan : list,
@@ -206,10 +207,83 @@ class AbstractPreplanner(ABC):
                         planning_horizon : float = np.Inf,
                         orbitdata : OrbitData = None
                     ) -> bool:
-        """
-        Creates an initial plan for the agent to perform
-        """
-        pass
+
+        # update planning time
+        t_plan = t_plan if t_plan >= 0 else 0
+
+        # schedule observation path
+        path : list = self._schedule_observations(state)
+
+        # generate plan from path
+        plan : list = self._plan_from_path(state, path, t_plan, clock_config)
+
+        # update planning horizon time
+        self.t_plan = state.t
+        self.t_next = self.t_plan + planning_horizon
+
+        # check if collaboration is enabled
+        plan : list = self._schedule_broadcasts(state, plan, orbitdata) 
+
+        # wait for next planning horizon to start
+        t_wait_start = state.t if not plan else plan[-1].t_end
+        plan.append(WaitForMessages(t_wait_start, self.t_next))
+
+        return plan
+    
+    @abstractmethod
+    def _schedule_observations(self, state : AbstractAgentState) -> list:
+        """ initializes an observation plan """
+
+    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, orbitdata : OrbitData) -> list:
+        """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
+        left_pending = []
+        for broadcast_action in self.pending_broadcasts:
+            # place broadcast action in plan
+            broadcast_action : BroadcastMessageAction
+
+            if broadcast_action.t_start > self.t_next:
+                left_pending.append(left_pending)
+            
+            # check if broadcasts is scheduled to occur during while another action is being performed
+            interrupted_actions = [action for action in plan if action.t_start < broadcast_action.t_start < action.t_end]
+            if interrupted_actions:
+                interrupted_action : AgentAction = interrupted_actions.pop(0)
+                if (    
+                        isinstance(interrupted_action, MeasurementAction) 
+                    or  isinstance(interrupted_action, BroadcastMessageAction)
+                    ):
+                    # interrupted action has no duration, schedule broadcast for right after
+                    plan.insert(plan.index(interrupted_action) + 1, broadcast_action)
+                    
+                else:
+                    # interrupted action has a non-zero duration; split interrupted action into two 
+                    i_plan = plan.index(interrupted_action)
+
+                    continued_action : AgentAction = action_from_dict(**interrupted_action.to_dict())
+                    continued_action.t_start = broadcast_action.t_start
+                    continued_action.id = str(uuid.uuid1())
+
+                    interrupted_action.t_end = broadcast_action.t_start
+
+                    plan[i_plan] = interrupted_action
+                    plan.insert(i_plan + 1, continued_action)
+                    plan.insert(i_plan + 1, broadcast_action)
+
+                continue
+
+            ## check if access occurs after an action was performed 
+            last_actions = [action for action in plan if action.t_end <= broadcast_action.t_start]
+            if last_actions:
+                last_action : AgentAction = last_actions.pop()
+                plan.insert(plan.index(last_action) + 1, broadcast_action)
+                continue
+
+            plan.insert(0, broadcast_action)
+
+        for scheduled_broadcast in [broadcast_action for broadcast_action in self.pending_broadcasts if not broadcast_action in left_pending]:
+            self.pending_broadcasts.remove(scheduled_broadcast)
+
+        return plan
 
     @runtime_tracker
     def _get_available_requests(self) -> list:
@@ -404,43 +478,7 @@ class FIFOPreplanner(AbstractPreplanner):
         """
 
         super().__init__(utility_func, logger, **kwargs)
-        self.collaboration = collaboration
-
-    @runtime_tracker
-    def initialize_plan(self, 
-                        state : SimulationAgentState,
-                        current_plan : list,
-                        performed_actions : list,
-                        incoming_reqs : list,
-                        generated_reqs : list,
-                        misc_messages : list,
-                        t_plan : float,
-                        clock_config : ClockConfig,
-                        planning_horizon : float = np.Inf,
-                        orbitdata : OrbitData = None
-                    ) -> bool:
-
-        # update planning time
-        t_plan = t_plan if t_plan >= 0 else 0
-
-        # schedule observation path
-        path : list = self._schedule_observations(state)
-
-        # generate plan from path
-        plan : list = self._plan_from_path(state, path, t_plan, clock_config)
-
-        # update planning horizon time
-        self.t_plan = state.t
-        self.t_next = self.t_plan + planning_horizon
-
-        # check if collaboration is enabled
-        plan : list = self._schedule_broadcasts(state, plan, orbitdata) 
-
-        # wait for next planning horizon to start
-        t_wait_start = state.t if not plan else plan[-1].t_end
-        plan.append(WaitForMessages(t_wait_start, self.t_next))
-
-        return plan
+        self.collaboration = collaboration    
 
     def _schedule_observations(self, state : SimulationAgentState) -> list:
         """ 
@@ -531,6 +569,7 @@ class FIFOPreplanner(AbstractPreplanner):
     
         return path
     
+    @runtime_tracker
     def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, orbitdata : OrbitData) -> list:
         """ 
         Modifies original plan and schedule broadcasts whenever a measurement has been completed in plan 
@@ -540,18 +579,25 @@ class FIFOPreplanner(AbstractPreplanner):
             - plan (`list`): current plan to be performed
             - orbitdata (:obj:`OrbitData`): orbit propagation and coverage data for agent (if applicable)
         """
+        # schedule pending broadcasts
+        plan = super()._schedule_broadcasts(state, plan, orbitdata)
+
         if not self.collaboration:
             return plan
 
+        # schedule measurement action completion broadcasts
         planned_measurements = [action for action in plan 
                                 if isinstance(action, MeasurementAction)]
         
         for action in planned_measurements:
             action : MeasurementAction
+
+            # generate broadcast message
             action_copy = action_from_dict(**action.to_dict())
             action_copy.status = MeasurementAction.COMPLETED
             msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action_copy.to_dict())
             
+            # place broadcasts in plan
             if isinstance(state, SatelliteAgentState):
                 if not orbitdata:
                     raise ValueError('orbitdata required for satellite agents')
@@ -559,33 +605,40 @@ class FIFOPreplanner(AbstractPreplanner):
                 # get next access windows to all agents
                 isl_accesses = [orbitdata.get_next_agent_access(target, action.t_end) for target in orbitdata.isl_data]
 
-                # TODO merge accesses
+                # TODO merge accesses to find overlaps
                 isl_accesses_merged = isl_accesses
 
-                # place broadcasts in plan
-                for t_msg in [interval.start for interval in isl_accesses_merged if interval.start <= self.t_next]:
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(t_msg, action.t_end))
+                # handle placement in plan
+                for interval in isl_accesses_merged:
+                    interval : TimeInterval
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, action.t_end))
+
+                    if self.t_next < broadcast_action.t_start:
+                        self.pending_broadcasts.append(broadcast_action)
+                        continue
 
                     # place broadcast action in plan
                     ## check if access occurs during an action being performed
-                    interrupted_actions = [action for action in plan if action.t_start < t_msg < action.t_end]
+                    interrupted_actions = [action for action in plan 
+                                            if action.t_start < broadcast_action.t_start < action.t_end]
                     if interrupted_actions:
                         interrupted_action : AgentAction = interrupted_actions.pop(0)
                         if (    
                                 isinstance(interrupted_action, MeasurementAction) 
                             or  isinstance(interrupted_action, BroadcastMessageAction)
                             ):
+                            # interrupted action has no duration; schedule broadcast for right after
                             plan.insert(plan.index(interrupted_action) + 1, broadcast_action)
                             
                         else:
-                            # split action into two 
+                            # interrupted action has a non-zero duration; split interrupted action into two 
                             i_plan = plan.index(interrupted_action)
 
                             continued_action : AgentAction = action_from_dict(**interrupted_action.to_dict())
-                            continued_action.t_start = t_msg
+                            continued_action.t_start = broadcast_action.t_start
                             continued_action.id = str(uuid.uuid1())
 
-                            interrupted_action.t_end = t_msg
+                            interrupted_action.t_end = broadcast_action.t_start
 
                             plan[i_plan] = interrupted_action
                             plan.insert(i_plan + 1, continued_action)
@@ -594,7 +647,7 @@ class FIFOPreplanner(AbstractPreplanner):
                         continue
 
                     ## check if access occurs after an action was performed 
-                    last_actions = [action for action in plan if action.t_end <= t_msg]
+                    last_actions = [action for action in plan if action.t_end <= broadcast_action.t_start]
                     if last_actions:
                         last_action : AgentAction = last_actions.pop()
                         plan.insert(plan.index(last_action) + 1, broadcast_action)
@@ -605,5 +658,4 @@ class FIFOPreplanner(AbstractPreplanner):
             else:
                 raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
        
-
         return plan

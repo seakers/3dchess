@@ -1,6 +1,6 @@
 routine,t_avg,t_std,t_med,n
 ENVIRONMENT_wait,-1.0,0.0,-1.0,0
-sar_0_wait,0.119,0.333,0.037,212
-thm_0_wait,0.146,0.444,0.037,212
-clock_wait,0.153,0.442,0.044,212
-sim_runtime,32.356,0.0,32.356,1
+sar_0_wait,0.435,3.434,0.036,221
+thm_0_wait,0.54,3.781,0.037,221
+clock_wait,0.565,3.789,0.046,221
+sim_runtime,124.855,0.0,124.855,1
