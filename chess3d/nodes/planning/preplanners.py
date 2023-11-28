@@ -429,15 +429,15 @@ class FIFOPreplanner(AbstractPreplanner):
         # generate plan from path
         plan : list = self._plan_from_path(state, path, t_plan, clock_config)
 
-        # check if collaboration is enabled
-        plan : list = self._schedule_broadcasts(state, plan, orbitdata) 
-
         # update planning horizon time
         self.t_plan = state.t
         self.t_next = self.t_plan + planning_horizon
 
+        # check if collaboration is enabled
+        plan : list = self._schedule_broadcasts(state, plan, orbitdata) 
+
         # wait for next planning horizon to start
-        t_wait_start = state.t if len(plan) == 0 else plan[-1].t_end
+        t_wait_start = state.t if not plan else plan[-1].t_end
         plan.append(WaitForMessages(t_wait_start, self.t_next))
 
         return plan
@@ -548,22 +548,23 @@ class FIFOPreplanner(AbstractPreplanner):
         
         for action in planned_measurements:
             action : MeasurementAction
-            action.status = MeasurementAction.COMPLETED
-            msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action.to_dict())
+            action_copy = action_from_dict(**action.to_dict())
+            action_copy.status = MeasurementAction.COMPLETED
+            msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action_copy.to_dict())
             
             if isinstance(state, SatelliteAgentState):
                 if not orbitdata:
                     raise ValueError('orbitdata required for satellite agents')
                 
                 # get next access windows to all agents
-                isl_accesses = [orbitdata.get_next_agent_access(target, state.t) for target in orbitdata.isl_data]
+                isl_accesses = [orbitdata.get_next_agent_access(target, action.t_end) for target in orbitdata.isl_data]
 
                 # TODO merge accesses
                 isl_accesses_merged = isl_accesses
 
                 # place broadcasts in plan
-                for t_msg in [interval.start for interval in isl_accesses_merged]:
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(t_msg, state.t))
+                for t_msg in [interval.start for interval in isl_accesses_merged if interval.start <= self.t_next]:
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(t_msg, action.t_end))
 
                     # place broadcast action in plan
                     ## check if access occurs during an action being performed
@@ -600,12 +601,7 @@ class FIFOPreplanner(AbstractPreplanner):
                         continue
 
                     plan.insert(0, broadcast_action)
-
-                    # for action in [action for action in plan if action.t_end >= t_msg]:
-                    #     plan.insert(plan.index(action) + 1, broadcast_action)
-                    #     break
-
-                x = 1
+                    
             else:
                 raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
        

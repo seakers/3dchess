@@ -554,13 +554,13 @@ class PlanningModule(InternalModule):
                 # get next action to perform
                 plan_out = self._get_next_actions(plan, pending_actions, generated_reqs, self.get_current_time())
 
-                # check plan feasibility
-                if not self.is_plan_feasible(plan_out):
-                    raise RuntimeError("Planner generated an unfeasible plan.")
-
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
+
+                # check plan feasibility
+                if not self.is_plan_feasible(plan_out):
+                    raise RuntimeError("Planner generated an unfeasible plan.")
 
                 # send plan to parent agent
                 self.log(f'sending {len(plan_out)} actions to parent agent...')
@@ -824,12 +824,12 @@ class PlanningModule(InternalModule):
         
         # broadcasts all newly generated requests if they have a non-zero scientific value 
         # TODO move to replanners
-        for req in [req for req in generated_reqs if req.s_max > 0.0]:
-            req : MeasurementRequest
-            req_msg = MeasurementRequestMessage("", "", req.to_dict())
-            plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
-                                                        self.get_current_time()).to_dict()
-                                                    )
+        # for req in [req for req in generated_reqs if req.s_max > 0.0]:
+        #     req : MeasurementRequest
+        #     req_msg = MeasurementRequestMessage("", "", req.to_dict())
+        #     plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
+        #                                                 self.get_current_time()).to_dict()
+        #                                             )
 
         # idle if no more actions can be performed
         if len(plan_out) == 0:

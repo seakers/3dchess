@@ -1,4 +1,4 @@
 routine,t_avg,t_std,t_med,n
-sar_0,0.011,0.003,0.009,289
-thm_0,0.01,0.002,0.009,280
-query_measurement_data,0.012,0.002,0.011,103
+sar_0,0.011,0.003,0.009,266
+thm_0,0.01,0.002,0.009,267
+query_measurement_data,0.012,0.003,0.011,91

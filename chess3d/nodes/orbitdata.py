@@ -84,7 +84,7 @@ class OrbitData:
     """
     GET NEXT methods
     """
-    def get_next_agent_access(self, target, t: float):
+    def get_next_agent_access(self, target : str, t: float):
         src = self.agent_name
 
         if target in self.isl_data.keys():
@@ -92,20 +92,21 @@ class OrbitData:
         else:
             raise ValueError(f'{src} cannot access {target}.')
 
-    def get_next_isl_access_interval(self, target, t) -> TimeInterval:
+    def get_next_isl_access_interval(self, target : str, t : float) -> TimeInterval:
+        t = t/self.time_step
         isl_data : pd.DataFrame = self.isl_data[target]
+        isl_access = isl_data.query('@t <= `end index`').sort_values('start index')
         
-        for _, row in isl_data.iterrows():
-            t_start = row['start index'] * self.time_step
+        for _, row in isl_access.iterrows():
+            t_start = max(t, row['start index']) * self.time_step
             t_end = row['end index'] * self.time_step
 
-            interval = TimeInterval(t_start, t_end)
-            if interval.is_during(t) or interval.is_after(t):
-                return interval
+            return TimeInterval(t_start, t_end)
 
         return TimeInterval(-np.Infinity, np.Infinity)
 
     def get_next_gs_access(self, t):
+        t = t/self.time_step
         accesses = self.gp_access_data.query('`time index` >= @t').sort_values(by='time index')        
         for _, row in accesses.iterrows():
             return row['time index'] * self.time_step

@@ -94,10 +94,10 @@
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                     "sma": 7078,
                     "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 120.0,
+                    "inc": 247,
+                    "raan": 240.0,
                     "aop": 0.0,
-                    "ta": 40.0
+                    "ta": 80.0
                 }
             },
             "planner" : {
@@ -222,7 +222,7 @@
                     "initialRequestsPath" : "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
                     "eventsPath" : "./scenarios/scenario2_simple/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
-                    "connectivity" : "FULL", 
+                    "connectivity" : "LOS", 
                     "utility" : "LINEAR"
                 },
     "settings": {
