@@ -38,7 +38,9 @@ class AbstractReplanner(ABC):
     def needs_replanning(   self, 
                             state : SimulationAgentState,
                             current_plan : list,
-                            performed_actions : list,
+                            completed_actions : list,
+                            aborted_actions : list,
+                            pending_actions : list,
                             incoming_reqs : list,
                             generated_reqs : list,
                             misc_messages : list,
@@ -55,7 +57,9 @@ class AbstractReplanner(ABC):
     def replan( self, 
                 state : SimulationAgentState, 
                 current_plan : list,
-                performed_actions : list,
+                completed_actions : list,
+                aborted_actions : list,
+                pending_actions : list,
                 incoming_reqs : list, 
                 generated_reqs : list,
                 misc_messages : list,
@@ -382,7 +386,9 @@ class FIFOReplanner(AbstractReplanner):
     def needs_replanning(   self, 
                             state : SimulationAgentState,
                             current_plan : list,
-                            performed_actions : list,
+                            completed_actions : list,
+                            aborted_actions : list,
+                            pending_actions : list,
                             incoming_reqs : list,
                             generated_reqs : list,
                             misc_messages : list,
@@ -398,6 +404,8 @@ class FIFOReplanner(AbstractReplanner):
                                                         generated_reqs)
         
         # update list of performed measurements
+        performed_actions = [action for action in completed_actions]
+        performed_actions.extend(aborted_actions)
         self.__update_performed_requests(performed_actions)
 
         # update access times for known requests
@@ -464,7 +472,9 @@ class FIFOReplanner(AbstractReplanner):
     def replan( self, 
                 state : AbstractAgentState, 
                 current_plan : list,
-                performed_actions : list,
+                completed_actions : list,
+                aborted_actions : list,
+                pending_actions : list,
                 incoming_reqs : list, 
                 generated_reqs : list,
                 misc_messages : list,

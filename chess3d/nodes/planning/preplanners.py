@@ -9,6 +9,7 @@ from dmas.clocks import *
 
 from messages import MeasurementPerformedMessage, MeasurementResultsRequestMessage
 
+from nodes.planning.plan import Plan
 from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
 from nodes.actions import *
@@ -46,7 +47,9 @@ class AbstractPreplanner(ABC):
     def needs_initialized_plan( self, 
                                 state : SimulationAgentState,
                                 current_plan : list,
-                                performed_actions : list,
+                                completed_actions : list,
+                                aborted_actions : list,
+                                pending_actions : list,
                                 incoming_reqs : list,
                                 generated_reqs : list,
                                 misc_messages : list,
@@ -60,6 +63,8 @@ class AbstractPreplanner(ABC):
         self.known_reqs.extend(new_reqs)
 
         # update list of performed requests
+        performed_actions = [action for action in completed_actions]
+        performed_actions.extend(aborted_actions)
         performed_requests : list = self.__update_performed_requests(performed_actions, misc_messages)
         self.performed_requests.extend([req for req in performed_requests if req not in self.performed_requests])
 
@@ -79,7 +84,6 @@ class AbstractPreplanner(ABC):
         Reads incoming requests and determines which ones are new or known
         """
         reqs = [req for req in incoming_reqs]
-        reqs.extend(generated_reqs)
 
         return [req for req in reqs if req not in self.known_reqs and req.s_max > 0]
 
@@ -198,7 +202,9 @@ class AbstractPreplanner(ABC):
     def initialize_plan(self, 
                         state : SimulationAgentState,
                         current_plan : list,
-                        performed_actions : list,
+                        completed_actions : list,
+                        aborted_actions : list,
+                        pending_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
                         misc_messages : list,
@@ -228,7 +234,7 @@ class AbstractPreplanner(ABC):
         t_wait_start = state.t if not plan else plan[-1].t_end
         plan.append(WaitForMessages(t_wait_start, self.t_next))
 
-        return plan
+        return Plan(plan, state.t)
     
     @abstractmethod
     def _schedule_observations(self, state : AbstractAgentState) -> list:

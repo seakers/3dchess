@@ -2,6 +2,7 @@ import os
 import re
 import time
 from typing import Any, Callable
+from nodes.planning.plan import Plan
 from nodes.planning.preplanners import AbstractPreplanner
 from nodes.planning.replanners import AbstractReplanner
 from nodes.orbitdata import OrbitData
@@ -431,8 +432,8 @@ class PlanningModule(InternalModule):
         Generates a plan for the parent agent to perform
         """
         try:
-            # initialize results vectors
-            plan = []
+            # initialize plan
+            plan : Plan = Plan(self.planning_horizon)
 
             # level = logging.WARNING
             level = logging.DEBUG
@@ -441,16 +442,14 @@ class PlanningModule(InternalModule):
                 # wait for agent to update state
                 state : SimulationAgentState = await self.states_inbox.get()
                 
-                await self.agent_state_lock.acquire()
+                # update internal clock
                 await self.update_current_time(state.t)
-                self.agent_state = state
-                self.agent_state_lock.release()
-
-                assert abs(self.get_current_time() - self.agent_state.t) <= 1e-2
+                assert abs(self.get_current_time() - state.t) <= 1e-2
 
                 # --- Check incoming information ---
                 # check action completion
-                completed_actions, aborted_actions, pending_actions = await self.__check_action_completion(plan, level)
+                completed_actions, aborted_actions, pending_actions \
+                    = await self.__check_action_completion(level)
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # all_actions = [action for action in completed_actions]
@@ -466,23 +465,20 @@ class PlanningModule(InternalModule):
                 # -------------------------------------
 
                 # remove aborted or completed actions from plan
-                plan, performed_actions = self.__remove_performed_actions_from_plan(plan, completed_actions, aborted_actions)
+                plan.update_action_completion(completed_actions, aborted_actions, pending_actions, self.get_current_time())
                 
                 # Read incoming messages
-                incoming_reqs, generated_reqs, misc_messages = await self._wait_for_messages()
+                incoming_reqs, generated_reqs, misc_messages = await self._read_incoming_messages()
                 
                 # --- Create plan ---
-                # Check if reeplanning is needed
-                await self.agent_state_lock.acquire()
-                agent_state = self.agent_state.copy()
-                self.agent_state_lock.release()
-
                 # check if plan has been initialized
                 if (self.preplanner is not None                                         # there is a preplanner assigned to this planner
                     and self.preplanner.needs_initialized_plan(                         # there is a need to construct a new plan
-                                                                agent_state,
+                                                                state,
                                                                 plan, 
-                                                                performed_actions,
+                                                                completed_actions,
+                                                                aborted_actions,
+                                                                pending_actions,
                                                                 incoming_reqs,
                                                                 generated_reqs,
                                                                 misc_messages,
@@ -493,8 +489,11 @@ class PlanningModule(InternalModule):
                     ):
 
                     # initialize plan
-                    plan = await self._preplan( plan, 
-                                                performed_actions,
+                    plan = await self._preplan( state,
+                                                plan, 
+                                                completed_actions,
+                                                aborted_actions,
+                                                pending_actions,
                                                 incoming_reqs,
                                                 generated_reqs,
                                                 misc_messages,
@@ -502,19 +501,19 @@ class PlanningModule(InternalModule):
                     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
                     self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                    x = 1
                     # -------------------------------------
 
+                # --- Modify plan ---
                 # Check if reeplanning is needed
-                await self.agent_state_lock.acquire()
-                agent_state = self.agent_state.copy()
-                self.agent_state_lock.release()
-
                 if (    
                     self.replanner is not None and                          # there is a replanner assigned to this planner
                     self.replanner.needs_replanning(                        # there is new relevant information to be considered
-                                                    agent_state,
+                                                    state,
                                                     plan, 
-                                                    performed_actions,
+                                                    completed_actions,
+                                                    aborted_actions,
+                                                    pending_actions,
                                                     incoming_reqs,
                                                     generated_reqs,
                                                     misc_messages,
@@ -530,9 +529,12 @@ class PlanningModule(InternalModule):
                     # -------------------------------------
 
                     # replan
-                    plan : list = await self._replan(   
-                                                        plan, 
-                                                        performed_actions,
+                    plan : Plan = await self._replan(   
+                                                        state,
+                                                        plan,
+                                                        completed_actions,
+                                                        aborted_actions,
+                                                        pending_actions,                                                        
                                                         incoming_reqs, 
                                                         generated_reqs, 
                                                         misc_messages
@@ -546,21 +548,12 @@ class PlanningModule(InternalModule):
                     # -------------------------------------
 
                 # --- Execute plan ---
-
-                # check plan feasibility
-                if not self.is_plan_feasible(plan):
-                    raise RuntimeError("Planner generated an unfeasible plan.")
-
                 # get next action to perform
-                plan_out = self._get_next_actions(plan, pending_actions, generated_reqs, self.get_current_time())
+                plan_out = plan.get_next_actions(self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
-
-                # check plan feasibility
-                if not self.is_plan_feasible(plan_out):
-                    raise RuntimeError("Planner generated an unfeasible plan.")
 
                 # send plan to parent agent
                 self.log(f'sending {len(plan_out)} actions to parent agent...')
@@ -568,9 +561,6 @@ class PlanningModule(InternalModule):
                 await self._send_manager_msg(plan_msg, zmq.PUB)
 
                 self.log(f'actions sent!')
-
-                if abs(state.t - 630.0) < 1e-3:
-                    x = 1
 
         except asyncio.CancelledError:
             return
@@ -602,18 +592,16 @@ class PlanningModule(InternalModule):
         return True
         
     @runtime_tracker
-    async def __check_action_completion(self, current_plan : list, level : int = logging.DEBUG) -> tuple:
+    async def __check_action_completion(self, level : int = logging.DEBUG) -> tuple:
         """
         Checks incoming messages from agent to check which actions from its plan have been completed, aborted, or are still pending
 
         ### Arguments:
-            - current_plan (`list`): latest plan generated by this planner
             - level (`int`): logging level
 
         ### Returns:
             - `tuple` of action lists `completed_actions, aborted_actions, pending_actions`
         """
-        plan_ids = [action.id for action in current_plan]
         completed_actions = []
         aborted_actions = []
         pending_actions = []
@@ -622,107 +610,81 @@ class PlanningModule(InternalModule):
             action_msg : AgentActionMessage = await self.action_status_inbox.get()
             action : AgentAction = action_from_dict(**action_msg.action)
 
-            if action.id in plan_ids:
-                if action_msg.status == AgentAction.COMPLETED:
-                    # planned action completed! 
-                    self.log(f'action of type `{action.action_type}` completed!', level)
-                    completed_actions.append(action)
-                elif action_msg.status == AgentAction.ABORTED:
-                    # planned action aborted! 
-                    self.log(f'action of type `{action.action_type}` aborted!', level)
-                    aborted_actions.append(action)
-                    pass
-                elif action_msg.status == AgentAction.PENDING:
-                    # planned action wasn't completed
-                    self.log(f"action {action.id.split('-')[0]} not completed yet! trying again...", level)
-                    pending_actions.append(action)
-                else: 
-                    # unknowhn action status; ignore
-                    continue
+            if action_msg.status == AgentAction.COMPLETED:
+                # planned action completed! 
+                self.log(f'action of type `{action.action_type}` completed!', level)
+                completed_actions.append(action)
+            elif action_msg.status == AgentAction.ABORTED:
+                # planned action aborted! 
+                self.log(f'action of type `{action.action_type}` aborted!', level)
+                aborted_actions.append(action)
+                pass
+            elif action_msg.status == AgentAction.PENDING:
+                # planned action wasn't completed
+                self.log(f"action {action.id.split('-')[0]} not completed yet! trying again...", level)
+                pending_actions.append(action)
+            else: 
+                # unknowhn action status; ignore
+                continue
         
         return completed_actions, aborted_actions, pending_actions
-    
-    def __remove_performed_actions_from_plan(   self, 
-                                                current_plan : list, 
-                                                completed_actions : list, 
-                                                aborted_actions : list) -> tuple:
-        
-        updated_plan = [action for action in current_plan]
-        performed_actions = [action for action in completed_actions]
-        performed_actions.extend(aborted_actions)
-        for performed_action in performed_actions:
-            performed_action : AgentAction
-            for action in updated_plan:
-                action : AgentAction
-                if performed_action.id == action.id:
-                    updated_plan.remove(action)
-
-        return updated_plan, performed_actions
-                
+                    
     @runtime_tracker
-    async def _preplan( self, 
+    async def _preplan( self,
+                        state : AbstractAgentState, 
                         plan : list,
-                        performed_actions : list,
+                        completed_actions : list,
+                        aborted_actions : list,
+                        pending_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
                         misc_messages : list,
                         level : int 
-                        ) -> None:
+                        ) -> Plan:
         # Generate Initial Plan        
-        await self.agent_state_lock.acquire()
-
-        plan = self.preplanner.initialize_plan( self.agent_state, 
-                                                plan,
-                                                performed_actions,
-                                                incoming_reqs,
-                                                generated_reqs,
-                                                misc_messages,
-                                                self.t_plan,
-                                                self._clock_config,
-                                                self.planning_horizon,
-                                                self.orbitdata
-                                                )
-        self.agent_state_lock.release()
+        plan : Plan = self.preplanner.initialize_plan(  state, 
+                                                        plan,
+                                                        completed_actions,
+                                                        aborted_actions,
+                                                        pending_actions,
+                                                        incoming_reqs,
+                                                        generated_reqs,
+                                                        misc_messages,
+                                                        self.t_plan,
+                                                        self._clock_config,
+                                                        self.planning_horizon,
+                                                        self.orbitdata
+                                                        )
 
         # update last time plan was updated
         self.t_plan = self.get_current_time()
         self.t_next = self.t_plan + self.planning_horizon
 
-        # remove all elements of the plan that occur after the planning horizon ends
-        while(len(plan) > 0 and plan[-1].t_end > self.t_next):
-            plan.pop()
-
-        # wait for next planning horizon if needed
-        if len(plan) > 0:
-            if plan[-1].t_end < self.t_next:
-                plan.append(WaitForMessages(plan[-1].t_end, self.t_next))
-        else:
-            plan.append(WaitForMessages(self.agent_state.t, self.t_next))
-
         # save copy of plan for post-processing
-        plan_copy = []
-        for action in plan:
-            plan_copy.append(action)
+        plan_copy = [action for action in plan]
         self.plan_history.append((self.t_plan, plan_copy))
 
         return plan
 
     @runtime_tracker
     async def _replan(  self, 
+                        state : AbstractAgentState,
                         current_plan : list,
-                        performed_actions : list,
+                        completed_actions : list,
+                        aborted_actions : list,
+                        pending_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
                         misc_messages : list,
                         level : int = logging.DEBUG
-                        ) -> None:
+                        ) -> Plan:
         
         # Modify current Plan      
-        await self.agent_state_lock.acquire()
-
-        plan : list = self.replanner.replan(self.agent_state, 
+        plan : Plan = self.replanner.replan(state, 
                                             current_plan,
-                                            performed_actions,
+                                            completed_actions,
+                                            aborted_actions,
+                                            pending_actions,
                                             incoming_reqs, 
                                             generated_reqs,
                                             misc_messages,
@@ -730,32 +692,18 @@ class PlanningModule(InternalModule):
                                             self.t_next,
                                             self._clock_config,
                                             self.orbitdata) 
-        self.agent_state_lock.release()
 
         # update last time plan was updated
         self.t_plan = self.get_current_time()
 
-        # remove all elements of the plan that occur after the planning horizon ends
-        while(len(plan) > 0 and plan[-1].t_end > self.t_next):
-            plan.pop()
-
-        # wait for next planning horizon if needed
-        if len(plan) > 0:
-            if plan[-1].t_end < self.t_next:
-                plan.append(WaitForMessages(plan[-1].t_end, self.t_next))
-        else:
-            plan.append(WaitForMessages(self.agent_state.t, self.t_next))
-
         # save copy of plan for post-processing
-        plan_copy = []
-        for action in plan:
-            plan_copy.append(action)
+        plan_copy = [action for action in plan]
         self.plan_history.append((self.t_plan, plan_copy))
 
         return plan
     
     @runtime_tracker
-    async def _wait_for_messages(self) -> tuple:
+    async def _read_incoming_messages(self) -> tuple:
         """
         Collects and classifies incoming messages. If a measurement was made by the parent agent,
         it waits until other modules to process the measurement's data and send a response.
@@ -797,54 +745,52 @@ class PlanningModule(InternalModule):
 
         return incoming_reqs, generated_reqs, misc_messages
 
-    @runtime_tracker
-    def _get_next_actions(self, plan : list, pending_actions : list, generated_reqs : list, t : float) -> list:
-        """ Parses current plan and outputs list of actions that are to be performed at a given time"""
+    # @runtime_tracker
+    # def _get_next_actions(self, plan : list, pending_actions : list, generated_reqs : list, t : float) -> list:
+    #     """ Parses current plan and outputs list of actions that are to be performed at a given time"""
+       
+    #     # get next available action to perform
+    #     plan_out = [action.to_dict() for action in plan if action.t_start <= t <= action.t_end]
 
+    #     # if broadcasts are to be done, perform them first before any other actions
+    #     # TODO move decision to the pre/replanner level
+    #     # broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
+    #     # if len(broadcast_actions) > 0:
+    #     #     broadcast_actions : list = [action for action in plan_out 
+    #     #                                 if isinstance(action, BroadcastMessageAction) 
+    #     #                                 or isinstance(action, WaitForMessages)
+    #     #                                 ]
+
+    #     # plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
+    #     # plan_out = [action.to_dict() for action in plan_out]
+
+    #     # re-attempt pending actions 
+    #     pending_out = [action.to_dict() for action in pending_actions if action.to_dict() not in plan_out]
+    #     pending_out.extend(plan_out); plan_out = pending_out
         
+    #     # broadcasts all newly generated requests if they have a non-zero scientific value 
+    #     # TODO move to replanners
+    #     # for req in [req for req in generated_reqs if req.s_max > 0.0]:
+    #     #     req : MeasurementRequest
+    #     #     req_msg = MeasurementRequestMessage("", "", req.to_dict())
+    #     #     plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
+    #     #                                                 self.get_current_time()).to_dict()
+    #     #                                             )
 
-        # get next available action to perform
-        plan_out = [action.to_dict() for action in plan if action.t_start <= t <= action.t_end]
+    #     # idle if no more actions can be performed
+    #     if len(plan_out) == 0:
+    #         t_idle = plan[0].t_start if len(plan) > 0 else self.t_next
+    #         # t_idle = plan[0].t_start if len(plan) > 0 and plan[0].t_end <= t else self.t_next
+    #         action = WaitForMessages(t, t_idle)
+    #         plan_out.append(action.to_dict())     
 
-        # if broadcasts are to be done, perform them first before any other actions
-        # TODO move decision to the pre/replanner level
-        # broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
-        # if len(broadcast_actions) > 0:
-        #     broadcast_actions : list = [action for action in plan_out 
-        #                                 if isinstance(action, BroadcastMessageAction) 
-        #                                 or isinstance(action, WaitForMessages)
-        #                                 ]
+    #     # sort plan in order of ascending start time 
+    #     if len(plan_out) > 1:
+    #         plan_out.sort(key=lambda a: a['t_start'])
 
-        # plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
-        # plan_out = [action.to_dict() for action in plan_out]
-
-        # re-attempt pending actions 
-        pending_out = [action.to_dict() for action in pending_actions if action.to_dict() not in plan_out]
-        pending_out.extend(plan_out); plan_out = pending_out
-        
-        # broadcasts all newly generated requests if they have a non-zero scientific value 
-        # TODO move to replanners
-        # for req in [req for req in generated_reqs if req.s_max > 0.0]:
-        #     req : MeasurementRequest
-        #     req_msg = MeasurementRequestMessage("", "", req.to_dict())
-        #     plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
-        #                                                 self.get_current_time()).to_dict()
-        #                                             )
-
-        # idle if no more actions can be performed
-        if len(plan_out) == 0:
-            t_idle = plan[0].t_start if len(plan) > 0 else self.t_next
-            # t_idle = plan[0].t_start if len(plan) > 0 and plan[0].t_end <= t else self.t_next
-            action = WaitForMessages(t, t_idle)
-            plan_out.append(action.to_dict())     
-
-        # sort plan in order of ascending start time 
-        if len(plan_out) > 1:
-            plan_out.sort(key=lambda a: a['t_start'])
-
-        return plan_out     
+    #     return plan_out     
     
-    def __log_plan(self, plan : list, title : str, level : int = logging.DEBUG) -> None:
+    def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
         out = f'\n{title}\nid\taction type\tt_start\tt_end\n'
 
         for action in plan:
