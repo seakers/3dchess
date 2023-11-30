@@ -103,12 +103,12 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
+                    "collaboration " : "False"
                 },
                 "horizon" : 3600,
                 "utility" : "LINEAR"
             },
-            "science" : "True",
+            "science" : "False",
             "notifier": "False",
             "missionProfile": "3D-CHESS"
         },
@@ -201,12 +201,12 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
+                    "collaboration " : "False"
                 },                
                 "horizon": 3600,
                 "utility" : "LINEAR"
             },
-            "science" : "True",
+            "science" : "False",
             "notifier": "False",
             "missionProfile": "3D-CHESS"
         }

@@ -46,14 +46,13 @@ class AbstractPreplanner(ABC):
     @runtime_tracker
     def needs_initialized_plan( self, 
                                 state : SimulationAgentState,
-                                current_plan : list,
+                                current_plan : Plan,
                                 completed_actions : list,
                                 aborted_actions : list,
                                 pending_actions : list,
                                 incoming_reqs : list,
                                 generated_reqs : list,
                                 misc_messages : list,
-                                t_plan : float,
                                 planning_horizon : float = np.Inf,
                                 orbitdata : OrbitData = None
                             ) -> bool:
@@ -69,10 +68,10 @@ class AbstractPreplanner(ABC):
         self.performed_requests.extend([req for req in performed_requests if req not in self.performed_requests])
 
         # update access times 
-        self.__update_access_times(state, t_plan, planning_horizon, orbitdata)
+        self.__update_access_times(state, current_plan.t_update, planning_horizon, orbitdata)
         
         # check if plan needs to be inialized
-        return (t_plan < 0                    # simulation just started
+        return (current_plan.t_update < 0                    # simulation just started
                 or state.t >= self.t_next)    # planning horizon has been reached
 
     @runtime_tracker

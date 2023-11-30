@@ -447,19 +447,24 @@ class PlanningModule(InternalModule):
                 assert abs(self.get_current_time() - state.t) <= 1e-2
 
                 # --- Check incoming information ---
+                # Read incoming messages
+                incoming_reqs, generated_reqs, misc_messages = await self._read_incoming_messages()
+
                 # check action completion
                 completed_actions, aborted_actions, pending_actions \
                     = await self.__check_action_completion(level)
 
+                # remove aborted or completed actions from plan
+                plan.update_action_completion(  
+                                                completed_actions, 
+                                                aborted_actions, 
+                                                pending_actions, 
+                                                self.get_current_time()
+                                            )
+                
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 self.__log_actions(completed_actions, aborted_actions, pending_actions)
                 # -------------------------------------
-
-                # remove aborted or completed actions from plan
-                plan.update_action_completion(completed_actions, aborted_actions, pending_actions, self.get_current_time())
-                
-                # Read incoming messages
-                incoming_reqs, generated_reqs, misc_messages = await self._read_incoming_messages()
                 
                 # --- Create plan ---
                 # check if plan has been initialized
@@ -473,7 +478,6 @@ class PlanningModule(InternalModule):
                                                                 incoming_reqs,
                                                                 generated_reqs,
                                                                 misc_messages,
-                                                                self.t_plan,
                                                                 self.planning_horizon,
                                                                 self.orbitdata
                                                             )
@@ -488,7 +492,8 @@ class PlanningModule(InternalModule):
                                                 incoming_reqs,
                                                 generated_reqs,
                                                 misc_messages,
-                                                level)   
+                                                level
+                                                )   
                     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
                     self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
