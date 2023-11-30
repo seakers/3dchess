@@ -234,7 +234,7 @@ class AbstractPreplanner(ABC):
         t_wait_start = state.t if not plan else plan[-1].t_end
         plan.append(WaitForMessages(t_wait_start, self.t_next))
 
-        return Plan(plan, state.t)
+        return Plan(plan, state.t, planning_horizon)
     
     @abstractmethod
     def _schedule_observations(self, state : AbstractAgentState) -> list:

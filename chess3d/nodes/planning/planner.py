@@ -433,7 +433,7 @@ class PlanningModule(InternalModule):
         """
         try:
             # initialize plan
-            plan : Plan = Plan(self.planning_horizon)
+            plan : Plan = Plan(horizon=self.planning_horizon)
 
             # level = logging.WARNING
             level = logging.DEBUG
@@ -452,16 +452,7 @@ class PlanningModule(InternalModule):
                     = await self.__check_action_completion(level)
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # all_actions = [action for action in completed_actions]
-                # all_actions.extend([action for action in aborted_actions])
-                # all_actions.extend([action for action in pending_actions])
-
-                # if len(all_actions) > 0:
-                #     out = '\nACTION STATUS:\n'
-                #     for action in all_actions:
-                #         action : AgentAction
-                #         out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-                #     self.log(out, logging.WARNING)
+                self.__log_actions(completed_actions, aborted_actions, pending_actions)
                 # -------------------------------------
 
                 # remove aborted or completed actions from plan
@@ -790,6 +781,19 @@ class PlanningModule(InternalModule):
 
     #     return plan_out     
     
+    def __log_actions(self, completed_actions : list, aborted_actions : list, pending_actions : list) -> None:
+        all_actions = [action for action in completed_actions]
+        all_actions.extend([action for action in aborted_actions])
+        all_actions.extend([action for action in pending_actions])
+
+        if len(all_actions) > 0:
+            out = '\nACTION STATUS:\n'
+            for action in all_actions:
+                action : AgentAction
+                out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+            out += '\n'
+            self.log(out, logging.WARNING)
+
     def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
         out = f'\n{title}\nid\taction type\tt_start\tt_end\n'
 
