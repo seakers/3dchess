@@ -218,7 +218,7 @@ class AbstractPreplanner(ABC):
                         misc_messages : list,
                         clock_config : ClockConfig,
                         orbitdata : OrbitData = None
-                    ) -> bool:
+                    ) -> Plan:
 
         # update planning time
         t_plan = self.plan.t_update if self.plan.t_update >= 0 else 0
@@ -240,25 +240,11 @@ class AbstractPreplanner(ABC):
         self.plan = Plan(actions, state.t)
 
         # wait for next planning period to start
-        if not actions:
-            t_wait_start = state.t 
-        else:
-            actions_in_period = [action for action in actions if action.t_start < self.t_next]
+        self.plan = self.__schedule_periodic_replan(state)
 
-            if actions_in_period:
-                last_action : AgentAction = actions_in_period.pop()
-                if last_action.t_end < self.t_next:
-                    t_wait_start = last_action.t_end
-                else:
-                    t_wait_start = self.t_next
-                                
-            else:
-                t_wait_start = state.t
-        wait_action = WaitForMessages(t_wait_start, self.t_next)
-        self.plan.put(wait_action, state.t)
-
+        # return plan
         return self.plan
-    
+        
     @abstractmethod
     def _schedule_observations(self, state : AbstractAgentState) -> list:
         """ initializes an observation plan """
@@ -313,6 +299,34 @@ class AbstractPreplanner(ABC):
             self.pending_broadcasts.remove(scheduled_broadcast)
 
         return plan
+
+    def __schedule_periodic_replan(self, state : SimulationAgentState) -> Plan:
+        """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
+
+        # find wait start time
+        if self.plan.empty():
+            t_wait_start = state.t 
+        else:
+            actions_in_period = [action for action in self.plan.actions if action.t_start < self.t_next]
+
+            if actions_in_period:
+                last_action : AgentAction = actions_in_period.pop()
+                if last_action.t_end < self.t_next:
+                    t_wait_start = last_action.t_end
+                else:
+                    t_wait_start = self.t_next
+                                
+            else:
+                t_wait_start = state.t
+
+        # create wait action
+        wait_action = WaitForMessages(t_wait_start, self.t_next)
+
+        # place in plan
+        self.plan.put(wait_action, state.t)
+
+        # return plan
+        return self.plan
 
     @runtime_tracker
     def _get_available_requests(self) -> list:
