@@ -101,10 +101,11 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "False"
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
                 },
                               
                 "utility" : "LINEAR"                

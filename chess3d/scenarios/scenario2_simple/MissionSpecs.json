@@ -201,9 +201,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "False"
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
                 },                
-                "horizon": 3600,
                 "utility" : "LINEAR"
             },
             "science" : "False",

@@ -26,22 +26,39 @@ class AbstractPreplanner(ABC):
     """
     def __init__(   self, 
                     utility_func : Callable[[], Any], 
+                    horizon : float = np.Inf,
+                    period : float = np.Inf,
                     logger: logging.Logger = None
                 ) -> None:
+        """
+        ## Preplanner 
+        
+        Creates an instance of a preplanner class object.
+
+        #### Arguments:
+            - utility_func (`Callable`): desired utility function for evaluating observations
+            - horizon (`float`) : planning horizon in seconds [s]
+            - period (`float`) : period of replanning in seconds [s]
+            - logger (`logging.Logger`) : debugging logger
+        """
         super().__init__()
 
-        self.t_plan = -1
-        self.t_next = np.Inf
-
+        # initialize valiables
         self.performed_requests = []
         self.pending_broadcasts = []
         self.access_times = {}
         self.known_reqs = []
-        
         self.stats = {}
-        
+        self.plan = Plan()        
+
+        # set properties
         self.utility_func = utility_func
+        self.horizon = horizon
+        self.period = period
         self._logger = logger
+
+        # set 
+        self.t_next = period
 
     @runtime_tracker
     def needs_initialized_plan( self, 
@@ -53,7 +70,6 @@ class AbstractPreplanner(ABC):
                                 incoming_reqs : list,
                                 generated_reqs : list,
                                 misc_messages : list,
-                                planning_horizon : float = np.Inf,
                                 orbitdata : OrbitData = None
                             ) -> bool:
         """ Determines whether a new plan needs to be initalized """    
@@ -68,10 +84,10 @@ class AbstractPreplanner(ABC):
         self.performed_requests.extend([req for req in performed_requests if req not in self.performed_requests])
 
         # update access times 
-        self.__update_access_times(state, current_plan.t_update, planning_horizon, orbitdata)
+        self.__update_access_times(state, current_plan.t_update, orbitdata)
         
         # check if plan needs to be inialized
-        return (current_plan.t_update < 0                    # simulation just started
+        return (current_plan.t_update < 0     # simulation just started
                 or state.t >= self.t_next)    # planning horizon has been reached
 
     @runtime_tracker
@@ -82,8 +98,7 @@ class AbstractPreplanner(ABC):
         """
         Reads incoming requests and determines which ones are new or known
         """
-        reqs = [req for req in incoming_reqs]
-
+        reqs = [req for req in incoming_reqs]; reqs.extend(generated_reqs)
         return [req for req in reqs if req not in self.known_reqs and req.s_max > 0]
 
     @runtime_tracker
@@ -99,10 +114,7 @@ class AbstractPreplanner(ABC):
                                 MeasurementAction(**msg.measurement_action)
                                 for msg in misc_messages if isinstance(msg,  MeasurementPerformedMessage)
                                ]
-        
-        if their_measurements: 
-            x = 1
-        
+                
         # compile performed measurements  
         performed_measurements.extend(their_measurements)
 
@@ -120,7 +132,6 @@ class AbstractPreplanner(ABC):
     def __update_access_times(  self,
                                 state : SimulationAgentState,
                                 t_plan : float,
-                                planning_horizon : float,
                                 orbitdata : OrbitData) -> None:
         """
         Calculates and saves the access times of all known requests
@@ -145,7 +156,6 @@ class AbstractPreplanner(ABC):
                                                                     req, 
                                                                     instrument,
                                                                     state.t,
-                                                                    planning_horizon, 
                                                                     orbitdata)
                     self.access_times[req.id][instrument] = t_arrivals
 
@@ -155,7 +165,6 @@ class AbstractPreplanner(ABC):
                             req : MeasurementRequest, 
                             instrument : str,
                             t_prev : Union[int, float],
-                            planning_horizon : Union[int, float], 
                             orbitdata : OrbitData) -> float:
         """
         Estimates the quickest arrival time from a starting position to a given final position
@@ -165,8 +174,8 @@ class AbstractPreplanner(ABC):
             if isinstance(state, SatelliteAgentState):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
-                t_end = min(t_prev + planning_horizon, req.t_end)
-                t_start = min( max(t_prev, req.t_start), t_prev + planning_horizon)
+                t_start = min( max(t_prev, req.t_start), t_prev + self.horizon)
+                t_end = min(t_prev + self.horizon, req.t_end)
                 df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
 
                 for _, row in df.iterrows():
@@ -207,33 +216,48 @@ class AbstractPreplanner(ABC):
                         incoming_reqs : list,
                         generated_reqs : list,
                         misc_messages : list,
-                        t_plan : float,
                         clock_config : ClockConfig,
-                        planning_horizon : float = np.Inf,
                         orbitdata : OrbitData = None
                     ) -> bool:
 
         # update planning time
-        t_plan = t_plan if t_plan >= 0 else 0
+        t_plan = self.plan.t_update if self.plan.t_update >= 0 else 0
 
         # schedule observation path
         path : list = self._schedule_observations(state)
 
         # generate plan from path
-        plan : list = self._plan_from_path(state, path, t_plan, clock_config)
+        actions : list = self._plan_from_path(state, path, t_plan, clock_config)
 
-        # update planning horizon time
+        # update planning period time
         self.t_plan = state.t
-        self.t_next = self.t_plan + planning_horizon
+        self.t_next = self.t_plan + self.period
 
         # check if collaboration is enabled
-        plan : list = self._schedule_broadcasts(state, plan, generated_reqs, orbitdata) 
+        actions : list = self._schedule_broadcasts(state, actions, generated_reqs, orbitdata) 
 
-        # wait for next planning horizon to start
-        t_wait_start = state.t if not plan else plan[-1].t_end
-        plan.append(WaitForMessages(t_wait_start, self.t_next))
+        # create plan from action list
+        self.plan = Plan(actions, state.t)
 
-        return Plan(plan, state.t, planning_horizon)
+        # wait for next planning period to start
+        if not actions:
+            t_wait_start = state.t 
+        else:
+            actions_in_period = [action for action in actions if action.t_start < self.t_next]
+
+            if actions_in_period:
+                last_action : AgentAction = actions_in_period.pop()
+                if last_action.t_end < self.t_next:
+                    t_wait_start = last_action.t_end
+                else:
+                    t_wait_start = self.t_next
+                                
+            else:
+                t_wait_start = state.t
+        wait_action = WaitForMessages(t_wait_start, self.t_next)
+        self.plan.put(wait_action, state.t)
+
+        return self.plan
     
     @abstractmethod
     def _schedule_observations(self, state : AbstractAgentState) -> list:
@@ -472,17 +496,19 @@ class IdlePlanner(AbstractPreplanner):
 class FIFOPreplanner(AbstractPreplanner):
     def __init__(self, 
                  utility_func: Callable[[], Any], 
+                 period : float = np.Inf,
+                 horizon : float = np.Inf,
                  collaboration : bool = False,
                  logger: logging.Logger = None, 
                  **kwargs
                  ) -> None:
         """
-        # First Come, First Served Preplanner
+        ### First Come, First Served Preplanner
 
         Schedules 
         """
 
-        super().__init__(utility_func, logger, **kwargs)
+        super().__init__(utility_func, horizon, period, logger)
         self.collaboration = collaboration    
 
     def _schedule_observations(self, state : SimulationAgentState) -> list:

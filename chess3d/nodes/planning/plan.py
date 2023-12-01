@@ -1,11 +1,16 @@
+import uuid
 import numpy as np
-from nodes.actions import AgentAction, WaitForMessages
+from nodes.actions import *
 
 
 class Plan(object):
     """ Describes a plan to be performed by an agent """
     
-    def __init__(self, actions : list = None, t : float = 0.0, horizon : float = np.Inf) -> None:
+    def __init__(   self, 
+                    actions : list = [],  
+                    # horizon : float = np.Inf,
+                    t : float = 0.0
+                ) -> None:
         # check for argument types
         if actions:
             if not isinstance(actions, list):
@@ -17,7 +22,7 @@ class Plan(object):
                 
         # initialize values
         self.t_update = t
-        self.horizon = horizon
+        # self.horizon = horizon
         self.actions = []
         
         # load preplan
@@ -39,32 +44,65 @@ class Plan(object):
             raise RuntimeError("Cannot update plan: new plan is unfeasible.")
         
         # update plan
-        self.actions = [action for action in actions 
-                     if action.t_start <= self.t_update + self.horizon]
+        self.actions = [action for action in actions]
         
-        t_next = self.t_update + self.horizon
-        if not self.empty():
-            if self.actions[-1].t_end < t_next:
-                self.actions.append(WaitForMessages(self.actions[-1].t_end, t_next))
-        else:
-            self.actions.append(WaitForMessages(t, t_next))
+        t_wait_start = t if self.empty() else self.actions[-1].t_end
+        self.actions.append(WaitForMessages(t_wait_start, np.Inf))
 
         # update latest update time
         self.t_update = t              
         
-    def add_to_plan(self, action : AgentAction, t : float) -> None:
+    def put(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
-        
-        # check if action fits within planning horizon
-        if action.t_start > self.t_update + self.horizon:
-            return
+        try:
+            # check if action is scheduled to occur during while another action is being performed
+            interrupted_actions = [interrupted_action for interrupted_action in self.actions 
+                                   if interrupted_action.t_start <= action.t_start < interrupted_action.t_end]
+            if interrupted_actions:
+                interrupted_action : AgentAction = interrupted_actions.pop(0)
+                if (    
+                        isinstance(interrupted_action, MeasurementAction) 
+                    or  isinstance(interrupted_action, BroadcastMessageAction)
+                    ):
+                    # interrupted action has no duration, schedule broadcast for right after
+                    self.actions.insert(self.actions.index(interrupted_action) + 1, action)
+                    
+                else:
+                    # interrupted action has a non-zero duration; split interrupted action into two 
+                    i_plan = self.actions.index(interrupted_action)
 
-        # TODO place action in plan
+                    # create duplciate of interrupted action with a new ID
+                    continued_action : AgentAction = action_from_dict(**interrupted_action.to_dict())
+                    continued_action.id = str(uuid.uuid1())
 
-        pass
+                    # change start and end times for the interrupted and continued actions
+                    interrupted_action.t_end = action.t_start
+                    continued_action.t_start = action.t_end
 
-        if not self.__is_feasible(self.actions):
-            raise RuntimeError("Unfeasible plan.")
+                    # place action in between the two split parts
+                    self.actions[i_plan] = interrupted_action
+                    self.actions.insert(i_plan + 1, continued_action)
+                    self.actions.insert(i_plan + 1, action)
+                
+                return
+
+            ## check if access occurs after an action was completed 
+            completed_actions = [completed_action for completed_action in self.actions 
+                            if completed_action.t_end <= action.t_start]
+            if completed_actions:
+                # place action after action ends
+                completed_action : AgentAction = completed_actions.pop()
+                self.actions.insert(self.actions.index(completed_action) + 1, action)
+            
+        finally:
+            # update latest update time
+            self.t_update = t  
+
+            try:
+                # check plan feasibility
+                self.__is_feasible(self.actions)
+            except ValueError as e:
+                raise RuntimeError(f"Unfeasible plan. {e}")
 
     def update_action_completion(   self, 
                                     completed_actions : list, 
@@ -111,8 +149,7 @@ class Plan(object):
 
         # idle if no more actions can be performed
         if not plan_out:
-            t_next = self.t_update + self.horizon
-            t_idle = self.actions[0].t_start if not self.empty() else t_next
+            t_idle = self.actions[0].t_start if not self.empty() else np.Inf
             action = WaitForMessages(t, t_idle)
             plan_out.append(action.to_dict())     
 
@@ -154,6 +191,10 @@ class Plan(object):
             t_end_prev = t_end
 
         return True
+
+    def get_horizon(self) -> float:
+        """ Returns current planning horizon """
+        return 0.0 if self.empty() else self.actions[-1].t_end - self.actions[0].t_start
 
     def empty(self) -> bool:
         """ Checks if the current plan is empty """

@@ -260,16 +260,17 @@ def agent_factory(  scenario_name : str,
     ## load planner module
     if planner_dict is not None:
         planner_dict : dict
-        planning_horizon = planner_dict.get('horizon', np.Inf)
         utility_func = utility_function[planner_dict.get('utility', 'NONE')]
         
         preplanner_dict = planner_dict.get('preplanner', None)
         if isinstance(preplanner_dict, dict):
             preplanner_type = preplanner_dict.get('@type', None)
+            period = preplanner_dict.get('period', np.Inf)
+            horizon = preplanner_dict.get('horizon', np.Inf)
 
             if preplanner_type == "FIFO":
                 collaboration = preplanner_dict.get('collaboration ', "False") == "True"
-                preplanner = FIFOPreplanner(utility_func, collaboration)
+                preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
             else:
                 raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
         else:
@@ -301,7 +302,6 @@ def agent_factory(  scenario_name : str,
                                 utility_func, 
                                 preplanner,
                                 replanner,
-                                planning_horizon,
                                 initial_reqs
                             )    
         
