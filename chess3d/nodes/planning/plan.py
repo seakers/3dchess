@@ -7,53 +7,52 @@ class Plan(object):
     """ Describes a plan to be performed by an agent """
     
     def __init__(   self, 
-                    actions : list = [],  
+                    *actions,  
                     # horizon : float = np.Inf,
                     t : float = 0.0
                 ) -> None:
-        # check for argument types
-        if actions:
-            if not isinstance(actions, list):
-                raise ValueError(f'pre-defined plan must be of type `list`.')
-
-            for action in actions:
-                if not isinstance(action, AgentAction):
-                    raise ValueError(f'pre-defined plan must be comprised of objects of type AgentAction`.')
-                
         # initialize values
         self.t_update = t
-        # self.horizon = horizon
         self.actions = []
         
         # load preplan
         if actions:
-            self.update_plan(actions, t)
+            self.update_plan(*actions, t=t)
 
-    def update_plan(self, actions : list, t : float) -> None:
+    def update_plan(self, *action_lists, t : float) -> None:
         """ Updates the current plan to a new list of actions """
+        
+        # reset current plan
+        self.actions = []
 
-        # check argument types
-        if not isinstance(actions, list):
-            raise ValueError(f'updated plan must be of type `list`.')
+        # add actions from iterable set of actions
+        for actions in action_lists:
+            # check argument types
+            if not isinstance(actions, list):
+                raise ValueError(f'updated plan must be of type `list`.')
+            
+            # check feasiblity
+            if not self.__is_feasible(actions):
+                raise RuntimeError("Cannot update plan: new plan is unfeasible.")
         
-        if any([not isinstance(action, AgentAction) for action in actions]):
-            raise ValueError(f'updated plan must be comprised of objects of type AgentAction`.')
-
-        # check feasiblity
-        if not self.__is_feasible(actions):
-            raise RuntimeError("Cannot update plan: new plan is unfeasible.")
-        
-        # update plan
-        self.actions = [action for action in actions]
-        
+            # update plan
+            for action in actions:
+                self.put(action, t)
+                
+        # add indefinite wait at the end of the plan
         t_wait_start = t if self.empty() else self.actions[-1].t_end
-        self.actions.append(WaitForMessages(t_wait_start, np.Inf))
+        self.put(WaitForMessages(t_wait_start, np.Inf), t)
 
-        # update latest update time
+        # update plan update time
         self.t_update = t              
         
     def put(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
+
+        # check argument types
+        if not isinstance(action, AgentAction):
+            raise ValueError(f"Cannot place action of type `{type(action)}` in plan. Must be of type `{AgentAction}`.")
+
         try:
             # check if action is scheduled to occur during while another action is being performed
             interrupted_actions = [interrupted_action for interrupted_action in self.actions 
@@ -89,10 +88,14 @@ class Plan(object):
             ## check if access occurs after an action was completed 
             completed_actions = [completed_action for completed_action in self.actions 
                             if completed_action.t_end <= action.t_start]
+            
             if completed_actions:
                 # place action after action ends
                 completed_action : AgentAction = completed_actions.pop()
                 self.actions.insert(self.actions.index(completed_action) + 1, action)
+
+            else:
+                self.actions.insert(0, action)
             
         finally:
             # update latest update time
@@ -191,6 +194,18 @@ class Plan(object):
             t_end_prev = t_end
 
         return True
+    
+    def __str__(self) -> str:
+        out = f'\nid\taction type\tt_start\tt_end\n'
+
+        if self.empty():
+            out += 'EMPTY\n\n'
+        else:
+            for action in self.actions:
+                if isinstance(action, AgentAction):
+                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+
+        return out
 
     def get_horizon(self) -> float:
         """ Returns current planning horizon """

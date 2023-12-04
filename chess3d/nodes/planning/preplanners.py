@@ -7,7 +7,7 @@ import pandas as pd
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from messages import MeasurementPerformedMessage, MeasurementResultsRequestMessage
+from messages import *
 
 from nodes.planning.plan import Plan
 from nodes.orbitdata import OrbitData, TimeInterval
@@ -224,23 +224,26 @@ class AbstractPreplanner(ABC):
         t_plan = self.plan.t_update if self.plan.t_update >= 0 else 0
 
         # schedule observation path
-        path : list = self._schedule_observations(state)
+        observations_path : list = self._schedule_observations(state)
 
-        # generate plan from path
-        actions : list = self._plan_from_path(state, path, t_plan, clock_config)
+        # generate actions from observations path
+        measurement_actions : list = self._actions_from_observations_path(state, observations_path, t_plan, clock_config)
+
+        # compile broadcasts to be scheduled
+        broadcasts : list = self._schedule_broadcasts(state, measurement_actions, generated_reqs, orbitdata)
+
+        # schedule broadcast actions
+        broadcast_actions : list = self._actions_from_broadcasts(state, broadcasts) 
+        
+        # wait for next planning period to start
+        replan_actions : list = self.__schedule_periodic_replan(state, measurement_actions, broadcast_actions)
+
+        # generate plan from actions
+        self.plan = Plan(measurement_actions, broadcast_actions, replan_actions, t=state.t)
 
         # update planning period time
         self.t_plan = state.t
-        self.t_next = self.t_plan + self.period
-
-        # check if collaboration is enabled
-        actions : list = self._schedule_broadcasts(state, actions, generated_reqs, orbitdata) 
-
-        # create plan from action list
-        self.plan = Plan(actions, state.t)
-
-        # wait for next planning period to start
-        self.plan = self.__schedule_periodic_replan(state)
+        self.t_next = self.t_plan + self.period       
 
         # return plan
         return self.plan
@@ -249,85 +252,82 @@ class AbstractPreplanner(ABC):
     def _schedule_observations(self, state : AbstractAgentState) -> list:
         """ initializes an observation plan """
 
-    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, generated_reqs : list, orbitdata : OrbitData) -> list:
+
+    def _schedule_broadcasts(self, state : SimulationAgentState, measurement_actions : list, generated_reqs : list, orbitdata : OrbitData) -> list:
         """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
-        left_pending = []
-        for broadcast_action in self.pending_broadcasts:
-            # place broadcast action in plan
-            broadcast_action : BroadcastMessageAction
 
-            if broadcast_action.t_start > self.t_next:
-                left_pending.append(left_pending)
+        # initialize list of broadcasts to be done
+        broadcasts = []
+
+        # schedule generated measurement request broadcasts
+        for req in generated_reqs:
+            req : MeasurementRequest
+            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
             
-            # check if broadcasts is scheduled to occur during while another action is being performed
-            interrupted_actions = [action for action in plan if action.t_start < broadcast_action.t_start < action.t_end]
-            if interrupted_actions:
-                interrupted_action : AgentAction = interrupted_actions.pop(0)
-                if (    
-                        isinstance(interrupted_action, MeasurementAction) 
-                    or  isinstance(interrupted_action, BroadcastMessageAction)
-                    ):
-                    # interrupted action has no duration, schedule broadcast for right after
-                    plan.insert(plan.index(interrupted_action) + 1, broadcast_action)
+            # place broadcasts in plan
+            if isinstance(state, SatelliteAgentState):
+                if not orbitdata:
+                    raise ValueError('orbitdata required for satellite agents')
+                
+                # get next access windows to all agents
+                isl_accesses = [orbitdata.get_next_agent_access(target, state.t) for target in orbitdata.isl_data]
+
+                # TODO merge accesses to find overlaps
+                isl_accesses_merged = isl_accesses
+
+                # place requests in pending broadcasts list
+                for interval in isl_accesses_merged:
+                    interval : TimeInterval
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, state.t))
+
+                    broadcasts.append(broadcast_action)
                     
-                else:
-                    # interrupted action has a non-zero duration; split interrupted action into two 
-                    i_plan = plan.index(interrupted_action)
-
-                    continued_action : AgentAction = action_from_dict(**interrupted_action.to_dict())
-                    continued_action.t_start = broadcast_action.t_start
-                    continued_action.id = str(uuid.uuid1())
-
-                    interrupted_action.t_end = broadcast_action.t_start
-
-                    plan[i_plan] = interrupted_action
-                    plan.insert(i_plan + 1, continued_action)
-                    plan.insert(i_plan + 1, broadcast_action)
-
-                continue
-
-            ## check if access occurs after an action was performed 
-            last_actions = [action for action in plan if action.t_end <= broadcast_action.t_start]
-            if last_actions:
-                last_action : AgentAction = last_actions.pop()
-                plan.insert(plan.index(last_action) + 1, broadcast_action)
-                continue
-
-            plan.insert(0, broadcast_action)
-
-        for scheduled_broadcast in [broadcast_action for broadcast_action in self.pending_broadcasts if not broadcast_action in left_pending]:
+            else:
+                raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
+        
+        return broadcasts
+    
+    def _actions_from_broadcasts(self, state : SimulationAgentState, broadcasts : list) -> list:
+        
+        # include all desired broadcasts to list of pending broadcasts
+        self.pending_broadcasts.extend([broadcast_action for broadcast_action in broadcasts 
+                                        if broadcast_action not in self.pending_broadcasts])
+        
+        # schedule pending broadcasts that can be performed within the next planning period
+        scheduled_broadcasts = [broadcast_action for broadcast_action in self.pending_broadcasts 
+                                if broadcast_action.t_start <= state.t + self.period]
+        
+        # remove scheduled broadcasts from pending list
+        for scheduled_broadcast in scheduled_broadcasts:
             self.pending_broadcasts.remove(scheduled_broadcast)
 
-        return plan
+        # return scheduled broadcasts
+        return scheduled_broadcasts
 
-    def __schedule_periodic_replan(self, state : SimulationAgentState) -> Plan:
+    def __schedule_periodic_replan(self, state : SimulationAgentState, measurement_actions : list, broadcast_actions : list) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
 
+        # raise NotImplementedError("TODO")
+
         # find wait start time
-        if self.plan.empty():
+        if not measurement_actions and not broadcast_actions:
             t_wait_start = state.t 
         else:
-            actions_in_period = [action for action in self.plan.actions if action.t_start < self.t_next]
+            actions_in_period = [action for action in measurement_actions if action.t_start < state.t + self.period]
 
             if actions_in_period:
                 last_action : AgentAction = actions_in_period.pop()
                 if last_action.t_end < self.t_next:
                     t_wait_start = last_action.t_end
                 else:
-                    t_wait_start = self.t_next
+                    t_wait_start = state.t + self.period
                                 
             else:
                 t_wait_start = state.t
 
         # create wait action
-        wait_action = WaitForMessages(t_wait_start, self.t_next)
-
-        # place in plan
-        self.plan.put(wait_action, state.t)
-
-        # return plan
-        return self.plan
-
+        return [WaitForMessages(t_wait_start, state.t + self.period)]
+        
     @runtime_tracker
     def _get_available_requests(self) -> list:
         """ Returns a list of known requests that can be performed within the current planning horizon """
@@ -350,12 +350,12 @@ class AbstractPreplanner(ABC):
         return available_reqs
 
     @runtime_tracker
-    def _plan_from_path(    self, 
-                            state : SimulationAgentState, 
-                            path : list,
-                            t_init : float,
-                            clock_config : ClockConfig
-                    ) -> list:
+    def _actions_from_observations_path(    self, 
+                                            state : SimulationAgentState, 
+                                            observations_path : list,
+                                            t_init : float,
+                                            clock_config : ClockConfig
+                                        ) -> list:
         """
         Generates a list of AgentActions from the current path.
 
@@ -367,13 +367,12 @@ class AbstractPreplanner(ABC):
             - t_init (`float`): start time for plan
             - clock_config (:obj:`ClockConfig`): clock being used for this simulation
         """
-        # create appropriate actions for every measurement in the path
-        plan = []
+        actions = []
 
-        for i in range(len(path)):
+        for i in range(len(observations_path)):
             plan_i = []
 
-            measurement_req, subtask_index, t_img, u_exp = path[i]
+            measurement_req, subtask_index, t_img, u_exp = observations_path[i]
             measurement_req : MeasurementRequest; subtask_index : int; t_img : float; u_exp : float
 
             if not isinstance(measurement_req, GroundPointMeasurementRequest):
@@ -393,13 +392,13 @@ class AbstractPreplanner(ABC):
                     raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
             else:
                 prev_req = None
-                for action in reversed(plan):
+                for action in reversed(actions):
                     action : AgentAction
                     if isinstance(action, MeasurementAction):
                         prev_req = MeasurementRequest.from_dict(action.measurement_req)
                         break
                 
-                action_prev : AgentAction = plan[-1] if len(plan) > 0 else None
+                action_prev : AgentAction = actions[-1] if len(actions) > 0 else None
                 t_prev = action_prev.t_end if action_prev is not None else t_init
 
                 if isinstance(state, SatelliteAgentState):
@@ -494,11 +493,9 @@ class AbstractPreplanner(ABC):
                                                     )
             plan_i.append(measurement_action) 
 
-            # TODO inform others of request completion
+            actions.extend(plan_i)
 
-            plan.extend(plan_i)
-
-        return plan
+        return actions
 
 class IdlePlanner(AbstractPreplanner):
     @runtime_tracker
@@ -615,97 +612,55 @@ class FIFOPreplanner(AbstractPreplanner):
         return path
     
     @runtime_tracker
-    def _schedule_broadcasts(self, state : SimulationAgentState, plan : list, generated_reqs : list, orbitdata : OrbitData) -> list:
+    def _schedule_broadcasts(self, state : SimulationAgentState, measurement_actions : list, generated_reqs : list, orbitdata : OrbitData) -> list:
         """ 
         Modifies original plan and schedule broadcasts whenever a measurement has been completed in plan 
         
         ### Arguments
             - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
-            - plan (`list`): current plan to be performed
+            - generated_reqs (`list`): measurement requests generated by this agent to be sent out to others
             - orbitdata (:obj:`OrbitData`): orbit propagation and coverage data for agent (if applicable)
         """
-        # schedule pending broadcasts
-        plan = super()._schedule_broadcasts(state, plan, generated_reqs, orbitdata)
-
-        if not self.collaboration:
-            return plan
-
-        # schedule measurement action completion broadcasts
-        planned_measurements = [action for action in plan 
-                                if isinstance(action, MeasurementAction)]
         
-        for action in planned_measurements:
-            action : MeasurementAction
 
-            # generate broadcast message
-            action_copy = action_from_dict(**action.to_dict())
-            action_copy.status = MeasurementAction.COMPLETED
-            msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action_copy.to_dict())
+        if self.collaboration:
+            # schedule measurement action completion broadcasts
+            planned_measurements = [action for action in measurement_actions 
+                                    if isinstance(action, MeasurementAction)]
             
-            # place broadcasts in plan
-            if isinstance(state, SatelliteAgentState):
-                if not orbitdata:
-                    raise ValueError('orbitdata required for satellite agents')
+            for action in planned_measurements:
+                action : MeasurementAction
+
+                # generate broadcast message
+                action_copy = action_from_dict(**action.to_dict())
+                action_copy.status = MeasurementAction.COMPLETED
+                msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action_copy.to_dict())
                 
-                # get next access windows to all agents
-                isl_accesses = [orbitdata.get_next_agent_access(target, action.t_end) for target in orbitdata.isl_data]
-
-                # TODO merge accesses to find overlaps
-                isl_accesses_merged = isl_accesses
-
-                # handle placement in plan
-                for interval in isl_accesses_merged:
-                    interval : TimeInterval
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, action.t_end))
-
-                    if self.t_next < broadcast_action.t_start:
-                        self.pending_broadcasts.append(broadcast_action)
-                        continue
-
-                    # place broadcast action in plan
-                    ## check if access occurs during an action being performed
-                    interrupted_actions = [action for action in plan 
-                                            if action.t_start < broadcast_action.t_start < action.t_end]
-                    if interrupted_actions:
-                        interrupted_action : AgentAction = interrupted_actions.pop(0)
-                        if (    
-                                isinstance(interrupted_action, MeasurementAction) 
-                            or  isinstance(interrupted_action, BroadcastMessageAction)
-                            ):
-                            # interrupted action has no duration; schedule broadcast for right after
-                            plan.insert(plan.index(interrupted_action) + 1, broadcast_action)
-                            
-                        else:
-                            # interrupted action has a non-zero duration; split interrupted action into two 
-                            i_plan = plan.index(interrupted_action)
-
-                            continued_action : AgentAction = action_from_dict(**interrupted_action.to_dict())
-                            continued_action.t_start = broadcast_action.t_start
-                            continued_action.id = str(uuid.uuid1())
-
-                            interrupted_action.t_end = broadcast_action.t_start
-
-                            plan[i_plan] = interrupted_action
-                            plan.insert(i_plan + 1, continued_action)
-                            plan.insert(i_plan + 1, broadcast_action)
-
-                        continue
-
-                    ## check if access occurs after an action was performed 
-                    last_actions = [action for action in plan if action.t_end <= broadcast_action.t_start]
-                    if last_actions:
-                        last_action : AgentAction = last_actions.pop()
-                        plan.insert(plan.index(last_action) + 1, broadcast_action)
-                        continue
-
-                    plan.insert(0, broadcast_action)
+                # place broadcasts in plan
+                if isinstance(state, SatelliteAgentState):
+                    if not orbitdata:
+                        raise ValueError('orbitdata required for satellite agents')
                     
-            else:
-                raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
-        
-        for req in generated_reqs:
-            req : MeasurementRequest
-            # TODO
-            x = 1
+                    # get next access windows to all agents
+                    isl_accesses = [orbitdata.get_next_agent_access(target, action.t_end) for target in orbitdata.isl_data]
 
-        return plan
+                    # TODO merge accesses to find overlaps
+                    isl_accesses_merged = isl_accesses
+
+                    # handle placement in plan
+                    for interval in isl_accesses_merged:
+                        interval : TimeInterval
+                        broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, action.t_end))
+
+                        if self.t_next < broadcast_action.t_start:
+                            self.pending_broadcasts.append(broadcast_action)
+                            continue
+
+                        # place broadcast action in plan
+                        self.pending_broadcasts.append(broadcast_action)
+                        
+                else:
+                    raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
+            
+        # schedule pending broadcasts
+        return super()._schedule_broadcasts(state, measurement_actions, generated_reqs, orbitdata)

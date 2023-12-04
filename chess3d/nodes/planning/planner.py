@@ -703,51 +703,6 @@ class PlanningModule(InternalModule):
             misc_messages.append(await self.misc_inbox.get())
 
         return incoming_reqs, generated_reqs, misc_messages
-
-    # @runtime_tracker
-    # def _get_next_actions(self, plan : list, pending_actions : list, generated_reqs : list, t : float) -> list:
-    #     """ Parses current plan and outputs list of actions that are to be performed at a given time"""
-       
-    #     # get next available action to perform
-    #     plan_out = [action.to_dict() for action in plan if action.t_start <= t <= action.t_end]
-
-    #     # if broadcasts are to be done, perform them first before any other actions
-    #     # TODO move decision to the pre/replanner level
-    #     # broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
-    #     # if len(broadcast_actions) > 0:
-    #     #     broadcast_actions : list = [action for action in plan_out 
-    #     #                                 if isinstance(action, BroadcastMessageAction) 
-    #     #                                 or isinstance(action, WaitForMessages)
-    #     #                                 ]
-
-    #     # plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
-    #     # plan_out = [action.to_dict() for action in plan_out]
-
-    #     # re-attempt pending actions 
-    #     pending_out = [action.to_dict() for action in pending_actions if action.to_dict() not in plan_out]
-    #     pending_out.extend(plan_out); plan_out = pending_out
-        
-    #     # broadcasts all newly generated requests if they have a non-zero scientific value 
-    #     # TODO move to replanners
-    #     # for req in [req for req in generated_reqs if req.s_max > 0.0]:
-    #     #     req : MeasurementRequest
-    #     #     req_msg = MeasurementRequestMessage("", "", req.to_dict())
-    #     #     plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
-    #     #                                                 self.get_current_time()).to_dict()
-    #     #                                             )
-
-    #     # idle if no more actions can be performed
-    #     if len(plan_out) == 0:
-    #         t_idle = plan[0].t_start if len(plan) > 0 else self.t_next
-    #         # t_idle = plan[0].t_start if len(plan) > 0 and plan[0].t_end <= t else self.t_next
-    #         action = WaitForMessages(t, t_idle)
-    #         plan_out.append(action.to_dict())     
-
-    #     # sort plan in order of ascending start time 
-    #     if len(plan_out) > 1:
-    #         plan_out.sort(key=lambda a: a['t_start'])
-
-    #     return plan_out     
     
     def __log_actions(self, completed_actions : list, aborted_actions : list, pending_actions : list) -> None:
         all_actions = [action for action in completed_actions]
@@ -763,13 +718,16 @@ class PlanningModule(InternalModule):
             self.log(out, logging.WARNING)
 
     def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
-        out = f'\n{title}\nid\taction type\tt_start\tt_end\n'
+        out = f'\n{title}'
 
-        for action in plan:
-            if isinstance(action, AgentAction):
-                out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-            elif isinstance(action, dict):
-                out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+        if isinstance(plan, Plan):
+            out += str(plan)
+        else:
+            for action in plan:
+                if isinstance(action, AgentAction):
+                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+                elif isinstance(action, dict):
+                    out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
         
         self.log(out, level)
                

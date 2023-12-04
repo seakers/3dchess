@@ -76,7 +76,7 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
                     or scenario_dict['duration'] != mission_dict['duration']
                     or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
                     or scenario_dict['grid'] != mission_dict['grid']
-                    or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
+                    # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
                     ):
                     return True
                 
@@ -164,26 +164,6 @@ def precompute_orbitdata(scenario_name) -> str:
             mission : Mission = Mission.from_json(mission_dict)  
             mission.execute()                
             print("Propagation done!")
-
-            # modify connectivity if specified 
-            if ((scenario_dict := mission_dict.get('scenario', None)) 
-                and scenario_dict.get('connectivity', None) == "FULL"):
-                
-                comm_dir = data_dir + '/comm/'
-                for d in os.listdir(comm_dir):
-                    with open(comm_dir + d, 'r') as comms_file:
-                        lines = comms_file.readlines()
-
-                    with open(comm_dir + d, 'w') as comms_file:
-                        # delete access times 
-                        while len(lines) > 4:
-                            lines.pop()
-                        
-                        # include single access
-                        dt : float = timedelta(days=mission_dict["duration"]).seconds
-                        lines.append(f"{0.0}, {dt}")
-
-                        comms_file.writelines(lines)
 
             # save specifications of propagation in the orbit data directory
             with open(data_dir +'MissionSpecs.json', 'w') as mission_specs:
