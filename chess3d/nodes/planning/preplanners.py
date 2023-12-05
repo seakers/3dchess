@@ -77,6 +77,16 @@ class AbstractPreplanner(ABC):
         new_reqs : list = self.__get_new_requests(incoming_reqs, generated_reqs)
         self.known_reqs.extend(new_reqs)
 
+        # create a pending broadcast for new requests
+        # TODO
+        # for req in new_reqs:
+        #     req : MeasurementRequest
+        #     msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+        #     self.pending_broadcasts(msg)
+
+        # update list of performed broadcasts
+        # TODO
+
         # update list of performed requests
         performed_actions = [action for action in completed_actions]
         performed_actions.extend(aborted_actions)
