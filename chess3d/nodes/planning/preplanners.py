@@ -380,7 +380,65 @@ class AbstractPreplanner(ABC):
 
         return actions
 
-    def _generate_broadcasts(self, state : SimulationAgentState, _ : list, generated_reqs : list, orbitdata : OrbitData) -> list:
+    def _schedule_broadcasts(self, 
+                             state : SimulationAgentState, 
+                             measurements : list, 
+                             generated_reqs : list, 
+                             orbitdata : OrbitData
+                            ) -> list:
+        """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
+
+        # generate a set of broadcasts to be performed 
+        # initialize list of broadcasts to be done
+        broadcasts = []
+
+        # schedule generated measurement request broadcasts
+        for req in generated_reqs:
+            req : MeasurementRequest
+            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+            
+            # place broadcasts in plan
+            if isinstance(state, SatelliteAgentState):
+                if not orbitdata:
+                    raise ValueError('orbitdata required for satellite agents')
+                
+                # get next access windows to all agents
+                isl_accesses = [orbitdata.get_next_agent_access(target, state.t) for target in orbitdata.isl_data]
+
+                # TODO merge accesses to find overlaps
+                isl_accesses_merged = isl_accesses
+
+                # place requests in pending broadcasts list
+                for interval in isl_accesses_merged:
+                    interval : TimeInterval
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, state.t))
+
+                    broadcasts.append(broadcast_action)
+                    
+            else:
+                raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
+        
+        
+        # check
+
+        # # include broadcasts to list of pending broadcasts if they are to be done after the next replanning horizon
+        # self.pending_broadcasts.extend([broadcast_action for broadcast_action in broadcasts 
+        #                                 if broadcast_action not in self.pending_broadcasts
+        #                                 and broadcast_action.t_start > state.t + self.period])
+        
+        # # schedule pending broadcasts that can be performed within the next planning period
+        # scheduled_broadcasts = [broadcast_action for broadcast_action in broadcasts 
+        #                         if broadcast_action not in self.pending_broadcasts]
+                
+        # return scheduled broadcasts
+        return scheduled_broadcasts   
+
+    def _generate_broadcasts(self, 
+                             state : SimulationAgentState, 
+                             measurements : list, 
+                             generated_reqs : list, 
+                             orbitdata : OrbitData
+                             ) -> list:
         """ Creates broadcast actions """
         # initialize list of broadcasts to be done
         broadcasts = []
@@ -411,25 +469,7 @@ class AbstractPreplanner(ABC):
             else:
                 raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
         
-        return broadcasts
-
-    def _schedule_broadcasts(self, state : SimulationAgentState, measurements : list, generated_reqs : list, orbitdata : OrbitData) -> list:
-        """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
-
-        # generate a set of broadcasts to be performed 
-        broadcasts = self._generate_broadcasts(state, measurements, generated_reqs, orbitdata)
-        
-        # include broadcasts to list of pending broadcasts if they are to be done after the next replanning horizon
-        self.pending_broadcasts.extend([broadcast_action for broadcast_action in broadcasts 
-                                        if broadcast_action not in self.pending_broadcasts
-                                        and broadcast_action.t_start > state.t + self.period])
-        
-        # schedule pending broadcasts that can be performed within the next planning period
-        scheduled_broadcasts = [broadcast_action for broadcast_action in broadcasts 
-                                if broadcast_action not in self.pending_broadcasts]
-                
-        # return scheduled broadcasts
-        return scheduled_broadcasts      
+        return broadcasts   
 
     def __schedule_periodic_replan(self, state : SimulationAgentState, measurement_actions : list, broadcast_actions : list) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
@@ -617,20 +657,18 @@ class FIFOPreplanner(AbstractPreplanner):
         return actions
     
     @runtime_tracker
-    def _schedule_broadcasts(self, state : SimulationAgentState, observations : list, generated_reqs : list, orbitdata : OrbitData) -> list:
-        """ 
-        Modifies original plan and schedule broadcasts whenever a measurement has been completed in plan 
-        
-        ### Arguments
-            - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
-            - generated_reqs (`list`): measurement requests generated by this agent to be sent out to others
-            - orbitdata (:obj:`OrbitData`): orbit propagation and coverage data for agent (if applicable)
-        """
-        
+    def _generate_broadcasts(self, 
+                             state: SimulationAgentState,
+                             measurements: list, 
+                             generated_reqs: list, 
+                             orbitdata: OrbitData
+                            ) -> list:
+        # initialize broadcast list
+        broadcasts : list = super()._generate_broadcasts(state, measurements, generated_reqs, orbitdata)
 
         if self.collaboration:
             # schedule measurement action completion broadcasts
-            planned_measurements = [action for action in observations 
+            planned_measurements = [action for action in measurements 
                                     if isinstance(action, MeasurementAction)]
             
             for action in planned_measurements:
@@ -658,14 +696,14 @@ class FIFOPreplanner(AbstractPreplanner):
                         broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, action.t_end))
 
                         if self.t_next < broadcast_action.t_start:
-                            self.pending_broadcasts.append(broadcast_action)
+                            broadcasts.append(broadcast_action)
                             continue
 
                         # place broadcast action in plan
-                        self.pending_broadcasts.append(broadcast_action)
+                        broadcasts.append(broadcast_action)
                         
                 else:
                     raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
-            
-        # schedule pending broadcasts
-        return super()._schedule_broadcasts(state, observations, generated_reqs, orbitdata)
+
+        # return broadcast list
+        return broadcasts
