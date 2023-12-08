@@ -268,7 +268,9 @@ class AbstractPreplanner(ABC):
             - t_init (`float`): start time for plan
             - clock_config (:obj:`ClockConfig`): clock being used for this simulation
         """
-        actions = []
+
+        # initialize maneuver list
+        maneuvers = []
 
         for i in range(len(observations)):
             action_sequence_i = []
@@ -286,32 +288,24 @@ class AbstractPreplanner(ABC):
                     t_prev = state.t
                     prev_state : SatelliteAgentState = state.copy()
 
-                elif isinstance(state, UAVAgentState):
-                    t_prev = state.t # TODO consider wait time for convergence
-                    prev_state : UAVAgentState = state.copy()
+                # elif isinstance(state, UAVAgentState):
+                #     t_prev = state.t # TODO consider wait time for convergence
+                #     prev_state : UAVAgentState = state.copy()
 
                 else:
-                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
+                    raise NotImplemented(f"maneuver scheduling for states of type `{type(state)}` not yet supported")
             else:
-                prev_req = None
-                for action in reversed(actions):
-                    action : AgentAction
-                    if isinstance(action, MeasurementAction):
-                        prev_req = MeasurementRequest.from_dict(action.measurement_req)
-                        break
-                
-                action_prev : AgentAction = actions[-1] if actions else None
-                t_prev = action_prev.t_end if action_prev is not None else state.t
+                prev_measurement : MeasurementAction = observations[i-1]
+                prev_req = MeasurementRequest.from_dict(prev_measurement.measurement_req)
+                t_prev = prev_measurement.t_end if prev_measurement is not None else state.t
 
                 if isinstance(state, SatelliteAgentState):
                     prev_state : SatelliteAgentState = state.propagate(t_prev)
-                    
-                    if prev_req is not None:
-                        prev_state.attitude = [
-                                            prev_state.calc_off_nadir_agle(prev_req),
-                                            0.0,
-                                            0.0
-                                        ]
+                    prev_state.attitude = [
+                                        prev_state.calc_off_nadir_agle(prev_req),
+                                        0.0,
+                                        0.0
+                                    ]
 
                 elif isinstance(state, UAVAgentState):
                     prev_state : UAVAgentState = state.copy()
@@ -359,9 +353,7 @@ class AbstractPreplanner(ABC):
             else:
                 raise NotImplementedError(f"cannot calculate travel time end for agent states of type {type(state)}")
             
-            if t_move_end < t_img:
-                action_sequence_i.append( WaitForMessages(t_move_end, t_img) )
-
+            # quantize travel maneuver times if needed
             if isinstance(clock_config, FixedTimesStepClockConfig):
                 dt = clock_config.dt
                 if t_move_start < np.Inf:
@@ -369,16 +361,18 @@ class AbstractPreplanner(ABC):
                 if t_move_end < np.Inf:
                     t_move_end = dt * math.ceil(t_move_end/dt)
             
+            # add move maneuver if required
             if abs(t_move_start - t_move_end) >= 1e-3:
-                if t_move_start > t_move_end:
-                    continue
-
                 move_action = TravelAction(final_pos, t_move_start, t_move_end)
                 action_sequence_i.append(move_action)
+            
+            # wait for measurement action to start
+            if t_move_end < t_img:
+                action_sequence_i.append( WaitForMessages(t_move_end, t_img) )
 
-            actions.extend(action_sequence_i)
+            maneuvers.extend(action_sequence_i)
 
-        return actions
+        return maneuvers
 
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
