@@ -1,12 +1,12 @@
-Eclipse times for Spacecraft with id imaging_sat_2_0
+Eclipse times for Spacecraft with id imaging_sat_1_0
 Epoch [JDUT1] is 2458849.5
 Step size [s] is 10.0
 start index,end index
-64,235
-658,828
-1251,1420
-1844,2013
-2438,2606
-3031,3198
-3625,3791
-4218,4320
+99,270
+692,863
+1285,1456
+1878,2049
+2470,2642
+3063,3236
+3656,3829
+4249,4320

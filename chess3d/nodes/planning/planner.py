@@ -554,7 +554,7 @@ class PlanningModule(InternalModule):
             self.log(out, logging.WARNING)
 
     def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
-        out = f'\n{title}'
+        out = f'\n{title}\n'
 
         if isinstance(plan, Plan):
             out += str(plan)
