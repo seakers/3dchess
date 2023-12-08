@@ -56,7 +56,7 @@ class AgentStateMessage(SimulationMessage):
                 dst: str, 
                 state : dict,
                 id: str = None, 
-                path: list = []
+                path: list = [],
                 **_):
         super().__init__(src, dst, SimulationMessageTypes.AGENT_STATE.value, id, path)
         self.state = state

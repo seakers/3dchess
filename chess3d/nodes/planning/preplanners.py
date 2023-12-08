@@ -387,53 +387,32 @@ class AbstractPreplanner(ABC):
                              orbitdata : dict
                             ) -> list:
         """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
-
-        # generate a set of broadcasts to be performed 
         # initialize list of broadcasts to be done
         broadcasts = []
 
         # schedule generated measurement request broadcasts
-        for req in self.generated_reqs:
-            req : MeasurementRequest
-            # check if this request has been broadcasted yet
-            msg : MeasurementRequestMessage
+        ## check which requests have not been broadcasted yet
+        requests_broadcasted = [msg.req['id'] for msg in self.completed_broadcasts 
+                                if isinstance(msg, MeasurementRequestMessage)]
+        requests_to_broadcast = [req for req in self.generated_reqs
+                                 if isinstance(req, MeasurementRequest)
+                                 and req.id not in requests_broadcasted]
 
-            matching_broadcasts = [msg for msg in self.completed_broadcasts 
-                                    if ]
-            for msg in self.completed_broadcasts:
-                x = 1
+        # find best path for message
+        path, t_start = self._create_broadcast_path(state, orbitdata)
 
-            x = 1
-
-
-            pass
-            # msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+        ## create a broadcast action for all unbroadcasted requests
+        for req in requests_to_broadcast:        
+            # if found, create broadcast action
+            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+            broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+            if t_start < np.Inf:
+                broadcasts.append(broadcast_action)
             
-            # # place broadcasts in plan
-            # if isinstance(state, SatelliteAgentState):
-            #     raise ValueError('TODO')
-                
-            #     if not orbitdata:
-            #         raise ValueError('orbitdata required for satellite agents')
-                
-            #     # get next access windows to all agents
-            #     isl_accesses = [orbitdata.get_next_agent_access(target, state.t) for target in orbitdata.isl_data]
 
-            #     # TODO merge accesses to find overlaps
-            #     isl_accesses_merged = isl_accesses
-
-            #     # place requests in pending broadcasts list
-            #     for interval in isl_accesses_merged:
-            #         interval : TimeInterval
-            #         broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, state.t))
-
-            #         broadcasts.append(broadcast_action)
-                    
-            # else:
-            #     raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
-        
         
         # schedule message relay
+        # TODO
 
         # # include broadcasts to list of pending broadcasts if they are to be done after the next replanning horizon
         # self.pending_broadcasts.extend([broadcast_action for broadcast_action in broadcasts 
@@ -446,6 +425,9 @@ class AbstractPreplanner(ABC):
                 
         # return scheduled broadcasts
         return broadcasts   
+    
+    def _create_broadcast_path(self, state : SimulationAgentState, orbitdata : dict) -> tuple:
+        """ Finds the best path for """
 
     def _generate_broadcasts(self, 
                              state : SimulationAgentState, 
