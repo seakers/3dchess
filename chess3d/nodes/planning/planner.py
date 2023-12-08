@@ -69,7 +69,7 @@ class PlanningModule(InternalModule):
                     }
         self.agent_state : SimulationAgentState = None
         self.parent_agent_type = None
-        self.orbitdata : OrbitData = None
+        self.orbitdata : dict = None
         self.other_modules_exist : bool = False
 
         self.initial_reqs = []
@@ -180,7 +180,7 @@ class PlanningModule(InternalModule):
                             if self.parent_agent_type is None:
                                 if isinstance(state, SatelliteAgentState):
                                     # import orbit data
-                                    self.orbitdata : OrbitData = self._load_orbit_data()
+                                    self.orbitdata : dict = self._load_orbit_data()
                                     
                                     # parent is a satellite-type agent
                                     self.parent_agent_type = SimulationAgentTypes.SATELLITE.value
@@ -237,7 +237,7 @@ class PlanningModule(InternalModule):
         except asyncio.CancelledError:
             return
         
-    def _load_orbit_data(self) -> OrbitData:
+    def _load_orbit_data(self) -> dict:
         """
         Loads agent orbit data from pre-computed csv files in scenario directory
         """
@@ -252,7 +252,8 @@ class PlanningModule(InternalModule):
 
         scenario_name = results_path_list[-1]
         scenario_dir = f'./scenarios/{scenario_name}/'
-        return OrbitData.load(scenario_dir, self.get_parent_name())
+        # return OrbitData.load(scenario_dir, self.get_parent_name())
+        return OrbitData.from_directory(scenario_dir)
         
     """
     -----------------

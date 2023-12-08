@@ -52,7 +52,7 @@ class OrbitData:
                     time_data : pd.DataFrame, 
                     eclipse_data : pd.DataFrame, 
                     position_data : pd.DataFrame, 
-                    isl_data : pd.DataFrame,
+                    isl_data : dict,
                     gs_access_data : pd.DataFrame, 
                     gp_access_data : pd.DataFrame, 
                     grid_data : pd.DataFrame):
@@ -69,9 +69,8 @@ class OrbitData:
         self.position_data = position_data.sort_values(by=['time index'])
 
         # inter-satellite communication access times
-        self.isl_data = {}
-        for satellite_name in isl_data.keys():
-            self.isl_data[satellite_name] = isl_data[satellite_name].sort_values(by=['start index'])
+        self.isl_data = { satellite_name : isl_data[satellite_name].sort_values(by=['start index']) 
+                         for satellite_name in isl_data.keys() }
 
         # ground station access times
         self.gs_access_data = gs_access_data.sort_values(by=['start index'])
@@ -96,7 +95,7 @@ class OrbitData:
     def get_next_isl_access_interval(self, target : str, t : float) -> TimeInterval:
         t = t/self.time_step
         isl_data : pd.DataFrame = self.isl_data[target]
-        isl_access = isl_data.query('@t <= `end index`').sort_values('start index')
+        isl_access : pd.DataFrame = isl_data.query('@t <= `end index`').sort_values('start index')
         
         for _, row in isl_access.iterrows():
             t_start = max(t, row['start index']) * self.time_step
@@ -308,42 +307,9 @@ class OrbitData:
 
         return -1, -1, -1, -1
 
-    def from_directory(scenario_dir: str) -> dict:
-        """
-        Loads orbit data from a directory containig a json file specifying the details of the mission being simulated.
-        If the data has not been previously propagated, it will do so and store it in the same directory as the json file
-        being used.
-
-        The data gets stored as a dictionary, with each entry containing the orbit data of each agent in the mission 
-        indexed by the name of the agent.
-        """
-        with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
-            
-            # load json file as dictionary
-            mission_dict : dict = json.load(scenario_specs)
-            data = dict()
-            spacecraft_list : list = mission_dict.get('spacecraft', None)
-            uav_list : list = mission_dict.get('uav', None)
-            ground_station_list = mission_dict.get('groundStation', None)
-
-            # load pre-computed data
-            if spacecraft_list:
-                for spacecraft in spacecraft_list:
-                    spacecraft : dict
-                    agent_name = spacecraft.get('name')
-
-                    data[agent_name] = OrbitData.load(scenario_dir, agent_name)
-
-            if uav_list:
-                for uav in uav_list:
-                    raise NotImplementedError('Orbitdata for UAVs not yet supported')
-
-            if ground_station_list:
-                for groundstation in ground_station_list:
-                    raise NotImplementedError('Orbitdata for ground stations not yet supported')
-
-            return data
-
+    """
+    LOAD FROM PRE-COMPUTED DATA
+    """
     def load(scenario_dir : str, agent_name : str) -> object:
         """
         Loads agent orbit data from pre-computed csv files in scenario directory
@@ -533,7 +499,43 @@ class OrbitData:
                     grid_data_compiled.append(grid_data)
 
                 return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
-    
+
+    def from_directory(scenario_dir: str) -> dict:
+        """
+        Loads orbit data from a directory containig a json file specifying the details of the mission being simulated.
+        If the data has not been previously propagated, it will do so and store it in the same directory as the json file
+        being used.
+
+        The data gets stored as a dictionary, with each entry containing the orbit data of each agent in the mission 
+        indexed by the name of the agent.
+        """
+        with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
+            
+            # load json file as dictionary
+            mission_dict : dict = json.load(scenario_specs)
+            data = dict()
+            spacecraft_list : list = mission_dict.get('spacecraft', None)
+            uav_list : list = mission_dict.get('uav', None)
+            ground_station_list = mission_dict.get('groundStation', None)
+
+            # load pre-computed data
+            if spacecraft_list:
+                for spacecraft in spacecraft_list:
+                    spacecraft : dict
+                    agent_name = spacecraft.get('name')
+
+                    data[agent_name] = OrbitData.load(scenario_dir, agent_name)
+
+            if uav_list:
+                for uav in uav_list:
+                    raise NotImplementedError('Orbitdata for UAVs not yet supported')
+
+            if ground_station_list:
+                for groundstation in ground_station_list:
+                    raise NotImplementedError('Orbitdata for ground stations not yet supported')
+
+            return data
+        
 """
 TESTING
 """

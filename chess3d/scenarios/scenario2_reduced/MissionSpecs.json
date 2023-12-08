@@ -101,11 +101,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -200,11 +201,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -299,11 +301,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -398,11 +401,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -497,11 +501,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -596,11 +601,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -695,11 +701,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -794,11 +801,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",
@@ -893,11 +901,12 @@
                 }
             },
             "planner" : {
-                "horizon" : 360000,
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
-                },     
+                    "collaboration " : "False",
+                    "horizon": 7200,
+                    "period" : 3600
+                },                
                 "utility" : "LINEAR"
             },
             "science" : "True",

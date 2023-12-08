@@ -70,7 +70,7 @@ class AbstractPreplanner(ABC):
                                 incoming_reqs : list,
                                 generated_reqs : list,
                                 misc_messages : list,
-                                orbitdata : OrbitData = None
+                                orbitdata : dict = None
                             ) -> bool:
         """ Determines whether a new plan needs to be initalized """    
         # update list of known requests
@@ -88,7 +88,7 @@ class AbstractPreplanner(ABC):
                                         if req not in self.completed_requests])
 
         # update access times 
-        self.__update_access_times(state, current_plan.t_update, orbitdata)
+        self.__update_access_times(state, current_plan.t_update, orbitdata[state.agent_name])
         
         # check if plan needs to be inialized
         return (current_plan.t_update < 0     # simulation just started
@@ -136,7 +136,7 @@ class AbstractPreplanner(ABC):
     def __update_access_times(  self,
                                 state : SimulationAgentState,
                                 t_plan : float,
-                                orbitdata : OrbitData) -> None:
+                                agent_orbitdata : OrbitData) -> None:
         """
         Calculates and saves the access times of all known requests
         """
@@ -160,7 +160,7 @@ class AbstractPreplanner(ABC):
                                                                     req, 
                                                                     instrument,
                                                                     state.t,
-                                                                    orbitdata)
+                                                                    agent_orbitdata)
                     self.access_times[req.id][instrument] = t_arrivals
 
     @runtime_tracker
@@ -169,7 +169,7 @@ class AbstractPreplanner(ABC):
                             req : MeasurementRequest, 
                             instrument : str,
                             t_prev : Union[int, float],
-                            orbitdata : OrbitData) -> float:
+                            agent_orbitdata : OrbitData) -> float:
         """
         Estimates the quickest arrival time from a starting position to a given final position
         """
@@ -180,10 +180,11 @@ class AbstractPreplanner(ABC):
                 lat,lon,_ = req.lat_lon_pos
                 t_start = min( max(t_prev, req.t_start), t_prev + self.horizon)
                 t_end = min(t_prev + self.horizon, req.t_end)
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
+                df : pd.DataFrame = agent_orbitdata \
+                                        .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
 
                 for _, row in df.iterrows():
-                    t_img = row['time index'] * orbitdata.time_step
+                    t_img = row['time index'] * agent_orbitdata.time_step
                     dt = t_img - state.t
                 
                     # propagate state
@@ -221,7 +222,7 @@ class AbstractPreplanner(ABC):
                         generated_reqs : list,
                         misc_messages : list,
                         clock_config : ClockConfig,
-                        orbitdata : OrbitData = None
+                        orbitdata : dict = None
                     ) -> Plan:
         
         # schedule measurements
@@ -233,10 +234,8 @@ class AbstractPreplanner(ABC):
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, measurements, generated_reqs, orbitdata)
         
-        # broadcast_actions : list = self._actions_from_broadcasts(state, broadcasts) 
-        
         # wait for next planning period to start
-        # replan_actions : list = self.__schedule_periodic_replan(state, maneuvers, broadcast_actions)
+        replan : list = self.__schedule_periodic_replan(state, maneuvers, broadcasts)
 
         # generate plan from actions
         self.plan = Plan(measurements, maneuvers, broadcasts, replan, t=state.t)
@@ -337,8 +336,9 @@ class AbstractPreplanner(ABC):
                 t_maneuver_end = t_maneuver_start + dt
 
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
-                    maneuver_action = ManeuverAction([th_f, 0, 0], t_maneuver_start, t_maneuver_end)
-                    action_sequence_i.append(maneuver_action)   
+                    action_sequence_i.append(ManeuverAction([th_f, 0, 0], 
+                                                            t_maneuver_start, 
+                                                            t_maneuver_end))   
                 else:
                     t_maneuver_end = None
 
@@ -384,7 +384,7 @@ class AbstractPreplanner(ABC):
                              state : SimulationAgentState, 
                              measurements : list, 
                              generated_reqs : list, 
-                             orbitdata : OrbitData
+                             orbitdata : dict
                             ) -> list:
         """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
 
@@ -399,6 +399,8 @@ class AbstractPreplanner(ABC):
             
             # place broadcasts in plan
             if isinstance(state, SatelliteAgentState):
+                raise ValueError('TODO')
+                
                 if not orbitdata:
                     raise ValueError('orbitdata required for satellite agents')
                 
@@ -431,7 +433,7 @@ class AbstractPreplanner(ABC):
         #                         if broadcast_action not in self.pending_broadcasts]
                 
         # return scheduled broadcasts
-        return scheduled_broadcasts   
+        return broadcasts   
 
     def _generate_broadcasts(self, 
                              state : SimulationAgentState, 
@@ -548,33 +550,39 @@ class FIFOPreplanner(AbstractPreplanner):
         ### Arguments:
             - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
         """
-         
-        path = []         
+        
+        # initialize measurement path
+        measurements = []         
+
+        # get available requests
         available_reqs : list = self._get_available_requests()
 
         if isinstance(state, SatelliteAgentState):
-            # Generates a plan for observing GPs on a first-come first-served basis
-            reqs = {req.id : req for req, _ in available_reqs}
 
             # create first assignment of observations
             for req, subtask_index in available_reqs:
-                instrument, _ = req.measurement_groups[subtask_index]  
-                t_arrivals : list = self.access_times[req.id][instrument]
+                req : MeasurementRequest
+                main_measurement, _ = req.measurement_groups[subtask_index]  
+                t_arrivals : list = self.access_times[req.id][main_measurement]
 
                 if len(t_arrivals) > 0:
                     t_img = t_arrivals.pop(0)
-                    req : MeasurementRequest = reqs[req.id]
-                    s_j = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+                    u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
-                    path.append((req, subtask_index, t_img, s_j))
+                    # perform measurement
+                    measurements.append(MeasurementAction( req.to_dict(),
+                                                   subtask_index, 
+                                                   main_measurement,
+                                                   u_exp,
+                                                   t_img, 
+                                                   t_img + req.duration
+                                                 ))
 
-            path.sort(key=lambda a: a[2])
+            # sort from ascending start time
+            measurements.sort(key=lambda a: a.t_start)
 
             # ----- FOR DEBUGGING PURPOSES ONLY ------
-            # out = '\n'
-            # for req, subtask_index, t_img, s in path:
-            #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-            # print(out)
+            self.__print_observation_path(state, measurements)
             # ----------------------------------------
 
             # ensure conflict-free path
@@ -582,79 +590,113 @@ class FIFOPreplanner(AbstractPreplanner):
                 conflict_free = True
                 i_remove = None
 
-                # check every scheduled observation
-                for i in range(len(path) - 1):
+                for i in range(len(measurements) - 1):
                     j = i + 1
-                    req_i, _, t_i, __ = path[i]
-                    req_j, subtask_index_j, t_j, s_j = path[j]
+                    measurement_i : MeasurementAction = measurements[i]
+                    measurement_j : MeasurementAction = measurements[j]
+
+                    req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+                    req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
 
                     th_i = state.calc_off_nadir_agle(req_i)
                     th_j = state.calc_off_nadir_agle(req_j)
 
-                    # check if 
-                    if abs(th_i - th_j) / state.max_slew_rate > t_j - t_i:
-                        instrument, _ = req.measurement_groups[subtask_index_j]  
-                        t_arrivals : list = self.access_times[req_j.id][instrument]
-                        
-                        if len(t_arrivals) > 0:
-                            # pick next arrival time
-                            t_img = t_arrivals.pop(0)
-                            s_j = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+                    dt_maneuver = abs(th_i - th_j) / state.max_slew_rate
+                    dt_measurements = measurement_j.t_start - measurement_i.t_end
 
-                            path[j] = (req_j, subtask_index_j, t_img, s_j)
-                            path.sort(key=lambda a: a[2])
-                        else:
-                            # remove request from path
+                    # check if there's enough time to maneuver from one observation to another
+                    if dt_maneuver > dt_measurements:
+
+                        # there is not enough time to maneuver 
+                        main_measurement, _ = req_j.measurement_groups[measurement_j.subtask_index]  
+                        t_arrivals : list = self.access_times[req_j.id][main_measurement]
+                        
+                        if len(t_arrivals) > 0:     # try again for the next access period
+                            # pick next access time
+                            t_img = t_arrivals.pop(0)
+                            u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+
+                            # update measurement action
+                            measurement_j.t_start = t_img
+                            measurement_j.t_end = t_img + req_j.duration
+                            measurement_j.u_exp = u_exp
+                            
+                            # update path list
+                            measurements[j] = measurement_j
+
+                            # sort from ascending start time
+                            measurements.sort(key=lambda a: a.t_start)
+                        else:                       # no more future accesses for this GP
                             i_remove = j
                             conflict_free = False
-                            break
-                            # raise Exception("Whoops. See Plan Initializer.")
+                            # break
+                            raise Exception("Whoops. See Plan Initializer.")
+
+                        # flag current observation plan as unfeasible for rescheduling
                         conflict_free = False
                         break
                 
                 if i_remove is not None:
-                    path.pop(j) 
+                    measurements.pop(j) 
 
                 if conflict_free:
                     break
                     
             # ----- FOR DEBUGGING PURPOSES ONLY ------
-            # out = '\n'
-            # for req, subtask_index, t_img, s in path:
-            #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-            # print(out)
+            self.__print_observation_path(state, measurements)
             # ----------------------------------------
             
         else:
             raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')
     
-        actions = []
-        for measurement_req, subtask_index, t_img, u_exp in path:
-            measurement_req : MeasurementRequest
+        return measurements
 
-            t_img_start = t_img
-            t_img_end = t_img_start + measurement_req.duration
+    def __print_observation_path(self, state : SatelliteAgentState, path : list) -> None :
+        """ Debugging tool. Prints current observations plan being considered. """
 
-            if isinstance(clock_config, FixedTimesStepClockConfig):
-                dt = clock_config.dt
-                if t_img_start < np.Inf:
-                    t_img_start = dt * math.floor(t_img_start/dt)
-                if t_img_end < np.Inf:
-                    t_img_end = dt * math.ceil((t_img_start + measurement_req.duration)/dt)
+        out = '\n\n\nID\t  Subtask\tt_img\tdt_mmt\tdt_mvr\tValid\tu_exp\n'
+        for i in range(len(path) - 1):
+            if i == 0:
+                measurement_i : MeasurementAction = path[i]
+                req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+
+                out_temp = [f"{req_i.id.split('-')[0]}",
+                            f"\t{measurement_i.subtask_index}",
+                            f"\t{np.round(measurement_i.t_start,3)}",
+                            f"\t-",
+                            f"\t-",
+                            f"\tTrue"
+                            f"\t{np.round(measurement_i.u_exp,3)}",
+                            f"\n"
+                            ]
+                out += ''.join(out_temp)
+                continue 
             
-            # perform measurement
-            main_measurement, _ = measurement_req.measurement_groups[subtask_index]
-            measurement_action = MeasurementAction( 
-                                                    measurement_req.to_dict(),
-                                                    subtask_index, 
-                                                    main_measurement,
-                                                    u_exp,
-                                                    t_img_start, 
-                                                    t_img_end
-                                                    )
-            actions.append(measurement_action)
+            j = i - 1 
+            measurement_i : MeasurementAction = path[i]
+            measurement_prev : MeasurementAction = path[j]
 
-        return actions
+            req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+            req_prev : MeasurementRequest = MeasurementRequest.from_dict(measurement_prev.measurement_req)
+
+            th_i = state.calc_off_nadir_agle(req_i)
+            th_prev = state.calc_off_nadir_agle(req_prev)
+
+            dt_maneuver = abs(th_i - th_prev) / state.max_slew_rate
+            dt_measurements = measurement_i.t_start - measurement_prev.t_end
+
+            out_temp = [f"{req_i.id.split('-')[0]}",
+                            f"\t{measurement_i.subtask_index}",
+                            f"\t{np.round(measurement_i.t_start,3)}",
+                            f"\t{np.round(dt_measurements,3)}",
+                            f"\t{np.round(dt_maneuver,3)}",
+                            f"\t{dt_maneuver <= dt_measurements}"
+                            f"\t{np.round(measurement_i.u_exp,3)}",
+                            f"\n"
+                            ]
+            out += ''.join(out_temp)
+
+        print(out)
     
     @runtime_tracker
     def _generate_broadcasts(self, 
