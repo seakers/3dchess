@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
 import math
+import queue
 from typing import Any, Callable
 import pandas as pd
 
@@ -428,6 +429,21 @@ class AbstractPreplanner(ABC):
     
     def _create_broadcast_path(self, state : SimulationAgentState, orbitdata : dict) -> tuple:
         """ Finds the best path for """
+        q = queue.PriorityQueue()
+        costs = {sender_agent : {receiver_agent : np.Inf
+                                for receiver_agent in orbitdata} 
+                for sender_agent in orbitdata}
+
+        for sender_agent in costs:
+            sender_orbitdata : OrbitData = orbitdata[sender_agent]
+            for receiver_agent in costs[sender_agent]:
+                if sender_agent == receiver_agent:
+                    continue
+                
+                access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(receiver_agent, state.t)
+
+                costs[sender_agent][receiver_agent] = access_interval.start - state.t
+        x = 1
 
     def _generate_broadcasts(self, 
                              state : SimulationAgentState, 
