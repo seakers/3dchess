@@ -105,7 +105,7 @@ class Plan(object):
                 # check plan feasibility
                 self.__is_feasible(self.actions)
             except ValueError as e:
-                raise RuntimeError(f"Cannot place action in plan. {e} \n {str(self)}")
+                raise RuntimeError(f"Cannot place action in plan. {e} \n {str(self)}\ncurrent plan:\n{str(self)}")
 
     def update_action_completion(   self, 
                                     completed_actions : list, 

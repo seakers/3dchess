@@ -103,7 +103,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "collaboration " : "True",
                     "horizon": 7200,
                     "period" : 3600
                 },                
@@ -203,7 +203,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "collaboration " : "True",
                     "horizon": 7200,
                     "period" : 3600
                 },
@@ -303,7 +303,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "collaboration " : "True",
                     "horizon": 7200,
                     "period" : 3600
                 },                
