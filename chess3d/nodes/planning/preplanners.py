@@ -399,51 +399,76 @@ class AbstractPreplanner(ABC):
                                  if isinstance(req, MeasurementRequest)
                                  and req.id not in requests_broadcasted]
 
-        # find best path for message
-        path, t_start = self._create_broadcast_path(state, orbitdata)
+        # if there are requests to broadcast, find best path for message
+        if requests_to_broadcast:
+            path, t_start = self._create_broadcast_path(state, orbitdata)
 
-        ## create a broadcast action for all unbroadcasted requests
+        ## create a broadcast action for all unbroadcasted measurement requests
         for req in requests_to_broadcast:        
             # if found, create broadcast action
             msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
             broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-            if t_start < np.Inf:
-                broadcasts.append(broadcast_action)
             
-
-        
-        # schedule message relay
-        # TODO
-
-        # # include broadcasts to list of pending broadcasts if they are to be done after the next replanning horizon
-        # self.pending_broadcasts.extend([broadcast_action for broadcast_action in broadcasts 
-        #                                 if broadcast_action not in self.pending_broadcasts
-        #                                 and broadcast_action.t_start > state.t + self.period])
-        
-        # # schedule pending broadcasts that can be performed within the next planning period
-        # scheduled_broadcasts = [broadcast_action for broadcast_action in broadcasts 
-        #                         if broadcast_action not in self.pending_broadcasts]
-                
+            # check broadcast start; only add to plan if it's within the planning horizon
+            if t_start <= state.t + self.period:
+                broadcasts.append(broadcast_action)
+                        
         # return scheduled broadcasts
         return broadcasts   
     
     def _create_broadcast_path(self, state : SimulationAgentState, orbitdata : dict) -> tuple:
-        """ Finds the best path for """
-        q = queue.PriorityQueue()
-        costs = {sender_agent : {receiver_agent : np.Inf
-                                for receiver_agent in orbitdata} 
-                for sender_agent in orbitdata}
+        """ 
+        Finds the best path for broadcasting a message to all agents using depth-first-search
+        """
+        # initialte queue
+        q = queue.Queue()
+        
+        # initialize min path and min path cost
+        min_path = []
+        min_times = []
+        min_cost = np.Inf
 
-        for sender_agent in costs:
-            sender_orbitdata : OrbitData = orbitdata[sender_agent]
-            for receiver_agent in costs[sender_agent]:
-                if sender_agent == receiver_agent:
-                    continue
+        # get list of agents
+        agents = [agent_name for agent_name in orbitdata if agent_name != state.agent_name]
+        
+        # add parent agent as the root node
+        q.put((state.agent_name, [], [], 0.0))
+
+        # iterate through depth-first search
+        while not q.empty():
+            # get next node in the search
+            sender_agent, current_path, current_times, path_cost = q.get()
+
+            # check if path is complete
+            if len(agents) == len(current_path):
+                # check if minimum cost
+                if path_cost < min_cost:
+                    min_cost = path_cost
+                    min_path = [path_element for path_element in current_path]
+                    min_times = [path_time for path_time in current_times]
+
+            # add children nodes to queue
+            for receiver_agent in [receiver_agent for receiver_agent in agents 
+                                    if receiver_agent not in current_path
+                                    and receiver_agent != state.agent_name]:
+                # query next access interval to children nodes
+                t : float = state.t + path_cost
+                sender_orbitdata : OrbitData = orbitdata[sender_agent]
+                access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(receiver_agent, t)
                 
-                access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(receiver_agent, state.t)
+                if access_interval.start < np.Inf:
+                    new_path = [path_element for path_element in current_path]
+                    new_path.append(receiver_agent)
 
-                costs[sender_agent][receiver_agent] = access_interval.start - state.t
-        x = 1
+                    new_cost = access_interval.start - state.t
+
+                    new_times = [path_time for path_time in current_times]
+                    new_times.append(new_cost)
+
+                    q.put((receiver_agent, new_path, new_times, new_cost))
+
+        # return path and broadcast start time
+        return (min_path, min_times[0]) if min_path else ([], np.Inf)
 
     def _generate_broadcasts(self, 
                              state : SimulationAgentState, 
@@ -709,53 +734,75 @@ class FIFOPreplanner(AbstractPreplanner):
         print(out)
     
     @runtime_tracker
-    def _generate_broadcasts(self, 
-                             state: SimulationAgentState,
-                             measurements: list, 
-                             generated_reqs: list, 
-                             orbitdata: OrbitData
+    def _schedule_broadcasts(self, 
+                            state: SimulationAgentState, 
+                            measurements: list, 
+                            generated_reqs: list, 
+                            orbitdata: dict
                             ) -> list:
-        # initialize broadcast list
-        broadcasts : list = super()._generate_broadcasts(state, measurements, generated_reqs, orbitdata)
+        # initialize broadcasts
+        broadcasts : list = super()._schedule_broadcasts(state, measurements, generated_reqs, orbitdata)
 
+        # schedule performed measurement broadcasts
         if self.collaboration:
-            # schedule measurement action completion broadcasts
-            planned_measurements = [action for action in measurements 
-                                    if isinstance(action, MeasurementAction)]
-            
-            for action in planned_measurements:
-                action : MeasurementAction
+            ## check which measurements have not been broadcasted yet
+            measurements_broadcasted = [msg.req['id'] for msg in self.completed_broadcasts 
+                                        if isinstance(msg, MeasurementPerformedMessage)]
+            measurements_to_broadcast = [req for req in self.generated_reqs
+                                        if isinstance(req, MeasurementRequest)
+                                        and req.id not in measurements_broadcasted]
 
-                # generate broadcast message
-                action_copy = action_from_dict(**action.to_dict())
-                action_copy.status = MeasurementAction.COMPLETED
-                msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action_copy.to_dict())
+            # if there are requests to broadcast, find best path for message
+            if measurements_to_broadcast:
+                path, t_start = self._create_broadcast_path(state, orbitdata)
+
+            ## create a broadcast action for all unbroadcasted measurement requests
+            for req in measurements_to_broadcast:        
+                # if found, create broadcast action
+                msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
                 
-                # place broadcasts in plan
-                if isinstance(state, SatelliteAgentState):
-                    if not orbitdata:
-                        raise ValueError('orbitdata required for satellite agents')
+                # check broadcast start; only add to plan if it's within the planning horizon
+                if t_start <= state.t + self.period:
+                    broadcasts.append(broadcast_action)
+            
+            # # schedule measurement action completion broadcasts
+            # planned_measurements = [action for action in measurements 
+            #                         if isinstance(action, MeasurementAction)]
+            
+            # for action in planned_measurements:
+            #     action : MeasurementAction
+
+            #     # generate broadcast message
+            #     action_copy = action_from_dict(**action.to_dict())
+            #     action_copy.status = MeasurementAction.COMPLETED
+            #     msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, action_copy.to_dict())
+                
+            #     # place broadcasts in plan
+            #     if isinstance(state, SatelliteAgentState):
+            #         if not orbitdata:
+            #             raise ValueError('orbitdata required for satellite agents')
                     
-                    # get next access windows to all agents
-                    isl_accesses = [orbitdata.get_next_agent_access(target, action.t_end) for target in orbitdata.isl_data]
+            #         # get next access windows to all agents
+            #         isl_accesses = [orbitdata.get_next_agent_access(target, action.t_end) for target in orbitdata.isl_data]
 
-                    # TODO merge accesses to find overlaps
-                    isl_accesses_merged = isl_accesses
+            #         # TODO merge accesses to find overlaps
+            #         isl_accesses_merged = isl_accesses
 
-                    # handle placement in plan
-                    for interval in isl_accesses_merged:
-                        interval : TimeInterval
-                        broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, action.t_end))
+            #         # handle placement in plan
+            #         for interval in isl_accesses_merged:
+            #             interval : TimeInterval
+            #             broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, action.t_end))
 
-                        if self.t_next < broadcast_action.t_start:
-                            broadcasts.append(broadcast_action)
-                            continue
+            #             if self.t_next < broadcast_action.t_start:
+            #                 broadcasts.append(broadcast_action)
+            #                 continue
 
-                        # place broadcast action in plan
-                        broadcasts.append(broadcast_action)
+            #             # place broadcast action in plan
+            #             broadcasts.append(broadcast_action)
                         
-                else:
-                    raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
+            #     else:
+            #         raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
 
         # return broadcast list
         return broadcasts

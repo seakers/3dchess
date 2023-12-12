@@ -103,7 +103,7 @@ class OrbitData:
 
             return TimeInterval(t_start, t_end)
 
-        return TimeInterval(-np.Infinity, np.Infinity)
+        return TimeInterval(np.Inf, np.Inf)
 
     def get_next_gs_access(self, t):
         t = t/self.time_step
@@ -121,7 +121,7 @@ class OrbitData:
 
         # find next access
         # TODO
-        interval = TimeInterval(-np.Infinity, np.Infinity)
+        interval = TimeInterval(-np.Inf, np.Inf)
         instruments = []
         modes = dict()
         return interval, instruments, modes
