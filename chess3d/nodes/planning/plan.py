@@ -32,7 +32,9 @@ class Plan(object):
                 raise ValueError(f'updated plan must be of type `list`.')
             
             # check feasiblity
-            if not self.__is_feasible(actions):
+            try:
+                self.__is_feasible(actions)
+            except RuntimeError as e:
                 raise RuntimeError("Cannot update plan: new plan is unfeasible.")
         
             # update plan
@@ -55,6 +57,17 @@ class Plan(object):
 
         try:
             # check if action is scheduled to occur during while another action is being performed
+            for overlapping_action in self.actions:
+                if ((action.t_start < overlapping_action.t_start < action.t_end
+                    or action.t_start < overlapping_action.t_end < action.t_end) 
+                    and overlapping_action.t_end - overlapping_action.t_start > 0.0):
+                    x = 1
+
+            if [overlapping_action for overlapping_action in self.actions
+                if (action.t_start <= overlapping_action.t_start <= action.t_end
+                or action.t_start <= overlapping_action.t_end <= action.t_end)]:
+                x = 1
+
             interrupted_actions = [interrupted_action for interrupted_action in self.actions 
                                    if interrupted_action.t_start <= action.t_start < interrupted_action.t_end]
             if interrupted_actions:

@@ -236,28 +236,31 @@ class AbstractPreplanner(ABC):
                         clock_config : ClockConfig,
                         orbitdata : dict = None
                     ) -> Plan:
+        try:
+            # schedule measurements
+            measurements : list = self._schedule_measurements(state, clock_config)
+
+            # generate maneuver and travel actions from measurements
+            maneuvers : list = self._schedule_maneuvers(state, measurements, clock_config)
+
+            # schedule broadcasts to be perfomed
+            broadcasts : list = self._schedule_broadcasts(state, measurements, generated_reqs, orbitdata)
+            
+            # wait for next planning period to start
+            replan : list = self.__schedule_periodic_replan(state, maneuvers, broadcasts)
+
+            # generate plan from actions
+            self.plan = Plan(measurements, maneuvers, broadcasts, replan, t=state.t)
+
+            # update planning period time
+            self.t_plan = state.t
+            self.t_next = self.t_plan + self.period       
+
+            # return plan
+            return self.plan
         
-        # schedule measurements
-        measurements : list = self._schedule_measurements(state, clock_config)
-
-        # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, measurements, clock_config)
-
-        # schedule broadcasts to be perfomed
-        broadcasts : list = self._schedule_broadcasts(state, measurements, generated_reqs, orbitdata)
-        
-        # wait for next planning period to start
-        replan : list = self.__schedule_periodic_replan(state, maneuvers, broadcasts)
-
-        # generate plan from actions
-        self.plan = Plan(measurements, maneuvers, broadcasts, replan, t=state.t)
-
-        # update planning period time
-        self.t_plan = state.t
-        self.t_next = self.t_plan + self.period       
-
-        # return plan
-        return self.plan
+        except Exception as e:
+            raise e
         
     @abstractmethod
     def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig) -> list:
@@ -523,13 +526,16 @@ class AbstractPreplanner(ABC):
     def __schedule_periodic_replan(self, state : SimulationAgentState, measurement_actions : list, broadcast_actions : list) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
 
-        # raise NotImplementedError("TODO")
-
         # find wait start time
         if not measurement_actions and not broadcast_actions:
             t_wait_start = state.t 
+        
         else:
-            actions_in_period = [action for action in measurement_actions if action.t_start < state.t + self.period]
+            actions_in_period = [action for action in measurement_actions 
+                                 if action.t_start < state.t + self.period]
+            actions_in_period.extend([action for action in broadcast_actions
+                                      if action.t_start < state.t + self.period])
+            actions_in_period.sort(key=lambda a : a.t_start)
 
             if actions_in_period:
                 last_action : AgentAction = actions_in_period.pop()
