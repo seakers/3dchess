@@ -57,19 +57,8 @@ class Plan(object):
 
         try:
             # check if action is scheduled to occur during while another action is being performed
-            for overlapping_action in self.actions:
-                if ((action.t_start < overlapping_action.t_start < action.t_end
-                    or action.t_start < overlapping_action.t_end < action.t_end) 
-                    and overlapping_action.t_end - overlapping_action.t_start > 0.0):
-                    x = 1
-
-            if [overlapping_action for overlapping_action in self.actions
-                if (action.t_start <= overlapping_action.t_start <= action.t_end
-                or action.t_start <= overlapping_action.t_end <= action.t_end)]:
-                x = 1
-
-            interrupted_actions = [interrupted_action for interrupted_action in self.actions 
-                                   if interrupted_action.t_start <= action.t_start < interrupted_action.t_end]
+            interrupted_actions = [interrupted_action for interrupted_action in self.actions
+                                   if interrupted_action.t_start < action.t_start < interrupted_action.t_end]
             if interrupted_actions:
                 interrupted_action : AgentAction = interrupted_actions.pop(0)
                 if (    
@@ -87,7 +76,12 @@ class Plan(object):
                     continued_action : AgentAction = action_from_dict(**interrupted_action.to_dict())
                     continued_action.id = str(uuid.uuid1())
 
-                    # change start and end times for the interrupted and continued actions
+                    # modify interrupted action
+                    if isinstance(interrupted_action, TravelAction):
+                        ## change start and end positions TODO
+                        pass
+
+                    ## change start and end times for the interrupted and continued actions
                     interrupted_action.t_end = action.t_start
                     continued_action.t_start = action.t_end
 
@@ -99,7 +93,7 @@ class Plan(object):
                 return
 
             ## check if access occurs after an action was completed 
-            completed_actions = [completed_action for completed_action in self.actions 
+            completed_actions = [completed_action for completed_action in self.actions
                             if completed_action.t_end <= action.t_start]
             
             if completed_actions:
