@@ -49,6 +49,7 @@ class AbstractPreplanner(ABC):
         self.completed_requests = []
         self.completed_broadcasts = []
         self.completed_actions = []
+        self.pending_relays = []
         self.access_times = {}
         self.known_reqs = []
         self.stats = {}
@@ -72,6 +73,7 @@ class AbstractPreplanner(ABC):
                                 pending_actions : list,
                                 incoming_reqs : list,
                                 generated_reqs : list,
+                                relay_messages : list,
                                 misc_messages : list,
                                 orbitdata : dict = None
                             ) -> bool:
@@ -90,6 +92,20 @@ class AbstractPreplanner(ABC):
                                           for action in completed_actions 
                                           if isinstance(action, BroadcastMessageAction)
                                           and message_from_dict(**action.msg) not in self.completed_broadcasts])
+
+        # update list of relays to perform
+        pending_relay_ids = [msg.id for msg in self.pending_relays]
+        self.pending_relays.extend([relay_message 
+                                    for relay_message in relay_messages 
+                                    if relay_message.id not in pending_relay_ids])
+
+        for completed_broadcast in self.completed_broadcasts:
+            completed_broadcast : SimulationMessage
+            for pending_relay in self.pending_relays:
+                pending_relay : SimulationMessage
+                if completed_broadcast.id == pending_relay.id:
+                    self.pending_relays.remove(pending_relay)
+                    break
 
         # update list of performed actions
         self.completed_actions.extend([action for action in completed_actions])
@@ -232,6 +248,7 @@ class AbstractPreplanner(ABC):
                         pending_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
+                        relay_messages : list,
                         misc_messages : list,
                         clock_config : ClockConfig,
                         orbitdata : dict = None
@@ -244,7 +261,7 @@ class AbstractPreplanner(ABC):
         maneuvers : list = self._schedule_maneuvers(state, measurements, clock_config)
 
         # schedule broadcasts to be perfomed
-        broadcasts : list = self._schedule_broadcasts(state, measurements, generated_reqs, orbitdata)
+        broadcasts : list = self._schedule_broadcasts(state, measurements, generated_reqs, relay_messages, orbitdata)
         
         # wait for next planning period to start
         replan : list = self.__schedule_periodic_replan(state, maneuvers, broadcasts)
@@ -390,6 +407,7 @@ class AbstractPreplanner(ABC):
                              state : SimulationAgentState, 
                              measurements : list, 
                              generated_reqs : list, 
+                             relay_messages : list,
                              orbitdata : dict
                             ) -> list:
         """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
@@ -417,6 +435,28 @@ class AbstractPreplanner(ABC):
             # check broadcast start; only add to plan if it's within the planning horizon
             if t_start <= state.t + self.horizon:
                 broadcasts.append(broadcast_action)
+
+        # schedule message relay
+        for relay in self.pending_relays:
+            relay : SimulationMessage
+
+            assert relay.path
+
+            # find next destination and access time
+            next_dst = relay.path[0]
+            
+            # query next access interval to children nodes
+            sender_orbitdata : OrbitData = orbitdata[state.agent_name]
+            access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(next_dst, state.t)
+            t_start : float = access_interval.start
+
+            if t_start < np.Inf:
+                # if found, create broadcast action
+                broadcast_action = BroadcastMessageAction(relay.to_dict(), t_start)
+                
+                # check broadcast start; only add to plan if it's within the planning horizon
+                if t_start <= state.t + self.horizon:
+                    broadcasts.append(broadcast_action)
                         
         # return scheduled broadcasts
         return broadcasts   
@@ -455,16 +495,14 @@ class AbstractPreplanner(ABC):
             # add children nodes to queue
             for receiver_agent in [receiver_agent for receiver_agent in agents 
                                     if receiver_agent not in current_path
-                                    and receiver_agent != agent_name]:
+                                    and receiver_agent != agent_name
+                                    ]:
                 # query next access interval to children nodes
                 t_access : float = t + path_cost
 
                 sender_orbitdata : OrbitData = orbitdata[sender_agent]
                 access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(receiver_agent, t_access)
                 
-                if access_interval.start < t:
-                    x = 1
-
                 if access_interval.start < np.Inf:
                     new_path = [path_element for path_element in current_path]
                     new_path.append(receiver_agent)
@@ -751,10 +789,15 @@ class FIFOPreplanner(AbstractPreplanner):
                             state: SimulationAgentState, 
                             measurements: list, 
                             generated_reqs: list, 
+                            relay_messages : list,
                             orbitdata: dict
                             ) -> list:
         # initialize broadcasts
-        broadcasts : list = super()._schedule_broadcasts(state, measurements, generated_reqs, orbitdata)
+        broadcasts : list = super()._schedule_broadcasts(state,
+                                                         measurements, 
+                                                         generated_reqs, 
+                                                         relay_messages, 
+                                                         orbitdata)
 
         # schedule performed measurement broadcasts
         if self.collaboration:

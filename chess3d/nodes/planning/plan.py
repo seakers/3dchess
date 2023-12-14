@@ -17,9 +17,9 @@ class Plan(object):
         
         # load preplan
         if actions:
-            self.update_plan(*actions, t=t)
+            self.update(*actions, t=t)
 
-    def update_plan(self, *action_lists, t : float) -> None:
+    def update(self, *action_lists, t : float) -> None:
         """ Updates the current plan to a new list of actions """
         
         # reset current plan
@@ -126,8 +126,6 @@ class Plan(object):
         If so, they are removed.
         
         """
-        plan_ids = [action.id for action in self.actions]
-
         # compile performed actions
         performed_actions = [action for action in completed_actions]
         performed_actions.extend(aborted_actions)
@@ -139,17 +137,7 @@ class Plan(object):
                 action : AgentAction
                 if performed_action.id == action.id:
                     self.actions.remove(action)
-
-        # update pending actions
-        # for pending_action in pending_actions:
-        #     pending_action : AgentAction
-            
-        #     # update start time to current time
-        #     pending_action.t_start = t
-
-        #     # update plan with updated action
-        #     i_pending = plan_ids.index(pending_action.id)
-        #     self.actions[i_pending] = pending_action
+                    break
 
     def get_next_actions(self, t : float) -> list:
         """ returns a list of dicts """

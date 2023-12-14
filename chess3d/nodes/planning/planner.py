@@ -89,6 +89,7 @@ class PlanningModule(InternalModule):
         self.action_status_inbox = asyncio.Queue()
         self.req_inbox = asyncio.Queue()
         self.measurement_inbox = asyncio.Queue()
+        self.relay_inbox = asyncio.Queue()
         self.misc_inbox = asyncio.Queue()
 
         # setup agent state locks
@@ -160,8 +161,14 @@ class PlanningModule(InternalModule):
                         # unpack message
                         msg : SimulationMessage = message_from_dict(**sense)
 
-                        # check type of message being received
+                        # check if message needs to be relayed
+                        if msg.path:
+                            msg.path.pop(0)
+                            if msg.path:
+                                msg_copy : SimulationMessage = message_from_dict(**msg.to_dict())
+                                await self.relay_inbox.put(msg_copy)
 
+                        # check type of message being received
                         if isinstance(msg, AgentActionMessage):
                             # agent action received
                             self.log(f"received agent action of status {msg.status}!")
@@ -281,7 +288,8 @@ class PlanningModule(InternalModule):
 
                 # --- Check incoming information ---
                 # Read incoming messages
-                incoming_reqs, generated_reqs, misc_messages = await self._read_incoming_messages()
+                incoming_reqs, generated_reqs, relay_messages, misc_messages \
+                    = await self._read_incoming_messages()
 
                 # check action completion
                 completed_actions, aborted_actions, pending_actions \
@@ -310,6 +318,7 @@ class PlanningModule(InternalModule):
                                                                 pending_actions,
                                                                 incoming_reqs,
                                                                 generated_reqs,
+                                                                relay_messages,
                                                                 misc_messages,
                                                                 self.orbitdata
                                                             )
@@ -323,6 +332,7 @@ class PlanningModule(InternalModule):
                                                 pending_actions,
                                                 incoming_reqs,
                                                 generated_reqs,
+                                                relay_messages,
                                                 misc_messages,
                                                 level
                                                 )   
@@ -440,6 +450,7 @@ class PlanningModule(InternalModule):
                         pending_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
+                        relay_messages : list,
                         misc_messages : list,
                         level : int 
                         ) -> Plan:
@@ -451,6 +462,7 @@ class PlanningModule(InternalModule):
                                                         pending_actions,
                                                         incoming_reqs,
                                                         generated_reqs,
+                                                        relay_messages,
                                                         misc_messages,
                                                         self._clock_config,
                                                         self.orbitdata
@@ -539,7 +551,11 @@ class PlanningModule(InternalModule):
         while not self.misc_inbox.empty():
             misc_messages.append(await self.misc_inbox.get())
 
-        return incoming_reqs, generated_reqs, misc_messages
+        relay_messages= []
+        while not self.relay_inbox.empty():
+            relay_messages.append(await self.relay_inbox.get())
+
+        return incoming_reqs, generated_reqs, relay_messages, misc_messages
     
     def __log_actions(self, completed_actions : list, aborted_actions : list, pending_actions : list) -> None:
         all_actions = [action for action in completed_actions]
