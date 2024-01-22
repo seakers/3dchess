@@ -257,14 +257,14 @@ class AbstractPreplanner(ABC):
         # schedule measurements
         measurements : list = self._schedule_measurements(state, clock_config)
 
-        # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, measurements, clock_config)
-
         # schedule broadcasts to be perfomed
-        broadcasts : list = self._schedule_broadcasts(state, measurements, generated_reqs, relay_messages, orbitdata)
+        broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
+
+        # generate maneuver and travel actions from measurements
+        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
         
         # wait for next planning period to start
-        replan : list = self.__schedule_periodic_replan(state, maneuvers, broadcasts)
+        replan : list = self.__schedule_periodic_replan(state, measurements, maneuvers)
 
         # generate plan from actions
         self.plan = Plan(measurements, maneuvers, broadcasts, replan, t=state.t)
@@ -284,6 +284,7 @@ class AbstractPreplanner(ABC):
     def _schedule_maneuvers(    self, 
                                 state : SimulationAgentState, 
                                 observations : list,
+                                broadcasts : list,
                                 clock_config : ClockConfig
                             ) -> list:
         """
@@ -406,13 +407,26 @@ class AbstractPreplanner(ABC):
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
                              measurements : list, 
-                             generated_reqs : list, 
-                             relay_messages : list,
                              orbitdata : dict
                             ) -> list:
-        """ Schedules any broadcasts to be done. By default it only schedules pending messages from previous planning horizons """
+        """ 
+        Schedules any broadcasts to be done. 
+        
+        By default it schedules an announcement any generated request,
+        an annoucement of the current plan,
+        the completion of each measurement after it's been performed,
+        and the relay of any incoming relay messages
+
+        KNOWN QUANTITIES
+        self.known_reqs
+        self.generated_reqs
+        self.completed_broadcasts
+        self.pending_relays
+        self.completed_actions
+        self.completed_requests
+        """
         # initialize list of broadcasts to be done
-        broadcasts = []
+        broadcasts = []       
 
         # schedule generated measurement request broadcasts
         ## check which requests have not been broadcasted yet
@@ -430,6 +444,32 @@ class AbstractPreplanner(ABC):
         for req in requests_to_broadcast:        
             # if found, create broadcast action
             msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+            broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+            
+            # check broadcast start; only add to plan if it's within the planning horizon
+            if t_start <= state.t + self.horizon:
+                broadcasts.append(broadcast_action)
+
+        # schedule the announcement of the current plan
+        if measurements:
+            # if there are measurements in plan, create plan broadcast action
+            msg = PlanMessage(state.agent_name, 
+                            state.agent_name, 
+                            [action.to_dict() for action in measurements],
+                            state.t,
+                            path=path)
+            broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+            
+            # check broadcast start; only add to plan if it's within the planning horizon
+            if t_start <= state.t + self.horizon:
+                broadcasts.append(broadcast_action)
+
+        # schedule the completion of each measurement after it's been performed
+        for measurement in measurements:
+            measurement : MeasurementAction
+            path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, measurement.t_end)
+
+            msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, measurement.to_dict(), path=path)
             broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
             
             # check broadcast start; only add to plan if it's within the planning horizon
@@ -558,17 +598,17 @@ class AbstractPreplanner(ABC):
         
         return broadcasts   
 
-    def __schedule_periodic_replan(self, state : SimulationAgentState, measurement_actions : list, broadcast_actions : list) -> list:
+    def __schedule_periodic_replan(self, state : SimulationAgentState, measurement_actions : list, maneuver_actions : list) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
         # calculate next period for planning
         t_next = state.t + self.period
 
         # find wait start time
-        if not measurement_actions and not broadcast_actions:
+        if not measurement_actions and not maneuver_actions:
             t_wait_start = state.t 
         
         else:
-            prelim_plan = Plan(measurement_actions, broadcast_actions, t=state.t)
+            prelim_plan = Plan(measurement_actions, maneuver_actions, t=state.t)
 
             actions_in_period = [action for action in prelim_plan.actions 
                                  if action.t_start < t_next]
