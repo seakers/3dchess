@@ -310,7 +310,7 @@ class ScienceModule(InternalModule):
                     req_msg = MeasurementRequestMessage(self.get_parent_name(), self.get_parent_name(), measurement_req.to_dict())
                     await self._send_manager_msg(req_msg, zmq.PUB)
 
-                    if len(desired_variables) > 0:
+                    if science_value > 0:
                         x = 1
 
                 else:

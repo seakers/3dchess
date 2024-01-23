@@ -43,7 +43,8 @@ class Plan(object):
                 
         # add indefinite wait at the end of the plan
         t_wait_start = t if self.empty() else self.actions[-1].t_end
-        self.put(WaitForMessages(t_wait_start, np.Inf), t)
+        if t_wait_start < np.Inf:
+            self.put(WaitForMessages(t_wait_start, np.Inf), t)
 
         # update plan update time
         self.t_update = t              

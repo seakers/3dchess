@@ -325,17 +325,17 @@ class PlanningModule(InternalModule):
                     ):
 
                     # initialize plan
-                    plan = await self._preplan( state,
-                                                plan, 
-                                                completed_actions,
-                                                aborted_actions,
-                                                pending_actions,
-                                                incoming_reqs,
-                                                generated_reqs,
-                                                relay_messages,
-                                                misc_messages,
-                                                level
-                                                )   
+                    plan : Plan = await self._preplan(  state,
+                                                        plan, 
+                                                        completed_actions,
+                                                        aborted_actions,
+                                                        pending_actions,
+                                                        incoming_reqs,
+                                                        generated_reqs,
+                                                        relay_messages,
+                                                        misc_messages,
+                                                        level
+                                                        )   
                     
                     # --- FOR DEBUGGING PURPOSES ONLY: ---
                     self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
