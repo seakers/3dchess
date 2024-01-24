@@ -112,18 +112,8 @@ class AbstractPreplanner(AbstractPlanner):
         """ 
         Schedules any broadcasts to be done. 
         
-        By default it schedules an announcement any generated request,
-        an annoucement of the current plan,
-        the completion of each measurement after it's been performed,
+        By default it schedules the broadcast of any newly generated requests
         and the relay of any incoming relay messages
-
-        KNOWN QUANTITIES
-        self.known_reqs
-        self.generated_reqs
-        self.completed_broadcasts
-        self.pending_relays
-        self.completed_actions
-        self.completed_requests
         """
         # initialize list of broadcasts to be done
         broadcasts = []       
@@ -446,7 +436,6 @@ class FIFOPreplanner(AbstractPreplanner):
         broadcasts : list = super()._schedule_broadcasts(state,
                                                          measurements, 
                                                          orbitdata)
-        print(Plan(measurements, broadcasts))
 
         # schedule performed measurement broadcasts
         if self.collaboration:
@@ -507,5 +496,4 @@ class FIFOPreplanner(AbstractPreplanner):
         broadcasts.sort(key=lambda a : a.t_start)
 
         # return broadcast list
-        print(Plan(measurements, broadcasts))
         return broadcasts

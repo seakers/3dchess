@@ -350,17 +350,16 @@ class AbstractPlanner(ABC):
         
         # check if broadcast needs to be routed
         if agents:
-            earliest_accesses = [orbitdata[agent].get_next_agent_access(agent_name, t) for agent in agents]
-            earliest_start = [access.start for access in earliest_accesses if isinstance(access, TimeInterval)]
-            earliest_end = [access.end for access in earliest_accesses if isinstance(access, TimeInterval)]
-            
-            same_access_start = [t == earliest_start[0] for t in earliest_start]
-            same_access_end = [t == earliest_end[0] for t in earliest_end]
+            earliest_accesses = [orbitdata[agent].get_next_agent_access(agent_name, t) for agent in agents]           
+            same_access_start = [access.start == earliest_accesses[0].start for access in earliest_accesses if isinstance(access, TimeInterval)]
+            same_access_end = [access.end == earliest_accesses[0].end for access in earliest_accesses if isinstance(access, TimeInterval)]
 
             if all(same_access_start) and all(same_access_end):
+                # all agents are accessing eachother at the same time; no need for mesasge relays
                 return ([], t)   
             
         else:
+            # no other agents in the simulation; no need for broadcasts
             return ([], -1)
 
         # add parent agent as the root node
