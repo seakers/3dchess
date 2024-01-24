@@ -307,9 +307,9 @@ class AbstractPreplanner(AbstractPlanner):
 
 class IdlePlanner(AbstractPreplanner):
     @runtime_tracker
-    def initialize_plan(    self, 
-                            *_
-                        ) -> tuple:
+    def generate_plan(  self, 
+                        *_
+                    ) -> tuple:
         return [IdleAction(0.0, np.Inf)]
 
 class FIFOPreplanner(AbstractPreplanner):

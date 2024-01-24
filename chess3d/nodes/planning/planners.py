@@ -348,6 +348,21 @@ class AbstractPlanner(ABC):
         # get list of agents
         agents = [agent for agent in orbitdata if agent != agent_name]
         
+        # check if broadcast needs to be routed
+        if agents:
+            earliest_accesses = [orbitdata[agent].get_next_agent_access(agent_name, t) for agent in agents]
+            earliest_start = [access.start for access in earliest_accesses if isinstance(access, TimeInterval)]
+            earliest_end = [access.end for access in earliest_accesses if isinstance(access, TimeInterval)]
+            
+            same_access_start = [t == earliest_start[0] for t in earliest_start]
+            same_access_end = [t == earliest_end[0] for t in earliest_end]
+
+            if all(same_access_start) and all(same_access_end):
+                return ([], t)   
+            
+        else:
+            return ([], -1)
+
         # add parent agent as the root node
         q.put((agent_name, [], [], 0.0))
 
