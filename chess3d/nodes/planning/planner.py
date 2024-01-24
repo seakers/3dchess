@@ -346,50 +346,58 @@ class PlanningModule(InternalModule):
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
                         self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
-                        x = 1
                         # -------------------------------------
 
-                # # --- Modify plan ---
-                # # Check if reeplanning is needed
-                # if (    
-                #     self.replanner is not None and                          # there is a replanner assigned to this planner
-                #     self.replanner.needs_replanning(                        # there is new information relevant to the current plan  
-                #                                     state,
-                #                                     plan, 
-                #                                     completed_actions,
-                #                                     aborted_actions,
-                #                                     pending_actions,
-                #                                     incoming_reqs,
-                #                                     generated_reqs,
-                #                                     relay_messages,
-                #                                     misc_messages,
-                #                                     self.orbitdata
-                #                                 )
-                #     ):
-                    
-                #     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                #     # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
-                #     # -------------------------------------
+                # --- Modify plan ---
+                # Check if reeplanning is needed
+                if self.replanner is not None:
+                    # there is a replanner assigned to this planner
 
-                #     # replan
-                #     plan : Plan = await self._replan(   state,
-                #                                         plan, 
-                #                                         completed_actions,
-                #                                         aborted_actions,
-                #                                         pending_actions,
-                #                                         incoming_reqs,
-                #                                         generated_reqs,
-                #                                         relay_messages,
-                #                                         misc_messages,
-                #                                         level
-                #                                     )     
+                    # update replanner precepts
+                    self.replanner.update_precepts(state,
+                                                    plan, 
+                                                    completed_actions,
+                                                    aborted_actions,
+                                                    pending_actions,
+                                                    incoming_reqs,
+                                                    generated_reqs,
+                                                    relay_messages,
+                                                    misc_messages,
+                                                    self.orbitdata
+                                                )
                     
-                #     # clear pending actions
-                #     pending_actions = []
+                    if self.replanner.needs_planning():
+                        # Modify current Plan      
+                        plan : Plan = self.replanner.generate_plan( state, 
+                                                                    plan,
+                                                                    completed_actions,
+                                                                    aborted_actions,
+                                                                    pending_actions,
+                                                                    incoming_reqs,
+                                                                    generated_reqs,
+                                                                    relay_messages,
+                                                                    misc_messages,
+                                                                    self._clock_config,
+                                                                    self.orbitdata
+                                                                    )
 
-                #     # --- FOR DEBUGGING PURPOSES ONLY: ---
-                #     self.__log_plan(plan, "REPLAN", logging.WARNING)
-                #     # -------------------------------------
+                        # --- FOR DEBUGGING PURPOSES ONLY: ---
+                        self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                        # -------------------------------------
+
+                        # update last time plan was updated
+                        self.t_plan = self.get_current_time()
+
+                        # save copy of plan for post-processing
+                        plan_copy = [action for action in plan]
+                        self.plan_history.append((self.t_plan, plan_copy))
+                    
+                        # clear pending actions
+                        pending_actions = []
+
+                        # --- FOR DEBUGGING PURPOSES ONLY: ---
+                        self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        # -------------------------------------
 
                 # --- Execute plan ---
                 # get next action to perform
@@ -461,26 +469,7 @@ class PlanningModule(InternalModule):
                         level : int 
                         ) -> Plan:
         
-        # Modify current Plan      
-        plan : Plan = self.replanner.replan(state, 
-                                            plan,
-                                            completed_actions,
-                                            aborted_actions,
-                                            pending_actions,
-                                            incoming_reqs,
-                                            generated_reqs,
-                                            relay_messages,
-                                            misc_messages,
-                                            self._clock_config,
-                                            self.orbitdata
-                                            )
-
-        # update last time plan was updated
-        self.t_plan = self.get_current_time()
-
-        # save copy of plan for post-processing
-        plan_copy = [action for action in plan]
-        self.plan_history.append((self.t_plan, plan_copy))
+        
 
         return plan
     

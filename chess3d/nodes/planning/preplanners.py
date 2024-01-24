@@ -21,7 +21,7 @@ class AbstractPreplanner(AbstractPlanner):
     """
     # Preplanner
 
-    Conducts observations planning for an agent at the beginning of a planning horizon. 
+    Conducts operations planning for an agent at the beginning of a planning horizon. 
     """
     def __init__(   self, 
                     utility_func : Callable[[], Any], 
@@ -41,16 +41,11 @@ class AbstractPreplanner(AbstractPlanner):
             - logger (`logging.Logger`) : debugging logger
         """
         # initialize planner
-        super().__init__(horizon)    
+        super().__init__(utility_func, horizon, period, logger)    
 
         # set parameters
-        self.utility_func = utility_func
         self.period = period
-        self._logger = logger
-
-        # set next update time to the determined period
-        self.t_next = period
-
+        
     @runtime_tracker
     def needs_planning( self, 
                         state : SimulationAgentState,

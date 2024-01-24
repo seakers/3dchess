@@ -1,6 +1,9 @@
 
 import math
 import queue
+from typing import Any
+
+from traitlets import Callable
 from nodes.planning.plan import Plan
 from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
@@ -12,7 +15,13 @@ import pandas as pd
 
 
 class AbstractPlanner(ABC):
-    def __init__(self, horizon : float = np.Inf, t_next : float = np.Inf) -> None:
+    def __init__(self, 
+                 utility_func : Callable[[], Any], 
+                 horizon : float = np.Inf, 
+                 t_next : float = np.Inf,
+                 logger : logging.Logger = None
+                 ) -> None:
+        
         # initialize object
         super().__init__()
 
@@ -28,8 +37,10 @@ class AbstractPlanner(ABC):
         self.plan = Plan() 
 
         # set parameters
-        self.horizon = horizon      # planning horizon
-        self.t_next = t_next        # scheduled time for replanning
+        self.utility_func = utility_func    # utility function 
+        self.horizon = horizon              # planning horizon
+        self.t_next = t_next                # scheduled time for replanning
+        self._logger = logger               # logger for debugging
 
     def update_precepts(self, 
                         state : SimulationAgentState,
@@ -337,14 +348,6 @@ class AbstractPlanner(ABC):
         """ 
         Finds the best path for broadcasting a message to all agents using depth-first-search
         """
-        # initialte queue
-        q = queue.Queue()
-        
-        # initialize min path and min path cost
-        min_path = []
-        min_times = []
-        min_cost = np.Inf
-
         # get list of agents
         agents = [agent for agent in orbitdata if agent != agent_name]
         
@@ -361,6 +364,14 @@ class AbstractPlanner(ABC):
         else:
             # no other agents in the simulation; no need for broadcasts
             return ([], -1)
+
+        # initialte queue
+        q = queue.Queue()
+        
+        # initialize min path and min path cost
+        min_path = []
+        min_times = []
+        min_cost = np.Inf
 
         # add parent agent as the root node
         q.put((agent_name, [], [], 0.0))
