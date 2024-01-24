@@ -7,7 +7,6 @@ from instrupy.base import Instrument
 import orbitpy.util
 import pandas as pd
 import random
-import sys
 import zmq
 import concurrent.futures
 
@@ -25,7 +24,7 @@ from nodes.uav import UAVAgent
 from nodes.agent import SimulationAgent
 from nodes.groundstat import GroundStationAgent
 from nodes.satellite import SatelliteAgent
-from nodes.planning.planner import PlanningModule
+from chess3d.nodes.planning.planner import PlanningModule
 from nodes.science.science import ScienceModule
 from nodes.science.utility import utility_function
 from nodes.science.reqs import GroundPointMeasurementRequest
@@ -258,11 +257,13 @@ def agent_factory(  scenario_name : str,
 
         replanner_dict = planner_dict.get('replanner', None)
         if isinstance(replanner_dict, dict):
+            raise NotImplementedError('Replanners under development.')
+
             replanner_type = replanner_dict.get('@type', None)
             
             if replanner_dict == 'FIFO':
                 collaboration = preplanner_dict.get('collaboration ', "False") == "True"
-                replanner = FIFOReplanner(utility_func, collaboration)
+                # replanner = FIFOReplanner(utility_func, collaboration)
 
             elif replanner_type == 'ACBBA':
                 max_bundle_size = replanner_dict.get('bundle size', 3)

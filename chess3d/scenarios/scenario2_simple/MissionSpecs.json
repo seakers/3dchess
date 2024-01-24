@@ -103,9 +103,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True",
-                    "horizon": 7200,
-                    "period" : 3600
+                    "collaboration " : "True"
                 },                
                 "utility" : "LINEAR"
             },
@@ -203,9 +201,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True",
-                    "horizon": 7200,
-                    "period" : 3600
+                    "collaboration " : "True"
                 },
                 "horizon" : 3600,
                 "utility" : "LINEAR"
@@ -303,9 +299,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True",
-                    "horizon": 7200,
-                    "period" : 3600
+                    "collaboration " : "True"
                 },                
                 "utility" : "LINEAR"
             },
@@ -325,7 +319,7 @@
                     "initialRequestsPath" : "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
                     "eventsPath" : "./scenarios/scenario2_simple/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
-                    "connectivity" : "LOS", 
+                    "connectivity" : "FULL", 
                     "utility" : "LINEAR"
                 },
     "settings": {

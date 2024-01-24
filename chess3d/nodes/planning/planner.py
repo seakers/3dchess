@@ -1,7 +1,9 @@
-import os
-import re
-import time
 from typing import Any, Callable
+import pandas as pd
+
+from dmas.modules import *
+from dmas.utils import runtime_tracker
+
 from nodes.planning.plan import Plan
 from nodes.planning.preplanners import AbstractPreplanner
 from nodes.planning.replanners import AbstractReplanner
@@ -9,9 +11,6 @@ from nodes.orbitdata import OrbitData
 from nodes.states import *
 from nodes.science.reqs import *
 from messages import *
-from dmas.modules import *
-from dmas.utils import runtime_tracker
-import pandas as pd
 
 class PlanningModule(InternalModule):
     def __init__(self, 
@@ -25,6 +24,7 @@ class PlanningModule(InternalModule):
                 level: int = logging.INFO, 
                 logger: logging.Logger = None
                 ) -> None:
+        """ Internal Agent Module in charge of planning an scheduling. """
                        
         # setup network settings
         addresses = parent_network_config.get_internal_addresses()        
@@ -308,82 +308,88 @@ class PlanningModule(InternalModule):
                 # -------------------------------------
                 
                 # --- Create plan ---
-                # check if plan has been initialized
-                if (self.preplanner is not None                                         # there is a preplanner assigned to this planner
-                    and self.preplanner.needs_initialized_plan(                         # there is a need to construct a new plan
-                                                                state,
-                                                                plan, 
-                                                                completed_actions,
-                                                                aborted_actions,
-                                                                pending_actions,
-                                                                incoming_reqs,
-                                                                generated_reqs,
-                                                                relay_messages,
-                                                                misc_messages,
-                                                                self.orbitdata
-                                                            )
-                    ):
+                if self.preplanner is not None:
+                    # there is a preplanner assigned to this planner
 
-                    # initialize plan
-                    plan = await self._preplan( state,
-                                                plan, 
-                                                completed_actions,
-                                                aborted_actions,
-                                                pending_actions,
-                                                incoming_reqs,
-                                                generated_reqs,
-                                                relay_messages,
-                                                misc_messages,
-                                                level
-                                                )   
-                    
-                    # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
-                    x = 1
-                    # -------------------------------------
-
-                # --- Modify plan ---
-                # Check if reeplanning is needed
-                if (    
-                    self.replanner is not None and                          # there is a replanner assigned to this planner
-                    self.replanner.needs_replanning(                        # there is new relevant information to be considered
-                                                    state,
+                    # update preplanner precepts
+                    self.preplanner.update_precepts(state,
                                                     plan, 
                                                     completed_actions,
                                                     aborted_actions,
                                                     pending_actions,
                                                     incoming_reqs,
                                                     generated_reqs,
+                                                    relay_messages,
                                                     misc_messages,
-                                                    self.t_plan,
-                                                    self.t_next,
-                                                    self.planning_horizon,
                                                     self.orbitdata
                                                 )
-                    ):
                     
-                    # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
-                    # -------------------------------------
+                    # check if there is a need to construct a new plan
+                    if self.preplanner.needs_planning(state, plan):     
+                        # initialize plan      
+                        plan : Plan = self.preplanner.generate_plan(    state, 
+                                                                        plan,
+                                                                        completed_actions,
+                                                                        aborted_actions,
+                                                                        pending_actions,
+                                                                        incoming_reqs,
+                                                                        generated_reqs,
+                                                                        relay_messages,
+                                                                        misc_messages,
+                                                                        self._clock_config,
+                                                                        self.orbitdata
+                                                                        )
 
-                    # replan
-                    plan : Plan = await self._replan(   
-                                                        state,
-                                                        plan,
-                                                        completed_actions,
-                                                        aborted_actions,
-                                                        pending_actions,                                                        
-                                                        incoming_reqs, 
-                                                        generated_reqs, 
-                                                        misc_messages
-                                                    )     
+                        # save copy of plan for post-processing
+                        plan_copy = [action for action in plan]
+                        self.plan_history.append((state.t, plan_copy))
+                        
+                        # --- FOR DEBUGGING PURPOSES ONLY: ---
+                        self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        x = 1
+                        # -------------------------------------
+
+                # # --- Modify plan ---
+                # # Check if reeplanning is needed
+                # if (    
+                #     self.replanner is not None and                          # there is a replanner assigned to this planner
+                #     self.replanner.needs_replanning(                        # there is new information relevant to the current plan  
+                #                                     state,
+                #                                     plan, 
+                #                                     completed_actions,
+                #                                     aborted_actions,
+                #                                     pending_actions,
+                #                                     incoming_reqs,
+                #                                     generated_reqs,
+                #                                     relay_messages,
+                #                                     misc_messages,
+                #                                     self.orbitdata
+                #                                 )
+                #     ):
                     
-                    # clear pending actions
-                    pending_actions = []
+                #     # --- FOR DEBUGGING PURPOSES ONLY: ---
+                #     # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                #     # -------------------------------------
 
-                    # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    self.__log_plan(plan, "REPLAN", logging.WARNING)
-                    # -------------------------------------
+                #     # replan
+                #     plan : Plan = await self._replan(   state,
+                #                                         plan, 
+                #                                         completed_actions,
+                #                                         aborted_actions,
+                #                                         pending_actions,
+                #                                         incoming_reqs,
+                #                                         generated_reqs,
+                #                                         relay_messages,
+                #                                         misc_messages,
+                #                                         level
+                #                                     )     
+                    
+                #     # clear pending actions
+                #     pending_actions = []
+
+                #     # --- FOR DEBUGGING PURPOSES ONLY: ---
+                #     self.__log_plan(plan, "REPLAN", logging.WARNING)
+                #     # -------------------------------------
 
                 # --- Execute plan ---
                 # get next action to perform
@@ -440,9 +446,9 @@ class PlanningModule(InternalModule):
                 continue
         
         return completed_actions, aborted_actions, pending_actions
-                    
+
     @runtime_tracker
-    async def _preplan( self,
+    async def _replan(  self,
                         state : SimulationAgentState, 
                         plan : list,
                         completed_actions : list,
@@ -454,52 +460,20 @@ class PlanningModule(InternalModule):
                         misc_messages : list,
                         level : int 
                         ) -> Plan:
-        # Generate Initial Plan        
-        plan : Plan = self.preplanner.initialize_plan(  state, 
-                                                        plan,
-                                                        completed_actions,
-                                                        aborted_actions,
-                                                        pending_actions,
-                                                        incoming_reqs,
-                                                        generated_reqs,
-                                                        relay_messages,
-                                                        misc_messages,
-                                                        self._clock_config,
-                                                        self.orbitdata
-                                                        )
-
-        # save copy of plan for post-processing
-        plan_copy = [action for action in plan]
-        self.plan_history.append((state.t, plan_copy))
-
-        return plan
-
-    @runtime_tracker
-    async def _replan(  self, 
-                        state : AbstractAgentState,
-                        current_plan : list,
-                        completed_actions : list,
-                        aborted_actions : list,
-                        pending_actions : list,
-                        incoming_reqs : list,
-                        generated_reqs : list,
-                        misc_messages : list,
-                        level : int = logging.DEBUG
-                        ) -> Plan:
         
         # Modify current Plan      
         plan : Plan = self.replanner.replan(state, 
-                                            current_plan,
+                                            plan,
                                             completed_actions,
                                             aborted_actions,
                                             pending_actions,
-                                            incoming_reqs, 
+                                            incoming_reqs,
                                             generated_reqs,
+                                            relay_messages,
                                             misc_messages,
-                                            self.t_plan,
-                                            self.t_next,
                                             self._clock_config,
-                                            self.orbitdata) 
+                                            self.orbitdata
+                                            )
 
         # update last time plan was updated
         self.t_plan = self.get_current_time()
