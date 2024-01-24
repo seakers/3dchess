@@ -11,6 +11,7 @@ from nodes.science.utility import synergy_factor
 from nodes.planning.plan import Plan
 from nodes.planning.planners import AbstractPlanner
 from nodes.states import *
+from messages import MeasurementRequestMessage
 
 class AbstractReplanner(AbstractPlanner):
     def __init__(self, 
@@ -20,6 +21,24 @@ class AbstractReplanner(AbstractPlanner):
                  logger: logging.Logger = None
                  ) -> None:
         super().__init__(utility_func, horizon, t_next, logger)
+
+class RelayReplanner(AbstractReplanner):
+    def __init__(self) -> None:
+        super().__init__(None)
+
+    def needs_planning(self, state : SimulationAgentState, plan : Plan) -> bool:
+        # check if there any requests that have not been broadcasted yet
+        requests_broadcasted = [msg.req['id'] for msg in self.completed_broadcasts 
+                                if isinstance(msg, MeasurementRequestMessage)]
+        requests_to_broadcast = [req for req in self.generated_reqs
+                                 if isinstance(req, MeasurementRequest)
+                                 and req.id not in requests_broadcasted]
+
+        # replans if relays need to be sent or if requests have to be announced
+        return len(requests_to_broadcast) > 0 or len(self.pending_relays) > 0
+    
+    def generate_plan(self, *args) -> Plan:
+        return Plan()
 
 # class AbstractReplanner(ABC):
 #     """

@@ -273,7 +273,7 @@ def agent_factory(  scenario_name : str,
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
         else:
-            replanner = None
+            replanner = RelayReplanner()
     else:
         preplanner, replanner = None, None
 

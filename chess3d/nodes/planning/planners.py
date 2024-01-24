@@ -1,9 +1,8 @@
 
 import math
 import queue
-from typing import Any
+from typing import Callable, Any
 
-from traitlets import Callable
 from nodes.planning.plan import Plan
 from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *

@@ -366,7 +366,7 @@ class PlanningModule(InternalModule):
                                                     self.orbitdata
                                                 )
                     
-                    if self.replanner.needs_planning():
+                    if self.replanner.needs_planning(state, plan):
                         # Modify current Plan      
                         plan : Plan = self.replanner.generate_plan( state, 
                                                                     plan,
@@ -454,24 +454,6 @@ class PlanningModule(InternalModule):
                 continue
         
         return completed_actions, aborted_actions, pending_actions
-
-    @runtime_tracker
-    async def _replan(  self,
-                        state : SimulationAgentState, 
-                        plan : list,
-                        completed_actions : list,
-                        aborted_actions : list,
-                        pending_actions : list,
-                        incoming_reqs : list,
-                        generated_reqs : list,
-                        relay_messages : list,
-                        misc_messages : list,
-                        level : int 
-                        ) -> Plan:
-        
-        
-
-        return plan
     
     @runtime_tracker
     async def _read_incoming_messages(self) -> tuple:
