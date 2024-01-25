@@ -61,7 +61,7 @@ class AbstractPreplanner(AbstractPlanner):
     @runtime_tracker
     def generate_plan(  self, 
                         state : SimulationAgentState,
-                        current_plan : list,
+                        current_plan : Plan,
                         completed_actions : list,
                         aborted_actions : list,
                         pending_actions : list,
@@ -99,6 +99,7 @@ class AbstractPreplanner(AbstractPlanner):
     def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig) -> list:
         """ Creates a list of measurement actions to be performed by the agent """
 
+    @runtime_tracker
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
                              measurements : list, 
@@ -136,6 +137,8 @@ class AbstractPreplanner(AbstractPlanner):
 
         # schedule message relay
         for relay in self.pending_relays:
+            raise NotImplementedError('Relay preplanning not yet supported.')
+
             relay : SimulationMessage
 
             assert relay.path
@@ -159,6 +162,7 @@ class AbstractPreplanner(AbstractPlanner):
         # return scheduled broadcasts
         return broadcasts   
 
+    @runtime_tracker
     def _generate_broadcasts(self, 
                              state : SimulationAgentState, 
                              measurements : list, 
@@ -197,6 +201,7 @@ class AbstractPreplanner(AbstractPlanner):
         
         return broadcasts   
 
+    @runtime_tracker
     def __schedule_periodic_replan(self, state : SimulationAgentState, measurement_actions : list, maneuver_actions : list) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
         # calculate next period for planning
@@ -313,6 +318,7 @@ class FIFOPreplanner(AbstractPreplanner):
         super().__init__(utility_func, horizon, period, logger)
         self.collaboration = collaboration    
 
+    @runtime_tracker
     def _schedule_measurements(self, state : SimulationAgentState, _ : ClockConfig) -> list:
         """ 
         Schedule a sequence of observations based on the current state of the agent 

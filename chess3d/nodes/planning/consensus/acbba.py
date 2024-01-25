@@ -8,121 +8,122 @@ from nodes.planning.consensus.consensus import AbstractConsensusReplanner
 from nodes.science.reqs import MeasurementRequest
 
 
-class ACBBAReplanner(AbstractConsensusReplanner):
+
+# class ACBBAReplanner(AbstractConsensusReplanner):
     
-    def _generate_bids_from_request(self, req : MeasurementRequest) -> list:
-        return UnconstrainedBid.new_bids_from_request(req, self.parent_name, self.dt_converge)
+#     def _generate_bids_from_request(self, req : MeasurementRequest) -> list:
+#         return UnconstrainedBid.new_bids_from_request(req, self.parent_name, self.dt_converge)
 
-    # def planning_phase(self, state: SimulationAgentState, current_plan: list, t_next: float) -> tuple:
-    #     return [], [], [], []
+#     # def planning_phase(self, state: SimulationAgentState, current_plan: list, t_next: float) -> tuple:
+#     #     return [], [], [], []
 
-    def _can_bid(self, 
-                state : SimulationAgentState, 
-                results : dict,
-                req : MeasurementRequest, 
-                subtask_index : int
-                ) -> bool:
-        """
-        Checks if an agent has the ability to bid on a measurement task
-        """
-        # check capabilities - TODO: Replace with knowledge graph
-        bid : UnconstrainedBid = results[req.id][subtask_index]
-        if bid.main_measurement not in [instrument for instrument in state.payload]:
-            return False 
+#     def _can_bid(self, 
+#                 state : SimulationAgentState, 
+#                 results : dict,
+#                 req : MeasurementRequest, 
+#                 subtask_index : int
+#                 ) -> bool:
+#         """
+#         Checks if an agent has the ability to bid on a measurement task
+#         """
+#         # check capabilities - TODO: Replace with knowledge graph
+#         bid : UnconstrainedBid = results[req.id][subtask_index]
+#         if bid.main_measurement not in [instrument for instrument in state.payload]:
+#             return False 
 
-        # check time constraints
-        ## Constraint 1: task must be able to be performed during or after the current time
-        if req.t_end < state.t:
-            return False
+#         # check time constraints
+#         ## Constraint 1: task must be able to be performed during or after the current time
+#         if req.t_end < state.t:
+#             return False
         
-        return True
+#         return True
 
-    @runtime_tracker
-    def calc_imaging_time(  self, 
-                            state : SimulationAgentState, 
-                            path : list,
-                            req : MeasurementRequest, 
-                            subtask_index : int
-                         ) -> float:
-        """
-        Computes the ideal" time when a task in the path would be performed
-        ### Returns
-            - t_img (`float`): earliest available imaging time
-        """
-        # calculate the state of the agent prior to performing the measurement request
-        def is_path_element(path_element) -> bool:
-            path_req, path_subtask_index, _, _ = path_element
-            return path_req == req and path_subtask_index == subtask_index
+#     @runtime_tracker
+#     def calc_imaging_time(  self, 
+#                             state : SimulationAgentState, 
+#                             path : list,
+#                             req : MeasurementRequest, 
+#                             subtask_index : int
+#                          ) -> float:
+#         """
+#         Computes the ideal" time when a task in the path would be performed
+#         ### Returns
+#             - t_img (`float`): earliest available imaging time
+#         """
+#         # calculate the state of the agent prior to performing the measurement request
+#         def is_path_element(path_element) -> bool:
+#             path_req, path_subtask_index, _, _ = path_element
+#             return path_req == req and path_subtask_index == subtask_index
 
-        path_element = list(filter(is_path_element, path))
-        if len(path_element) != 1:
-            # path contains more than one measurement of the same request and subtask or does not contain it at all
-            return -1
+#         path_element = list(filter(is_path_element, path))
+#         if len(path_element) != 1:
+#             # path contains more than one measurement of the same request and subtask or does not contain it at all
+#             return -1
 
-        i = path.index(path_element[0])
-        if i == 0:
-            t_prev = state.t
-            prev_state = state.copy()
-        else:
-            prev_req, _, t_img, _ = path[i-1]
-            prev_req : MeasurementRequest
-            t_prev : float = t_img + prev_req.duration
+#         i = path.index(path_element[0])
+#         if i == 0:
+#             t_prev = state.t
+#             prev_state = state.copy()
+#         else:
+#             prev_req, _, t_img, _ = path[i-1]
+#             prev_req : MeasurementRequest
+#             t_prev : float = t_img + prev_req.duration
 
-            if isinstance(state, SatelliteAgentState):
-                prev_state : SatelliteAgentState = state.propagate(t_prev)
+#             if isinstance(state, SatelliteAgentState):
+#                 prev_state : SatelliteAgentState = state.propagate(t_prev)
                 
-                prev_state.attitude = [
-                                        prev_state.calc_off_nadir_agle(prev_req),
-                                        0.0,
-                                        0.0
-                                    ]
-            elif isinstance(state, UAVAgentState):
-                prev_state = state.copy()
-                prev_state.t = t_prev
+#                 prev_state.attitude = [
+#                                         prev_state.calc_off_nadir_agle(prev_req),
+#                                         0.0,
+#                                         0.0
+#                                     ]
+#             elif isinstance(state, UAVAgentState):
+#                 prev_state = state.copy()
+#                 prev_state.t = t_prev
                 
-                if isinstance(prev_req, GroundPointMeasurementRequest):
-                    prev_state.pos = prev_req.pos
-                else:
-                    raise NotImplementedError
-            else:
-                raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
+#                 if isinstance(prev_req, GroundPointMeasurementRequest):
+#                     prev_state.pos = prev_req.pos
+#                 else:
+#                     raise NotImplementedError
+#             else:
+#                 raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
-        if isinstance(state, SatelliteAgentState):
-            instrument, _ = req.measurement_groups[subtask_index]
-            t_img = -1
+#         if isinstance(state, SatelliteAgentState):
+#             instrument, _ = req.measurement_groups[subtask_index]
+#             t_img = -1
 
-            for t_arrival in [t for t in self.access_times[req.id][instrument] if t >= t_prev] :
-                th_i = prev_state.attitude[0]
-                th_j = state.calc_off_nadir_agle(req)
+#             for t_arrival in [t for t in self.access_times[req.id][instrument] if t >= t_prev] :
+#                 th_i = prev_state.attitude[0]
+#                 th_j = state.calc_off_nadir_agle(req)
                 
-                if abs(th_j - th_i) / state.max_slew_rate <= t_arrival - t_prev:
-                    return t_arrival
+#                 if abs(th_j - th_i) / state.max_slew_rate <= t_arrival - t_prev:
+#                     return t_arrival
 
-            return t_img
+#             return t_img
 
-        # elif isinstance(state, UAVAgentState):
-        #     pass
+#         # elif isinstance(state, UAVAgentState):
+#         #     pass
         
-        else:
-            raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
+#         else:
+#             raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
-    def _is_bundle_converged(   self, 
-                                state : SimulationAgentState, 
-                                results : dict, 
-                                bundle : list, 
-                                prev_bundle: list
-                            ) -> bool:
-        """ Checks if the constructed bundle is ready for excution"""
-        return self._compare_bundles(bundle, prev_bundle)
+#     def _is_bundle_converged(   self, 
+#                                 state : SimulationAgentState, 
+#                                 results : dict, 
+#                                 bundle : list, 
+#                                 prev_bundle: list
+#                             ) -> bool:
+#         """ Checks if the constructed bundle is ready for excution"""
+#         return self._compare_bundles(bundle, prev_bundle)
 
-    def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
-        """ Compares two bundles. Returns true if they are equal and false if not. """
-        if len(bundle_1) == len(bundle_2):
-            for req, subtask in bundle_1:
-                if (req, subtask) not in bundle_2:            
-                    return False
-            return True
-        return False
+#     def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
+#         """ Compares two bundles. Returns true if they are equal and false if not. """
+#         if len(bundle_1) == len(bundle_2):
+#             for req, subtask in bundle_1:
+#                 if (req, subtask) not in bundle_2:            
+#                     return False
+#             return True
+#         return False
 
 
     # def calc_arrival_times(self, state : SimulationAgentState, req : MeasurementRequest, t_prev : Union[int, float]) -> float:

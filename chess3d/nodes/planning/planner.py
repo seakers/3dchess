@@ -354,7 +354,7 @@ class PlanningModule(InternalModule):
                     # there is a replanner assigned to this planner
 
                     # update replanner precepts
-                    self.replanner.update_precepts(state,
+                    self.replanner.update_precepts( state,
                                                     plan, 
                                                     completed_actions,
                                                     aborted_actions,

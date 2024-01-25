@@ -5,40 +5,131 @@ from numpy import Inf
 from pyparsing import Any
 from traitlets import Callable
 
-from nodes.orbitdata import OrbitData
+from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.science.reqs import *
 from nodes.science.utility import synergy_factor
 from nodes.planning.plan import Plan
 from nodes.planning.planners import AbstractPlanner
 from nodes.states import *
-from messages import MeasurementRequestMessage
+from messages import *
 
 class AbstractReplanner(AbstractPlanner):
     def __init__(self, 
-                 utility_func: Callable, 
+                 utility_func: Callable = None, 
                  horizon: float = np.Inf, 
                  t_next: float = np.Inf, 
                  logger: logging.Logger = None
                  ) -> None:
+        """ 
+        # Abstract Replanner 
+
+        Only schedules the breoadcast of newly generated measurement requests into the current plan
+        """
         super().__init__(utility_func, horizon, t_next, logger)
 
-class RelayReplanner(AbstractReplanner):
-    def __init__(self) -> None:
-        super().__init__(None)
-
-    def needs_planning(self, state : SimulationAgentState, plan : Plan) -> bool:
+    def needs_planning(self, *_) -> bool:
         # check if there any requests that have not been broadcasted yet
+        requests_broadcasted = [msg.req['id'] for msg in self.completed_broadcasts 
+                                if isinstance(msg, MeasurementRequestMessage)]
+        requests_to_broadcast = [req for req in self.generated_reqs
+                                    if isinstance(req, MeasurementRequest)
+                                    and req.id not in requests_broadcasted]
+
+        # replans if relays need to be sent or if requests have to be announced
+        return len(requests_to_broadcast) > 0
+    
+    def generate_plan(  self, 
+                        state : SimulationAgentState,
+                        current_plan : Plan,
+                        orbitdata : dict = None
+                    ) -> Plan:
+        # initialize list of broadcasts to be done
+        broadcasts = []       
+
+        # schedule generated measurement request broadcasts
+        ## check which requests have not been broadcasted yet
         requests_broadcasted = [msg.req['id'] for msg in self.completed_broadcasts 
                                 if isinstance(msg, MeasurementRequestMessage)]
         requests_to_broadcast = [req for req in self.generated_reqs
                                  if isinstance(req, MeasurementRequest)
                                  and req.id not in requests_broadcasted]
 
+        # Find best path for broadcasts
+        path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, state.t)
+
+        ## create a broadcast action for all unbroadcasted measurement requests
+        for req in requests_to_broadcast:        
+            # if found, create broadcast action
+            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+            broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+            
+            # check broadcast start; only add to plan if it's within the planning horizon
+            if t_start <= state.t + self.horizon:
+                broadcasts.append(broadcast_action)
+                        
+        # update plan with new broadcasts
+        current_plan.add_all(broadcasts, t=state.t)
+
+        # return scheduled broadcasts
+        return current_plan
+
+class RelayReplanner(AbstractReplanner):
+    def __init__(self) -> None:
+        super().__init__(None)
+
+    def needs_planning(self, state : SimulationAgentState, plan : Plan) -> bool:
         # replans if relays need to be sent or if requests have to be announced
-        return len(requests_to_broadcast) > 0 or len(self.pending_relays) > 0
+        return super().needs_planning(state, plan) or len(self.pending_relays) > 0
     
-    def generate_plan(self, *args) -> Plan:
-        return Plan()
+    def generate_plan(  self, 
+                        state : SimulationAgentState,
+                        current_plan : Plan,
+                        completed_actions : list,
+                        aborted_actions : list,
+                        pending_actions : list,
+                        incoming_reqs : list,
+                        generated_reqs : list,
+                        relay_messages : list,
+                        misc_messages : list,
+                        clock_config : ClockConfig,
+                        orbitdata : dict = None
+                    ) -> Plan:
+        
+        # update plan with measurement request broadcasts
+        new_plan : Plan = super().generate_plan(state, current_plan, orbitdata)
+
+        # initialize list of broadcasts to be done
+        broadcasts = []       
+
+        # schedule message relay
+        for relay in self.pending_relays:
+            raise NotImplementedError('Relay replanning not yet supported.')
+
+            # relay : SimulationMessage
+
+            # assert relay.path
+
+            # # find next destination and access time
+            # next_dst = relay.path[0]
+            
+            # # query next access interval to children nodes
+            # sender_orbitdata : OrbitData = orbitdata[state.agent_name]
+            # access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(next_dst, state.t)
+            # t_start : float = access_interval.start
+
+            # if t_start < np.Inf:
+            #     # if found, create broadcast action
+            #     broadcast_action = BroadcastMessageAction(relay.to_dict(), t_start)
+                
+            #     # check broadcast start; only add to plan if it's within the planning horizon
+            #     if t_start <= state.t + self.horizon:
+            #         broadcasts.append(broadcast_action)
+                        
+        # update plan with new broadcasts
+        new_plan.add_all(broadcasts, t=state.t)
+
+        # return scheduled broadcasts
+        return new_plan
 
 # class AbstractReplanner(ABC):
 #     """

@@ -38,18 +38,17 @@ class Plan(object):
                 raise RuntimeError("Cannot update plan: new plan is unfeasible.")
         
             # update plan
-            for action in actions:
-                self.put(action, t)
+            self.add_all(actions, t)
                 
         # add indefinite wait at the end of the plan
         t_wait_start = t if self.empty() else self.actions[-1].t_end
         if t_wait_start < np.Inf:
-            self.put(WaitForMessages(t_wait_start, np.Inf), t)
+            self.add(WaitForMessages(t_wait_start, np.Inf), t)
 
         # update plan update time
         self.t_update = t              
         
-    def put(self, action : AgentAction, t : float) -> None:
+    def add(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
 
         # check argument types
@@ -114,6 +113,11 @@ class Plan(object):
                 self.__is_feasible(self.actions)
             except ValueError as e:
                 raise RuntimeError(f"Cannot place action in plan. {e} \n {str(self)}\ncurrent plan:\n{str(self)}")
+
+    def add_all(self, actions : list, t : float) -> None:
+        """ adds a set of actions to plan """
+        for action in actions:
+            self.add(action, t)
 
     def update_action_completion(   self, 
                                     completed_actions : list, 
@@ -192,15 +196,16 @@ class Plan(object):
         return True
     
     def __str__(self) -> str:
-        out = f'\nid\taction type\tt_start\tt_end\n'
+        out = f't_plan = {self.t_update}[s]\n'
+        out += f'id\t  action type\tt_start\tt_end\n'
 
         if self.empty():
             out += 'EMPTY\n\n'
         else:
             for action in self.actions:
                 if isinstance(action, AgentAction):
-                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-
+                    out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}\n"
+        out += f'\nn actions in plan: {len(self)}\n'
         return out
 
     def get_horizon(self) -> float:
@@ -214,3 +219,6 @@ class Plan(object):
     def __iter__(self) -> list:
         for action in self.actions:
             yield action
+
+    def __len__(self) -> int:
+        return len(self.actions)
