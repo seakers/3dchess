@@ -10,7 +10,7 @@ from traitlets import Callable
 from chess3d.nodes.states import SimulationAgentState
 
 from nodes.planning.plan import Plan
-from nodes.planning.consensus.bids import Bid, UnconstrainedBid
+from nodes.planning.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults, UnconstrainedBid
 from nodes.planning.replanners import AbstractReplanner
 from nodes.science.utility import *
 from nodes.orbitdata import OrbitData
@@ -199,40 +199,44 @@ class AbstractConsensusReplanner(AbstractReplanner):
             my_bid : Bid = results[their_bid.req_id][their_bid.subtask_index]
             # self.log(f'comparing bids...\nmine:  {str(my_bid)}\ntheirs: {str(their_bid)}', level=logging.DEBUG)
 
-            broadcast_bid, changed = my_bid.compare(their_bid.to_dict(), state.t)
-            broadcast_bid : Bid; changed : bool
+            comp_result, rebroadcast = my_bid.compare(their_bid.to_dict(), state.t)
+            new_bid : Bid = my_bid.update(their_bid, comp_result, state.t)
+            changed = my_bid != new_bid
 
             # update results with modified bid
             # self.log(f'\nupdated: {my_bid}\n', level=logging.DEBUG)
-            results[their_bid.req_id][their_bid.subtask_index] = my_bid
+            results[their_bid.req_id][their_bid.subtask_index] = new_bid
                 
-            # if relevant changes were made, add to changes and rebroadcast
+            # if relevant changes were made, add to changes and rebroadcast lists respectively
             if changed or new_req:
-                changed_bid : Bid = broadcast_bid if not new_req else my_bid
+                changed_bid : Bid = their_bid if not new_req else my_bid
                 changes.append(changed_bid)
 
-            if broadcast_bid or new_req:                    
-                broadcast_bid : Bid = broadcast_bid if not new_req else my_bid
-                rebroadcasts.append(broadcast_bid)
+            if (rebroadcast is RebroadcastComparisonResults.REBROADCAST_EMPTY 
+                  or rebroadcast is RebroadcastComparisonResults.REBROADCAST_SELF):
+                rebroadcasts.append(new_bid)
+            elif rebroadcast is RebroadcastComparisonResults.REBROADCAST_OTHER:
+                rebroadcasts.append(their_bid)
 
             # if outbid for a task in the bundle, release subsequent tasks in bundle and path
             if (
-                (req, my_bid.subtask_index) in bundle 
+                (req, my_bid.subtask_index, my_bid) in bundle 
                 and my_bid.winner != state.agent_name
                 ):
-                bid_index = bundle.index((req, my_bid.subtask_index))
+                
+                bid_index = bundle.index((req, my_bid.subtask_index, my_bid))
 
                 for _ in range(bid_index, len(bundle)):
                     # remove all subsequent tasks from bundle
-                    measurement_req, subtask_index = bundle.pop(bid_index)
+                    measurement_req, subtask_index, current_bid = bundle.pop(bid_index)
                     measurement_req : MeasurementRequest
                     path.remove((measurement_req, subtask_index))
 
                     # if the agent is currently winning this bid, reset results
-                    current_bid : Bid = results[measurement_req.id][subtask_index]
-                    if current_bid.winner == self.get_parent_name():
-                        current_bid.reset(t)
-                        results[measurement_req.id][subtask_index] = current_bid
+                    current_bid : Bid
+                    if current_bid.winner == state.agent_name:
+                        results[measurement_req.id][subtask_index] \
+                            = current_bid.update(None, BidComparisonResults.RESET, state.t)
 
                         rebroadcasts.append(current_bid)
                         changes.append(current_bid)
@@ -279,7 +283,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 measurement_req : Bid
                 current_bid : Bid = results[measurement_req.id][subtask_index]
                 if current_bid.winner == self.get_parent_name():
-                    current_bid.reset(t)
+                    current_bid._reset(t)
                     results[measurement_req.id][subtask_index] = current_bid
                     
                     rebroadcasts.append(current_bid)
@@ -350,7 +354,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     path.remove((req, subtask_index))
 
                     bid : Bid = results[req.id][subtask_index]
-                    bid.reset(t)
+                    bid._reset(t)
                     results[req.id][subtask_index] = bid
 
                     rebroadcasts.append(bid)
