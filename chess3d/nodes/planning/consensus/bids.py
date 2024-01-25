@@ -11,6 +11,18 @@ class BidTypes(Enum):
     CONSTRAINED_BID = 'CONSTRAINED_BID'
     GREEDY = 'GREEDY'
 
+class BidComparisonResults(Enum):
+    UPDATE_TIME = 'update_time'
+    UPDATE = 'update'
+    LEAVE = 'leave'
+    RESET = 'reset'
+
+class RebroadcastComparisonResults(Enum):
+    REBROADCAST_SELF = 'rebroadcast_self'
+    REBROADCAST_OTHER = 'rebroadcast_other'
+    REBROADCAST_EMPTY = 'rebroadcast_empty'
+    NO_REBROADCAST = 'no_rebroadcast'
+
 class Bid(ABC):
     """
     ## Measurement Request Bid for Consensus Planners
@@ -151,252 +163,250 @@ class Bid(ABC):
         
         return abs(other.winning_bid - self.winning_bid) > 1e-3 or other.winner != self.winner
 
-    def update(self, other_dict : dict, t : Union[float, int]) -> object:
-        """
-        Compares bid with another and either updates, resets, or leaves the information contained in this bid
-        depending on predifned rules.
+    # def compare(self, other_dict : dict, t : Union[float, int]) -> object:
+    #     """
+    #     Compares bid with another and either updates, resets, or leaves the information contained in this bid
+    #     depending on predifned rules.
 
-        ### Arguments:
-            - other_dict (`dict`): dictionary representing the bid being compared to
-            - t (`float` or `dict`): time when this information is being updated
+    #     ### Arguments:
+    #         - other_dict (`dict`): dictionary representing the bid being compared to
+    #         - t (`float` or `dict`): time when this information is being updated
 
-        ### Returns:
-            - (`Bid` or `NoneType`): returns bid information if any changes were made.
-        """
-        broadcast_out, changed = self._update_rules(other_dict, t)
-        broadcast_out : Bid; changed : bool
+    #     ### Returns:
+    #         - (`Bid` or `NoneType`): returns bid if it needs to be rebroadcasted
+    #         - `bool`: indicates if any changes were made
+    #     """
+    #     broadcast_out, changed = self._update_rules(other_dict)
+    #     broadcast_out : Bid; changed : bool
 
-        if broadcast_out is not None:
-            other : Bid = Bid.from_dict(other_dict)
-            return other, changed
+    #     if broadcast_out is not None:
+    #         other : Bid = Bid.from_dict(other_dict)
+    #         return other, changed
             
-            # if other.bidder == broadcast_out.bidder:
-            #     return other, changed
-            # else:
-            #     return self, changed
-        return None, changed
+    #         # if other.bidder == broadcast_out.bidder:
+    #         #     return other, changed
+    #         # else:
+    #         #     return self, changed
+    #     return None, changed
 
     def __update_time(self, t_update : float) -> None:
         """Records the lastest time this bid was updated"""
         self.t_update = t_update
 
-    def _update_rules(self, other_dict : dict, t : Union[float, int]) -> tuple:
+    def compare(self, other_dict : dict) -> object:
         """
         Compares bid with another and either updates, resets, or leaves the information contained in this bid
         depending on the rules specified in:
-            - Whitten, Andrew K., et al. "Decentralized task allocation with coupled constraints in complex missions." Proceedings of the 2011 American Control Conference. IEEE, 2011.
+            - Luke B. Johnson, Sameera S. Ponda, Han-Lim Choi, Jonathan P. How "Asynchronous Decentralized Task Allocation for Dynamic Environments".
 
         ### Arguments:
             - other_dict (`dict`): dictionary representing the bid being compared to
-            - t (`float` or `dict`): time when this information is being updated
 
         ### Returns:
-            - rebroadcast (`TaskBid` or `NoneType`): bid information to be rebroadcasted to other agents.
-            - changed (`bool`): boolean value indicating if a change was made to this bid
+            - comparison (`BidComparisonResults`) : action to perform to this bid upon comparing this bid to the other bid
+            - rebroadcast (`RebroadcastComparisonResults`): rebroadcast action to perform after comparing this bid to the other bid
         """
         other : Bid = Bid.from_dict(other_dict)
-        prev : Bid = self.copy() 
 
         if self.req_id != other.req_id:
             # if update is for a different task, ignore update
             raise AttributeError(f'cannot update bid with information from another bid intended for another task (expected task id: {self.task_id}, given id: {other.task_id})')
-
+        
         if other.performed and not self.performed:
-            self._update_info(other, t)
-            return self, prev!=self
-
+            # update and rebroadcast
+            return BidComparisonResults.UPDATE, True
         if other.bidder == self.bidder:
             if other.t_update > self.t_update:
-                self._update_info(other,t)
-                return self, prev!=self
+                # update & rebroadcast other's bid
+                return BidComparisonResults.UPDATE, \
+                    RebroadcastComparisonResults.REBROADCAST_OTHER
             else:
-                self._leave(t)
-                return None, False
+                # leave & no-rebroadcast
+                return BidComparisonResults.UPDATE, \
+                    RebroadcastComparisonResults.NO_REBROADCAST
         
-        elif other.winner == other.NONE:
-            if self.winner == self.bidder:
-                # leave and rebroadcast
-                self._leave(t)
-                return self, False
-
-            elif self.winner == other.bidder:
-                # update and rebroadcast
-                self._update_info(other, t)
-                return other, prev!=self
-
-            elif self.winner not in [self.bidder, other.bidder, self.NONE]:
-                if other.t_update > self.t_update:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-
-            elif self.winner == self.NONE:
-                # leave and no rebroadcast
-                self._leave(t)
-                return None, False
-
+        # Total of 31 cases
         elif other.winner == other.bidder:
             if self.winner == self.bidder:
                 if other.winning_bid > self.winning_bid:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-                    
-                elif other.winning_bid == self.winning_bid:
-                    # if there's a tie, bidder with the smallest id wins
-                    if self._tie_breaker(other, self):
-                        # update and rebroadcast
-                        self._update_info(other, t)
-                        return other, prev!=self
-
-                if other.winning_bid < self.winning_bid:
-                    # update time and rebroadcast
-                    self.__update_time(t)
-                    return self, prev!=self
+                    # update & rebroadcast other's bid
+                    return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
+                
+                elif other.winning_bid == self.winning_bid and self._tie_breaker(other, self):
+                    # update & rebroadcast other's bid
+                    return BidComparisonResults.UPDATE, \
+                        RebroadcastComparisonResults.REBROADCAST_OTHER
+                
+                elif other.winning_bid < self.winning_bid:
+                    # update time & rebroadcast own bid
+                    return BidComparisonResults.UPDATE_TIME,\
+                          RebroadcastComparisonResults.REBROADCAST_SELF
 
             elif self.winner == other.bidder:
-                if abs(other.t_update - self.t_update) < 1e-6:
-                    # leave and no rebroadcast
-                    self._leave(t)
-                    return None, False
-
-                if other.t_update > self.t_update:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-
+                if abs(other.t_update - self.t_update) < 1e-3:
+                    # leave & no-rebroadcast
+                    return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.NO_REBROADCAST
+                
+                elif other.t_update > self.t_update:
+                    # update & rebroadcast other's bid
+                    return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
+                
                 elif other.t_update < self.t_update:
-                    # leave and no rebroadcast
-                    self._leave(t)
-                    return None, False
-
-            elif self.winner not in [self.bidder, other.bidder, self.NONE]:
-                if other.winning_bid > self.winning_bid and other.t_update >= self.t_update:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-
-                elif other.winning_bid < self.winning_bid and other.t_update <= self.t_update:
-                    #leave and rebroadcast
-                    self._leave(t)
-                    return self, False
-
+                    # leave & no-rebroadcast
+                    return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.NO_REBROADCAST
+                
+            elif self.winner not in [other.bidder, self.bidder, self.NONE]:
+                if other.winning_bid > self.winning_bid:
+                    if other.t_update >= self.t_update:
+                        # update & rebroadcast other's bid
+                        return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
+                    else:
+                        # update & rebroadcast other's bid
+                        return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
+                
                 elif other.winning_bid == self.winning_bid:
-                    # leave and rebroadcast
-                    self._leave(t)
-                    return self, False
+                    # leave & rebroadcast own information
+                    return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.REBROADCAST_SELF
+                
+                elif other.winning_bid < self.winning_bid:
+                    if other.t_update <= self.t_update:
+                        # leave & rebroadcast own information
+                        return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.REBROADCAST_SELF
+                    else:
+                        # update & rebroadcast other's bid
+                        return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
 
-                elif other.winning_bid < self.winning_bid and other.t_update > self.t_update:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-                    
-                elif other.winning_bid > self.winning_bid and other.t_update < self.t_update:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-
-            elif self.winner == self.NONE:
-                # update and rebroadcast
-                self._update_info(other, t)
-                return other, prev!=self
+            elif self.winner is self.NONE:
+                # update & rebroadcast other's bid
+                return BidComparisonResults.UPDATE,\
+                    RebroadcastComparisonResults.REBROADCAST_OTHER
 
         elif other.winner == self.bidder:
-            if self.winner == self.NONE:
-                # leave and rebroadcast with current update time
-                self.__update_time(t)
-                return self, prev!=self
-
-            elif self.winner == self.bidder:
-                if abs(other.t_update - self.t_update) < 1e-6:
-                    # leave and no rebroadcast
-                    self._leave(t)
-                    return None, False
-                
-            elif self.winner == other.bidder and other.bidder != self.bidder:
-                # reset and rebroadcast with current update time
-                self.reset(t)
-                return self, prev!=self
-
-            elif self.winner not in [self.bidder, other.bidder, self.NONE]:
-                # leave and rebroadcast
-                self._leave(t)
-                return self, False
-
-        elif other.winner not in [self.bidder, other.bidder, self.NONE]:
             if self.winner == self.bidder:
-                if other.winning_bid > self.winning_bid:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-
-                elif other.winning_bid == self.winning_bid:
-                    # if there's a tie, bidder with the smallest id wins
-                    if self._tie_breaker(other, self):
-                        # update and rebroadcast
-                        self._update_info(other, t)
-                        return other, prev!=self
-
-                elif other.winning_bid < self.winning_bid:
-                    # update time and rebroadcast
-                    self.__update_time(t)
-                    return other, prev!=self
+                if abs(other.t_update - self.t_update) < 1e-3:
+                    # leave & no-rebroadcast
+                    return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.NO_REBROADCAST
 
             elif self.winner == other.bidder:
-                # update and rebroadcast
-                self._update_info(other, t)
-                return other, prev!=self
+                # reset & rebroadcast empty bid with current time
+                return BidComparisonResults.RESET,\
+                    RebroadcastComparisonResults.REBROADCAST_EMPTY
 
+            elif self.winner not in [other.bidder, self.bidder, self.NONE]:
+                # leave & rebroadcast own information
+                return BidComparisonResults.LEAVE,\
+                    RebroadcastComparisonResults.REBROADCAST_SELF
+
+            elif self.winner is self.NONE:
+                # leave & rebroadcast emtpy bid with current time
+                return BidComparisonResults.LEAVE,\
+                    RebroadcastComparisonResults.REBROADCAST_EMPTY
+
+        elif other.winner not in [other.bidder, self.bidder, self.NONE]:
+            if self.winner == self.bidder:
+                if other.winning_bid > self.winning_bid:
+                    # update & rebroadcast other's bid
+                    return BidComparisonResults.UPDATE,\
+                        RebroadcastComparisonResults.REBROADCAST_OTHER
+                
+                elif other.winning_bid == self.winning_bid and self._tie_breaker(other, self): 
+                    # update & rebroadcast other's bid
+                    return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
+                
+                elif other.winning_bid < self.winning_bid:
+                    # update time & rebroadcast own bid
+                    return BidComparisonResults.UPDATE_TIME,\
+                          RebroadcastComparisonResults.REBROADCAST_SELF
+                    
+            elif self.winner == other.bidder:
+                # update & rebroadcast other's bid
+                return BidComparisonResults.UPDATE,\
+                    RebroadcastComparisonResults.REBROADCAST_OTHER
+            
             elif self.winner == other.winner:
-                if other.t_update > self.t_update:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-                    
-                elif abs(other.t_update - self.t_update) < 1e-6:
-                    # leave and no rebroadcast
-                    self._leave(t)
-                    return None, False
-
+                if abs(other.t_update - self.t_update) < 1e-3:
+                    # leave & no-rebroadcast
+                    return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.NO_REBROADCAST
+                
+                elif other.t_update > self.t_update:
+                    # update & rebroadcast other's bid
+                    return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
+                
                 elif other.t_update < self.t_update:
-                    # leave and rebroadcast
-                    self._leave(t)
-                    return self, False
+                    # leave & no-rebroadcast
+                    return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.NO_REBROADCAST
+                
+            elif self.winner not in [other.bidder, self.bidder, other.winner, self.NONE]:
+                if other.winning_bid > self.winning_bid:
+                    if other.t_update >= self.t_update:
+                        # update & rebroadcast other's bid
+                        return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
 
-            elif self.winner not in [self.bidder, other.bidder, other.winner, self.NONE]:
-                if other.winning_bid > self.winning_bid and other.t_update >= self.t_update:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
+                    elif other.t_update < self.t_update:
+                        # leave & rebroadcast own bid
+                        return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.REBROADCAST_SELF
 
-                elif other.winning_bid < self.winning_bid and other.t_update <= self.t_update:
-                    # leave and rebroadcast
-                    self._leave(t)
-                    return self, False
+                elif other.winning_bid < self.winning_bid:
+                    if other.t_update <= self.t_update:
+                        # leave & rebroadcast own bid
+                        return BidComparisonResults.LEAVE,\
+                          RebroadcastComparisonResults.REBROADCAST_SELF
                     
-                elif other.winning_bid < self.winning_bid and other.t_update > self.t_update:
-                    # update and rebroadcast
-                    self._update_info(other, t)
-                    return other, prev!=self
-                    
-                elif other.winning_bid > self.winning_bid and other.t_update < self.t_update:
-                    # leave and rebroadcast
-                    self._leave(t)
-                    return self, prev!=self
+                    elif other.t_update > self.t_update:
+                        # update & rebroadcast other's bid
+                        return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
+                
+            elif self.winner is self.NONE:
+                # update & rebroadcast other's bid
+                return BidComparisonResults.UPDATE,\
+                    RebroadcastComparisonResults.REBROADCAST_OTHER
 
-            elif self.winner == self.NONE:
-                # update and rebroadcast
-                self._update_info(other, t)
-                return other, prev!=self
-        
-        return None, False
+        elif other.winner is self.NONE:
+            if self.winner == self.bidder:
+                # leave & rebroadcast own bid
+                return BidComparisonResults.LEAVE,\
+                    RebroadcastComparisonResults.REBROADCAST_SELF
 
-    def _update_info(self,
-                        other, 
-                        t : float,
-                        *args,
-                        **kwargs
-                    ) -> None:
+            elif self.winner == other.bidder:
+                # update & rebroadcast other's bid
+                return BidComparisonResults.UPDATE,\
+                    RebroadcastComparisonResults.REBROADCAST_OTHER
+
+            elif self.winner not in [other.bidder, self.bidder, self.NONE]:
+                if other.t_update > self.t_update:
+                    # update & rebroadcast other's bid
+                    return BidComparisonResults.UPDATE,\
+                          RebroadcastComparisonResults.REBROADCAST_OTHER
+
+            elif self.winner is self.NONE:
+                # leave & no-rebroadcast
+                return BidComparisonResults.LEAVE,\
+                    RebroadcastComparisonResults.NO_REBROADCAST
+            
+        return BidComparisonResults.LEAVE,\
+            RebroadcastComparisonResults.NO_REBROADCAST
+
+    def update_info(self,
+                    other, 
+                    t : float
+                ) -> None:
         """
         Updates all of the variable bid information
 
@@ -427,7 +437,7 @@ class Bid(ABC):
         self.t_img = -1
         self.t_update = t_update
 
-    def _leave(self, _, **__) -> None:
+    def leave(self, _, **__) -> None:
         """
         Leaves bid as is (used for algorithm readibility).
 
@@ -766,7 +776,7 @@ class ConstrainedBid(Bid):
         # reset violation timer
         self.__reset_violation_timer(t_update)
 
-    def _update_info(self, 
+    def update_info(self, 
                     other, 
                     t : Union[float, int]
                     ) -> None:
@@ -781,7 +791,7 @@ class ConstrainedBid(Bid):
             # if update is from an older time than this bid, ignore update
             raise ValueError(f'attempting to update bid with outdated information.')
 
-        super()._update_info(other)
+        super().update_info(other)
         self.t_update = t
         self.performed = other.performed
         self.t_violation = other.t_violation
@@ -1167,19 +1177,19 @@ class GreedyBid(Bid):
         """
         return self.winner != GreedyBid.NONE
 
-    def update(self, other_dict: dict, t_update: Union[float, int]) -> object:
+    def compare(self, other_dict: dict, t_update: Union[float, int]) -> object:
         other = GreedyBid(**other_dict)
 
         if (    other.winning_bid > self.winning_bid
             or (other.winning_bid == self.winning_bid and self._tie_breaker(self, other))
             ):
-            self._update_info(other)
+            self.update_info(other)
             
         self.t_update = t_update
         return self
 
-    def _update_info(self, other : Bid, t_update: Union[float, int]) -> None:
-        super()._update_info(other)
+    def update_info(self, other : Bid, t_update: Union[float, int]) -> None:
+        super().update_info(other)
         self.t_update = t_update
         
 
