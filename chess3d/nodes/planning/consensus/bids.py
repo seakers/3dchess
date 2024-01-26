@@ -16,6 +16,7 @@ class BidComparisonResults(Enum):
     UPDATE = 'update'
     LEAVE = 'leave'
     RESET = 'reset'
+    COMPLETED = 'completed'
 
 class RebroadcastComparisonResults(Enum):
     REBROADCAST_SELF = 'rebroadcast_self'
@@ -385,10 +386,12 @@ class Bid(ABC):
             new_bid.__update_time(t)
         elif comp_result is BidComparisonResults.UPDATE:
             new_bid._update_info(other, t)
+        elif comp_result is BidComparisonResults.RESET:
+            new_bid._reset(t)
         elif comp_result is BidComparisonResults.LEAVE:
-            new_bid.reset(t)
-        elif comp_result is BidComparisonResults.LEAVE:
-            new_bid._leave()
+            new_bid._leave(t)
+        elif comp_result is BidComparisonResults.COMPLETED:
+            new_bid._perform(t)
         else:
             raise ValueError(f'cannot perform update of type `{comp_result}`')
         
@@ -417,9 +420,9 @@ class Bid(ABC):
             self.own_bid = other.own_bid
 
         self.t_update = t
-        self.performed = other.performed
+        self.performed = other.performed if not self.performed else True # Check if this hold true for all values
 
-    def reset(self, t_update) -> None:
+    def _reset(self, t_update) -> None:
         """
         Resets the values of this bid while keeping track of lates update time
         """
@@ -430,12 +433,17 @@ class Bid(ABC):
 
     def _leave(self, _, **__) -> None:
         """
-        Leaves bid as is (used for algorithm readibility).
+        Leaves bid as is (used for code readibility).
 
         ### Arguments:
             - t_update (`float` or `int`): latest time when this bid was updated
         """
         return
+    
+    def _perform(self, t_update : float) -> None:
+        """ Indicates that this action has been performed """
+        self.performed = True
+        self.t_update = t_update
 
     def _tie_breaker(self, bid1 : object, bid2 : object) -> object:
         """

@@ -32,6 +32,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.path = []
         self.results = []
         self.bids_to_rebroadcasts = []
+        self.completed_measurements = []
 
         # set paremeters
         self.max_bundle_size = max_bundle_size
@@ -66,14 +67,18 @@ class AbstractConsensusReplanner(AbstractReplanner):
         bids_received = self._compile_bids( incoming_reqs, 
                                             generated_reqs, 
                                             misc_messages)
-        
+
+        # compile completed measurements
+        completed_measurements = self._compile_completed_measurements(self, completed_actions)
+
         # perform consesus phase
         self.results, self.bundle, \
             self.path, _, self.bids_to_rebroadcasts = self.consensus_phase( state,
                                                                             self.results,
                                                                             self.bundle, 
                                                                             self.path, 
-                                                                            bids_received)
+                                                                            bids_received,
+                                                                            completed_measurements)
 
     def _compile_bids(self, 
                       state : SimulationAgentState, 
@@ -104,6 +109,23 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ Creages bids from given measurement request """
         pass
 
+    def _compile_completed_measurements(self, 
+                                        completed_actions : list, 
+                                        misc_messages : list) -> list:
+        """ Reads incoming precepts and compiles all measurement actions performed by the parent agent or other agents """
+        # checks measurements performed by the parent agent
+        completed_measurements = [action for action in completed_actions
+                                  if isinstance(action, MeasurementAction)]
+        
+        # checks measuremetns performed by other agents
+        completed_measurements.extend([action_from_dict(msg.measurement_action) for msg in misc_messages
+                                       if isinstance(msg, MeasurementPerformedMessage)])
+        
+        assert all([action.status == action.COMPLETED and isinstance(action, MeasurementAction)
+                    for action in completed_measurements])
+
+        return completed_measurements
+
     def needs_replanning(self, state : SimulationAgentState, plan : Plan) -> bool:   
         if not self.is_converged():
             x = 1
@@ -130,43 +152,183 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                 bundle : list, 
                                 path : list, 
                                 bids_received : list,
+                                completed_measurements : list,
                                 level : int = logging.DEBUG
                             ) -> None:
         """
         Evaluates incoming bids and updates current results and bundle
         """
-        changes = []
-        rebroadcasts = []
         
+        # check if tasks were performed
+        results, bundle, path, \
+            done_changes, done_rebroadcasts = self.check_request_completion(state, results, bundle, path, completed_measurements, level)
+        
+        # check if tasks expired
+        results, bundle, path, \
+            exp_changes, exp_rebroadcasts = self.check_request_end_time(results, bundle, path, state.t, level)
+
         # compare bids with incoming messages
         results, bundle, path, \
-            comp_changes, comp_rebroadcasts = self.compare_results(state, results, bundle, path, bids_received, level)
-        changes.extend(comp_changes)
-        rebroadcasts.extend(comp_rebroadcasts)
+            comp_changes, comp_rebroadcasts = self.compare_bids(state, results, bundle, path, bids_received, level)
         
-        # check for expired tasks
-        results, bundle, path, \
-            exp_changes, exp_rebroadcasts = self.check_request_end_time(results, bundle, path, t, level)
-        changes.extend(exp_changes)
-        rebroadcasts.extend(exp_rebroadcasts)
 
-        # check for already performed tasks
-        results, bundle, path, \
-            done_changes, done_rebroadcasts = self.check_request_completion(results, bundle, path, t, level)
+        # compile changes
+        changes = []
+        changes.extend(comp_changes)
+        changes.extend(exp_changes)
         changes.extend(done_changes)
+
+        # compile rebroadcasts
+        rebroadcasts = []
+        rebroadcasts.extend(comp_rebroadcasts)
+        rebroadcasts.extend(exp_rebroadcasts)
         rebroadcasts.extend(done_rebroadcasts)
 
         return results, bundle, path, changes, rebroadcasts
 
+    
     @runtime_tracker
-    def compare_results(
-                        self, 
-                        state : SimulationAgentState, 
-                        results : dict, 
-                        bundle : list, 
-                        path : list, 
-                        bids_received : list,
-                        level=logging.DEBUG
+    def check_request_completion(self, 
+                                 state : SimulationAgentState,
+                                 results : dict, 
+                                 bundle : list, 
+                                 path : list, 
+                                 completed_measurements : list,
+                                 level=logging.DEBUG
+                                 ) -> tuple:
+        """
+        Checks if a subtask or a mutually exclusive subtask has already been performed 
+
+        ### Returns
+            - results
+            - bundle
+            - path
+            - changes
+        """
+        # initialize bundle changes and rebroadcast lists
+        changes = []
+        rebroadcasts = []
+
+        # update results using incoming messages
+        for action in completed_measurements:
+            action : MeasurementAction
+
+            # set bid as completed           
+            completed_req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+            bid : Bid = results[completed_req.id][action.subtask_index]
+            results[completed_req.id][action.subtask_index] \
+                  = bid.update(None, BidComparisonResults.COMPLETED, state.t)
+
+            # add to changes list
+            changes.append(bid)
+
+        # check for task completion in bundle
+        for task_to_remove in [req, subtask_index, current_bid 
+                               for req, subtask_index, current_bid in bundle
+                               if results[req.id][subtask_index].performed]:
+            ## remove all completed tasks from bundle
+            self.bundle.remove(task_to_remove)
+        
+        # check if any mutually exclusive tasks have been performed
+        task_to_remove = None
+        for req, subtask_index, current_bid in bundle:
+            req : MeasurementRequest
+            
+            ## check for all known bids related to the relevant measurement request
+            for bid_index in range(len(results[req.id])):
+                bid : Bid = results[req.id][bid_index]
+                if (bid.performed                                               # the other bid was performed
+                    and req.dependency_matrix[subtask_index][bid_index] < 0):   # is mutually exclusive with the bid at hand
+                    
+                    ## a mutually exclusive bid was performed
+                    task_to_remove = (req, subtask_index, current_bid)
+                    break   
+
+            if task_to_remove is not None:
+                break
+        
+        if task_to_remove is not None:
+            ## a mutually exclusive bid was performed; 
+            ## remove mutually exclusive task from bundle and all subsequent tasks
+            expired_index : int = bundle.index(task_to_remove)
+            for _ in range(expired_index, len(bundle)):
+                # remove from bundle
+                measurement_req, subtask_index, current_bid = bundle.pop(expired_index)
+
+                # remove from path
+                path.remove((measurement_req, subtask_index, current_bid))
+
+                # reset results
+                current_bid : Bid; measurement_req : MeasurementRequest
+                reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
+                results[measurement_req.id][subtask_index] = reset_bid
+
+                # add to changes and rebroadcast lists
+                changes.append(reset_bid)
+                rebroadcasts.append(reset_bid)
+
+        return results, bundle, path, changes, rebroadcasts
+
+    @runtime_tracker
+    def check_request_end_time(self, 
+                               state : SimulationAgentState,
+                               results : dict, 
+                               bundle : list, 
+                               path : list, 
+                               level=logging.DEBUG
+                               ) -> tuple:
+        """
+        Checks if measurement requests have expired and can no longer be performed
+
+        ### Returns a tuple with elements:
+            - results
+            - bundle
+            - path
+            - changes
+            - rebroadcasts 
+        """
+        # initialize bundle changes and rebroadcast lists
+        changes = []
+        rebroadcasts = []
+
+        # release tasks from bundle if t_end has passed
+        task_to_remove = None
+        for req, subtask_index, bid in bundle:
+            req : MeasurementRequest; bid : Bid
+            if req.t_end - req.duration < state.t and not bid.performed:
+                task_to_remove = (req, subtask_index, bid)
+                break
+
+        # if task has expired, release from bundle and path with all subsequent tasks
+        if task_to_remove is not None:
+            expired_index = bundle.index(task_to_remove)
+            for bundle_index in range(expired_index, len(bundle)):
+                # remove from bundle
+                measurement_req, subtask_index, current_bid = bundle.pop(expired_index)
+
+                # remove from path
+                path.remove((measurement_req, subtask_index, current_bid))
+
+                # reset results
+                current_bid : Bid; measurement_req : MeasurementRequest
+                if bundle_index > expired_index:
+                    reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, t)
+                    results[measurement_req.id][subtask_index] = reset_bid
+
+                    rebroadcasts.append(reset_bid)
+                    changes.append(reset_bid)
+
+        return results, bundle, path, changes, rebroadcasts
+
+    @runtime_tracker
+    def compare_bids(
+                    self, 
+                    state : SimulationAgentState, 
+                    results : dict, 
+                    bundle : list, 
+                    path : list, 
+                    bids_received : list,
+                    level=logging.DEBUG
                     ) -> tuple:
         """
         Compares the existing results with any incoming task bids and updates the bundle accordingly
@@ -184,10 +346,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
             their_bid : Bid            
 
             # check bids are for new requests
-            new_req = their_bid.req_id not in results
+            is_new_req : bool = their_bid.req_id not in results
 
-            req = MeasurementRequest.from_dict(their_bid.req)
-            if new_req:
+            req : MeasurementRequest = MeasurementRequest.from_dict(their_bid.req)
+            if is_new_req:
                 # was not aware of this request; add to results as a blank bid
                 results[req.id] = self._generate_bids_from_request(req, state)
 
@@ -197,193 +359,56 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                     
             # compare bids
             my_bid : Bid = results[their_bid.req_id][their_bid.subtask_index]
-            # self.log(f'comparing bids...\nmine:  {str(my_bid)}\ntheirs: {str(their_bid)}', level=logging.DEBUG)
+            # self.log(f'comparing bids...\nmine:  {str(my_bid)}\ntheirs: {str(their_bid)}', level=logging.DEBUG) #DEBUG PRINTOUT
 
-            comp_result, rebroadcast = my_bid.compare(their_bid.to_dict(), state.t)
-            new_bid : Bid = my_bid.update(their_bid, comp_result, state.t)
-            changed = my_bid != new_bid
+            comp_result, rebroadcast_result = my_bid.compare(their_bid.to_dict(), state.t)
+            updated_bid : Bid = my_bid.update(their_bid, comp_result, state.t)
+            bid_changed = my_bid != updated_bid
 
             # update results with modified bid
-            # self.log(f'\nupdated: {my_bid}\n', level=logging.DEBUG)
-            results[their_bid.req_id][their_bid.subtask_index] = new_bid
+            # self.log(f'\nupdated: {my_bid}\n', level=logging.DEBUG) #DEBUG PRINTOUT
+            results[their_bid.req_id][their_bid.subtask_index] = updated_bid
                 
             # if relevant changes were made, add to changes and rebroadcast lists respectively
-            if changed or new_req:
-                changed_bid : Bid = their_bid if not new_req else my_bid
-                changes.append(changed_bid)
+            if bid_changed or is_new_req:
+                # changed_bid : Bid = updated_bid if not is_new_req else my_bid
+                # changes.append(changed_bid)
+                changes.append(updated_bid)
 
-            if (rebroadcast is RebroadcastComparisonResults.REBROADCAST_EMPTY 
-                  or rebroadcast is RebroadcastComparisonResults.REBROADCAST_SELF):
-                rebroadcasts.append(new_bid)
-            elif rebroadcast is RebroadcastComparisonResults.REBROADCAST_OTHER:
+            if (rebroadcast_result is RebroadcastComparisonResults.REBROADCAST_EMPTY 
+                  or rebroadcast_result is RebroadcastComparisonResults.REBROADCAST_SELF):
+                rebroadcasts.append(updated_bid)
+            elif rebroadcast_result is RebroadcastComparisonResults.REBROADCAST_OTHER:
                 rebroadcasts.append(their_bid)
 
-            # if outbid for a task in the bundle, release subsequent tasks in bundle and path
+            # if outbid for a bids in the bundle; release outbid and subsequent bids in bundle and path
             if (
                 (req, my_bid.subtask_index, my_bid) in bundle 
-                and my_bid.winner != state.agent_name
+                and updated_bid.winner != state.agent_name
                 ):
 
-                bid_index = bundle.index((req, my_bid.subtask_index, my_bid))
+                outbid_index = bundle.index((req, my_bid.subtask_index, my_bid))
 
-                for _ in range(bid_index, len(bundle)):
-                    # remove all subsequent tasks from bundle
-                    measurement_req, subtask_index, current_bid = bundle.pop(bid_index)
-                    measurement_req : MeasurementRequest
-                    path.remove((measurement_req, subtask_index))
+                # remove all subsequent bids
+                for bundle_index in range(outbid_index, len(bundle)):
+                    # remove from bundle
+                    measurement_req, subtask_index, current_bid = bundle.pop(outbid_index)
 
-                    # if the agent is currently winning this bid, reset results
-                    current_bid : Bid
-                    if current_bid.winner == state.agent_name:
-                        results[measurement_req.id][subtask_index] \
-                            = current_bid.update(None, BidComparisonResults.RESET, state.t)
+                    # remove from path
+                    path.remove((measurement_req, subtask_index, current_bid))
 
-                        rebroadcasts.append(current_bid)
-                        changes.append(current_bid)
+                    # reset results
+                    current_bid : Bid; measurement_req : MeasurementRequest
+                    if bundle_index > outbid_index:
+                        reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
+                        results[measurement_req.id][subtask_index] = reset_bid
+
+                        rebroadcasts.append(reset_bid)
+                        changes.append(reset_bid)
         
         return results, bundle, path, changes, rebroadcasts
 
-    # @runtime_tracker
-    # def check_request_end_time(self, 
-    #                            results : dict, 
-    #                            bundle : list, 
-    #                            path : list, 
-    #                            t : Union[int, float], 
-    #                            level=logging.DEBUG
-    #                            ) -> tuple:
-    #     """
-    #     Checks if measurement requests have expired and can no longer be performed
-
-    #     ### Returns
-    #         - results
-    #         - bundle
-    #         - path
-    #         - changes
-    #     """
-    #     changes = []
-    #     rebroadcasts = []
-    #     # release tasks from bundle if t_end has passed
-    #     task_to_remove = None
-    #     for req, subtask_index in bundle:
-    #         req : MeasurementRequest
-    #         if req.t_end - req.duration < t:
-    #             task_to_remove = (req, subtask_index)
-    #             break
-
-    #     if task_to_remove is not None:
-    #         bundle_index = bundle.index(task_to_remove)
-    #         for _ in range(bundle_index, len(bundle)):
-    #             # remove all subsequent bids from bundle
-    #             measurement_req, subtask_index = bundle.pop(bundle_index)
-
-    #             # remove bids from path
-    #             path.remove((measurement_req, subtask_index))
-
-    #             # if the agent is currently winning this bid, reset results
-    #             measurement_req : Bid
-    #             current_bid : Bid = results[measurement_req.id][subtask_index]
-    #             if current_bid.winner == self.get_parent_name():
-    #                 current_bid._reset(t)
-    #                 results[measurement_req.id][subtask_index] = current_bid
-                    
-    #                 rebroadcasts.append(current_bid)
-    #                 changes.append(current_bid)
-
-    #     return results, bundle, path, changes, rebroadcasts
-
-    # @runtime_tracker
-    # def check_request_completion(self, 
-    #                              results : dict, 
-    #                              bundle : list, 
-    #                              path : list, 
-    #                              t : Union[int, float], 
-    #                              level=logging.DEBUG
-    #                              ) -> tuple:
-    #     """
-    #     Checks if a subtask or a mutually exclusive subtask has already been performed 
-
-    #     ### Returns
-    #         - results
-    #         - bundle
-    #         - path
-    #         - changes
-    #     """
-
-    #     changes = []
-    #     rebroadcasts = []
-    #     req_to_remove = None
-    #     req_to_reset = None
-
-    #     for req, subtask_index in bundle:
-    #         req : MeasurementRequest
-
-    #         # check if bid has been performed 
-    #         subtask_bid : Bid = results[req.id][subtask_index]
-    #         if self.is_bid_completed(req, subtask_bid, t):
-    #             req_to_remove = (req, subtask_index)
-    #             break
-
-    #         # check if a mutually exclusive bid has been performed
-    #         for subtask_bid in results[req.id]:
-    #             subtask_bid : Bid
-
-    #             bids : list = results[req.id]
-    #             bid_index = bids.index(subtask_bid)
-    #             bid : Bid = bids[bid_index]
-
-    #             if self.is_bid_completed(req, bid, t) and req.dependency_matrix[subtask_index][bid_index] < 0:
-    #                 req_to_remove = (req, subtask_index)
-    #                 req_to_reset = (req, subtask_index) 
-    #                 break   
-
-    #         if req_to_remove is not None:
-    #             break
-
-    #     if req_to_remove is not None:
-    #         if req_to_reset is not None:
-    #             bundle_index = bundle.index(req_to_remove)
-                
-    #             # level=logging.WARNING
-    #             # self.log_results('PRELIMINARY PREVIOUS PERFORMER CHECKED RESULTS', results, level)
-    #             # self.log_task_sequence('bundle', bundle, level)
-    #             # self.log_task_sequence('path', path, level)
-
-    #             for _ in range(bundle_index, len(bundle)):
-    #                 # remove task from bundle and path
-    #                 req, subtask_index = bundle.pop(bundle_index)
-    #                 path.remove((req, subtask_index))
-
-    #                 bid : Bid = results[req.id][subtask_index]
-    #                 bid._reset(t)
-    #                 results[req.id][subtask_index] = bid
-
-    #                 rebroadcasts.append(bid)
-    #                 changes.append(bid)
-
-    #                 # self.log_results('PRELIMINARY PREVIOUS PERFORMER CHECKED RESULTS', results, level)
-    #                 # self.log_task_sequence('bundle', bundle, level)
-    #                 # self.log_task_sequence('path', path, level)
-    #         else: 
-    #             # remove performed subtask from bundle
-    #             if req_to_remove in bundle:
-    #                 bundle_index = bundle.index(req_to_remove)
-    #                 req, subtask_index = bundle.pop(bundle_index)
-
-    #             # remove performed subtask from path
-    #             req, subtask_index = req_to_remove
-    #             path_elements = [item for item in path if item[0] == req and item[1] == subtask_index]
-    #             path.remove(path_elements[0])
-
-    #             # set bid as completed
-    #             bid : Bid = results[req.id][subtask_index]
-    #             bid.performed = True
-    #             results[req.id][subtask_index] = bid
-
-    #     return results, bundle, path, changes, rebroadcasts
-
-    # def is_bid_completed(self, req : MeasurementRequest, bid : Bid, t : float) -> bool:
-    #     """ Checks if a bid has already been completed or not """
-    #     return (bid.t_img >= 0.0 and bid.t_img + req.duration < t) or bid.performed
+    
 
     """
     -----------------------
