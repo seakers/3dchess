@@ -50,6 +50,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         misc_messages: list, 
                         orbitdata: dict = None
                         ) -> None:
+
+        # update preplan
+        #TODO ensure check guarantees that this only fires ONLY when a new preplan is generated
+        if state.t == current_plan.t_update: 
+            pass
+
         
         # update other precepts
         super().update_precepts(state, 
@@ -159,7 +165,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         clock_config: ClockConfig, 
                         orbitdata: OrbitData = None
                     ) -> list:
-        
+
         pass
         # plan : Plan = super().generate_plan(state, current_plan, orbitdata)
 
