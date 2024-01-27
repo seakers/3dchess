@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import asyncio
 from enum import Enum
-from typing import Union
+from typing import Any, Union
 import numpy as np
 
 from nodes.science.reqs import GroundPointMeasurementRequest, MeasurementRequest
@@ -168,7 +168,7 @@ class Bid(ABC):
         """Records the lastest time this bid was updated"""
         self.t_update = t_update
 
-    def compare(self, other_dict : dict) -> object:
+    def compare(self, other : Any) -> object:
         """
         Compares bid with another and either updates, resets, or leaves the information contained in this bid
         depending on the rules specified in:
@@ -181,7 +181,15 @@ class Bid(ABC):
             - comparison (`BidComparisonResults`) : action to perform to this bid upon comparing this bid to the other bid
             - rebroadcast (`RebroadcastComparisonResults`): rebroadcast action to perform after comparing this bid to the other bid
         """
-        other : Bid = Bid.from_dict(other_dict)
+        if isinstance(other, dict):
+            try:
+                other : Bid = Bid.from_dict(other)
+            except Exception as e:
+                raise ValueError(f'Cannot compare bid. {e}')
+        elif isinstance(other, Bid):
+            pass
+        else:
+            raise ValueError(f'Cannot compare bid to an object of type `{type(other)}`')
 
         if self.req_id != other.req_id:
             # if update is for a different task, ignore update

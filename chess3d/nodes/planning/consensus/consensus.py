@@ -147,6 +147,23 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ Checks if consensus has been reached and plans are coverged """
         pass
 
+    def generate_plan(  self, 
+                        state: SimulationAgentState,
+                        current_plan: Plan, 
+                        performed_actions: list, 
+                        incoming_reqs: list, 
+                        generated_reqs: list, 
+                        misc_messages: list, 
+                        t_plan: float, 
+                        t_next: float, 
+                        clock_config: ClockConfig, 
+                        orbitdata: OrbitData = None
+                    ) -> list:
+        
+        pass
+        # plan : Plan = super().generate_plan(state, current_plan, orbitdata)
+
+
     """
     -----------------------
         CONSENSUS PHASE
@@ -266,7 +283,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 # remove from path
                 path.remove((measurement_req, subtask_index, current_bid))
 
-                # reset results
+                # reset bid results
                 current_bid : Bid; measurement_req : MeasurementRequest
                 reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
                 results[measurement_req.id][subtask_index] = reset_bid
@@ -310,21 +327,20 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # if task has expired, release from bundle and path with all subsequent tasks
         if task_to_remove is not None:
             expired_index = bundle.index(task_to_remove)
-            for bundle_index in range(expired_index, len(bundle)):
+            for _ in range(expired_index, len(bundle)):
                 # remove from bundle
                 measurement_req, subtask_index, current_bid = bundle.pop(expired_index)
 
                 # remove from path
                 path.remove((measurement_req, subtask_index, current_bid))
 
-                # reset results
+                # reset bid results
                 current_bid : Bid; measurement_req : MeasurementRequest
-                if bundle_index > expired_index:
-                    reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, t)
-                    results[measurement_req.id][subtask_index] = reset_bid
+                reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, t)
+                results[measurement_req.id][subtask_index] = reset_bid
 
-                    rebroadcasts.append(reset_bid)
-                    changes.append(reset_bid)
+                rebroadcasts.append(reset_bid)
+                changes.append(reset_bid)
 
         return results, bundle, path, changes, rebroadcasts
 
@@ -369,7 +385,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             my_bid : Bid = results[their_bid.req_id][their_bid.subtask_index]
             # self.log(f'comparing bids...\nmine:  {str(my_bid)}\ntheirs: {str(their_bid)}', level=logging.DEBUG) #DEBUG PRINTOUT
 
-            comp_result, rebroadcast_result = my_bid.compare(their_bid.to_dict(), state.t)
+            comp_result, rebroadcast_result = my_bid.compare(their_bid, state.t)
             updated_bid : Bid = my_bid.update(their_bid, comp_result, state.t)
             bid_changed = my_bid != updated_bid
 
@@ -405,7 +421,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     # remove from path
                     path.remove((measurement_req, subtask_index, current_bid))
 
-                    # reset results
+                    # reset bid results
                     current_bid : Bid; measurement_req : MeasurementRequest
                     if bundle_index > outbid_index:
                         reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
@@ -415,8 +431,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         changes.append(reset_bid)
         
         return results, bundle, path, changes, rebroadcasts
-
-    
 
     """
     -----------------------
@@ -763,18 +777,18 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # return len(self.rebroadcasts) > 0 or not self.converged
 
-#     def replan( self, 
-#                 state: SimulationAgentState,
-#                 original_plan: list, 
-#                 performed_actions: list, 
-#                 incoming_reqs: list, 
-#                 generated_reqs: list, 
-#                 misc_messages: list, 
-#                 t_plan: float, 
-#                 t_next: float, 
-#                 clock_config: ClockConfig, 
-#                 orbitdata: OrbitData = None
-#             ) -> list:
+    # def replan( self, 
+    #             state: SimulationAgentState,
+    #             original_plan: list, 
+    #             performed_actions: list, 
+    #             incoming_reqs: list, 
+    #             generated_reqs: list, 
+    #             misc_messages: list, 
+    #             t_plan: float, 
+    #             t_next: float, 
+    #             clock_config: ClockConfig, 
+    #             orbitdata: OrbitData = None
+    #         ) -> list:
 #         # reset convergence if needed
 #         # self.converged = False 
 
