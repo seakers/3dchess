@@ -21,7 +21,7 @@ from messages import *
 class AbstractConsensusReplanner(AbstractReplanner):
     def __init__(self, 
                  utility_func: Callable, 
-                 max_bundle_size : int = 3,
+                 max_bundle_size : int = 1,
                  dt_converge : float = 0.0,
                  logger: logging.Logger = None
                  ) -> None:
@@ -88,13 +88,18 @@ class AbstractConsensusReplanner(AbstractReplanner):
                       ) -> list:
         """ Reads incoming messages and requests and checks if bids were received """
         # get bids from misc messages
-        bids = [Bid.from_dict(msg.bid) for msg in misc_messages if isinstance(msg, MeasurementBidMessage)]
+        bids = [Bid.from_dict(msg.bid) 
+                for msg in misc_messages 
+                if isinstance(msg, MeasurementBidMessage)]
         
         # check for new requests from incoming requests
-        new_reqs = [req for req in incoming_reqs if req.id not in self.results]
+        new_reqs = [req for req in incoming_reqs 
+                    if req.id not in self.results]
         
         #check for new requests from generated requests
-        new_reqs.extend([req for req in generated_reqs if req.id not in self.results and req not in new_reqs])
+        new_reqs.extend([req for req in generated_reqs 
+                         if req.id not in self.results 
+                         and req not in new_reqs])
         
         # generate bids for new requests
         for new_req in new_reqs:
@@ -118,10 +123,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                   if isinstance(action, MeasurementAction)]
         
         # checks measuremetns performed by other agents
-        completed_measurements.extend([action_from_dict(msg.measurement_action) for msg in misc_messages
+        completed_measurements.extend([action_from_dict(msg.measurement_action) 
+                                       for msg in misc_messages
                                        if isinstance(msg, MeasurementPerformedMessage)])
         
-        assert all([action.status == action.COMPLETED and isinstance(action, MeasurementAction)
+        assert all([action.status == action.COMPLETED 
+                    and isinstance(action, MeasurementAction)
                     for action in completed_measurements])
 
         return completed_measurements
@@ -214,7 +221,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
             action : MeasurementAction
 
             # set bid as completed           
-            completed_req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+            completed_req : MeasurementRequest \
+                = MeasurementRequest.from_dict(action.measurement_req)
             bid : Bid = results[completed_req.id][action.subtask_index]
             results[completed_req.id][action.subtask_index] \
                   = bid.update(None, BidComparisonResults.COMPLETED, state.t)
