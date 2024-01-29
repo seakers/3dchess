@@ -870,208 +870,41 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         return sum([u for _,_,_,u in path])  
 
-###################################
 
-# class AbstractConsensusReplanner(AbstractReplanner):
-#     def __init__(   self,
-#                     parent_name : str,
-#                     utility_func : Callable[[], Any],
-#                     max_bundle_size : int = 3,
-#                     dt_converge : float = 0.0
-#                     ) -> None:
-#         super().__init__(utility_func)
+    """
+    --------------------
+    LOGGING AND TEARDOWN
+    --------------------
+    """
+    @abstractmethod
+    def log_results(self, dsc : str, results : dict, level=logging.DEBUG) -> None:
+        """
+        Logs current results at a given time for debugging purposes
 
-#         self.parent_name = parent_name
-#         self.max_bundle_size = max_bundle_size
-#         self.dt_converge = dt_converge
-
-#         self.bundle = []
-#         self.path = []
-#         self.results = {}
-
-#         self.pre_plan = []
-#         self.pre_path = []
-
-#         self.rebroadcasts = []
-#         self.converged = True
-
-
-#     @runtime_tracker
-#     def needs_replanning(self, 
-#                         state: SimulationAgentState, 
-#                         current_plan: list, 
-#                         performed_actions: list, 
-#                         incoming_reqs: list, 
-#                         generated_reqs: list, 
-#                         misc_messages: list, 
-#                         t_plan: float, 
-#                         t_next: float, 
-#                         planning_horizon=np.Inf, 
-#                         orbitdata: OrbitData = None
-#                     ) -> bool:
-
-        # # update list of known requests
-        # new_reqs : list = self._update_known_requests(  current_plan, 
-        #                                                 incoming_reqs,
-        #                                                 generated_reqs)
-
-        # # update access times for known requests
-        # self._update_access_times(  state, 
-        #                             new_reqs, 
-        #                             performed_actions,
-        #                             t_plan,
-        #                             t_next,
-        #                             planning_horizon,
-        #                             orbitdata)        
-
-        # # compile received bids
-        # bids_received = self._compile_bids( incoming_reqs, 
-        #                                     generated_reqs, 
-        #                                     misc_messages, 
-        #                                     state.t)
-        
-        # # perform consesus phase
-        # self.results, self.bundle, self.path, _, self.rebroadcasts = self.consensus_phase(self.results, self.bundle, self.path, state.t, bids_received)
-
-        # # replan if relevant changes have been made to the bundle
-        # if not self.converged:
-        #     x = 1
-        # if len(self.rebroadcasts) > 0:
-        #     x = 1
-
-        # return len(self.rebroadcasts) > 0 or not self.converged
-
-    # def replan( self, 
-    #             state: SimulationAgentState,
-    #             original_plan: list, 
-    #             performed_actions: list, 
-    #             incoming_reqs: list, 
-    #             generated_reqs: list, 
-    #             misc_messages: list, 
-    #             t_plan: float, 
-    #             t_next: float, 
-    #             clock_config: ClockConfig, 
-    #             orbitdata: OrbitData = None
-    #         ) -> list:
-        # # reset convergence if needed
-        # # self.converged = False 
-
-        # # save previous bundle for future convergence checks
-        # _, prev_bundle = self._save_previous_bundle(self.results, self.bundle)
-        
-        # # perform bundle-building phase
-        # self.results, self.bundle, self.path, planner_changes \
-        #         = self.planning_phase(  state, 
-        #                                 original_plan,
-        #                                 self.results,
-        #                                 self.bundle,
-        #                                 t_plan,
-        #                                 t_next
-        #         )       
-
-        # # chose modified plan if planning has converged
-        # self.converged = self._is_bundle_converged(state, self.results, self.bundle, prev_bundle)
-        # # plan = [action for action in original_plan] if not self.converged else self._plan_from_path(state, self.path, state.t, clock_config)
-        # if self.converged:
-        #     dt_converge = 0.0 
-        # else:
-        #     dt_converge = min([self.results[req.id][subtask_index].dt_converge 
-        #                         + self.results[req.id][subtask_index].t_update 
-        #                         for req, subtask_index in self.bundle
-        #                         ]
-        #                     ) - state.t
-        # plan = self._plan_from_path(state, self.path, state.t, clock_config, dt_converge)
-        
-        # # add broadcast changes to plan
-        # broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
-        # for bid in broadcast_bids:
-        #     bid : Bid
-        #     msg = MeasurementBidMessage(self.parent_name, self.parent_name, bid.to_dict())
-        #     broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
-        #     plan.insert(0, broadcast_action)
-            
-        # # reset broadcast list
-        # self.rebroadcasts = []
-        
-        # # return plan
-        # print('Observations in Original Path:')
-        # original_obs_actions = [action for action in original_plan if isinstance(action, MeasurementAction)]
-        # for action in original_obs_actions:
-        #     print(action.measurement_req['id'].split('-')[0], action.subtask_index)
-        # print(len(original_obs_actions))
-            
-        # print('Observations in Modified Path:')
-        # obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
-        # for action in obs_actions:
-        #     print(action.measurement_req['id'].split('-')[0], action.subtask_index)
-        # print(len(obs_actions))
-
-        # if len(original_obs_actions) != len(obs_actions):
-        #     x = 1
-
-        # return plan
-
-#     def _save_previous_bundle(self, results : dict, bundle : list) -> tuple:
-#         """ creates a copy of the current bids of a given bundle  """
-#         prev_results = {}
-#         prev_bundle = []
-#         for req, subtask_index in bundle:
-#             req : MeasurementRequest; subtask_index : int
-#             prev_bundle.append((req, subtask_index))
-            
-#             if req.id not in prev_results:
-#                 prev_results[req.id] = [None for _ in results[req.id]]
-
-#             prev_results[req.id][subtask_index] = results[req.id][subtask_index].copy()
-        
-#         return prev_results, prev_bundle
-
-#     @abstractmethod
-#     def _is_bundle_converged(   self, 
-#                                 state : SimulationAgentState, 
-#                                 results : dict, 
-#                                 bundle : list, 
-#                                 prev_bundle: list
-#                             ) -> bool:
-#         """ Checks if the constructed bundle is ready for excution"""
-#         pass
+        ### Argumnents:
+            - dsc (`str`): description of what is to be logged
+            - results (`dict`): results to be logged
+            - level (`int`): logging level to be used
+        """
+        pass
     
+    def log_task_sequence(self, dsc : str, sequence : list, level=logging.DEBUG) -> None:
+        """
+        Logs a sequence of tasks at a given time for debugging purposes
 
-        
-#     """
-#     --------------------
-#     LOGGING AND TEARDOWN
-#     --------------------
-#     """
-#     # @abstractmethod
-#     # def log_results(self, dsc : str, results : dict, level=logging.DEBUG) -> None:
-#     #     """
-#     #     Logs current results at a given time for debugging purposes
-
-#     #     ### Argumnents:
-#     #         - dsc (`str`): description of what is to be logged
-#     #         - results (`dict`): results to be logged
-#     #         - level (`int`): logging level to be used
-#     #     """
-#     #     pass
-    
-#     def log_task_sequence(self, dsc : str, sequence : list, level=logging.DEBUG) -> None:
-#         """
-#         Logs a sequence of tasks at a given time for debugging purposes
-
-#         ### Argumnents:
-#             - dsc (`str`): description of what is to be logged
-#             - sequence (`list`): list of tasks to be logged
-#             - level (`int`): logging level to be used
-#         """
-#         out = f'\n{dsc} = ['
-#         for req, subtask_index in sequence:
-#             req : MeasurementRequest
-#             subtask_index : int
-#             split_id = req.id.split('-')
+        ### Argumnents:
+            - dsc (`str`): description of what is to be logged
+            - sequence (`list`): list of tasks to be logged
+            - level (`int`): logging level to be used
+        """
+        out = f'\n{dsc} = ['
+        for req, subtask_index in sequence:
+            req : MeasurementRequest
+            subtask_index : int
+            split_id = req.id.split('-')
             
-#             if sequence.index((req, subtask_index)) > 0:
-#                 out += ', '
-#             out += f'({split_id[0]}, {subtask_index})'
-#         out += ']\n'
-#         print(out)    
+            if sequence.index((req, subtask_index)) > 0:
+                out += ', '
+            out += f'({split_id[0]}, {subtask_index})'
+        out += ']\n'
+        print(out) 
