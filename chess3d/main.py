@@ -13,7 +13,7 @@ import concurrent.futures
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
 from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
-from nodes.planning.consensus.acbba import ACBBAReplanner
+# from nodes.planning.consensus.acbba import ACBBAReplanner
 from nodes.planning.preplanners import *
 from nodes.planning.replanners import *
 from manager import SimulationManager

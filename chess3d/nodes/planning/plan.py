@@ -1,18 +1,19 @@
+from abc import ABC, abstractmethod
 import uuid
 import numpy as np
+from chess3d.nodes.actions import AgentAction
 from nodes.actions import *
 
 
-class Plan(object):
+class Plan(ABC):
     """ Describes a plan to be performed by an agent """
     
     def __init__(   self, 
                     *actions,  
-                    # horizon : float = np.Inf,
                     t : float = 0.0
                 ) -> None:
         # initialize values
-        self.t_update = t
+        self.t = t
         self.actions = []
         
         # load preplan
@@ -46,7 +47,7 @@ class Plan(object):
             self.add(WaitForMessages(t_wait_start, np.Inf), t)
 
         # update plan update time
-        self.t_update = t              
+        self.t = t              
         
     def add(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
@@ -106,7 +107,7 @@ class Plan(object):
             
         finally:
             # update latest update time
-            self.t_update = t  
+            self.t = t  
 
             try:
                 # check plan feasibility
@@ -167,6 +168,10 @@ class Plan(object):
 
         return plan_out    
 
+    @abstractmethod
+    def copy(self) -> object:
+        """ Copy contructor. Creates a deep copy of this oject. """
+
     def __is_feasible(self, plan : list) -> bool:
         """ Checks if the current plan can be performed by the agent """
 
@@ -195,8 +200,18 @@ class Plan(object):
 
         return True
     
+    def __eq__(self, __value: object) -> bool:
+        if len(self.actions) != len(__value.actions):
+            return False
+        
+        for action in self.actions:
+            if action not in __value.actions:
+                return False
+            
+        return self.t == __value.t_update
+
     def __str__(self) -> str:
-        out = f't_plan = {self.t_update}[s]\n'
+        out = f't_plan = {self.t}[s]\n'
         out += f'id\t  action type\tt_start\tt_end\n'
 
         if self.empty():
@@ -222,3 +237,49 @@ class Plan(object):
 
     def __len__(self) -> int:
         return len(self.actions)
+    
+
+class Preplan(Plan):
+    def __init__(self, 
+                 *actions, 
+                 t: float = 0,
+                 horizon : float = np.Inf,
+                 t_next : float = np.Inf
+                 ) -> None:
+        self.horizon = horizon
+        self.t_next = t_next
+
+        super().__init__(*actions, t=t)
+
+    def copy(self) -> object:
+        return Preplan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
+    
+    def add(self, action: AgentAction, t: float) -> None:
+        if self.t + self.horizon < action.t_end:
+            raise ValueError(f'cannot add action scheduled to be done past the planning horizon of this plan')
+
+        super().add(action, t)
+
+class Replan(Plan):
+    def __init__(self, 
+                 *actions, 
+                 t: float = 0,
+                 t_next : float = np.Inf
+                 ) -> None:
+        self.t_next = t_next
+
+        super().__init__(*actions, t=t)
+
+    def add(self, action: AgentAction, t: float) -> None:
+        if self.t_next < action.t_end:
+            raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
+
+        super().add(action, t)
+
+    def copy(self) -> object:
+        return Replan(self.actions, t=self.t, t_next=self.t_next)
+    
+    def from_preplan(preplan : Preplan, *actions, t : float) -> object:
+        """ creates a modified plan from an existing preplan and a set of new actions to be added to said plan """
+        return Replan(preplan.actions, *actions, t=t, t_next=preplan.t_next)
+    

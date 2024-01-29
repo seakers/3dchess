@@ -8,7 +8,7 @@ from traitlets import Callable
 from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.science.reqs import *
 from nodes.science.utility import synergy_factor
-from nodes.planning.plan import Plan
+from nodes.planning.plan import Plan, Replan
 from nodes.planning.planners import AbstractPlanner
 from nodes.states import *
 from messages import *
@@ -68,10 +68,10 @@ class AbstractReplanner(AbstractPlanner):
                 broadcasts.append(broadcast_action)
                         
         # update plan with new broadcasts
-        current_plan.add_all(broadcasts, t=state.t)
+        new_plan = Replan.from_preplan(current_plan, broadcasts, t=state.t)
 
         # return scheduled broadcasts
-        return current_plan
+        return new_plan
 
 class RelayReplanner(AbstractReplanner):
     def __init__(self) -> None:
@@ -96,7 +96,7 @@ class RelayReplanner(AbstractReplanner):
                     ) -> Plan:
         
         # update plan with measurement request broadcasts
-        new_plan : Plan = super().generate_plan(state, current_plan, orbitdata)
+        new_plan : Replan = super().generate_plan(state, current_plan, orbitdata)
 
         # initialize list of broadcasts to be done
         broadcasts = []       

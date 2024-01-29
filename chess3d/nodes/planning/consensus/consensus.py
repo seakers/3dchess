@@ -9,7 +9,7 @@ from dmas.clocks import *
 from traitlets import Callable
 from chess3d.nodes.states import SimulationAgentState
 
-from nodes.planning.plan import Plan
+from nodes.planning.plan import Plan, Preplan, Replan
 from nodes.planning.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults, UnconstrainedBid
 from nodes.planning.replanners import AbstractReplanner
 from nodes.science.utility import *
@@ -33,6 +33,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.results = []
         self.bids_to_rebroadcasts = []
         self.completed_measurements = []
+        self.preplan : Preplan = Preplan(t=-1.0)
 
         # set paremeters
         self.max_bundle_size = max_bundle_size
@@ -53,9 +54,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # update preplan
         #TODO ensure check guarantees that this only fires ONLY when a new preplan is generated
-        if state.t == current_plan.t_update: 
-            pass
-
+        if state.t == current_plan.t and isinstance(current_plan, Preplan): 
+            self.preplan = current_plan.copy() 
         
         # update other precepts
         super().update_precepts(state, 
@@ -154,21 +154,151 @@ class AbstractConsensusReplanner(AbstractReplanner):
         pass
 
     def generate_plan(  self, 
-                        state: SimulationAgentState,
-                        current_plan: Plan, 
-                        performed_actions: list, 
-                        incoming_reqs: list, 
-                        generated_reqs: list, 
-                        misc_messages: list, 
-                        t_plan: float, 
-                        t_next: float, 
-                        clock_config: ClockConfig, 
-                        orbitdata: OrbitData = None
+                        state : SimulationAgentState,
+                        current_plan : Plan,
+                        completed_actions : list,
+                        aborted_actions : list,
+                        pending_actions : list,
+                        incoming_reqs : list,
+                        generated_reqs : list,
+                        relay_messages : list,
+                        misc_messages : list,
+                        clock_config : ClockConfig,
+                        orbitdata : dict = None
                     ) -> list:
 
-        pass
-        # plan : Plan = super().generate_plan(state, current_plan, orbitdata)
+        # bidding phase
+        self.results, self.bid, self.path, _, planner_changes = \
+            self.planning_phase(state, self.results, self.bundle, self.path)
+        
+        # check convergence
+        if self.is_converged():
+            plan : Replan = self._plan_from_path(state, self.path, clock_config, orbitdata)
+        else:
+            plan : Preplan = self.preplan
 
+        # broadcast changes to plan
+        broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
+        for bid in broadcast_bids:
+            bid : Bid
+            msg = MeasurementBidMessage(state.agent_name, state.agent_name, bid.to_dict())
+            broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
+            plan.add(broadcast_action)
+            
+        # reset broadcast list
+        self.rebroadcasts = []
+
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        original_obs_actions = [action for action in self.preplan if isinstance(action, MeasurementAction)]
+        for action in original_obs_actions:
+            print(action.measurement_req['id'].split('-')[0], action.subtask_index)
+        print(len(original_obs_actions))
+            
+        print('Observations in Modified Path:')
+        obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
+        for action in obs_actions:
+            print(action.measurement_req['id'].split('-')[0], action.subtask_index)
+        print(len(obs_actions))
+
+        if len(original_obs_actions) != len(obs_actions):
+            x = 1
+        # -------------------------------
+
+        # output plan
+        return plan
+        
+    def _plan_from_path(self, 
+                        state : SimulationAgentState, 
+                        path : list,
+                        clock_config: ClockConfig, 
+                        orbitdata: OrbitData = None
+                        ) -> Replan:
+        """ creates a new plan to be performed by the agent based on the results of the planning phase """
+
+        # schedule measurements
+        measurements : list = self._compile_measurements(path)
+
+        # schedule broadcasts to be perfomed
+        broadcasts : list = [action for action in self.preplan.actions if isinstance(action, BroadcastMessageAction)]
+
+        # generate maneuver and travel actions from measurements
+        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+
+        return Replan(measurements, broadcasts, maneuvers, t=state.t, t_next=self.preplan.t_next)
+        
+    def _compile_measurements(self, path : list) -> list:
+        """ compiles and merges lists of measurement actions to be performed by the agent """
+        # get list of preplanned measurements
+        preplanned_measurements = [action for action in self.plan.actions if isinstance(action, MeasurementAction)]
+        preplanned_measurements.sort(key=lambda a : a.t_start)
+
+        # get list of new measurements to add to plan
+        new_measurements = []
+        for req, subtask_index, bid in path:
+            req : MeasurementRequest
+            subtask_index : int
+            bid : Bid
+
+            instrument_name, _ = req.measurement_groups[subtask_index]
+            new_measurements.append(MeasurementAction(req.to_dict(), subtask_index, instrument_name, bid.winning_bid, bid.t_img, bid.t_img+req.duration))    
+        new_measurements.sort(key=lambda a : a.t_start)
+
+        # merge measurements 
+        measurements = [action for action in preplanned_measurements]
+        for new_measurement in new_measurements:
+            new_measurement : MeasurementAction
+            i = -1
+            replace = False
+            insert = False
+            
+            for measurement in measurements:
+                measurement : MeasurementAction
+                
+                replace = (measurement.t_start < new_measurement.t_end <= measurement.t_end
+                            or measurement.t_start <= new_measurement.t_start < measurement.t_end)
+                insert = new_measurement.t_end <= measurement.t_start
+                
+                if replace or insert:
+                    i = measurements.index(measurement)
+                    break
+
+            if replace:
+                measurements[i] = new_measurement
+            elif insert:
+                measurements.insert(i, new_measurement)
+            else:
+                measurements.append(new_measurement)
+
+        return measurements
+    
+    def _compile_broadcast_bids(self, planner_changes : list) -> list:        
+        """ Compiles changes in bids from consensus and planning phase and returns a list of the most updated bids """
+        broadcast_bids = {}
+
+        bids = [bid for bid in self.bids_to_rebroadcasts]
+        bids.extend(planner_changes)
+        for bid in bids:
+            bid : Bid
+
+            if bid.req_id not in broadcast_bids:
+                req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
+                broadcast_bids[bid.req_id] = [None for _ in req.dependency_matrix]
+
+            current_bid : Bid = broadcast_bids[bid.req_id][bid.subtask_index]
+            
+            if (current_bid is None 
+                or current_bid in planner_changes
+                or bid.bidder == current_bid.bidder
+                or bid.t_update >= current_bid.t_update
+                ):
+                broadcast_bids[bid.req_id][bid.subtask_index] = bid.copy()       
+
+        out = []
+        for req_id in broadcast_bids:
+            out.extend([bid for bid in broadcast_bids[req_id] if bid is not None])
+            
+        return out
 
     """
     -----------------------
@@ -443,99 +573,97 @@ class AbstractConsensusReplanner(AbstractReplanner):
         PLANNING PHASE
     -----------------------
     """
-    # @runtime_tracker
-    # def planning_phase( self, 
-    #                     state : SimulationAgentState, 
-    #                     current_plan : list,
-    #                     results : dict, 
-    #                     bundle : list,
-    #                     t_plan : float,
-    #                     t_next : float
-    #                 ) -> tuple:
-    #     """
-    #     Creates a modified plan from all known requests and current plan
-    #     """
-    #     changes = []
+    @runtime_tracker
+    def planning_phase( self, 
+                        state : SimulationAgentState, 
+                        results : dict, 
+                        bundle : list,
+                        path : list
+                    ) -> tuple:
+        """
+        Creates a modified plan from all known requests and current plan
+        """
+        changes = []
 
-    #     path = []
-    #     for measurement_action in [action for action in current_plan if isinstance(action, MeasurementAction)]:
-    #         measurement_action : MeasurementAction
-    #         req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
-    #         path.append((req, measurement_action.subtask_index, measurement_action.t_start, measurement_action.u_exp))
+        path = []
+        for measurement_action in [action for action in current_plan if isinstance(action, MeasurementAction)]:
+            measurement_action : MeasurementAction
+            req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
+            path.append((req, measurement_action.subtask_index, measurement_action.t_start, measurement_action.u_exp))
 
-    #     if len(bundle) >= self.max_bundle_size:
-    #         # Bundle is full; cannot modify 
-    #         return results, bundle, path, changes
+        if len(bundle) >= self.max_bundle_size:
+            # Bundle is full; cannot modify 
+            return results, bundle, path, changes
 
-    #     available_reqs : list = self._get_available_requests(state, results, bundle, path)
+        available_reqs : list = self._get_available_requests(state, results, bundle, path)
 
-    #     current_bids = {req.id : {} for req, _ in bundle}
-    #     for req, subtask_index in bundle:
-    #         req : MeasurementRequest
-    #         current_bid : UnconstrainedBid = results[req.id][subtask_index]
-    #         current_bids[req.id][subtask_index] = current_bid.copy()
+        current_bids = {req.id : {} for req, _ in bundle}
+        for req, subtask_index in bundle:
+            req : MeasurementRequest
+            current_bid : UnconstrainedBid = results[req.id][subtask_index]
+            current_bids[req.id][subtask_index] = current_bid.copy()
 
-    #     max_path = [(req, subtask_index, t_img, u_exp) for req, subtask_index, t_img, u_exp in path]; 
-    #     max_path_bids = {req.id : {} for req, _, _, _ in path}
-    #     for req, subtask_index, _, _ in path:
-    #         req : MeasurementRequest
-    #         max_path_bids[req.id][subtask_index] = results[req.id][subtask_index]
+        max_path = [(req, subtask_index, t_img, u_exp) for req, subtask_index, t_img, u_exp in path]; 
+        max_path_bids = {req.id : {} for req, _, _, _ in path}
+        for req, subtask_index, _, _ in path:
+            req : MeasurementRequest
+            max_path_bids[req.id][subtask_index] = results[req.id][subtask_index]
 
-    #     max_req = -1
-    #     while ( len(available_reqs) > 0                     # there are available tasks to be bid on
-    #             and len(bundle) < self.max_bundle_size      # there is space in the bundle
-    #             and max_req is not None                     # there is a request that maximizes utility
-    #         ):   
-    #          # find next best task to put in bundle (greedy)
-    #         max_req = None 
-    #         max_subtask = None
-    #         for req, subtask_index in available_reqs:
+        max_req = -1
+        while ( len(available_reqs) > 0                     # there are available tasks to be bid on
+                and len(bundle) < self.max_bundle_size      # there is space in the bundle
+                and max_req is not None                     # there is a request that maximizes utility
+            ):   
+             # find next best task to put in bundle (greedy)
+            max_req = None 
+            max_subtask = None
+            for req, subtask_index in available_reqs:
                 
-    #             # calculate best bid and path for a given request and subtask
-    #             projected_path, projected_path_utility \
-    #                  = self.calc_path_bid(  state, 
-    #                                         results, 
-    #                                         path, 
-    #                                         req, 
-    #                                         subtask_index)
+                # calculate best bid and path for a given request and subtask
+                projected_path, projected_path_utility \
+                     = self.calc_path_bid(  state, 
+                                            results, 
+                                            path, 
+                                            req, 
+                                            subtask_index)
 
-    #             # check if path was found
-    #             if projected_path is None:
-    #                 continue
+                # check if path was found
+                if projected_path is None:
+                    continue
 
-    #             # compare to maximum task
-    #             if (
-    #                 max_req is None or projected_path_utility > max_path_utility
-    #                 ):
+                # compare to maximum task
+                if (
+                    max_req is None or projected_path_utility > max_path_utility
+                    ):
 
-    #                 # check for cualition and mutex satisfaction                    
-    #                 max_path = projected_path
-    #                 max_path_utility = projected_path_utility
-    #                 max_req = req
-    #                 max_subtask = subtask_index
+                    # check for cualition and mutex satisfaction                    
+                    max_path = projected_path
+                    max_path_utility = projected_path_utility
+                    max_req = req
+                    max_subtask = subtask_index
             
-    #         if max_req is not None:
-    #             # max bid found! place task with the best bid in the bundle and the path
-    #             bundle.append((max_req, max_subtask))
-    #             path = max_path
+            if max_req is not None:
+                # max bid found! place task with the best bid in the bundle and the path
+                bundle.append((max_req, max_subtask))
+                path = max_path
 
-    #             # update results
-    #             for req, subtask_index in bundle:
-    #                 req : MeasurementRequest
-    #                 subtask_index : int
+                # update results
+                for req, subtask_index in bundle:
+                    req : MeasurementRequest
+                    subtask_index : int
                     
-    #                 path_elements = [item for item in path if item[0] == req and item[1] == subtask_index]
-    #                 _, _, t_img, u_exp = path_elements[0]
+                    path_elements = [item for item in path if item[0] == req and item[1] == subtask_index]
+                    _, _, t_img, u_exp = path_elements[0]
 
-    #                 old_bid : Bid = results[req.id][subtask_index]
-    #                 new_bid : Bid = old_bid.copy()
-    #                 new_bid.set_bid(u_exp, t_img, state.t)
+                    old_bid : Bid = results[req.id][subtask_index]
+                    new_bid : Bid = old_bid.copy()
+                    new_bid.set_bid(u_exp, t_img, state.t)
 
-    #                 if old_bid != new_bid:
-    #                     changes.append(new_bid.copy())
-    #                     results[req.id][subtask_index] = new_bid
+                    if old_bid != new_bid:
+                        changes.append(new_bid.copy())
+                        results[req.id][subtask_index] = new_bid
 
-    #     return results, bundle, path, changes 
+        return results, bundle, path, changes 
     
     # def _get_available_requests(self, 
     #                             state : SimulationAgentState, 
@@ -795,63 +923,63 @@ class AbstractConsensusReplanner(AbstractReplanner):
     #             clock_config: ClockConfig, 
     #             orbitdata: OrbitData = None
     #         ) -> list:
-#         # reset convergence if needed
-#         # self.converged = False 
+        # # reset convergence if needed
+        # # self.converged = False 
 
-#         # save previous bundle for future convergence checks
-#         _, prev_bundle = self._save_previous_bundle(self.results, self.bundle)
+        # # save previous bundle for future convergence checks
+        # _, prev_bundle = self._save_previous_bundle(self.results, self.bundle)
         
-#         # perform bundle-building phase
-#         self.results, self.bundle, self.path, planner_changes \
-#                 = self.planning_phase(  state, 
-#                                         original_plan,
-#                                         self.results,
-#                                         self.bundle,
-#                                         t_plan,
-#                                         t_next
-#                 )       
+        # # perform bundle-building phase
+        # self.results, self.bundle, self.path, planner_changes \
+        #         = self.planning_phase(  state, 
+        #                                 original_plan,
+        #                                 self.results,
+        #                                 self.bundle,
+        #                                 t_plan,
+        #                                 t_next
+        #         )       
 
-#         # chose modified plan if planning has converged
-#         self.converged = self._is_bundle_converged(state, self.results, self.bundle, prev_bundle)
-#         # plan = [action for action in original_plan] if not self.converged else self._plan_from_path(state, self.path, state.t, clock_config)
-#         if self.converged:
-#             dt_converge = 0.0 
-#         else:
-#             dt_converge = min([self.results[req.id][subtask_index].dt_converge 
-#                                 + self.results[req.id][subtask_index].t_update 
-#                                 for req, subtask_index in self.bundle
-#                                 ]
-#                             ) - state.t
-#         plan = self._plan_from_path(state, self.path, state.t, clock_config, dt_converge)
+        # # chose modified plan if planning has converged
+        # self.converged = self._is_bundle_converged(state, self.results, self.bundle, prev_bundle)
+        # # plan = [action for action in original_plan] if not self.converged else self._plan_from_path(state, self.path, state.t, clock_config)
+        # if self.converged:
+        #     dt_converge = 0.0 
+        # else:
+        #     dt_converge = min([self.results[req.id][subtask_index].dt_converge 
+        #                         + self.results[req.id][subtask_index].t_update 
+        #                         for req, subtask_index in self.bundle
+        #                         ]
+        #                     ) - state.t
+        # plan = self._plan_from_path(state, self.path, state.t, clock_config, dt_converge)
         
-#         # add broadcast changes to plan
-#         broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
-#         for bid in broadcast_bids:
-#             bid : Bid
-#             msg = MeasurementBidMessage(self.parent_name, self.parent_name, bid.to_dict())
-#             broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
-#             plan.insert(0, broadcast_action)
+        # # add broadcast changes to plan
+        # broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
+        # for bid in broadcast_bids:
+        #     bid : Bid
+        #     msg = MeasurementBidMessage(self.parent_name, self.parent_name, bid.to_dict())
+        #     broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
+        #     plan.insert(0, broadcast_action)
             
-#         # reset broadcast list
-#         self.rebroadcasts = []
+        # # reset broadcast list
+        # self.rebroadcasts = []
         
-#         # return plan
-#         # print('Observations in Original Path:')
-#         # original_obs_actions = [action for action in original_plan if isinstance(action, MeasurementAction)]
-#         # for action in original_obs_actions:
-#         #     print(action.measurement_req['id'].split('-')[0], action.subtask_index)
-#         # print(len(original_obs_actions))
+        # # return plan
+        # print('Observations in Original Path:')
+        # original_obs_actions = [action for action in original_plan if isinstance(action, MeasurementAction)]
+        # for action in original_obs_actions:
+        #     print(action.measurement_req['id'].split('-')[0], action.subtask_index)
+        # print(len(original_obs_actions))
             
-#         # print('Observations in Modified Path:')
-#         # obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
-#         # for action in obs_actions:
-#         #     print(action.measurement_req['id'].split('-')[0], action.subtask_index)
-#         # print(len(obs_actions))
+        # print('Observations in Modified Path:')
+        # obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
+        # for action in obs_actions:
+        #     print(action.measurement_req['id'].split('-')[0], action.subtask_index)
+        # print(len(obs_actions))
 
-#         # if len(original_obs_actions) != len(obs_actions):
-#         #     x = 1
+        # if len(original_obs_actions) != len(obs_actions):
+        #     x = 1
 
-#         return plan
+        # return plan
 
 #     def _save_previous_bundle(self, results : dict, bundle : list) -> tuple:
 #         """ creates a copy of the current bids of a given bundle  """
@@ -877,32 +1005,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
 #                             ) -> bool:
 #         """ Checks if the constructed bundle is ready for excution"""
 #         pass
-
-#     def _compile_broadcast_bids(self, planner_changes : list) -> list:        
-#         """ Compiles changes in bids from consensus and planning phase and returns a list of the most updated bids """
-#         broadcast_bids = {}
-
-#         planner_changes.extend([bid for bid in self.rebroadcasts])
-#         for new_bid in planner_changes:
-#             new_bid : Bid
-
-#             if new_bid.req_id not in broadcast_bids:
-#                 req : MeasurementRequest = MeasurementRequest.from_dict(new_bid.req)
-#                 broadcast_bids[new_bid.req_id] = [None for _ in req.dependency_matrix]
-
-#             current_bid : Bid = broadcast_bids[new_bid.req_id][new_bid.subtask_index]
-            
-#             if (current_bid is None 
-#                 or new_bid.bidder == current_bid.bidder
-#                 or new_bid.t_update >= current_bid.t_update
-#                 ):
-#                 broadcast_bids[new_bid.req_id][new_bid.subtask_index] = new_bid.copy()       
-
-#         out = []
-#         for req_id in broadcast_bids:
-#             out.extend([bid for bid in broadcast_bids[req_id] if bid is not None])
-            
-#         return out
     
 
         

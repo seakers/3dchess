@@ -7,7 +7,7 @@ from dmas.clocks import *
 
 from messages import *
 
-from nodes.planning.plan import Plan
+from nodes.planning.plan import Plan, Preplan
 from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
 from nodes.actions import *
@@ -55,7 +55,7 @@ class AbstractPreplanner(AbstractPlanner):
         """ Determines whether a new plan needs to be initalized """    
 
         # check if plan needs to be inialized
-        return (current_plan.t_update < 0     # simulation just started
+        return (current_plan.t < 0     # simulation just started
                 or state.t >= self.t_next)    # planning horizon has been reached
 
     @runtime_tracker
@@ -86,7 +86,7 @@ class AbstractPreplanner(AbstractPlanner):
         replan : list = self.__schedule_periodic_replan(state, measurements, maneuvers)
 
         # generate plan from actions
-        self.plan = Plan(measurements, maneuvers, broadcasts, replan, t=state.t)
+        self.plan = Preplan(measurements, maneuvers, broadcasts, replan, t=state.t, horizon=self.horizon, t_next=state.t+self.period)
 
         # update planning period time
         self.t_plan = state.t
@@ -98,69 +98,6 @@ class AbstractPreplanner(AbstractPlanner):
     @abstractmethod
     def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig) -> list:
         """ Creates a list of measurement actions to be performed by the agent """
-
-    @runtime_tracker
-    def _schedule_broadcasts(self, 
-                             state : SimulationAgentState, 
-                             measurements : list, 
-                             orbitdata : dict
-                            ) -> list:
-        """ 
-        Schedules any broadcasts to be done. 
-        
-        By default it schedules the broadcast of any newly generated requests
-        and the relay of any incoming relay messages
-        """
-        # initialize list of broadcasts to be done
-        broadcasts = []       
-
-        # schedule generated measurement request broadcasts
-        ## check which requests have not been broadcasted yet
-        requests_broadcasted = [msg.req['id'] for msg in self.completed_broadcasts 
-                                if isinstance(msg, MeasurementRequestMessage)]
-        requests_to_broadcast = [req for req in self.generated_reqs
-                                 if isinstance(req, MeasurementRequest)
-                                 and req.id not in requests_broadcasted]
-
-        # Find best path for broadcasts
-        path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, state.t)
-
-        ## create a broadcast action for all unbroadcasted measurement requests
-        for req in requests_to_broadcast:        
-            # if found, create broadcast action
-            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-            broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-            
-            # check broadcast start; only add to plan if it's within the planning horizon
-            if t_start <= state.t + self.horizon:
-                broadcasts.append(broadcast_action)
-
-        # schedule message relay
-        for relay in self.pending_relays:
-            raise NotImplementedError('Relay preplanning not yet supported.')
-
-            relay : SimulationMessage
-
-            assert relay.path
-
-            # find next destination and access time
-            next_dst = relay.path[0]
-            
-            # query next access interval to children nodes
-            sender_orbitdata : OrbitData = orbitdata[state.agent_name]
-            access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(next_dst, state.t)
-            t_start : float = access_interval.start
-
-            if t_start < np.Inf:
-                # if found, create broadcast action
-                broadcast_action = BroadcastMessageAction(relay.to_dict(), t_start)
-                
-                # check broadcast start; only add to plan if it's within the planning horizon
-                if t_start <= state.t + self.horizon:
-                    broadcasts.append(broadcast_action)
-                        
-        # return scheduled broadcasts
-        return broadcasts   
 
     @runtime_tracker
     def _generate_broadcasts(self, 
@@ -212,7 +149,7 @@ class AbstractPreplanner(AbstractPlanner):
             t_wait_start = state.t 
         
         else:
-            prelim_plan = Plan(measurement_actions, maneuver_actions, t=state.t)
+            prelim_plan = Preplan(measurement_actions, maneuver_actions, t=state.t)
 
             actions_in_period = [action for action in prelim_plan.actions 
                                  if action.t_start < t_next]

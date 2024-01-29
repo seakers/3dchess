@@ -4,7 +4,7 @@ import pandas as pd
 from dmas.modules import *
 from dmas.utils import runtime_tracker
 
-from nodes.planning.plan import Plan
+from nodes.planning.plan import Plan, Preplan
 from nodes.planning.preplanners import AbstractPreplanner
 from nodes.planning.replanners import AbstractReplanner
 from nodes.orbitdata import OrbitData
@@ -273,7 +273,7 @@ class PlanningModule(InternalModule):
         """
         try:
             # initialize plan
-            plan : Plan = Plan(t=-1.0)
+            plan : Plan = Preplan(t=-1.0)
 
             # level = logging.WARNING
             level = logging.DEBUG
