@@ -86,6 +86,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                                                             bids_received,
                                                                             completed_measurements)
         self.log_results('Updated precepts', self.results, logging.WARNING)
+        x = 1
 
     @runtime_tracker
     def _update_access_times(  self,
@@ -167,10 +168,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                   if isinstance(action, MeasurementAction)]
         
         # checks measuremetns performed by other agents
-        completed_measurements.extend([action_from_dict(msg.measurement_action) 
+        completed_measurements.extend([action_from_dict(**msg.measurement_action) 
                                        for msg in misc_messages
                                        if isinstance(msg, MeasurementPerformedMessage)])
-        
+
+        if  any([action.status != action.COMPLETED 
+                and isinstance(action, MeasurementAction)
+                for action in completed_measurements]):
+            x = 1 
+
         assert all([action.status == action.COMPLETED 
                     and isinstance(action, MeasurementAction)
                     for action in completed_measurements])

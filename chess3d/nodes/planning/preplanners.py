@@ -434,7 +434,7 @@ class FIFOPreplanner(AbstractPreplanner):
                 msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, measurement.to_dict(), path=path)
 
                 if t_start >= 0.0:
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start, status = AgentAction.COMPLETED)
                     
                     # check broadcast start; only add to plan if it's within the planning horizon
                     if t_start <= state.t + self.horizon:

@@ -11,7 +11,7 @@ class ActionTypes(Enum):
     MANEUVER = 'MANEUVER'
     BROADCAST_MSG = 'BROADCAST_MSG'
     WAIT_FOR_MSG = 'WAIT_FOR_MSG'
-    MEASURE = 'MESURE'
+    MEASURE = 'MESAURE'
 
 def action_from_dict(action_type : str, **kwargs) -> AgentAction:
     if action_type == ActionTypes.IDLE.value:
@@ -27,7 +27,7 @@ def action_from_dict(action_type : str, **kwargs) -> AgentAction:
     elif action_type == ActionTypes.MEASURE.value:
         return MeasurementAction(**kwargs)
     else:
-        raise NotImplemented(f'Action of type {action_type} not yet implemented.')
+        raise NotImplementedError(f'Action of type {action_type} not yet implemented.')
     
 class IdleAction(AgentAction):
     """

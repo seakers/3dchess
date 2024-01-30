@@ -123,6 +123,19 @@
             "args": "scenario2_simple"
         },
         {
+            "name": "SCENARIO 2 - SIMPLE ACBBA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "scenario2_simple_acbba"
+        },
+        {
             "name": "SCENARIO 2 - SINGLE SAT",
             "type": "python",
             "request": "launch",
