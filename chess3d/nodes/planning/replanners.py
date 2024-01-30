@@ -1,10 +1,14 @@
 import logging
+from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 from numpy import Inf
 import pandas as pd
 from pyparsing import Any
 from traitlets import Callable
+from chess3d.messages import ClockConfig
+from chess3d.nodes.planning.plan import Plan
+from chess3d.nodes.states import SimulationAgentState
 
 from nodes.orbitdata import OrbitData
 from nodes.science.reqs import *
@@ -27,6 +31,7 @@ class AbstractReplanner(AbstractPlanner):
         super().__init__(utility_func, horizon, logger)
         
         self.preplan : Preplan = Preplan(t=-1.0)
+        self.plan : Replan = Replan(t=-1)
 
     def needs_planning(self, *_) -> bool:
         # check if there any requests that have not been broadcasted yet
@@ -69,10 +74,10 @@ class AbstractReplanner(AbstractPlanner):
                 broadcasts.append(broadcast_action)
                         
         # update plan with new broadcasts
-        new_plan = Replan.from_preplan(current_plan, broadcasts, t=state.t)
+        self.plan : Replan = Replan.from_preplan(current_plan, broadcasts, t=state.t)
 
         # return scheduled broadcasts
-        return new_plan
+        return self.plan
     
     @runtime_tracker
     def _update_access_times(self,
@@ -148,7 +153,7 @@ class RelayReplanner(AbstractReplanner):
         # return current_plan
 
         # update plan with measurement request broadcasts
-        new_plan : Replan = super().generate_plan(state, current_plan, orbitdata)
+        self.plan : Replan = super().generate_plan(state, current_plan, orbitdata)
 
         # initialize list of broadcasts to be done
         broadcasts = []       
@@ -178,11 +183,64 @@ class RelayReplanner(AbstractReplanner):
             #         broadcasts.append(broadcast_action)
                         
         # update plan with new broadcasts
-        new_plan.add_all(broadcasts, t=state.t)
+        self.plan.add_all(broadcasts, t=state.t)
 
         # return scheduled broadcasts
-        return new_plan
+        return self.plan
         
+class ReactivePlanner(RelayReplanner):
+    def needs_planning(self, state: SimulationAgentState, plan: Plan) -> bool:
+        considered_reqs = [req for req in self.completed_requests]
+        considered_reqs.extend([MeasurementRequest.from_dict(**action.measurement_req)
+                                for action in self.plan.actions
+                                if isinstance(action, MeasurementAction)])
+        
+        inconsidered_req = [req 
+                            for req in self.known_reqs
+                            if req not in considered_reqs
+                            ]
+        
+        new_accessible_req = False
+        for req in inconsidered_req:
+            req : MeasurementRequest
+            for t_accesses in self.access_times[req]:
+                if t_accesses > 0:
+                    new_accessible_req = True
+                    break
+            if new_accessible_req:
+                break
+
+        return super().needs_planning(state, plan) or new_accessible_req
+    
+    def generate_plan(self, 
+                      state: SimulationAgentState, 
+                      current_plan: Plan, 
+                      completed_actions: list, 
+                      aborted_actions: list, 
+                      pending_actions: list, 
+                      incoming_reqs: list, 
+                      generated_reqs: list, 
+                      relay_messages: list, 
+                      misc_messages: list, 
+                      clock_config: ClockConfig, 
+                      orbitdata: dict = None
+                      ) -> Plan:
+        # schedule measurements
+        measurements : list = self._schedule_measurements(state, clock_config)
+
+        # schedule broadcasts to be perfomed
+        broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
+
+        # generate maneuver and travel actions from measurements
+        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+        
+        # generate plan from actions
+        self.plan : Preplan = Preplan(measurements, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
+
+        # return plan
+        return self.plan
+
+        return super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
     
 # class AbstractReplanner(ABC):
 #     """
