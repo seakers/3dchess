@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
+import pandas as pd
 
 from messages import *
 
@@ -59,7 +60,7 @@ class AbstractPreplanner(AbstractPlanner):
                 or state.t >= self.t_next)    # planning horizon has been reached
 
     @runtime_tracker
-    def _update_access_times(  self,
+    def _update_access_times(   self,
                                 state : SimulationAgentState,
                                 t_plan : float,
                                 agent_orbitdata : OrbitData) -> None:
@@ -82,12 +83,21 @@ class AbstractPreplanner(AbstractPlanner):
                         # agent has already performed this request
                         continue
 
-                    t_arrivals : list = self._calc_arrival_times(   state, 
-                                                                    req, 
-                                                                    instrument,
-                                                                    state.t,
-                                                                    agent_orbitdata)
-                    self.access_times[req.id][instrument] = t_arrivals
+                    if isinstance(req, GroundPointMeasurementRequest):
+                        lat,lon,_ = req.lat_lon_pos 
+                        t_start = state.t
+                        t_end = self.plan.t + self.horizon if self.plan else state.t + self.horizon
+                        if isinstance(state, SatelliteAgentState):
+                            df : pd.DataFrame = agent_orbitdata \
+                                            .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
+                            t_arrivals = [row['time index'] * agent_orbitdata.time_step
+                                        for _, row in df.iterrows()]
+                            self.access_times[req.id][instrument] = t_arrivals
+                        else:
+                            raise NotImplementedError(f"access time estimation for agents of type `{type(state)}` not yet supported.")    
+
+                    else:
+                        raise NotImplementedError(f"access time estimation for measurement requests of type `{type(req)}` not yet supported.")
 
     @runtime_tracker
     def generate_plan(  self, 
@@ -434,7 +444,7 @@ class FIFOPreplanner(AbstractPreplanner):
                 msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, measurement.to_dict(), path=path)
 
                 if t_start >= 0.0:
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start, status = AgentAction.COMPLETED)
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
                     
                     # check broadcast start; only add to plan if it's within the planning horizon
                     if t_start <= state.t + self.horizon:

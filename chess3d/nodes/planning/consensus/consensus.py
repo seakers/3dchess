@@ -117,13 +117,24 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     if len(self.access_times[req.id][instrument]) > 0:
                         continue
 
-                    t_arrivals : list = self._calc_arrival_times(   state, 
-                                                                    req, 
-                                                                    instrument,
-                                                                    state.t,
-                                                                    agent_orbitdata)
-                    
-                    self.access_times[req.id][instrument] = t_arrivals
+                    if isinstance(req, GroundPointMeasurementRequest):
+                        lat,lon,_ = req.lat_lon_pos 
+                        t_start = state.t
+                        t_end = self.preplan.t_next
+
+                        if isinstance(state, SatelliteAgentState):
+                            df : pd.DataFrame = agent_orbitdata \
+                                            .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
+                            t_arrivals = [row['time index'] * agent_orbitdata.time_step
+                                        for _, row in df.iterrows()]
+                            self.access_times[req.id][instrument] = t_arrivals
+                        else:
+                            raise NotImplementedError(f"access time estimation for agents of type `{type(state)}` not yet supported.")    
+
+                    else:
+                        raise NotImplementedError(f"access time estimation for measurement requests of type `{type(req)}` not yet supported.")
+
+            x = 1
 
     def _compile_bids(self, 
                       state : SimulationAgentState, 
@@ -171,15 +182,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         completed_measurements.extend([action_from_dict(**msg.measurement_action) 
                                        for msg in misc_messages
                                        if isinstance(msg, MeasurementPerformedMessage)])
-
-        if  any([action.status != action.COMPLETED 
-                and isinstance(action, MeasurementAction)
-                for action in completed_measurements]):
-            x = 1 
-
-        assert all([action.status == action.COMPLETED 
-                    and isinstance(action, MeasurementAction)
-                    for action in completed_measurements])
 
         return completed_measurements
 
@@ -275,7 +277,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def _compile_measurements(self, path : list) -> list:
         """ compiles and merges lists of measurement actions to be performed by the agent """
         # get list of preplanned measurements
-        preplanned_measurements = [action for action in self.plan.actions 
+        preplanned_measurements = [action for action in self.preplan.actions 
                                    if isinstance(action, MeasurementAction)]
         preplanned_measurements.sort(key=lambda a : a.t_start)
 
@@ -654,6 +656,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # get requests that can be bid on by this agent
         available_reqs : list = self._get_available_requests(state, results, bundle, path)
+
+        if available_reqs:
+            x = 1
 
         # initialize path of maximum utility
         max_path = [path_element for path_element in path]; 
