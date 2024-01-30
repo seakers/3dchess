@@ -129,11 +129,7 @@ class AbstractReplanner(AbstractPlanner):
 
     
 class RelayReplanner(AbstractReplanner):
-    def __init__(self) -> None:
-        super().__init__(None)
-
     def needs_planning(self, state : SimulationAgentState, plan : Plan) -> bool:
-        # replans if relays need to be sent or if requests have to be announced
         return super().needs_planning(state, plan) or len(self.pending_relays) > 0
     
     def generate_plan(  self, 
@@ -188,7 +184,7 @@ class RelayReplanner(AbstractReplanner):
         # return scheduled broadcasts
         return self.plan
         
-class ReactivePlanner(RelayReplanner):
+class ReactivePlanner(AbstractReplanner):
     def needs_planning(self, state: SimulationAgentState, plan: Plan) -> bool:
         considered_reqs = [req for req in self.completed_requests]
         considered_reqs.extend([MeasurementRequest.from_dict(**action.measurement_req)
@@ -210,38 +206,45 @@ class ReactivePlanner(RelayReplanner):
             if new_accessible_req:
                 break
 
-        return super().needs_planning(state, plan) or new_accessible_req
+        return (super().needs_planning(state, plan) 
+                or len(self.pending_relays) > 0 
+                or new_accessible_req)
     
-    def generate_plan(self, 
-                      state: SimulationAgentState, 
-                      current_plan: Plan, 
-                      completed_actions: list, 
-                      aborted_actions: list, 
-                      pending_actions: list, 
-                      incoming_reqs: list, 
-                      generated_reqs: list, 
-                      relay_messages: list, 
-                      misc_messages: list, 
-                      clock_config: ClockConfig, 
-                      orbitdata: dict = None
-                      ) -> Plan:
-        # schedule measurements
-        measurements : list = self._schedule_measurements(state, clock_config)
-
-        # schedule broadcasts to be perfomed
-        broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
-
-        # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+    # def generate_plan(self, 
+    #                   state: SimulationAgentState, 
+    #                   current_plan: Plan, 
+    #                   completed_actions: list, 
+    #                   aborted_actions: list, 
+    #                   pending_actions: list, 
+    #                   incoming_reqs: list, 
+    #                   generated_reqs: list, 
+    #                   relay_messages: list, 
+    #                   misc_messages: list, 
+    #                   clock_config: ClockConfig, 
+    #                   orbitdata: dict = None
+    #                   ) -> Plan:
         
-        # generate plan from actions
-        self.plan : Preplan = Preplan(measurements, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
+    #     # schedule measurements
+    #     measurements : list = self._schedule_measurements(state, clock_config)
 
-        # return plan
-        return self.plan
+    #     # schedule broadcasts to be perfomed
+    #     broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
 
-        return super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
-    
+    #     # generate maneuver and travel actions from measurements
+    #     maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+        
+    #     # generate plan from actions
+    #     self.plan : Preplan = Replan(measurements, maneuvers, broadcasts, t=state.t, t_next=self.preplan.t_next)    
+
+    #     # return plan
+    #     return self.plan
+
+    #     # return super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
+
+    # @abstractmethod
+    # def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig) -> list:
+    #     pass
+
 # class AbstractReplanner(ABC):
 #     """
 #     # Replanner    
