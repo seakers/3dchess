@@ -3,7 +3,7 @@ import math
 import queue
 from typing import Callable, Any
 
-from nodes.planning.plan import Plan
+from nodes.planning.plan import Plan, Preplan
 from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
 from nodes.science.reqs import *
@@ -17,7 +17,6 @@ class AbstractPlanner(ABC):
     def __init__(self, 
                  utility_func : Callable[[], Any], 
                  horizon : float = np.Inf, 
-                 t_next : float = np.Inf,
                  logger : logging.Logger = None
                  ) -> None:
         
@@ -33,12 +32,11 @@ class AbstractPlanner(ABC):
         self.access_times = {}
         self.known_reqs = []
         self.stats = {}
-        self.plan = None
+        self.plan : Plan = None
 
         # set parameters
         self.utility_func = utility_func    # utility function 
         self.horizon = horizon              # planning horizon
-        self.t_next = t_next                # scheduled time for replanning
         self._logger = logger               # logger for debugging
 
     def update_precepts(self, 
@@ -54,6 +52,10 @@ class AbstractPlanner(ABC):
                         orbitdata : dict = None
                         ) -> None:
         """ Uses incoming precepts to update internal knowledge of the environment and the state of the parent agent """
+        # update preplan
+        if state.t == current_plan.t and isinstance(current_plan, Preplan): 
+            self.preplan = current_plan.copy() 
+        
         # update list of known requests
         new_reqs : list = self.__get_new_requests(incoming_reqs, generated_reqs)
         self.known_reqs.extend(new_reqs)
@@ -92,7 +94,7 @@ class AbstractPlanner(ABC):
                                         if req not in self.completed_requests])
         
         # update access times 
-        self._update_access_times(state, current_plan.t, orbitdata[state.agent_name])
+        self._update_access_times(state, orbitdata[state.agent_name])
         
     @runtime_tracker
     def __get_new_requests( self, 

@@ -33,7 +33,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.results = {}
         self.bids_to_rebroadcasts = []
         self.completed_measurements = []
-        self.preplan : Preplan = Preplan(t=-1.0)
 
         # set paremeters
         self.max_bundle_size = max_bundle_size
@@ -64,10 +63,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                 misc_messages, 
                                 orbitdata)
         
-        # update preplan
-        if state.t == current_plan.t and isinstance(current_plan, Preplan): 
-            self.preplan = current_plan.copy() 
-        
         # compile received bids
         bids_received = self._compile_bids( state,
                                             incoming_reqs, 
@@ -87,54 +82,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                                                             completed_measurements)
         self.log_results('Updated precepts', self.results, logging.WARNING)
         x = 1
-
-    @runtime_tracker
-    def _update_access_times(  self,
-                                state : SimulationAgentState,
-                                t_plan : float,
-                                agent_orbitdata : OrbitData) -> None:
-        """
-        Calculates and saves the access times of all known requests
-        """
-        if state.t == self.preplan.t or len(self.known_reqs) > len(self.results):
-            # recalculate access times for all known requests            
-            for req in self.known_reqs:
-                req : MeasurementRequest
-
-                if state.t == self.preplan.t or req.id not in self.access_times:
-                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-
-                # check access for each required measurement
-                for instrument in self.access_times[req.id]:
-                    if instrument not in state.payload:
-                        # agent cannot perform this request TODO add KG support
-                        continue
-
-                    if (req, instrument) in self.completed_requests:
-                        # agent has already performed this request
-                        continue
-
-                    if len(self.access_times[req.id][instrument]) > 0:
-                        continue
-
-                    if isinstance(req, GroundPointMeasurementRequest):
-                        lat,lon,_ = req.lat_lon_pos 
-                        t_start = state.t
-                        t_end = self.preplan.t_next
-
-                        if isinstance(state, SatelliteAgentState):
-                            df : pd.DataFrame = agent_orbitdata \
-                                            .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
-                            t_arrivals = [row['time index'] * agent_orbitdata.time_step
-                                        for _, row in df.iterrows()]
-                            self.access_times[req.id][instrument] = t_arrivals
-                        else:
-                            raise NotImplementedError(f"access time estimation for agents of type `{type(state)}` not yet supported.")    
-
-                    else:
-                        raise NotImplementedError(f"access time estimation for measurement requests of type `{type(req)}` not yet supported.")
-
-            x = 1
 
     def _compile_bids(self, 
                       state : SimulationAgentState, 

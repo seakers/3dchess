@@ -42,10 +42,11 @@ class AbstractPreplanner(AbstractPlanner):
             - logger (`logging.Logger`) : debugging logger
         """
         # initialize planner
-        super().__init__(utility_func, horizon, period, logger)    
+        super().__init__(utility_func, horizon, logger)    
 
         # set parameters
         self.period = period
+        self.plan = Preplan(t=-1,horizon=horizon,t_next=0.0)
         
     @runtime_tracker
     def needs_planning( self, 
@@ -55,19 +56,17 @@ class AbstractPreplanner(AbstractPlanner):
                         ) -> bool:
         """ Determines whether a new plan needs to be initalized """    
 
-        # check if plan needs to be inialized
-        return (current_plan.t < 0     # simulation just started
-                or state.t >= self.t_next)    # planning horizon has been reached
+        return (current_plan.t < 0                  # simulation just started
+                or state.t >= self.plan.t_next)     # periodic planning period has been reached
 
     @runtime_tracker
-    def _update_access_times(   self,
-                                state : SimulationAgentState,
-                                t_plan : float,
-                                agent_orbitdata : OrbitData) -> None:
+    def _update_access_times(self,
+                             state : SimulationAgentState,
+                             agent_orbitdata : OrbitData) -> None:
         """
         Calculates and saves the access times of all known requests
         """
-        if state.t >= self.t_next or t_plan < 0:
+        if state.t >= self.plan.t_next or self.plan.t < 0:
             # recalculate access times for all known requests            
             for req in self.known_reqs:
                 req : MeasurementRequest
@@ -127,11 +126,7 @@ class AbstractPreplanner(AbstractPlanner):
         replan : list = self.__schedule_periodic_replan(state, measurements, maneuvers)
 
         # generate plan from actions
-        self.plan = Preplan(measurements, maneuvers, broadcasts, replan, t=state.t, horizon=self.horizon, t_next=state.t+self.period)
-
-        # update planning period time
-        self.t_plan = state.t
-        self.t_next = self.t_plan + self.period       
+        self.plan : Preplan = Preplan(measurements, maneuvers, broadcasts, replan, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
 
         # return plan
         return self.plan

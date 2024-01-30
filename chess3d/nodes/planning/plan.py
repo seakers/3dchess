@@ -246,6 +246,7 @@ class Preplan(Plan):
                  horizon : float = np.Inf,
                  t_next : float = np.Inf
                  ) -> None:
+        
         self.horizon = horizon
         self.t_next = t_next
 
@@ -266,6 +267,7 @@ class Replan(Plan):
                  t: float = 0,
                  t_next : float = np.Inf
                  ) -> None:
+        
         self.t_next = t_next
 
         super().__init__(*actions, t=t)

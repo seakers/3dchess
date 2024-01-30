@@ -2,13 +2,13 @@ import logging
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 from numpy import Inf
+import pandas as pd
 from pyparsing import Any
 from traitlets import Callable
 
-from nodes.orbitdata import OrbitData, TimeInterval
+from nodes.orbitdata import OrbitData
 from nodes.science.reqs import *
-from nodes.science.utility import synergy_factor
-from nodes.planning.plan import Plan, Replan
+from nodes.planning.plan import Plan, Preplan, Replan
 from nodes.planning.planners import AbstractPlanner
 from nodes.states import *
 from messages import *
@@ -17,7 +17,6 @@ class AbstractReplanner(AbstractPlanner):
     def __init__(self, 
                  utility_func: Callable = None, 
                  horizon: float = np.Inf, 
-                 t_next: float = np.Inf, 
                  logger: logging.Logger = None
                  ) -> None:
         """ 
@@ -25,7 +24,9 @@ class AbstractReplanner(AbstractPlanner):
 
         Only schedules the breoadcast of newly generated measurement requests into the current plan
         """
-        super().__init__(utility_func, horizon, t_next, logger)
+        super().__init__(utility_func, horizon, logger)
+        
+        self.preplan : Preplan = Preplan(t=-1.0)
 
     def needs_planning(self, *_) -> bool:
         # check if there any requests that have not been broadcasted yet
@@ -72,7 +73,56 @@ class AbstractReplanner(AbstractPlanner):
 
         # return scheduled broadcasts
         return new_plan
+    
+    @runtime_tracker
+    def _update_access_times(self,
+                             state : SimulationAgentState,
+                             agent_orbitdata : OrbitData
+                            ) -> None:
+        """
+        Calculates and saves the access times of all known requests
+        """
+        if state.t == self.preplan.t or any([req.id not in self.access_times for req in self.known_reqs]):
+            # recalculate access times for all known requests            
+            for req in self.known_reqs:
+                req : MeasurementRequest
 
+                if state.t == self.preplan.t or req.id not in self.access_times:
+                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+
+                # check access for each required measurement
+                for instrument in self.access_times[req.id]:
+                    if instrument not in state.payload:
+                        # agent cannot perform this request TODO add KG support
+                        continue
+
+                    if (req, instrument) in self.completed_requests:
+                        # agent has already performed this request
+                        continue
+
+                    if len(self.access_times[req.id][instrument]) > 0:
+                        # access times for this request have already been calculated for this period
+                        continue
+
+                    if isinstance(req, GroundPointMeasurementRequest):
+                        lat,lon,_ = req.lat_lon_pos 
+                        t_start = state.t
+                        t_end = self.preplan.t_next
+
+                        if isinstance(state, SatelliteAgentState):
+                            df : pd.DataFrame = agent_orbitdata \
+                                            .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
+                            t_arrivals = [row['time index'] * agent_orbitdata.time_step
+                                          for _, row in df.iterrows()]
+                            self.access_times[req.id][instrument] = t_arrivals
+
+                        else:
+                            raise NotImplementedError(f"access time estimation for agents of type `{type(state)}` not yet supported.")    
+
+                    else:
+                        raise NotImplementedError(f"access time estimation for measurement requests of type `{type(req)}` not yet supported.")
+
+    
 class RelayReplanner(AbstractReplanner):
     def __init__(self) -> None:
         super().__init__(None)
@@ -95,6 +145,8 @@ class RelayReplanner(AbstractReplanner):
                         orbitdata : dict = None
                     ) -> Plan:
         
+        # return current_plan
+
         # update plan with measurement request broadcasts
         new_plan : Replan = super().generate_plan(state, current_plan, orbitdata)
 
@@ -130,7 +182,8 @@ class RelayReplanner(AbstractReplanner):
 
         # return scheduled broadcasts
         return new_plan
-
+        
+    
 # class AbstractReplanner(ABC):
 #     """
 #     # Replanner    
