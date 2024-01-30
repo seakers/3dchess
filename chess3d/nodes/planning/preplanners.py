@@ -59,6 +59,37 @@ class AbstractPreplanner(AbstractPlanner):
                 or state.t >= self.t_next)    # planning horizon has been reached
 
     @runtime_tracker
+    def _update_access_times(  self,
+                                state : SimulationAgentState,
+                                t_plan : float,
+                                agent_orbitdata : OrbitData) -> None:
+        """
+        Calculates and saves the access times of all known requests
+        """
+        if state.t >= self.t_next or t_plan < 0:
+            # recalculate access times for all known requests            
+            for req in self.known_reqs:
+                req : MeasurementRequest
+                self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+
+                # check access for each required measurement
+                for instrument in self.access_times[req.id]:
+                    if instrument not in state.payload:
+                        # agent cannot perform this request TODO add KG support
+                        continue
+
+                    if (req, instrument) in self.completed_requests:
+                        # agent has already performed this request
+                        continue
+
+                    t_arrivals : list = self._calc_arrival_times(   state, 
+                                                                    req, 
+                                                                    instrument,
+                                                                    state.t,
+                                                                    agent_orbitdata)
+                    self.access_times[req.id][instrument] = t_arrivals
+
+    @runtime_tracker
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         current_plan : Plan,
@@ -387,11 +418,13 @@ class FIFOPreplanner(AbstractPreplanner):
                                 [action.to_dict() for action in measurements],
                                 state.t,
                                 path=path)
-                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
                 
-                # check broadcast start; only add to plan if it's within the planning horizon
-                if t_start <= state.t + self.horizon:
-                    broadcasts.append(broadcast_action)
+                if t_start >= 0.0:
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                    
+                    # check broadcast start; only add to plan if it's within the planning horizon
+                    if t_start <= state.t + self.horizon:
+                        broadcasts.append(broadcast_action)
 
             # schedule the broadcast of each scheduled measurement's completion after it's been performed
             for measurement in measurements:
@@ -399,11 +432,13 @@ class FIFOPreplanner(AbstractPreplanner):
                 path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, measurement.t_end)
 
                 msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, measurement.to_dict(), path=path)
-                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-                
-                # check broadcast start; only add to plan if it's within the planning horizon
-                if t_start <= state.t + self.horizon:
-                    broadcasts.append(broadcast_action)
+
+                if t_start >= 0.0:
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                    
+                    # check broadcast start; only add to plan if it's within the planning horizon
+                    if t_start <= state.t + self.horizon:
+                        broadcasts.append(broadcast_action)
            
             # check which measurements that have been performed and already broadcasted
             measurements_broadcasted = [action_from_dict(**msg.measurement_action)
@@ -422,13 +457,15 @@ class FIFOPreplanner(AbstractPreplanner):
                 path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, t_end)
                 
                 msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, completed_measurement.to_dict())
-                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start, path=path)
                 
-                # check broadcast start; only add to plan if it's within the planning horizon
-                if t_start <= state.t + self.horizon:
-                    broadcasts.append(broadcast_action)
+                if t_start >= 0.0:
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start, path=path)
+                    
+                    # check broadcast start; only add to plan if it's within the planning horizon
+                    if t_start <= state.t + self.horizon:
+                        broadcasts.append(broadcast_action)
 
-                assert completed_measurement.t_end <= broadcast_action.t_start
+                    assert completed_measurement.t_end <= broadcast_action.t_start
         
         # sort broadcasts by start time
         broadcasts.sort(key=lambda a : a.t_start)

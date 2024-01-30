@@ -552,8 +552,8 @@ class Bid(ABC):
         """
         Creates a bid class object from a dictionary
         """
-        # if d['bid_type'] == BidTypes.UNCONSTRAINED_BID.value:
-        #     return UnconstrainedBid(**d)
+        if d['bid_type'] == BidTypes.UNCONSTRAINED_BID.value:
+            return UnconstrainedBid(**d)
         # elif d['bid_type'] == BidTypes.CONSTRAINED_BID.value:
         #     return ConstrainedBid(**d)
         # elif d['bid_type'] == BidTypes.GREEDY.value:
@@ -562,86 +562,86 @@ class Bid(ABC):
         raise AttributeError(f"bids of type `{d['bid_type']}` not yet supported.")
         
 
-# class UnconstrainedBid(Bid):
-#     """
-#     ## Unconstrained Bid
+class UnconstrainedBid(Bid):
+    """
+    ## Unconstrained Bid
 
-#     Describes a bid placed on a measurement request that has no constraints
+    Describes a bid placed on a measurement request that has no constraints
 
-#     ### Attributes:
-#         - bid_type (`str`): type of bid being placed
-#         - req (`dict`): measurement request being bid on
-#         - subtask_index (`int`) : index of the subtask to be bid on
-#         - main_measurement (`str`): name of the main measurement assigned by this subtask bid
-#         - bidder (`bidder`): name of the agent keeping track of this bid information
-#         - own_bid (`float` or `int`): latest bid from bidder
-#         - winner (`str`): name of current the winning agent
-#         - winning_bid (`float` or `int`): current winning bid
-#         - t_img (`float` or `int`): time where the task is set to be performed by the winning agent
-#         - t_update (`float` or `int`): latest time when this bid was updated
-#         - dt_converge (`float` or `int`): time interval after which local convergence is assumed to have been reached
-#         - performed (`bool`): indicates if the winner of this bid has performed the measurement request at hand
-#     """
-#     def __init__(   self, 
-#                     req: dict, 
-#                     subtask_index: int, 
-#                     main_measurement: str, 
-#                     bidder: str, 
-#                     winning_bid: Union[float, int] = 0, 
-#                     own_bid: Union[float, int] = 0, 
-#                     winner: str = Bid.NONE, 
-#                     t_img: Union[float, int] = -1, 
-#                     t_update: Union[float, int] = -1, 
-#                     dt_converge: Union[float, int] = 0, 
-#                     performed: bool = False,
-#                     **_
-#                 ) -> object:
-#         """
-#         ### Arguments:
-#             - req (`dict`): measurement request being bid on
-#             - subtask_index (`int`) : index of the subtask to be bid on
-#             - main_measurement (`str`): name of the main measurement assigned by this subtask bid
-#             - bidder (`bidder`): name of the agent keeping track of this bid information
-#             - own_bid (`float` or `int`): latest bid from bidder
-#             - winner (`str`): name of current the winning agent
-#             - winning_bid (`float` or `int`): current winning bid
-#             - t_img (`float` or `int`): time where the task is set to be performed by the winning agent
-#             - t_update (`float` or `int`): latest time when this bid was updated
-#             - dt_converge (`float` or `int`): time interval after which local convergence is assumed to have been reached
-#             - performed (`bool`): indicates if the winner of this bid has performed the measurement request at hand
-#         """
-#         super().__init__(   BidTypes.UNCONSTRAINED_BID.value,
-#                             req, 
-#                             subtask_index, 
-#                             main_measurement, 
-#                             bidder, 
-#                             winning_bid, 
-#                             own_bid, 
-#                             winner, 
-#                             t_img, 
-#                             t_update, 
-#                             dt_converge, 
-#                             performed
-#                             )
+    ### Attributes:
+        - bid_type (`str`): type of bid being placed
+        - req (`dict`): measurement request being bid on
+        - subtask_index (`int`) : index of the subtask to be bid on
+        - main_measurement (`str`): name of the main measurement assigned by this subtask bid
+        - bidder (`bidder`): name of the agent keeping track of this bid information
+        - own_bid (`float` or `int`): latest bid from bidder
+        - winner (`str`): name of current the winning agent
+        - winning_bid (`float` or `int`): current winning bid
+        - t_img (`float` or `int`): time where the task is set to be performed by the winning agent
+        - t_update (`float` or `int`): latest time when this bid was updated
+        - dt_converge (`float` or `int`): time interval after which local convergence is assumed to have been reached
+        - performed (`bool`): indicates if the winner of this bid has performed the measurement request at hand
+    """
+    def __init__(self,                  
+                 req: dict, 
+                 subtask_index: int, 
+                 main_measurement: str, 
+                 bidder: str, 
+                 winning_bid: float = 0, 
+                 own_bid: float = 0,
+                 winner: str = Bid.NONE, 
+                 t_img: float = -1, 
+                 t_update: float = -1, 
+                 dt_converge: float = 0, 
+                 performed: bool = False,
+                 **_
+                 ) -> object:
+        """
+        ### Arguments:
+            - req (`dict`): measurement request being bid on
+            - subtask_index (`int`) : index of the subtask to be bid on
+            - main_measurement (`str`): name of the main measurement assigned by this subtask bid
+            - bidder (`bidder`): name of the agent keeping track of this bid information
+            - own_bid (`float` or `int`): latest bid from bidder
+            - winner (`str`): name of current the winning agent
+            - winning_bid (`float` or `int`): current winning bid
+            - t_img (`float` or `int`): time where the task is set to be performed by the winning agent
+            - t_update (`float` or `int`): latest time when this bid was updated
+            - dt_converge (`float` or `int`): time interval after which local convergence is assumed to have been reached
+            - performed (`bool`): indicates if the winner of this bid has performed the measurement request at hand
+        """
+        super().__init__(BidTypes.UNCONSTRAINED_BID.value, 
+                         req, 
+                         subtask_index, 
+                         main_measurement, 
+                         bidder, 
+                         winning_bid, 
+                         own_bid, 
+                         winner, 
+                         t_img, 
+                         t_update, 
+                         dt_converge, 
+                         performed)        
     
-#     def new_bids_from_request(req : MeasurementRequest, bidder : str, dt_converge : float = 0.0) -> list:
-#         """
-#         Generates subtask bids from a measurement request
-#         """
-#         subtasks = []        
-#         for subtask_index in range(len(req.measurement_groups)):
-#             main_measurement, dependent_measurements = req.measurement_groups[subtask_index]
+    
+    def new_bids_from_request(req : MeasurementRequest, bidder : str, dt_converge : float = 0.0) -> list:
+        """
+        Generates subtask bids from a measurement request
+        """
+        subtasks = []        
+        for main_measurement, dependent_measurements in req.measurement_groups:
+            subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
             
-#             if len(dependent_measurements) > 0: 
-#                 continue
+            if len(dependent_measurements) > 0: 
+                continue
             
-#             subtasks.append(UnconstrainedBid(   req.to_dict(), 
-#                                                 subtask_index,
-#                                                 main_measurement,
-#                                                 bidder,
-#                                                 dt_converge=dt_converge
-#                                             ))
-#         return subtasks
+            subtasks.append(UnconstrainedBid(   req.to_dict(), 
+                                                subtask_index,
+                                                main_measurement,
+                                                bidder,
+                                                dt_converge=dt_converge
+                                            ))
+        return subtasks
 
 # class ConstrainedBid(Bid):
 #     """

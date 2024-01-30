@@ -346,6 +346,7 @@ class PlanningModule(InternalModule):
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
                         self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        x = 1
                         # -------------------------------------
 
                 # --- Modify plan ---
@@ -397,6 +398,7 @@ class PlanningModule(InternalModule):
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
                         self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        x = 1
                         # -------------------------------------
 
                 # --- Execute plan ---

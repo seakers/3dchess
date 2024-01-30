@@ -101,9 +101,17 @@
                 }
             },
             "planner": {
-                "horizon": 3600,
-                "preplanner": "FIFO",
-                "replanner": "FIFO",
+                "preplanner": {
+                    "@type": "FIFO",
+                    "collaboration ": "True",
+                    "horizon": 7200,
+                    "period": 3600
+                },
+                "replanner": {
+                    "@type": "ACBBA",
+                    "bundle size": 1,
+                    "dt_convergence": 0.0
+                },
                 "utility": "LINEAR"
             },
             "science": "True",
@@ -128,6 +136,6 @@
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/scenario2_single_sat//orbit_data/"
+        "outDir": "./scenarios/scenario2_single_sat_cbba//orbit_data/"
     }
 }

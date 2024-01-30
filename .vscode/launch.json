@@ -146,7 +146,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_single_sat_acbba"
+            "args": "scenario2_single_sat_cbba"
         }
     ],
     "compounds": [

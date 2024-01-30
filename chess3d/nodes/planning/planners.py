@@ -92,7 +92,7 @@ class AbstractPlanner(ABC):
                                         if req not in self.completed_requests])
         
         # update access times 
-        self.__update_access_times(state, current_plan.t, orbitdata[state.agent_name])
+        self._update_access_times(state, current_plan.t, orbitdata[state.agent_name])
         
     @runtime_tracker
     def __get_new_requests( self, 
@@ -132,36 +132,15 @@ class AbstractPlanner(ABC):
 
         return performed_requests
 
-    @runtime_tracker
-    def __update_access_times(  self,
+    @abstractmethod
+    def _update_access_times(  self,
                                 state : SimulationAgentState,
                                 t_plan : float,
                                 agent_orbitdata : OrbitData) -> None:
         """
         Calculates and saves the access times of all known requests
         """
-        if state.t >= self.t_next or t_plan < 0:
-            # recalculate access times for all known requests            
-            for req in self.known_reqs:
-                req : MeasurementRequest
-                self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-
-                # check access for each required measurement
-                for instrument in self.access_times[req.id]:
-                    if instrument not in state.payload:
-                        # agent cannot perform this request TODO add KG support
-                        continue
-
-                    if (req, instrument) in self.completed_requests:
-                        # agent has already performed this request
-                        continue
-
-                    t_arrivals : list = self._calc_arrival_times(   state, 
-                                                                    req, 
-                                                                    instrument,
-                                                                    state.t,
-                                                                    agent_orbitdata)
-                    self.access_times[req.id][instrument] = t_arrivals
+        pass
 
     @runtime_tracker
     def _calc_arrival_times(self, 
@@ -178,7 +157,7 @@ class AbstractPlanner(ABC):
             if isinstance(state, SatelliteAgentState):
                 t_imgs = []
                 lat,lon,_ = req.lat_lon_pos
-                t_start = min( max(t_prev, req.t_start), t_prev + self.horizon)
+                t_start = min( max(t_prev, req.t_start), t_prev + self.horizon)     # TODO generalize
                 t_end = min(t_prev + self.horizon, req.t_end)
                 df : pd.DataFrame = agent_orbitdata \
                                         .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
@@ -249,11 +228,13 @@ class AbstractPlanner(ABC):
         for req in requests_to_broadcast:        
             # if found, create broadcast action
             msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-            broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
             
-            # check broadcast start; only add to plan if it's within the planning horizon
-            if t_start <= state.t + self.horizon:
-                broadcasts.append(broadcast_action)
+            if t_start >= 0:
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                
+                # check broadcast start; only add to plan if it's within the planning horizon
+                if t_start <= state.t + self.horizon:
+                    broadcasts.append(broadcast_action)
 
         # schedule message relay
         for relay in self.pending_relays:

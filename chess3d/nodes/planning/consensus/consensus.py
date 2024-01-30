@@ -30,7 +30,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # initialize variables
         self.bundle = []
         self.path = []
-        self.results = []
+        self.results = {}
         self.bids_to_rebroadcasts = []
         self.completed_measurements = []
         self.preplan : Preplan = Preplan(t=-1.0)
@@ -51,12 +51,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         misc_messages: list, 
                         orbitdata: dict = None
                         ) -> None:
-
-        # update preplan
-        #TODO ensure check guarantees that this only fires ONLY when a new preplan is generated
-        if state.t == current_plan.t and isinstance(current_plan, Preplan): 
-            self.preplan = current_plan.copy() 
-        
+       
         # update other precepts
         super().update_precepts(state, 
                                 current_plan,    
@@ -69,13 +64,18 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                 misc_messages, 
                                 orbitdata)
         
+        # update preplan
+        if state.t == current_plan.t and isinstance(current_plan, Preplan): 
+            self.preplan = current_plan.copy() 
+        
         # compile received bids
-        bids_received = self._compile_bids( incoming_reqs, 
+        bids_received = self._compile_bids( state,
+                                            incoming_reqs, 
                                             generated_reqs, 
                                             misc_messages)
 
         # compile completed measurements
-        completed_measurements = self._compile_completed_measurements(self, completed_actions)
+        completed_measurements = self._compile_completed_measurements(completed_actions, misc_messages)
 
         # perform consesus phase
         self.results, self.bundle, \
@@ -85,6 +85,44 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                                                             self.path, 
                                                                             bids_received,
                                                                             completed_measurements)
+        self.log_results('Updated precepts', self.results, logging.WARNING)
+
+    @runtime_tracker
+    def _update_access_times(  self,
+                                state : SimulationAgentState,
+                                t_plan : float,
+                                agent_orbitdata : OrbitData) -> None:
+        """
+        Calculates and saves the access times of all known requests
+        """
+        if state.t == self.preplan.t or len(self.known_reqs) > len(self.results):
+            # recalculate access times for all known requests            
+            for req in self.known_reqs:
+                req : MeasurementRequest
+
+                if state.t == self.preplan.t or req.id not in self.access_times:
+                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+
+                # check access for each required measurement
+                for instrument in self.access_times[req.id]:
+                    if instrument not in state.payload:
+                        # agent cannot perform this request TODO add KG support
+                        continue
+
+                    if (req, instrument) in self.completed_requests:
+                        # agent has already performed this request
+                        continue
+
+                    if len(self.access_times[req.id][instrument]) > 0:
+                        continue
+
+                    t_arrivals : list = self._calc_arrival_times(   state, 
+                                                                    req, 
+                                                                    instrument,
+                                                                    state.t,
+                                                                    agent_orbitdata)
+                    
+                    self.access_times[req.id][instrument] = t_arrivals
 
     def _compile_bids(self, 
                       state : SimulationAgentState, 
@@ -168,7 +206,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     ) -> list:
 
         # bidding phase
-        self.results, self.bid, self.path, _, planner_changes = \
+        self.results, self.bid, self.path, planner_changes = \
             self.planning_phase(state, self.results, self.bundle, self.path)
         
         # check convergence
@@ -333,7 +371,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # check if tasks expired
         results, bundle, path, \
-            exp_changes, exp_rebroadcasts = self.check_request_end_time(results, bundle, path, state.t, level)
+            exp_changes, exp_rebroadcasts = self.check_request_end_time(state, results, bundle, path, level)
 
         # compare bids with incoming messages
         results, bundle, path, \
@@ -392,7 +430,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             changes.append(bid)
 
         # check for task completion in bundle
-        for task_to_remove in [req, subtask_index, current_bid 
+        for task_to_remove in [(req, subtask_index, current_bid)
                                for req, subtask_index, current_bid in bundle
                                if results[req.id][subtask_index].performed]:
             ## remove all completed tasks from bundle
@@ -529,7 +567,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             my_bid : Bid = results[their_bid.req_id][their_bid.subtask_index]
             # self.log(f'comparing bids...\nmine:  {str(my_bid)}\ntheirs: {str(their_bid)}', level=logging.DEBUG) #DEBUG PRINTOUT
 
-            comp_result, rebroadcast_result = my_bid.compare(their_bid, state.t)
+            comp_result, rebroadcast_result = my_bid.compare(their_bid)
             updated_bid : Bid = my_bid.update(their_bid, comp_result, state.t)
             bid_changed = my_bid != updated_bid
 
@@ -703,6 +741,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 already_performed = self.__request_has_been_performed(results, req, subtask_index, state.t)
                 
                 if (is_accessible 
+                    or is_biddable 
+                    or not already_in_bundle 
+                    or not already_performed
+                    ) and not already_in_path:
+                    x = 1
+                if not already_in_path:
+                    print(is_accessible, is_biddable, not already_in_bundle, not already_in_path, not already_performed)
+
+                if (is_accessible 
                     and is_biddable 
                     and not already_in_bundle 
                     and not already_in_path
@@ -724,6 +771,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
                           for t in self.access_times[req.id][main_instrument] 
                           if req.t_start <= t <= req.t_end
                           ]
+            
+            if len(t_arrivals) == 0 and len(self.access_times[req.id][main_instrument]) > 0:
+                y = 1
 
             return len(t_arrivals) > 0
         else:
