@@ -204,18 +204,31 @@ class FIFOReplanner(ReactivePlanner):
     def generate_plan(self, state: SimulationAgentState, current_plan: Plan, completed_actions: list, aborted_actions: list, pending_actions: list, incoming_reqs: list, generated_reqs: list, relay_messages: list, misc_messages: list, clock_config: ClockConfig, orbitdata: dict = None) -> Plan:
         
         # schedule measurements
-        prev_measurements = [action for action in current_plan if isinstance(action, MeasurementAction)]
+        prev_measurements = [action
+                             for action in current_plan 
+                             if isinstance(action, MeasurementAction)]
         available_measurements = self._get_available_requests()
+
+        for prev_measurement in prev_measurements:
+            prev_measurement : MeasurementAction
+            mmt = (MeasurementRequest.from_dict(prev_measurement.measurement_req), prev_measurement.subtask_index)
+
+            if mmt not in available_measurements:
+                i_missing = prev_measurements.index(prev_measurement)
+                x = 1
 
         if len(prev_measurements) > len(available_measurements):
             x = 1 
 
-        measurements : list = self._schedule_measurements(state, clock_config)
+        # measurements : list = self._schedule_measurements(state, clock_config)
 
-        if len(prev_measurements) > len(measurements):
-            x = 1
+        updated_plan = super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
         
-        return super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
+        current_measurements = [action for action in updated_plan if isinstance(action, MeasurementAction)]
+        if len(prev_measurements) > len(current_measurements):
+            x = 1
+
+        return updated_plan
 
     def update_precepts(self, 
                         state: SimulationAgentState, 
@@ -421,6 +434,9 @@ class FIFOReplanner(ReactivePlanner):
 
                             # sort from ascending start time
                             measurements.sort(key=lambda a: a.t_start)
+
+                            if (t_arrivals == 0):
+                                x = 1
                         else:                       # no more future accesses for this GP
                             j_remove = j
 
