@@ -529,6 +529,7 @@ class PlanningModule(InternalModule):
                 elif isinstance(action, dict):
                     out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
         
+        
         self.log(out, level)
                
     async def teardown(self) -> None:

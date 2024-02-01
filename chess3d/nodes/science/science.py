@@ -251,6 +251,8 @@ class ScienceModule(InternalModule):
         
     async def science_value(self):
         try:
+            detected_events = []
+
             while True:
                 msg : MeasurementResultsRequestMessage = await self.science_value_inbox.get()
                 self.log(f'Got message in science_value!',level=logging.INFO)
@@ -296,6 +298,7 @@ class ScienceModule(InternalModule):
                         self.log(f'Scenario not supported by `request_handler()`',level=logging.INFO)
                         continue
 
+
                     t_start = outlier_data['obs_start']
                     t_corr = outlier_data['obs_duration']
                     t_end = outlier_data['obs_end']
@@ -305,6 +308,32 @@ class ScienceModule(InternalModule):
                                                                         self.get_current_time(), 
                                                                         t_end, 
                                                                         t_corr)
+
+                    # check if this event has already been detected before
+                    if measurement_req.s_max > 0:
+                        found = False
+                        for previous_req in detected_events:
+                            previous_req : GroundPointMeasurementRequest
+
+                            # print(previous_req.lat_lon_pos[0], measurement_req.lat_lon_pos[0])
+                            # print(previous_req.lat_lon_pos[1], measurement_req.lat_lon_pos[1])
+                            # print(previous_req.lat_lon_pos[2], measurement_req.lat_lon_pos[2])
+                            # print(previous_req.t_start, measurement_req.t_start)
+                            # print(measurement_req.t_end, previous_req.t_end )
+
+                            if (previous_req.lat_lon_pos == measurement_req.lat_lon_pos
+                                and previous_req.t_start <= measurement_req.t_start 
+                                and measurement_req.t_end == previous_req.t_end 
+                                ):
+                                # this has been detected before
+                                measurement_req.s_max = 0.0
+                                found = True
+                                break
+                            else:
+                                x = 1
+                        
+                        if not found:
+                            detected_events.append(measurement_req)
 
                     self.log(f'sending measurement req to agent...')
                     req_msg = MeasurementRequestMessage(self.get_parent_name(), self.get_parent_name(), measurement_req.to_dict())

@@ -31,7 +31,6 @@ class AbstractReplanner(AbstractPlanner):
         super().__init__(utility_func, logger)
         
         self.preplan : Preplan = Preplan(t=-1.0)
-        self.plan : Replan = Replan(t=-1)
 
     def update_precepts(self, 
                         state: SimulationAgentState, 
@@ -70,7 +69,10 @@ class AbstractReplanner(AbstractPlanner):
         """
         Calculates and saves the access times of all known requests
         """
-        if state.t == self.preplan.t or any([req.id not in self.access_times for req in self.known_reqs]):
+        if (state.t == self.preplan.t                   # new planning horizon reached
+            or any([req.id not in self.access_times     # received new requests
+                    for req in self.known_reqs])
+            ):
             # recalculate access times for all known requests            
             for req in self.known_reqs:
                 req : MeasurementRequest
@@ -149,11 +151,8 @@ class RelayReplanner(AbstractReplanner):
         # initialize list of broadcasts to be done
         broadcasts = self._schedule_broadcasts(state, None, orbitdata)
                                                 
-        # update plan with new broadcasts
-        self.plan : Replan = Replan.from_preplan(current_plan, broadcasts, t=state.t)
-
-        # return scheduled broadcasts
-        return self.plan
+        # update and return plan with new broadcasts
+        return Replan.from_preplan(current_plan, broadcasts, t=state.t)
         
 class ReactivePlanner(AbstractReplanner):    
     def generate_plan(self, 
@@ -180,10 +179,7 @@ class ReactivePlanner(AbstractReplanner):
         maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
         
         # generate plan from actions
-        self.plan : Preplan = Replan(measurements, maneuvers, broadcasts, t=state.t, t_next=self.preplan.t_next)    
-
-        # return plan
-        return self.plan
+        return Replan(measurements, maneuvers, broadcasts, t=state.t, t_next=self.preplan.t_next)    
 
     @abstractmethod
     def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig) -> list:
@@ -200,80 +196,6 @@ class FIFOReplanner(ReactivePlanner):
         self.collaboration = collaboration
         self.other_plans = {}
         self.ignored_reqs = []
-
-    def needs_planning(self, state: SimulationAgentState, plan: Plan) -> bool:
-        if self.collaboration:
-            # check if other agents have plans with tasks considered by the current plan
-            my_measurements = [(MeasurementRequest.from_dict(action.measurement_req), action.subtask_index, action.t_start)
-                                for action in self.plan
-                                if isinstance(action, MeasurementAction)]
-            
-            for agent_name in self.other_plans:
-                plan : Plan = self.other_plans[agent_name]
-                their_measurements = [(MeasurementRequest.from_dict(action.measurement_req), action.subtask_index, action.t_start)
-                                        for action in plan
-                                        if isinstance(action, MeasurementAction)]
-                
-                for their_req, their_subtaskt_index, their_t_img in their_measurements:
-
-                    for my_req, my_subtaskt_index, my_t_img in my_measurements:
-                        
-                        if (their_req == my_req 
-                            and their_subtaskt_index == my_subtaskt_index
-                            and their_t_img < my_t_img):
-                            # other agent is performing a task I was considering but does it sooner
-                            return True
-                
-        # compile requests that have not been considered by the current plan
-        considered_reqs = [MeasurementRequest.from_dict(action.measurement_req)
-                           for action in self.plan
-                           if isinstance(action, MeasurementAction)]
-        inconsidered_req = [req 
-                            for req in self.known_reqs
-                            if req not in considered_reqs]
-        
-        # check if unconsidered requests are accessible
-        for req in inconsidered_req:
-            req : MeasurementRequest
-            for instrument in self.access_times[req.id]:
-                t_accesses = self.access_times[req.id][instrument]
-                if t_accesses and req not in self.ignored_reqs:
-                    # measurement request is accessible and hasent been considered yet
-                    return True
-
-        if super().needs_planning(state, plan):
-            x = 1
-        elif len(self.pending_relays) > 0:
-            x = 1
-
-        return super().needs_planning(state, plan) or len(self.pending_relays) > 0
-
-    # def generate_plan(self, state: SimulationAgentState, current_plan: Plan, completed_actions: list, aborted_actions: list, pending_actions: list, incoming_reqs: list, generated_reqs: list, relay_messages: list, misc_messages: list, clock_config: ClockConfig, orbitdata: dict = None) -> Plan:
-        
-    #     # schedule measurements
-    #     prev_measurements = [action
-    #                          for action in current_plan 
-    #                          if isinstance(action, MeasurementAction)]
-    #     available_measurements = self._get_available_requests()
-
-    #     for prev_measurement in prev_measurements:
-    #         prev_measurement : MeasurementAction
-    #         mmt = (MeasurementRequest.from_dict(prev_measurement.measurement_req), prev_measurement.subtask_index)
-
-    #         if mmt not in available_measurements:
-    #             i_missing = prev_measurements.index(prev_measurement)
-    #             x = 1
-
-    #     if len(prev_measurements) > len(available_measurements):
-    #         x = 1 
-
-    #     updated_plan = super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
-        
-    #     current_measurements = [action for action in updated_plan if isinstance(action, MeasurementAction)]
-    #     if len(prev_measurements) > len(current_measurements):
-    #         x = 1
-
-    #     return updated_plan
 
     def update_precepts(self, 
                         state: SimulationAgentState, 
@@ -308,8 +230,90 @@ class FIFOReplanner(ReactivePlanner):
         # update internal knowledge base of other agent's 
         for src, plan in incoming_plans:
             self.other_plans[src] = plan
-        self.plan = self.preplan.copy()        
-    
+
+    def needs_planning(self, state: SimulationAgentState, plan: Plan) -> bool:
+        if self.collaboration:
+            # check if other agents have plans with tasks considered by the current plan
+            my_measurements = [(MeasurementRequest.from_dict(action.measurement_req), action.subtask_index, action.t_start)
+                                for action in plan
+                                if isinstance(action, MeasurementAction)]
+            
+            for agent_name in self.other_plans:
+                plan : Plan = self.other_plans[agent_name]
+                their_measurements = [(MeasurementRequest.from_dict(action.measurement_req), action.subtask_index, action.t_start)
+                                        for action in plan
+                                        if isinstance(action, MeasurementAction)]
+                
+                for their_req, their_subtaskt_index, their_t_img in their_measurements:
+
+                    for my_req, my_subtaskt_index, my_t_img in my_measurements:
+                        
+                        if (their_req == my_req 
+                            and their_subtaskt_index == my_subtaskt_index
+                            and their_t_img < my_t_img):
+                            # other agent is performing a task I was considering but does it sooner
+                            return True
+                
+        # compile requests that have not been considered by the current plan
+        considered_reqs = [MeasurementRequest.from_dict(action.measurement_req)
+                           for action in plan
+                           if isinstance(action, MeasurementAction)]
+        considered_reqs.extend([req 
+                                for req, _ in self.completed_requests
+                                if req not in considered_reqs])
+        inconsidered_req = [req 
+                            for req in self.known_reqs
+                            if req not in considered_reqs
+                            and req not in self.ignored_reqs]
+        
+        # check if unconsidered requests are accessible
+        for req in inconsidered_req:
+            req : MeasurementRequest
+            for instrument in self.access_times[req.id]:
+                t_accesses = self.access_times[req.id][instrument]
+                if t_accesses and req not in self.ignored_reqs:
+                    # measurement request is accessible and hasent been considered yet
+                    return True
+
+        if super().needs_planning(state, plan):
+            x = 1
+        elif len(self.pending_relays) > 0:
+            x = 1
+
+        return super().needs_planning(state, plan) or len(self.pending_relays) > 0
+
+    # def generate_plan(self, state: SimulationAgentState, current_plan: Plan, completed_actions: list, aborted_actions: list, pending_actions: list, incoming_reqs: list, generated_reqs: list, relay_messages: list, misc_messages: list, clock_config: ClockConfig, orbitdata: dict = None) -> Plan:
+        
+    #     # schedule measurements
+    #     prev_measurements = [action
+    #                          for action in current_plan 
+    #                          if isinstance(action, MeasurementAction)]
+        
+    #     available_measurements = self._get_available_requests()
+
+    #     for prev_measurement in prev_measurements:
+    #         prev_measurement : MeasurementAction
+    #         mmt = (MeasurementRequest.from_dict(prev_measurement.measurement_req), prev_measurement.subtask_index)
+
+    #         if mmt not in available_measurements:
+    #             i_missing = prev_measurements.index(prev_measurement)
+    #             x = 1
+
+    #     if len(prev_measurements) > len(available_measurements):
+    #         x = 1 
+
+    #     # updated_plan = self._schedule_measurements(state, clock_config)
+
+    #     updated_plan = super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
+        
+    #     current_measurements = [action 
+    #                             for action in updated_plan 
+    #                             if isinstance(action, MeasurementAction)]
+    #     if len(prev_measurements) > len(current_measurements):
+    #         x = 1
+
+    #     return updated_plan
+                
     @runtime_tracker
     def _get_available_requests(self) -> list:
         """ Returns a list of known requests that can be performed within the current planning horizon """
@@ -492,7 +496,7 @@ class FIFOReplanner(ReactivePlanner):
         broadcasts : list = super()._schedule_broadcasts(state,
                                                          measurements, 
                                                          orbitdata)
-
+                
         # schedule performed measurement broadcasts
         if self.collaboration:
 
@@ -506,12 +510,11 @@ class FIFOReplanner(ReactivePlanner):
                                 state.t,
                                 path=path)
                 
-                if t_start >= 0.0:
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-                    
-                    # check broadcast start; only add to plan if it's within the planning horizon
-                    if t_start <= self.preplan.t_next:
-                        broadcasts.append(broadcast_action)
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                
+                # check broadcast start; only add to plan if it's within the planning horizon
+                if t_start <= self.preplan.t_next:
+                    broadcasts.append(broadcast_action)
 
             # schedule the broadcast of each scheduled measurement's completion after it's been performed
             for measurement in measurements:
@@ -520,12 +523,11 @@ class FIFOReplanner(ReactivePlanner):
 
                 msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, measurement.to_dict(), path=path)
 
-                if t_start >= 0.0:
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-                    
-                    # check broadcast start; only add to plan if it's within the planning horizon
-                    if t_start <= self.preplan.t_next:
-                        broadcasts.append(broadcast_action)
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                
+                # check broadcast start; only add to plan if it's within the planning horizon
+                if t_start <= self.preplan.t_next:
+                    broadcasts.append(broadcast_action)
            
             # check which measurements that have been performed and already broadcasted
             measurements_broadcasted = [action_from_dict(**msg.measurement_action)
@@ -545,14 +547,13 @@ class FIFOReplanner(ReactivePlanner):
                 
                 msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, completed_measurement.to_dict())
                 
-                if t_start >= 0.0:
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start, path=path)
-                    
-                    # check broadcast start; only add to plan if it's within the planning horizon
-                    if t_start <= self.preplan.t_next:
-                        broadcasts.append(broadcast_action)
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start, path=path)
+                
+                # check broadcast start; only add to plan if it's within the planning horizon
+                if t_start <= self.preplan.t_next:
+                    broadcasts.append(broadcast_action)
 
-                    assert completed_measurement.t_end <= broadcast_action.t_start
+                assert completed_measurement.t_end <= broadcast_action.t_start
         
         # sort broadcasts by start time
         broadcasts.sort(key=lambda a : a.t_start)

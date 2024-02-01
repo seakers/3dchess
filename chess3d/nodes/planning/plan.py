@@ -220,7 +220,11 @@ class Plan(ABC):
             for action in self.actions:
                 if isinstance(action, AgentAction):
                     out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}\n"
-        out += f'\nn actions in plan: {len(self)}\n'
+        out += f'\nn actions in plan: {len(self)}'
+        out += f'\nn measurements in plan: {len([action for action in self if isinstance(action, MeasurementAction)])}'
+        out += f'\nn bradcasts in plan: {len([action for action in self if isinstance(action, BroadcastMessageAction)])}'
+        out += f'\nn maneuvers in plan: {len([action for action in self if isinstance(action, ManeuverAction)])}'
+        out += f'\nn travel actions in plan: {len([action for action in self if isinstance(action, TravelAction)])}\n'
         return out
 
     def get_horizon(self) -> float:
