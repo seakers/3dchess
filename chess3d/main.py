@@ -260,7 +260,7 @@ def agent_factory(  scenario_name : str,
             replanner_type = replanner_dict.get('@type', None)
             
             if replanner_type == 'FIFO':
-                collaboration = preplanner_dict.get('collaboration ', "False") == "True"
+                collaboration = replanner_dict.get('collaboration ', "False") == "True"
                 replanner = FIFOReplanner(utility_func, collaboration)
 
             elif replanner_type == 'ACBBA':

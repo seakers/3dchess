@@ -98,6 +98,11 @@ class AbstractPreplanner(AbstractPlanner):
 
                     else:
                         raise NotImplementedError(f"access time estimation for measurement requests of type `{type(req)}` not yet supported.")
+        elif any([req.id not in self.access_times for req in self.known_reqs]):
+            for req in self.known_reqs:
+                if req.id not in self.access_times:
+                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+
 
     @runtime_tracker
     def generate_plan(  self, 
