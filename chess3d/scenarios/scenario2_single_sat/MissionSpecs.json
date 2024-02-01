@@ -105,6 +105,10 @@
                     "@type" : "FIFO",
                     "collaboration " : "True"
                 },
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "False"
+                },
                 "utility" : "LINEAR"                
             },
             "science" : "True",

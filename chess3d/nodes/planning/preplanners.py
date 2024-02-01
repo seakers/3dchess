@@ -291,7 +291,7 @@ class FIFOPreplanner(AbstractPreplanner):
             # ensure conflict-free path
             while True:                
                 # ----- FOR DEBUGGING PURPOSES ONLY ------
-                self._print_observation_path(state, measurements)
+                # self._print_observation_path(state, measurements)
                 # ----------------------------------------
 
                 conflict_free = True
@@ -355,10 +355,6 @@ class FIFOPreplanner(AbstractPreplanner):
 
                 if conflict_free:
                     break
-                    
-            # ----- FOR DEBUGGING PURPOSES ONLY ------
-            self._print_observation_path(state, measurements)
-            # ----------------------------------------
             
         else:
             raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')

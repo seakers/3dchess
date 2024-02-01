@@ -329,19 +329,11 @@ class FIFOReplanner(ReactivePlanner):
         # get available requests
         available_reqs : list = self._get_available_requests()
 
-        current_measurements = [action for action in self.plan if isinstance(action, MeasurementAction)]
-        if len(available_reqs) < len(current_measurements):
-            x = 1
-
         if isinstance(state, SatelliteAgentState):
 
             # create first assignment of observations
             for req, subtask_index in available_reqs:
                 req : MeasurementRequest
-
-                # if req not in self.considered_reqs:
-                #     self.considered_reqs.append(req)
-
                 main_measurement, _ = req.measurement_groups[subtask_index]  
                 t_arrivals : list = self.access_times[req.id][main_measurement]
 
@@ -373,44 +365,39 @@ class FIFOReplanner(ReactivePlanner):
                                                    t_img, 
                                                    t_img + req.duration
                                                  ))
-                
-                
 
             # sort from ascending start time
             measurements.sort(key=lambda a: a.t_start)
 
-            # ----- FOR DEBUGGING PURPOSES ONLY ------
-            self._print_observation_path(state, measurements)
-            # ----------------------------------------
-
             # ensure conflict-free path
-            while True:          
+            while True:                
+                # ----- FOR DEBUGGING PURPOSES ONLY ------
+                self._print_observation_path(state, measurements)
+                # ----------------------------------------
+
                 conflict_free = True
-                i_remove = None
+                j_remove = None
 
                 for j in range(len(measurements)):
                     i = j - 1
 
                     if i >= 0:
                         measurement_i : MeasurementAction = measurements[i]
-                        measurement_j : MeasurementAction = measurements[j]
-
+                        state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
                         req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                        req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-
-                        th_i = state.calc_off_nadir_agle(req_i)
-                        th_j = state.calc_off_nadir_agle(req_j)
-
-                        dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                        dt_measurements = measurement_j.t_start - measurement_i.t_end
+                        th_i = state_i.calc_off_nadir_agle(req_i)
+                        t_i = measurement_i.t_end
                     else:
-                        measurement_j : MeasurementAction = measurements[j]
-                        req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-                        th_j = state.calc_off_nadir_agle(req_j)
                         th_i = state.attitude[0]
+                        t_i = state.t
 
-                        dt_maneuver = abs(th_i - th_j) / state.max_slew_rate
-                        dt_measurements = measurement_j.t_start - state.t
+                    measurement_j : MeasurementAction = measurements[j]
+                    state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
+                    req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
+                    th_j = state_j.calc_off_nadir_agle(req_j)
+
+                    dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
+                    dt_measurements = measurement_j.t_start - t_i
 
                     # check if there's enough time to maneuver from one observation to another
                     if dt_maneuver > dt_measurements:
@@ -435,31 +422,25 @@ class FIFOReplanner(ReactivePlanner):
                             # sort from ascending start time
                             measurements.sort(key=lambda a: a.t_start)
                         else:                       # no more future accesses for this GP
-                            i_remove = j
-                            conflict_free = False
-                            # break
-                            raise Exception("Whoops. See Plan Initializer.")
+                            j_remove = j
 
                         # flag current observation plan as unfeasible for rescheduling
                         conflict_free = False
                         break
                 
-                if i_remove is not None:
+                if j_remove is not None:
                     measurements.pop(j) 
+
+                    # sort from ascending start time
+                    measurements.sort(key=lambda a: a.t_start)
 
                 if conflict_free:
                     break
-                    
-            # ----- FOR DEBUGGING PURPOSES ONLY ------
-            self._print_observation_path(state, measurements)
-            # ----------------------------------------
             
         else:
-            raise NotImplementedError(f'FIFO replanner for states of type `{type(state)}` not yet supported')
-
-        return measurements
+            raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')
     
-   
+        return measurements
     
     @runtime_tracker
     def _schedule_broadcasts(self, 
