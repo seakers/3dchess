@@ -121,7 +121,12 @@ class AbstractReplanner(AbstractPlanner):
                     while len(t_imgs) > 0 and t_imgs[0] < state.t:
                         t_imgs.pop(0)
 
+                    if len(t_imgs) == 0:
+                        x=1
+
                     self.access_times[req_id][instrument] = t_imgs
+
+        return
     
 class RelayReplanner(AbstractReplanner):
     def needs_planning(self, state : SimulationAgentState, plan : Plan) -> bool:
@@ -195,6 +200,22 @@ class FIFOReplanner(ReactivePlanner):
         self.collaboration = collaboration
         self.other_plans = {}
         self.ignored_reqs = []
+
+    def generate_plan(self, state: SimulationAgentState, current_plan: Plan, completed_actions: list, aborted_actions: list, pending_actions: list, incoming_reqs: list, generated_reqs: list, relay_messages: list, misc_messages: list, clock_config: ClockConfig, orbitdata: dict = None) -> Plan:
+        
+        # schedule measurements
+        prev_measurements = [action for action in current_plan if isinstance(action, MeasurementAction)]
+        available_measurements = self._get_available_requests()
+
+        if len(prev_measurements) > len(available_measurements):
+            x = 1 
+
+        measurements : list = self._schedule_measurements(state, clock_config)
+
+        if len(prev_measurements) > len(measurements):
+            x = 1
+        
+        return super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
 
     def update_precepts(self, 
                         state: SimulationAgentState, 
@@ -308,6 +329,10 @@ class FIFOReplanner(ReactivePlanner):
         # get available requests
         available_reqs : list = self._get_available_requests()
 
+        current_measurements = [action for action in self.plan if isinstance(action, MeasurementAction)]
+        if len(available_reqs) < len(current_measurements):
+            x = 1
+
         if isinstance(state, SatelliteAgentState):
 
             # create first assignment of observations
@@ -320,21 +345,21 @@ class FIFOReplanner(ReactivePlanner):
                 main_measurement, _ = req.measurement_groups[subtask_index]  
                 t_arrivals : list = self.access_times[req.id][main_measurement]
 
-                t_others = []
-                for plan in self.other_plans:
-                    measurements = [action
-                                    for action in plan
-                                    if isinstance(action, MeasurementAction) 
-                                    and MeasurementRequest.from_dict(action.measurement_req) == req
-                                    and action.subtask_index == subtask_index]
+                # t_others = []
+                # for plan in self.other_plans:
+                #     measurements = [action
+                #                     for action in plan
+                #                     if isinstance(action, MeasurementAction) 
+                #                     and MeasurementRequest.from_dict(action.measurement_req) == req
+                #                     and action.subtask_index == subtask_index]
                     
-                    t_others.extend([measurement.t_start 
-                                     for measurement in measurements
-                                     if isinstance(measurement, MeasurementAction)])
+                #     t_others.extend([measurement.t_start 
+                #                      for measurement in measurements
+                #                      if isinstance(measurement, MeasurementAction)])
                 
-                t_other = min(t_others) if t_others else np.Inf
-                if t_other < np.Inf:
-                    x = 1
+                # t_other = min(t_others) if t_others else np.Inf
+                # if t_other < np.Inf:
+                #     x = 1
 
                 if len(t_arrivals) > 0:
                     t_img = t_arrivals.pop(0)
@@ -355,7 +380,7 @@ class FIFOReplanner(ReactivePlanner):
             measurements.sort(key=lambda a: a.t_start)
 
             # ----- FOR DEBUGGING PURPOSES ONLY ------
-            # self._print_observation_path(state, measurements)
+            self._print_observation_path(state, measurements)
             # ----------------------------------------
 
             # ensure conflict-free path
@@ -376,7 +401,7 @@ class FIFOReplanner(ReactivePlanner):
                         th_i = state.calc_off_nadir_agle(req_i)
                         th_j = state.calc_off_nadir_agle(req_j)
 
-                        dt_maneuver = abs(th_i - th_j) / state.max_slew_rate
+                        dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
                         dt_measurements = measurement_j.t_start - measurement_i.t_end
                     else:
                         measurement_j : MeasurementAction = measurements[j]
@@ -426,7 +451,7 @@ class FIFOReplanner(ReactivePlanner):
                     break
                     
             # ----- FOR DEBUGGING PURPOSES ONLY ------
-            # self._print_observation_path(state, measurements)
+            self._print_observation_path(state, measurements)
             # ----------------------------------------
             
         else:

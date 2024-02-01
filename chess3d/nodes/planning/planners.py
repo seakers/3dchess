@@ -289,6 +289,11 @@ class AbstractPlanner(ABC):
             measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
             t_img = measurement_action.t_start
 
+            if isinstance(state, SatelliteAgentState):
+                imaging_state : SimulationAgentState = state.propagate(t_img)
+            else:
+                raise NotImplemented(f"maneuver scheduling for states of type `{type(state)}` not yet supported")
+
             if not isinstance(measurement_req, GroundPointMeasurementRequest):
                 raise NotImplementedError(f"Cannot create plan for requests of type {type(measurement_req)}")
             
@@ -333,11 +338,15 @@ class AbstractPlanner(ABC):
             t_maneuver_end = None
             if isinstance(state, SatelliteAgentState):
                 prev_state : SatelliteAgentState
+                imaging_state : SatelliteAgentState
 
                 t_maneuver_start = prev_state.t
-                th_f = prev_state.calc_off_nadir_agle(measurement_req)
+                th_f = imaging_state.calc_off_nadir_agle(measurement_req)
                 dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
                 t_maneuver_end = t_maneuver_start + dt
+
+                if t_maneuver_end > t_img:
+                    x = 1
 
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
                     action_sequence_i.append(ManeuverAction([th_f, 0, 0], 
@@ -371,7 +380,7 @@ class AbstractPlanner(ABC):
                 if t_move_end < np.Inf:
                     t_move_end = dt * math.ceil(t_move_end/dt)
             
-            # add move maneuver if required
+            # add travel maneuver if required
             if abs(t_move_start - t_move_end) >= 1e-3:
                 move_action = TravelAction(final_pos, t_move_start, t_move_end)
                 action_sequence_i.append(move_action)
@@ -460,23 +469,21 @@ class AbstractPlanner(ABC):
     def _print_observation_path(self, state : SatelliteAgentState, path : list) -> None :
         """ Debugging tool. Prints current observations plan being considered. """
 
-        out = '\n\n\nID\t  Subtask\tt_img\tdt_mmt\tdt_mvr\tValid\tu_exp\n'
-        for i in range(len(path) - 1):
-            if i == 0:
-                measurement_i : MeasurementAction = path[i]
-                req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+        out = '\n\n\nID\t  Subtask\tt_img\tth\tdt_mmt\tdt_mvr\tValid\tu_exp\n'
 
-                out_temp = [f"{req_i.id.split('-')[0]}",
-                            f"\t{measurement_i.subtask_index}",
-                            f"\t{np.round(measurement_i.t_start,3)}",
-                            f"\t-",
-                            f"\t-",
-                            f"\tTrue"
-                            f"\t{np.round(measurement_i.u_exp,3)}",
-                            f"\n"
-                            ]
-                out += ''.join(out_temp)
-                continue 
+        out_temp = [f"     N\A",
+                    f"      N\A",
+                    f"\t{np.round(state.t,3)}",
+                    f"\t{np.round(state.attitude[0],3)}",
+                    f"\t-",
+                    f"\t-",
+                    f"\tTrue"
+                    f"\t{0.0}",
+                    f"\n"
+                    ]
+        out += ''.join(out_temp)
+
+        for i in range(len(path) - 1):
             
             j = i - 1 
             measurement_i : MeasurementAction = path[i]
@@ -485,15 +492,17 @@ class AbstractPlanner(ABC):
             req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
             req_prev : MeasurementRequest = MeasurementRequest.from_dict(measurement_prev.measurement_req)
 
-            th_i = state.calc_off_nadir_agle(req_i)
-            th_prev = state.calc_off_nadir_agle(req_prev)
+            state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
+            th_i = state_i.calc_off_nadir_agle(req_i)
+            th_prev = state.calc_off_nadir_agle(req_prev) if i > 0 else state.attitude[0]
 
             dt_maneuver = abs(th_i - th_prev) / state.max_slew_rate
-            dt_measurements = measurement_i.t_start - measurement_prev.t_end
+            dt_measurements = measurement_i.t_start - measurement_prev.t_end if i > 0 else measurement_i.t_start - state.t
 
             out_temp = [f"{req_i.id.split('-')[0]}",
                             f"\t{measurement_i.subtask_index}",
                             f"\t{np.round(measurement_i.t_start,3)}",
+                            f"\t{np.round(th_i,3)}",
                             f"\t{np.round(dt_measurements,3)}",
                             f"\t{np.round(dt_maneuver,3)}",
                             f"\t{dt_maneuver <= dt_measurements}"

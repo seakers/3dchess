@@ -116,6 +116,7 @@ class AbstractPreplanner(AbstractPlanner):
         
         # schedule measurements
         measurements : list = self._schedule_measurements(state, clock_config)
+        self._print_observation_path(state, measurements)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
@@ -253,6 +254,9 @@ class FIFOPreplanner(AbstractPreplanner):
         ### Arguments:
             - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
         """
+
+        if not isinstance(state, SatelliteAgentState):
+            raise NotImplementedError(f'FIFO preplanner for agents of type `{type(state)}` not yet supported.')
         
         # initialize measurement path
         measurements = []         
@@ -284,12 +288,12 @@ class FIFOPreplanner(AbstractPreplanner):
             # sort from ascending start time
             measurements.sort(key=lambda a: a.t_start)
 
-            # ----- FOR DEBUGGING PURPOSES ONLY ------
-            # self.__print_observation_path(state, measurements)
-            # ----------------------------------------
-
             # ensure conflict-free path
             while True:                
+                # ----- FOR DEBUGGING PURPOSES ONLY ------
+                self._print_observation_path(state, measurements)
+                # ----------------------------------------
+
                 conflict_free = True
                 i_remove = None
 
@@ -300,21 +304,25 @@ class FIFOPreplanner(AbstractPreplanner):
                         measurement_i : MeasurementAction = measurements[i]
                         measurement_j : MeasurementAction = measurements[j]
 
+                        state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
+                        state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
+
                         req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
                         req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
 
-                        th_i = state.calc_off_nadir_agle(req_i)
-                        th_j = state.calc_off_nadir_agle(req_j)
+                        th_i = state_i.calc_off_nadir_agle(req_i)
+                        th_j = state_j.calc_off_nadir_agle(req_j)
 
-                        dt_maneuver = abs(th_i - th_j) / state.max_slew_rate
+                        dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
                         dt_measurements = measurement_j.t_start - measurement_i.t_end
                     else:
                         measurement_j : MeasurementAction = measurements[j]
+                        state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
                         req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-                        th_j = state.calc_off_nadir_agle(req_j)
+                        th_j = state_j.calc_off_nadir_agle(req_j)
                         th_i = state.attitude[0]
 
-                        dt_maneuver = abs(th_i - th_j) / state.max_slew_rate
+                        dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
                         dt_measurements = measurement_j.t_start - state.t
 
                     # check if there's enough time to maneuver from one observation to another
@@ -356,7 +364,7 @@ class FIFOPreplanner(AbstractPreplanner):
                     break
                     
             # ----- FOR DEBUGGING PURPOSES ONLY ------
-            # self.__print_observation_path(state, measurements)
+            self._print_observation_path(state, measurements)
             # ----------------------------------------
             
         else:
