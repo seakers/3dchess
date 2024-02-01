@@ -103,7 +103,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
+                    "collaboration " : "False"
                 },                           
                 "replanner" : {
                     "@type" : "FIFO",
@@ -205,7 +205,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
+                    "collaboration " : "False"
                 },                
                 "replanner" : {
                     "@type" : "FIFO",
@@ -306,7 +306,7 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration " : "True"
+                    "collaboration " : "False"
                 },                                
                 "replanner" : {
                     "@type" : "FIFO",

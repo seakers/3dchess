@@ -369,7 +369,7 @@ class PlanningModule(InternalModule):
                     
                     if self.replanner.needs_planning(state, plan):
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
                         # -------------------------------------
 
                         # Modify current Plan      
@@ -406,7 +406,7 @@ class PlanningModule(InternalModule):
                 plan_out : list = plan.get_next_actions(self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
                 # send plan to parent agent
@@ -529,7 +529,7 @@ class PlanningModule(InternalModule):
                 elif isinstance(action, dict):
                     out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
         
-        
+
         self.log(out, level)
                
     async def teardown(self) -> None:

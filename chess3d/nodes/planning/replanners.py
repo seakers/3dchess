@@ -274,12 +274,7 @@ class FIFOReplanner(ReactivePlanner):
                 if t_accesses and req not in self.ignored_reqs:
                     # measurement request is accessible and hasent been considered yet
                     return True
-
-        if super().needs_planning(state, plan):
-            x = 1
-        elif len(self.pending_relays) > 0:
-            x = 1
-
+                
         return super().needs_planning(state, plan) or len(self.pending_relays) > 0
 
     # def generate_plan(self, state: SimulationAgentState, current_plan: Plan, completed_actions: list, aborted_actions: list, pending_actions: list, incoming_reqs: list, generated_reqs: list, relay_messages: list, misc_messages: list, clock_config: ClockConfig, orbitdata: dict = None) -> Plan:
