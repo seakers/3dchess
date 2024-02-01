@@ -475,7 +475,7 @@ class AbstractPlanner(ABC):
     def _print_observation_path(self, state : SatelliteAgentState, path : list) -> None :
         """ Debugging tool. Prints current observations plan being considered. """
 
-        out = '\n\n\nID\t  j\tt_img\tth\tdt_mmt\tdt_mvr\tValid\tu_exp\n'
+        out = f'\n{state.agent_name}:\n\n\nID\t  j\tt_img\tth\tdt_mmt\tdt_mvr\tValid\tu_exp\n'
 
         out_temp = [f"N\A       ",
                     f"N\A",

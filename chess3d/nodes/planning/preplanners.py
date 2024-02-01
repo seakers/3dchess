@@ -121,7 +121,6 @@ class AbstractPreplanner(AbstractPlanner):
         
         # schedule measurements
         measurements : list = self._schedule_measurements(state, clock_config)
-        self._print_observation_path(state, measurements)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)

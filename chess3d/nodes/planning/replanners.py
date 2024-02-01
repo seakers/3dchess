@@ -245,9 +245,7 @@ class FIFOReplanner(ReactivePlanner):
                                         if isinstance(action, MeasurementAction)]
                 
                 for their_req, their_subtaskt_index, their_t_img in their_measurements:
-
                     for my_req, my_subtaskt_index, my_t_img in my_measurements:
-                        
                         if (their_req == my_req 
                             and their_subtaskt_index == my_subtaskt_index
                             and their_t_img < my_t_img):
@@ -276,38 +274,6 @@ class FIFOReplanner(ReactivePlanner):
                     return True
                 
         return super().needs_planning(state, plan) or len(self.pending_relays) > 0
-
-    # def generate_plan(self, state: SimulationAgentState, current_plan: Plan, completed_actions: list, aborted_actions: list, pending_actions: list, incoming_reqs: list, generated_reqs: list, relay_messages: list, misc_messages: list, clock_config: ClockConfig, orbitdata: dict = None) -> Plan:
-        
-    #     # schedule measurements
-    #     prev_measurements = [action
-    #                          for action in current_plan 
-    #                          if isinstance(action, MeasurementAction)]
-        
-    #     available_measurements = self._get_available_requests()
-
-    #     for prev_measurement in prev_measurements:
-    #         prev_measurement : MeasurementAction
-    #         mmt = (MeasurementRequest.from_dict(prev_measurement.measurement_req), prev_measurement.subtask_index)
-
-    #         if mmt not in available_measurements:
-    #             i_missing = prev_measurements.index(prev_measurement)
-    #             x = 1
-
-    #     if len(prev_measurements) > len(available_measurements):
-    #         x = 1 
-
-    #     # updated_plan = self._schedule_measurements(state, clock_config)
-
-    #     updated_plan = super().generate_plan(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, clock_config, orbitdata)
-        
-    #     current_measurements = [action 
-    #                             for action in updated_plan 
-    #                             if isinstance(action, MeasurementAction)]
-    #     if len(prev_measurements) > len(current_measurements):
-    #         x = 1
-
-    #     return updated_plan
                 
     @runtime_tracker
     def _get_available_requests(self) -> list:
@@ -351,7 +317,7 @@ class FIFOReplanner(ReactivePlanner):
         available_reqs : list = self._get_available_requests()
 
         if isinstance(state, SatelliteAgentState):
-
+            # get access times for all available measurements
             access_times = {}
             for req, subtask_index in available_reqs:
                 req : MeasurementRequest
@@ -362,7 +328,6 @@ class FIFOReplanner(ReactivePlanner):
                 main_measurement, _ = req.measurement_groups[subtask_index]  
                 access_times[req.id][main_measurement] = [t_img for t_img in self.access_times[req.id][main_measurement]]
 
-            x = 1
 
             # create first assignment of observations
             for req, subtask_index in available_reqs:
@@ -370,34 +335,17 @@ class FIFOReplanner(ReactivePlanner):
                 main_measurement, _ = req.measurement_groups[subtask_index]  
                 t_arrivals : list = access_times[req.id][main_measurement]
 
-                # t_others = []
-                # for plan in self.other_plans:
-                #     measurements = [action
-                #                     for action in plan
-                #                     if isinstance(action, MeasurementAction) 
-                #                     and MeasurementRequest.from_dict(action.measurement_req) == req
-                #                     and action.subtask_index == subtask_index]
-                    
-                #     t_others.extend([measurement.t_start 
-                #                      for measurement in measurements
-                #                      if isinstance(measurement, MeasurementAction)])
-                
-                # t_other = min(t_others) if t_others else np.Inf
-                # if t_other < np.Inf:
-                #     x = 1
+                t_img = t_arrivals.pop(0)
+                u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
-                if len(t_arrivals) > 0:
-                    t_img = t_arrivals.pop(0)
-                    u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
-
-                    # perform measurement
-                    measurements.append(MeasurementAction( req.to_dict(),
-                                                   subtask_index, 
-                                                   main_measurement,
-                                                   u_exp,
-                                                   t_img, 
-                                                   t_img + req.duration
-                                                 ))
+                # perform measurement
+                measurements.append(MeasurementAction( req.to_dict(),
+                                                subtask_index, 
+                                                main_measurement,
+                                                u_exp,
+                                                t_img, 
+                                                t_img + req.duration
+                                            ))
 
             # sort from ascending start time
             measurements.sort(key=lambda a: a.t_start)
@@ -405,7 +353,7 @@ class FIFOReplanner(ReactivePlanner):
             # ensure conflict-free path
             while True:                
                 # ----- FOR DEBUGGING PURPOSES ONLY ------
-                # self._print_observation_path(state, measurements)
+                self._print_observation_path(state, measurements)
                 # ----------------------------------------
 
                 conflict_free = True
@@ -414,6 +362,7 @@ class FIFOReplanner(ReactivePlanner):
                 for j in range(len(measurements)):
                     i = j - 1
 
+                    # estimate maneuver time 
                     if i >= 0:
                         measurement_i : MeasurementAction = measurements[i]
                         state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
@@ -443,7 +392,7 @@ class FIFOReplanner(ReactivePlanner):
                             # pick next access time
                             t_img = t_arrivals.pop(0)
                             u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
-
+                            
                             # update measurement action
                             measurement_j.t_start = t_img
                             measurement_j.t_end = t_img + req_j.duration
@@ -463,6 +412,30 @@ class FIFOReplanner(ReactivePlanner):
                             j_remove = j
 
                         # flag current observation plan as unfeasible for rescheduling
+                        conflict_free = False
+                        break
+
+                    # check if other agents scheduled to perform this observation as well
+                    t_others = []
+                    for agent_name in self.other_plans:
+                        plan : Plan = self.other_plans[agent_name]
+                        measurements = [action
+                                        for action in plan
+                                        if isinstance(action, MeasurementAction) 
+                                        and MeasurementRequest.from_dict(action.measurement_req) == req_j
+                                        and action.subtask_index == measurement_j.subtask_index]
+                        
+                        t_others.extend([measurement.t_start 
+                                        for measurement in measurements
+                                        if isinstance(measurement, MeasurementAction)])
+                    
+                    t_other = min(t_others) if t_others else np.Inf
+
+                    if t_other < t_img:
+                        # other agents are performing this observation earlier than the parent agent can;
+                        # add to list of ignored obserations
+                        self.ignored_reqs.append(req)
+                        j_remove = j
                         conflict_free = False
                         break
                 
