@@ -368,6 +368,10 @@ class PlanningModule(InternalModule):
                                                 )
                     
                     if self.replanner.needs_planning(state, plan):
+                        # --- FOR DEBUGGING PURPOSES ONLY: ---
+                        self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                        # -------------------------------------
+
                         # Modify current Plan      
                         plan : Plan = self.replanner.generate_plan( state, 
                                                                     plan,
@@ -381,10 +385,6 @@ class PlanningModule(InternalModule):
                                                                     self._clock_config,
                                                                     self.orbitdata
                                                                     )
-
-                        # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
-                        # -------------------------------------
 
                         # update last time plan was updated
                         self.t_plan = self.get_current_time()

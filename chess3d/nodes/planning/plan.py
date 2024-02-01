@@ -167,10 +167,10 @@ class Plan(ABC):
             raise RuntimeError(f"Unfeasible plan. {e}")
 
         return plan_out    
-
-    @abstractmethod
+    
     def copy(self) -> object:
         """ Copy contructor. Creates a deep copy of this oject. """
+        return Plan(self.actions, t=self.t)
 
     def __is_feasible(self, plan : list) -> bool:
         """ Checks if the current plan can be performed by the agent """
@@ -236,8 +236,7 @@ class Plan(ABC):
             yield action
 
     def __len__(self) -> int:
-        return len(self.actions)
-    
+        return len(self.actions)    
 
 class Preplan(Plan):
     def __init__(self, 

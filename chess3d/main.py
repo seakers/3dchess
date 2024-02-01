@@ -257,13 +257,11 @@ def agent_factory(  scenario_name : str,
 
         replanner_dict = planner_dict.get('replanner', None)
         if isinstance(replanner_dict, dict):
-            # raise NotImplementedError('Replanners under development.')
-
             replanner_type = replanner_dict.get('@type', None)
             
-            if replanner_dict == 'FIFO':
+            if replanner_type == 'FIFO':
                 collaboration = preplanner_dict.get('collaboration ', "False") == "True"
-                # replanner = FIFOReplanner(utility_func, collaboration)
+                replanner = FIFOReplanner(utility_func, collaboration)
 
             elif replanner_type == 'ACBBA':
                 max_bundle_size = replanner_dict.get('bundle size', 3)

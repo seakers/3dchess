@@ -42,10 +42,11 @@ class AbstractPreplanner(AbstractPlanner):
             - logger (`logging.Logger`) : debugging logger
         """
         # initialize planner
-        super().__init__(utility_func, horizon, logger)    
+        super().__init__(utility_func, logger)    
 
         # set parameters
-        self.period = period
+        self.horizon = horizon              # planning horizon
+        self.period = period                # replanning period         
         self.plan = Preplan(t=-1,horizon=horizon,t_next=0.0)
         
     @runtime_tracker
@@ -220,53 +221,6 @@ class AbstractPreplanner(AbstractPlanner):
                             break
 
         return available_reqs
-    
-    def _print_observation_path(self, state : SatelliteAgentState, path : list) -> None :
-        """ Debugging tool. Prints current observations plan being considered. """
-
-        out = '\n\n\nID\t  Subtask\tt_img\tdt_mmt\tdt_mvr\tValid\tu_exp\n'
-        for i in range(len(path) - 1):
-            if i == 0:
-                measurement_i : MeasurementAction = path[i]
-                req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-
-                out_temp = [f"{req_i.id.split('-')[0]}",
-                            f"\t{measurement_i.subtask_index}",
-                            f"\t{np.round(measurement_i.t_start,3)}",
-                            f"\t-",
-                            f"\t-",
-                            f"\tTrue"
-                            f"\t{np.round(measurement_i.u_exp,3)}",
-                            f"\n"
-                            ]
-                out += ''.join(out_temp)
-                continue 
-            
-            j = i - 1 
-            measurement_i : MeasurementAction = path[i]
-            measurement_prev : MeasurementAction = path[j]
-
-            req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-            req_prev : MeasurementRequest = MeasurementRequest.from_dict(measurement_prev.measurement_req)
-
-            th_i = state.calc_off_nadir_agle(req_i)
-            th_prev = state.calc_off_nadir_agle(req_prev)
-
-            dt_maneuver = abs(th_i - th_prev) / state.max_slew_rate
-            dt_measurements = measurement_i.t_start - measurement_prev.t_end
-
-            out_temp = [f"{req_i.id.split('-')[0]}",
-                            f"\t{measurement_i.subtask_index}",
-                            f"\t{np.round(measurement_i.t_start,3)}",
-                            f"\t{np.round(dt_measurements,3)}",
-                            f"\t{np.round(dt_maneuver,3)}",
-                            f"\t{dt_maneuver <= dt_measurements}"
-                            f"\t{np.round(measurement_i.u_exp,3)}",
-                            f"\n"
-                            ]
-            out += ''.join(out_temp)
-
-        print(out)
 
 class IdlePlanner(AbstractPreplanner):
     @runtime_tracker
@@ -339,19 +293,29 @@ class FIFOPreplanner(AbstractPreplanner):
                 conflict_free = True
                 i_remove = None
 
-                for i in range(len(measurements) - 1):
-                    j = i + 1
-                    measurement_i : MeasurementAction = measurements[i]
-                    measurement_j : MeasurementAction = measurements[j]
+                for j in range(len(measurements)):
+                    i = j - 1
 
-                    req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                    req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
+                    if i >= 0:
+                        measurement_i : MeasurementAction = measurements[i]
+                        measurement_j : MeasurementAction = measurements[j]
 
-                    th_i = state.calc_off_nadir_agle(req_i)
-                    th_j = state.calc_off_nadir_agle(req_j)
+                        req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+                        req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
 
-                    dt_maneuver = abs(th_i - th_j) / state.max_slew_rate
-                    dt_measurements = measurement_j.t_start - measurement_i.t_end
+                        th_i = state.calc_off_nadir_agle(req_i)
+                        th_j = state.calc_off_nadir_agle(req_j)
+
+                        dt_maneuver = abs(th_i - th_j) / state.max_slew_rate
+                        dt_measurements = measurement_j.t_start - measurement_i.t_end
+                    else:
+                        measurement_j : MeasurementAction = measurements[j]
+                        req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
+                        th_j = state.calc_off_nadir_agle(req_j)
+                        th_i = state.attitude[0]
+
+                        dt_maneuver = abs(th_i - th_j) / state.max_slew_rate
+                        dt_measurements = measurement_j.t_start - state.t
 
                     # check if there's enough time to maneuver from one observation to another
                     if dt_maneuver > dt_measurements:
