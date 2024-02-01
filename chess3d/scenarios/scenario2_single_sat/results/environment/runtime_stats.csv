@@ -1,0 +1,3 @@
+routine,t_avg,t_std,t_med,n
+img_1,0.422,6.187,0.01,230
+query_measurement_data,1.322,11.004,0.016,72

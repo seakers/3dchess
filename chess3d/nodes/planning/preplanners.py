@@ -295,35 +295,28 @@ class FIFOPreplanner(AbstractPreplanner):
                 # ----------------------------------------
 
                 conflict_free = True
-                i_remove = None
+                j_remove = None
 
                 for j in range(len(measurements)):
                     i = j - 1
 
                     if i >= 0:
                         measurement_i : MeasurementAction = measurements[i]
-                        measurement_j : MeasurementAction = measurements[j]
-
                         state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
-                        state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
-
                         req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                        req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-
                         th_i = state_i.calc_off_nadir_agle(req_i)
-                        th_j = state_j.calc_off_nadir_agle(req_j)
-
-                        dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                        dt_measurements = measurement_j.t_start - measurement_i.t_end
+                        t_i = measurement_i.t_end
                     else:
-                        measurement_j : MeasurementAction = measurements[j]
-                        state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
-                        req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-                        th_j = state_j.calc_off_nadir_agle(req_j)
                         th_i = state.attitude[0]
+                        t_i = state.t
 
-                        dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                        dt_measurements = measurement_j.t_start - state.t
+                    measurement_j : MeasurementAction = measurements[j]
+                    state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
+                    req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
+                    th_j = state_j.calc_off_nadir_agle(req_j)
+
+                    dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
+                    dt_measurements = measurement_j.t_start - t_i
 
                     # check if there's enough time to maneuver from one observation to another
                     if dt_maneuver > dt_measurements:
@@ -348,17 +341,17 @@ class FIFOPreplanner(AbstractPreplanner):
                             # sort from ascending start time
                             measurements.sort(key=lambda a: a.t_start)
                         else:                       # no more future accesses for this GP
-                            i_remove = j
-                            conflict_free = False
-                            # break
-                            raise Exception("Whoops. See Plan Initializer.")
+                            j_remove = j
 
                         # flag current observation plan as unfeasible for rescheduling
                         conflict_free = False
                         break
                 
-                if i_remove is not None:
+                if j_remove is not None:
                     measurements.pop(j) 
+
+                    # sort from ascending start time
+                    measurements.sort(key=lambda a: a.t_start)
 
                 if conflict_free:
                     break
