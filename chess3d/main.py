@@ -267,7 +267,7 @@ def agent_factory(  scenario_name : str,
                 max_bundle_size = replanner_dict.get('bundle size', 3)
                 dt_converge = replanner_dict.get('dt_convergence', 0.0)
                 replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge)
-
+            
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
         else:

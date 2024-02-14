@@ -345,7 +345,7 @@ class PlanningModule(InternalModule):
                         self.plan_history.append((state.t, plan_copy))
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -369,7 +369,7 @@ class PlanningModule(InternalModule):
                     
                     if self.replanner.needs_planning(state, plan):
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -398,7 +398,7 @@ class PlanningModule(InternalModule):
                         pending_actions = []
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        # self.__log_plan(plan, "REPLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -407,7 +407,7 @@ class PlanningModule(InternalModule):
                 plan_out : list = plan.get_next_actions(self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
                 # -------------------------------------
 
                 # send plan to parent agent
