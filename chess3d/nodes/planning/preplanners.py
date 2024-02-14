@@ -1,189 +1,211 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import logging
-import math
 from typing import Any, Callable
-import pandas as pd
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
+import pandas as pd
 
-from nodes.orbitdata import OrbitData
+from messages import *
+
+from nodes.planning.plan import Plan, Preplan
+from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
 from nodes.actions import *
 from nodes.science.reqs import *
 from nodes.science.utility import synergy_factor
 from nodes.states import SimulationAgentState
 from nodes.orbitdata import OrbitData
+from nodes.planning.planners import AbstractPlanner
 
-class AbstractPreplanner(ABC):
+class AbstractPreplanner(AbstractPlanner):
     """
     # Preplanner
+
+    Conducts operations planning for an agent at the beginning of a planning horizon. 
     """
     def __init__(   self, 
                     utility_func : Callable[[], Any], 
+                    horizon : float = np.Inf,
+                    period : float = np.Inf,
                     logger: logging.Logger = None
                 ) -> None:
-        super().__init__()
-
-        self.t_plan = -1
-        self.t_next = np.Inf
-
-        self.performed_requests = []
-        self.access_times = {}
-        self.known_reqs = []
+        """
+        ## Preplanner 
         
-        self.stats = {}
-        
-        self.utility_func = utility_func
-        self._logger = logger
+        Creates an instance of a preplanner class object.
 
+        #### Arguments:
+            - utility_func (`Callable`): desired utility function for evaluating observations
+            - horizon (`float`) : planning horizon in seconds [s]
+            - period (`float`) : period of replanning in seconds [s]
+            - logger (`logging.Logger`) : debugging logger
+        """
+        # initialize planner
+        super().__init__(utility_func, logger)    
+
+        # set parameters
+        self.horizon = horizon              # planning horizon
+        self.period = period                # replanning period         
+        self.plan = Preplan(t=-1,horizon=horizon,t_next=0.0)
+        
     @runtime_tracker
-    def needs_initialized_plan( self, 
-                                state : SimulationAgentState,
-                                current_plan : list,
-                                performed_actions : list,
-                                incoming_reqs : list,
-                                generated_reqs : list,
-                                misc_messages : list,
-                                t_plan : float,
-                                planning_horizon : float = np.Inf,
-                                orbitdata : OrbitData = None
-                            ) -> bool:
+    def needs_planning( self, 
+                        state : SimulationAgentState,
+                        current_plan : Plan, 
+                        *_
+                        ) -> bool:
         """ Determines whether a new plan needs to be initalized """    
-        # update list of known requests
-        new_reqs : list = self.__get_new_requests(incoming_reqs, generated_reqs)
-        self.known_reqs.extend(new_reqs)
 
-        # update list of performed requests
-        self.__update_performed_requests(performed_actions)
-
-        # update access times 
-        self.__update_access_times(state, t_plan, planning_horizon, orbitdata)
-        
-        # check if plan needs to be inialized
-        return (t_plan < 0                    # simulation just started
-                or state.t >= self.t_next)    # planning horizon has been reached
+        return (current_plan.t < 0                  # simulation just started
+                or state.t >= self.plan.t_next)     # periodic planning period has been reached
 
     @runtime_tracker
-    def __get_new_requests( self, 
-                            incoming_reqs : list,
-                            generated_reqs : list
-                            ) -> list:
-        """
-        Reads incoming requests and determines which ones are new or known
-        """
-        reqs = [req for req in incoming_reqs]
-        reqs.extend(generated_reqs)
-
-        return [req for req in reqs if req not in self.known_reqs and req.s_max > 0]
-
-    @runtime_tracker
-    def __update_performed_requests(self, performed_actions : list) -> None:
-        """ Updates an internal list of requests performed by the parent agent """
-        for action in performed_actions:
-            if isinstance(action, MeasurementAction):
-                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                if action.status == action.COMPLETED and (req, action.instrument_name) not in self.performed_requests:
-                    self.performed_requests.append((req, action.instrument_name))
-
-        return
-
-    @runtime_tracker
-    def __update_access_times(  self,
-                                state : SimulationAgentState,
-                                t_plan : float,
-                                planning_horizon : float,
-                                orbitdata : OrbitData) -> None:
+    def _update_access_times(self,
+                             state : SimulationAgentState,
+                             agent_orbitdata : OrbitData) -> None:
         """
         Calculates and saves the access times of all known requests
         """
-        if state.t >= self.t_next or t_plan < 0:
+        if state.t >= self.plan.t_next or self.plan.t < 0:
             # recalculate access times for all known requests            
             for req in self.known_reqs:
                 req : MeasurementRequest
                 self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+
+                # check access for each required measurement
                 for instrument in self.access_times[req.id]:
                     if instrument not in state.payload:
-                        # agent cannot perform this request
+                        # agent cannot perform this request TODO add KG support
                         continue
 
-                    if (req, instrument) in self.performed_requests:
+                    if (req, instrument) in self.completed_requests:
                         # agent has already performed this request
                         continue
 
-                    t_arrivals : list = self._calc_arrival_times(   state, 
-                                                                    req, 
-                                                                    instrument,
-                                                                    state.t,
-                                                                    planning_horizon, 
-                                                                    orbitdata)
-                    self.access_times[req.id][instrument] = t_arrivals
+                    if isinstance(req, GroundPointMeasurementRequest):
+                        lat,lon,_ = req.lat_lon_pos 
+                        t_start = state.t
+                        t_end = self.plan.t + self.horizon if self.plan else state.t + self.horizon
+                        if isinstance(state, SatelliteAgentState):
+                            df : pd.DataFrame = agent_orbitdata \
+                                            .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
+                            t_arrivals = [row['time index'] * agent_orbitdata.time_step
+                                        for _, row in df.iterrows()]
+                            self.access_times[req.id][instrument] = t_arrivals
+                        else:
+                            raise NotImplementedError(f"access time estimation for agents of type `{type(state)}` not yet supported.")    
+
+                    else:
+                        raise NotImplementedError(f"access time estimation for measurement requests of type `{type(req)}` not yet supported.")
+        elif any([req.id not in self.access_times for req in self.known_reqs]):
+            for req in self.known_reqs:
+                if req.id not in self.access_times:
+                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+
 
     @runtime_tracker
-    def _calc_arrival_times(self, 
-                            state : SimulationAgentState, 
-                            req : MeasurementRequest, 
-                            instrument : str,
-                            t_prev : Union[int, float],
-                            planning_horizon : Union[int, float], 
-                            orbitdata : OrbitData) -> float:
-        """
-        Estimates the quickest arrival time from a starting position to a given final position
-        """
-        if isinstance(req, GroundPointMeasurementRequest):
-            # compute earliest time to the task
-            if isinstance(state, SatelliteAgentState):
-                t_imgs = []
-                lat,lon,_ = req.lat_lon_pos
-                t_end = min(t_prev + planning_horizon, req.t_end)
-                t_start = min( max(t_prev, req.t_start), t_prev + planning_horizon)
-                df : pd.DataFrame = orbitdata.get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
-
-                for _, row in df.iterrows():
-                    t_img = row['time index'] * orbitdata.time_step
-                    dt = t_img - state.t
-                
-                    # propagate state
-                    propagated_state : SatelliteAgentState = state.propagate(t_prev)
-
-                    # compute off-nadir angle
-                    thf = propagated_state.calc_off_nadir_agle(req)
-                    dth = abs(thf - propagated_state.attitude[0])
-
-                    # estimate arrival time using fixed angular rate TODO change to 
-                    if dt >= dth / state.max_slew_rate: # TODO change maximum angular rate 
-                        t_imgs.append(t_img)
-                        
-                return t_imgs
-
-            elif isinstance(state, UAVAgentState):
-                dr = np.array(req.pos) - np.array(state.pos)
-                norm = np.sqrt( dr.dot(dr) )
-                return [norm / state.max_speed + t_prev]
-
-            else:
-                raise NotImplementedError(f"arrival time estimation for agents of type `{type(state)}` is not yet supported.")
-
-        else:
-            raise NotImplementedError(f"cannot calculate imaging time for measurement requests of type {type(req)}")       
-
-    @abstractmethod
-    def initialize_plan(self, 
+    def generate_plan(  self, 
                         state : SimulationAgentState,
-                        current_plan : list,
-                        performed_actions : list,
+                        current_plan : Plan,
+                        completed_actions : list,
+                        aborted_actions : list,
+                        pending_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
+                        relay_messages : list,
                         misc_messages : list,
-                        t_plan : float,
                         clock_config : ClockConfig,
-                        planning_horizon : float = np.Inf,
-                        orbitdata : OrbitData = None
-                    ) -> bool:
-        """
-        Creates an initial plan for the agent to perform
-        """
+                        orbitdata : dict = None
+                    ) -> Plan:
+        
+        # schedule measurements
+        measurements : list = self._schedule_measurements(state, clock_config)
 
+        # schedule broadcasts to be perfomed
+        broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
+
+        # generate maneuver and travel actions from measurements
+        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+        
+        # wait for next planning period to start
+        replan : list = self.__schedule_periodic_replan(state, measurements, maneuvers)
+
+        # generate plan from actions
+        self.plan : Preplan = Preplan(measurements, maneuvers, broadcasts, replan, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
+
+        # return plan
+        return self.plan
+        
+    @abstractmethod
+    def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig) -> list:
+        """ Creates a list of measurement actions to be performed by the agent """
+
+    @runtime_tracker
+    def _generate_broadcasts(self, 
+                             state : SimulationAgentState, 
+                             measurements : list, 
+                             generated_reqs : list, 
+                             orbitdata : OrbitData
+                             ) -> list:
+        """ Creates broadcast actions """
+        # initialize list of broadcasts to be done
+        broadcasts = []
+
+        # schedule generated measurement request broadcasts
+        for req in generated_reqs:
+            req : MeasurementRequest
+            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+            
+            # place broadcasts in plan
+            if isinstance(state, SatelliteAgentState):
+                if not orbitdata:
+                    raise ValueError('orbitdata required for satellite agents')
+                
+                # get next access windows to all agents
+                isl_accesses = [orbitdata.get_next_agent_access(target, state.t) for target in orbitdata.isl_data]
+
+                # TODO merge accesses to find overlaps
+                isl_accesses_merged = isl_accesses
+
+                # place requests in pending broadcasts list
+                for interval in isl_accesses_merged:
+                    interval : TimeInterval
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, state.t))
+
+                    broadcasts.append(broadcast_action)
+                    
+            else:
+                raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
+        
+        return broadcasts   
+
+    @runtime_tracker
+    def __schedule_periodic_replan(self, state : SimulationAgentState, measurement_actions : list, maneuver_actions : list) -> list:
+        """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
+        # calculate next period for planning
+        t_next = state.t + self.period
+
+        # find wait start time
+        if not measurement_actions and not maneuver_actions:
+            t_wait_start = state.t 
+        
+        else:
+            prelim_plan = Preplan(measurement_actions, maneuver_actions, t=state.t)
+
+            actions_in_period = [action for action in prelim_plan.actions 
+                                 if action.t_start < t_next]
+
+            if actions_in_period:
+                last_action : AgentAction = actions_in_period.pop()
+                t_wait_start = min(last_action.t_end, t_next)
+                                
+            else:
+                t_wait_start = state.t
+
+        # create wait action
+        return [WaitForMessages(t_wait_start, t_next)]
+        
     @runtime_tracker
     def _get_available_requests(self) -> list:
         """ Returns a list of known requests that can be performed within the current planning horizon """
@@ -205,255 +227,218 @@ class AbstractPreplanner(ABC):
 
         return available_reqs
 
-    @runtime_tracker
-    
-    def _plan_from_path(    self, 
-                            state : SimulationAgentState, 
-                            path : list,
-                            orbitdata : OrbitData,
-                            t_init : float,
-                            clock_config : ClockConfig
-                    ) -> list:
-        """
-        Generates a list of AgentActions from the current path.
-
-        Agents look to move to their designated measurement target and perform the measurement.
-
-        ## Arguments:
-            - state (:obj:`SimulationAgentState`): state of the agent at the start of the path
-            - path (`list`): list of tuples indicating the sequence of observations to be performed and time of observation
-        """
-        # create appropriate actions for every measurement in the path
-        plan = []
-
-        for i in range(len(path)):
-            plan_i = []
-
-            measurement_req, subtask_index, t_img, u_exp = path[i]
-            measurement_req : MeasurementRequest; subtask_index : int; t_img : float; u_exp : float
-
-            if not isinstance(measurement_req, GroundPointMeasurementRequest):
-                raise NotImplementedError(f"Cannot create plan for requests of type {type(measurement_req)}")
-            
-            # Estimate previous state
-            if i == 0:
-                if isinstance(state, SatelliteAgentState):
-                    t_prev = state.t
-                    prev_state : SatelliteAgentState = state.copy()
-
-                elif isinstance(state, UAVAgentState):
-                    t_prev = state.t #TODO consider wait time for convergence
-                    prev_state : UAVAgentState = state.copy()
-
-                else:
-                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
-            else:
-                prev_req = None
-                for action in reversed(plan):
-                    action : AgentAction
-                    if isinstance(action, MeasurementAction):
-                        prev_req = MeasurementRequest.from_dict(action.measurement_req)
-                        break
-                
-                action_prev : AgentAction = plan[-1] if len(plan) > 0 else None
-                t_prev = action_prev.t_end if action_prev is not None else t_init
-
-                if isinstance(state, SatelliteAgentState):
-                    prev_state : SatelliteAgentState = state.propagate(t_prev)
-                    
-                    if prev_req is not None:
-                        prev_state.attitude = [
-                                            prev_state.calc_off_nadir_agle(prev_req),
-                                            0.0,
-                                            0.0
-                                        ]
-
-                elif isinstance(state, UAVAgentState):
-                    prev_state : UAVAgentState = state.copy()
-                    prev_state.t = t_prev
-
-                    if isinstance(prev_req, GroundPointMeasurementRequest):
-                        prev_state.pos = prev_req.pos
-                    else:
-                        raise NotImplementedError(f"cannot calculate travel time start for requests of type {type(prev_req)} for uav agents")
-
-                else:
-                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
-                
-            # maneuver to point to target
-            t_maneuver_end = None
-            if isinstance(state, SatelliteAgentState):
-                prev_state : SatelliteAgentState
-
-                t_maneuver_start = prev_state.t
-                th_f = prev_state.calc_off_nadir_agle(measurement_req)
-                dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
-                t_maneuver_end = t_maneuver_start + dt
-
-                if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
-                    maneuver_action = ManeuverAction([th_f, 0, 0], t_maneuver_start, t_maneuver_end)
-                    plan_i.append(maneuver_action)   
-                else:
-                    t_maneuver_end = None
-
-            # move to target
-            t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
-            if isinstance(state, SatelliteAgentState):
-                t_move_end = t_img
-                future_state : SatelliteAgentState = state.propagate(t_move_end)
-                final_pos = future_state.pos
-
-            elif isinstance(state, UAVAgentState):
-                final_pos = measurement_req.pos
-                dr = np.array(final_pos) - np.array(prev_state.pos)
-                norm = np.sqrt( dr.dot(dr) )
-                
-                t_move_end = t_move_start + norm / state.max_speed
-
-            else:
-                raise NotImplementedError(f"cannot calculate travel time end for agent states of type {type(state)}")
-            
-            if t_move_end < t_img:
-                plan_i.append( WaitForMessages(t_move_end, t_img) )
-                
-            t_img_start = t_img
-            t_img_end = t_img_start + measurement_req.duration
-
-            if isinstance(clock_config, FixedTimesStepClockConfig):
-                dt = clock_config.dt
-                if t_move_start < np.Inf:
-                    t_move_start = dt * math.floor(t_move_start/dt)
-                if t_move_end < np.Inf:
-                    t_move_end = dt * math.ceil(t_move_end/dt)
-
-                if t_img_start < np.Inf:
-                    t_img_start = dt * math.floor(t_img_start/dt)
-                if t_img_end < np.Inf:
-                    t_img_end = dt * math.ceil((t_img_start + measurement_req.duration)/dt)
-            
-            if abs(t_move_start - t_move_end) >= 1e-3:
-                if t_move_start > t_move_end:
-                    continue
-
-                move_action = TravelAction(final_pos, t_move_start, t_move_end)
-                plan_i.append(move_action)
-            
-            # perform measurement
-            main_measurement, _ = measurement_req.measurement_groups[subtask_index]
-            measurement_action = MeasurementAction( 
-                                                    measurement_req.to_dict(),
-                                                    subtask_index, 
-                                                    main_measurement,
-                                                    u_exp,
-                                                    t_img_start, 
-                                                    t_img_end
-                                                    )
-            plan_i.append(measurement_action) 
-
-            # TODO inform others of request completion
-
-            plan.extend(plan_i)
-
-        return plan
-
 class IdlePlanner(AbstractPreplanner):
     @runtime_tracker
-    def initialize_plan(    self, 
-                            *_
-                        ) -> tuple:
+    def generate_plan(  self, 
+                        *_
+                    ) -> tuple:
         return [IdleAction(0.0, np.Inf)]
 
 class FIFOPreplanner(AbstractPreplanner):
+    def __init__(self, 
+                 utility_func: Callable[[], Any], 
+                 period : float = np.Inf,
+                 horizon : float = np.Inf,
+                 collaboration : bool = False,
+                 logger: logging.Logger = None, 
+                 **kwargs
+                 ) -> None:
+        """
+        ### First Come, First Served Preplanner
+        """
+
+        super().__init__(utility_func, horizon, period, logger)
+        self.collaboration = collaboration    
+
     @runtime_tracker
-    def initialize_plan(self, 
-                        state : SimulationAgentState,
-                        current_plan : list,
-                        performed_actions : list,
-                        incoming_reqs : list,
-                        generated_reqs : list,
-                        misc_messages : list,
-                        t_plan : float,
-                        clock_config : ClockConfig,
-                        planning_horizon : float = np.Inf,
-                        orbitdata : OrbitData = None
-                    ) -> bool:
-        t_plan = t_plan if t_plan >= 0 else 0
-        path = []         
+    def _schedule_measurements(self, state : SimulationAgentState, _ : ClockConfig) -> list:
+        """ 
+        Schedule a sequence of observations based on the current state of the agent 
+        
+        ### Arguments:
+            - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
+        """
+
+        if not isinstance(state, SatelliteAgentState):
+            raise NotImplementedError(f'FIFO preplanner for agents of type `{type(state)}` not yet supported.')
+        
+        # initialize measurement path
+        measurements = []         
+
+        # get available requests
         available_reqs : list = self._get_available_requests()
 
         if isinstance(state, SatelliteAgentState):
-            # Generates a plan for observing GPs on a first-come first-served basis
-            reqs = {req.id : req for req, _ in available_reqs}
 
+            # create first assignment of observations
             for req, subtask_index in available_reqs:
-                instrument, _ = req.measurement_groups[subtask_index]  
-                t_arrivals : list = self.access_times[req.id][instrument]
+                req : MeasurementRequest
+                main_measurement, _ = req.measurement_groups[subtask_index]  
+                t_arrivals : list = self.access_times[req.id][main_measurement]
 
                 if len(t_arrivals) > 0:
                     t_img = t_arrivals.pop(0)
-                    req : MeasurementRequest = reqs[req.id]
-                    s_j = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+                    u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
-                    path.append((req, subtask_index, t_img, s_j))
+                    # perform measurement
+                    measurements.append(MeasurementAction( req.to_dict(),
+                                                   subtask_index, 
+                                                   main_measurement,
+                                                   u_exp,
+                                                   t_img, 
+                                                   t_img + req.duration
+                                                 ))
 
-            path.sort(key=lambda a: a[2])
+            # sort from ascending start time
+            measurements.sort(key=lambda a: a.t_start)
 
-            # out = '\n'
-            # for req, subtask_index, t_img, s in path:
-            #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-            # print(out)
+            # ensure conflict-free path
+            while True:                
+                # ----- FOR DEBUGGING PURPOSES ONLY ------
+                # self._print_observation_path(state, measurements)
+                # ----------------------------------------
 
-            while True:
-                
                 conflict_free = True
-                i_remove = None
+                j_remove = None
 
-                for i in range(len(path) - 1):
-                    j = i + 1
-                    req_i, _, t_i, __ = path[i]
-                    req_j, subtask_index_j, t_j, s_j = path[j]
+                for j in range(len(measurements)):
+                    i = j - 1
 
-                    th_i = state.calc_off_nadir_agle(req_i)
-                    th_j = state.calc_off_nadir_agle(req_j)
+                    if i >= 0:
+                        measurement_i : MeasurementAction = measurements[i]
+                        state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
+                        req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+                        th_i = state_i.calc_off_nadir_agle(req_i)
+                        t_i = measurement_i.t_end
+                    else:
+                        th_i = state.attitude[0]
+                        t_i = state.t
 
-                    if abs(th_i - th_j) / state.max_slew_rate > t_j - t_i:
-                        instrument, _ = req.measurement_groups[subtask_index_j]  
-                        t_arrivals : list = self.access_times[req_j.id][instrument]
-                        if len(t_arrivals) > 0:
-                            # pick next arrival time
+                    measurement_j : MeasurementAction = measurements[j]
+                    state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
+                    req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
+                    th_j = state_j.calc_off_nadir_agle(req_j)
+
+                    dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
+                    dt_measurements = measurement_j.t_start - t_i
+
+                    # check if there's enough time to maneuver from one observation to another
+                    if dt_maneuver > dt_measurements:
+
+                        # there is not enough time to maneuver 
+                        main_measurement, _ = req_j.measurement_groups[measurement_j.subtask_index]  
+                        t_arrivals : list = self.access_times[req_j.id][main_measurement]
+                        
+                        if len(t_arrivals) > 0:     # try again for the next access period
+                            # pick next access time
                             t_img = t_arrivals.pop(0)
-                            s_j = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+                            u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
-                            path[j] = (req_j, subtask_index_j, t_img, s_j)
-                            path.sort(key=lambda a: a[2])
-                        else:
-                            # remove request from path
-                            i_remove = j
-                            conflict_free = False
-                            break
-                            # raise Exception("Whoops. See Plan Initializer.")
+                            # update measurement action
+                            measurement_j.t_start = t_img
+                            measurement_j.t_end = t_img + req_j.duration
+                            measurement_j.u_exp = u_exp
+                            
+                            # update path list
+                            measurements[j] = measurement_j
+
+                            # sort from ascending start time
+                            measurements.sort(key=lambda a: a.t_start)
+                        else:                       # no more future accesses for this GP
+                            j_remove = j
+
+                        # flag current observation plan as unfeasible for rescheduling
                         conflict_free = False
                         break
                 
-                if i_remove is not None:
-                    path.pop(j) 
+                if j_remove is not None:
+                    measurements.pop(j) 
+
+                    # sort from ascending start time
+                    measurements.sort(key=lambda a: a.t_start)
 
                 if conflict_free:
                     break
-                    
-            # out = '\n'
-            # for req, subtask_index, t_img, s in path:
-            #     out += f"{req.id.split('-')[0]}\t{subtask_index}\t{np.round(t_img,3)}\t{np.round(s,3)}\n"
-            # print(out)
-
-            # generate plan from path
-            plan = self._plan_from_path(state, path, orbitdata, t_plan, clock_config)
-
-            self.t_plan = state.t
-            self.t_next = self.t_plan + planning_horizon
-
-            return plan
-                
+            
         else:
             raise NotImplementedError(f'initial planner for states of type `{type(state)}` not yet supported')
     
+        return measurements
+    
+    @runtime_tracker
+    def _schedule_broadcasts(self, 
+                             state : SimulationAgentState, 
+                             measurements : list, 
+                             orbitdata : dict
+                            ) -> list:
+        # initialize broadcasts
+        broadcasts : list = super()._schedule_broadcasts(state,
+                                                         measurements, 
+                                                         orbitdata)
+
+        # schedule performed measurement broadcasts
+        if self.collaboration:
+
+            # schedule the announcement of the current plan
+            if measurements:
+                # if there are measurements in plan, create plan broadcast action
+                path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, state.t)
+                msg = PlanMessage(state.agent_name, 
+                                state.agent_name, 
+                                [action.to_dict() for action in measurements],
+                                state.t,
+                                path=path)
+                
+                if t_start >= 0.0:
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                    
+                    # check broadcast start; only add to plan if it's within the planning horizon
+                    if t_start <= state.t + self.horizon:
+                        broadcasts.append(broadcast_action)
+
+            # schedule the broadcast of each scheduled measurement's completion after it's been performed
+            for measurement in measurements:
+                measurement : MeasurementAction
+                path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, measurement.t_end)
+
+                msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, measurement.to_dict(), path=path)
+
+                if t_start >= 0.0:
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                    
+                    # check broadcast start; only add to plan if it's within the planning horizon
+                    if t_start <= state.t + self.horizon:
+                        broadcasts.append(broadcast_action)
+           
+            # check which measurements that have been performed and already broadcasted
+            measurements_broadcasted = [action_from_dict(**msg.measurement_action)
+                                        for msg in self.completed_broadcasts 
+                                        if isinstance(msg, MeasurementPerformedMessage)]
+
+            # search for measurements that have been performed but not yet been broadcasted
+            measurements_to_broadcast = [action for action in self.completed_actions 
+                                        if isinstance(action, MeasurementAction)
+                                        and action not in measurements_broadcasted]
+            
+            # create a broadcast action for all unbroadcasted measurements
+            for completed_measurement in measurements_to_broadcast:       
+                completed_measurement : MeasurementAction
+                t_end = max(completed_measurement.t_end, state.t)
+                path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, t_end)
+                
+                msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, completed_measurement.to_dict())
+                
+                if t_start >= 0.0:
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start, path=path)
+                    
+                    # check broadcast start; only add to plan if it's within the planning horizon
+                    if t_start <= state.t + self.horizon:
+                        broadcasts.append(broadcast_action)
+
+                    assert completed_measurement.t_end <= broadcast_action.t_start
+        
+        # sort broadcasts by start time
+        broadcasts.sort(key=lambda a : a.t_start)
+
+        # return broadcast list
+        return broadcasts

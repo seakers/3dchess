@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 import json
 import os
 import re
@@ -21,7 +22,25 @@ class TimeInterval:
 
     def is_during(self, t):
         return self.start <= t <= self.end
+    
+    def has_overlap(self, __other : object) -> bool:
+        """ checks if a this time interval has an overlap with another """
+        return (    __other.start <= self.start <= __other.end
+                or  __other.start <= self.end <= __other.end 
+                or  (self.start <= __other.start and __other.end <= self.end)) 
 
+    def merge(self, __other : object) -> object:
+        """ merges two time intervals and returns their intersect """
+
+        __other : TimeInterval
+        if not self.has_overlap(__other):
+            raise ValueError("cannot merge two time intervals with no overlap")
+
+        start = max(self.start, __other.start)
+        end = min(self.min, __other.min)
+
+    def __eq__(self, __value: object) -> bool:
+        return self.start == __value.start and self.end == __value.end
 
 class OrbitData:
     """
@@ -33,7 +52,7 @@ class OrbitData:
                     time_data : pd.DataFrame, 
                     eclipse_data : pd.DataFrame, 
                     position_data : pd.DataFrame, 
-                    isl_data : pd.DataFrame,
+                    isl_data : dict,
                     gs_access_data : pd.DataFrame, 
                     gp_access_data : pd.DataFrame, 
                     grid_data : pd.DataFrame):
@@ -50,9 +69,8 @@ class OrbitData:
         self.position_data = position_data.sort_values(by=['time index'])
 
         # inter-satellite communication access times
-        self.isl_data = {}
-        for satellite_name in isl_data.keys():
-            self.isl_data[satellite_name] = isl_data[satellite_name].sort_values(by=['start index'])
+        self.isl_data = { satellite_name : isl_data[satellite_name].sort_values(by=['start index']) 
+                         for satellite_name in isl_data.keys() }
 
         # ground station access times
         self.gs_access_data = gs_access_data.sort_values(by=['start index'])
@@ -66,28 +84,29 @@ class OrbitData:
     """
     GET NEXT methods
     """
-    def get_next_agent_access(self, target, t: float):
+    def get_next_agent_access(self, target : str, t: float):
         src = self.agent_name
 
         if target in self.isl_data.keys():
             return self.get_next_isl_access_interval(target, t)
         else:
-            raise Exception(f'Access between {src} and {target} not supported.')
+            raise ValueError(f'{src} cannot access {target}.')
 
-    def get_next_isl_access_interval(self, target, t) -> TimeInterval:
+    def get_next_isl_access_interval(self, target : str, t : float) -> TimeInterval:
+        t = t/self.time_step
         isl_data : pd.DataFrame = self.isl_data[target]
+        isl_access : pd.DataFrame = isl_data.query('@t <= `end index`').sort_values('start index')
         
-        for _, row in isl_data.iterrows():
-            t_start = row['start index'] * self.time_step
+        for _, row in isl_access.iterrows():
+            t_start = max(t, row['start index']) * self.time_step
             t_end = row['end index'] * self.time_step
 
-            interval = TimeInterval(t_start, t_end)
-            if interval.is_during(t) or interval.is_after(t):
-                return interval
+            return TimeInterval(t_start, t_end)
 
-        return TimeInterval(-np.Infinity, np.Infinity)
+        return TimeInterval(np.Inf, np.Inf)
 
     def get_next_gs_access(self, t):
+        t = t/self.time_step
         accesses = self.gp_access_data.query('`time index` >= @t').sort_values(by='time index')        
         for _, row in accesses.iterrows():
             return row['time index'] * self.time_step
@@ -102,7 +121,7 @@ class OrbitData:
 
         # find next access
         # TODO
-        interval = TimeInterval(-np.Infinity, np.Infinity)
+        interval = TimeInterval(-np.Inf, np.Inf)
         instruments = []
         modes = dict()
         return interval, instruments, modes
@@ -288,6 +307,199 @@ class OrbitData:
 
         return -1, -1, -1, -1
 
+    """
+    LOAD FROM PRE-COMPUTED DATA
+    """
+    def load(scenario_dir : str, agent_name : str) -> object:
+        """
+        Loads agent orbit data from pre-computed csv files in scenario directory
+        """
+        data_dir = scenario_dir + 'orbit_data/'
+
+        with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
+            # load json file as dictionary
+            mission_dict : dict = json.load(scenario_specs)
+            spacecraft_list : list = mission_dict.get('spacecraft', None)
+            ground_station_list = mission_dict.get('groundStation', None)
+            
+            for spacecraft in spacecraft_list:
+                spacecraft : dict
+                name = spacecraft.get('name')
+                index = spacecraft_list.index(spacecraft)
+                agent_folder = "sat" + str(index) + '/'
+
+                if name != agent_name:
+                    continue
+
+                # load eclipse data
+                eclipse_file = data_dir + agent_folder + "eclipses.csv"
+                eclipse_data = pd.read_csv(eclipse_file, skiprows=range(3))
+                
+                # load position data
+                position_file = data_dir + agent_folder + "state_cartesian.csv"
+                position_data = pd.read_csv(position_file, skiprows=range(4))
+
+                # load propagation time data
+                time_data =  pd.read_csv(position_file, nrows=3)
+                _, epoc_type, _, epoc = time_data.at[0,time_data.axes[1][0]].split(' ')
+                epoc_type = epoc_type[1 : -1]
+                epoc = float(epoc)
+                _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
+                time_step = float(time_step)
+
+                time_data = { "epoc": epoc, 
+                            "epoc type": epoc_type, 
+                            "time step": time_step }
+
+                # load inter-satellite link data
+                isl_data = dict()
+                for file in os.listdir(data_dir + '/comm/'):                
+                    isl = re.sub(".csv", "", file)
+                    sender, _, receiver = isl.split('_')
+
+                    if 'sat' + str(index) in sender or 'sat' + str(index) in receiver:
+                        isl_file = data_dir + 'comm/' + file
+                        if 'sat' + str(index) in sender:
+                            receiver_index = int(re.sub("[^0-9]", "", receiver))
+                            receiver_name = spacecraft_list[receiver_index].get('name')
+                            if (
+                                (scenario_dict := mission_dict.get('scenario', None)) 
+                                and scenario_dict.get('connectivity', None).upper() == "FULL"
+                                ):
+                                # modify connectivity if specified 
+                                columns = ['start index', 'end index']
+                                data = [[0.0, timedelta(days=mission_dict["duration"]).seconds]]
+                                isl_data[receiver_name] = pd.DataFrame(data=data, columns=columns)
+                            else:
+                                # load connectivity
+                                isl_data[receiver_name] = pd.read_csv(isl_file, skiprows=range(3))
+                        else:
+                            sender_index = int(re.sub("[^0-9]", "", sender))
+                            sender_name = spacecraft_list[sender_index].get('name')
+                            if (
+                                (scenario_dict := mission_dict.get('scenario', None)) 
+                                and scenario_dict.get('connectivity', None).upper() == "FULL"
+                                ):
+                                # modify connectivity if specified 
+                                columns = ['start index', 'end index']
+                                data = [[0.0, timedelta(days=mission_dict["duration"]).seconds]]
+                                isl_data[sender_name] = pd.DataFrame(data=data, columns=columns)
+                            else:
+                                # load connectivity
+                                isl_data[sender_name] = pd.read_csv(isl_file, skiprows=range(3))
+
+                # load ground station access data
+                gs_access_data = pd.DataFrame(columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]'])
+                for file in os.listdir(data_dir + agent_folder):
+                    if 'gndStn' in file:
+                        gndStn_access_file = data_dir + agent_folder + file
+                        gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
+                        nrows, _ = gndStn_access_data.shape
+
+                        if nrows > 0:
+                            gndStn, _ = file.split('_')
+                            gndStn_index = int(re.sub("[^0-9]", "", gndStn))
+                            
+                            gndStn_name = ground_station_list[gndStn_index].get('name')
+                            gndStn_id = ground_station_list[gndStn_index].get('@id')
+                            gndStn_lat = ground_station_list[gndStn_index].get('latitude')
+                            gndStn_lon = ground_station_list[gndStn_index].get('longitude')
+
+                            gndStn_name_column = [gndStn_name] * nrows
+                            gndStn_id_column = [gndStn_id] * nrows
+                            gndStn_lat_column = [gndStn_lat] * nrows
+                            gndStn_lon_column = [gndStn_lon] * nrows
+
+                            gndStn_access_data['gndStn name'] = gndStn_name_column
+                            gndStn_access_data['gndStn id'] = gndStn_id_column
+                            gndStn_access_data['lat [deg]'] = gndStn_lat_column
+                            gndStn_access_data['lon [deg]'] = gndStn_lon_column
+
+                            if len(gs_access_data) == 0:
+                                gs_access_data = gndStn_access_data
+                            else:
+                                gs_access_data = pd.concat([gs_access_data, gndStn_access_data])
+
+                # land coverage data metrics data
+                payload = spacecraft.get('instrument', None)
+                if not isinstance(payload, list):
+                    payload = [payload]
+
+                gp_access_data = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]', 'agent','instrument',
+                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
+
+                for instrument in payload:
+                    i_ins = payload.index(instrument)
+                    gp_acces_by_mode = []
+
+                    # TODO implement different viewing modes for payloads
+                    # modes = spacecraft.get('instrument', None)
+                    # if not isinstance(modes, list):
+                    #     modes = [0]
+                    modes = [0]
+
+                    gp_acces_by_mode = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]','instrument',
+                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
+                    for mode in modes:
+                        i_mode = modes.index(mode)
+                        gp_access_by_grid = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]',
+                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
+
+                        for grid in mission_dict.get('grid'):
+                            i_grid = mission_dict.get('grid').index(grid)
+                            metrics_file = data_dir + agent_folder + f'datametrics_instru{i_ins}_mode{i_mode}_grid{i_grid}.csv'
+                            metrics_data = pd.read_csv(metrics_file, skiprows=range(4))
+                            
+                            nrows, _ = metrics_data.shape
+                            grid_id_column = [i_grid] * nrows
+                            metrics_data['grid index'] = grid_id_column
+
+                            if len(gp_access_by_grid) == 0:
+                                gp_access_by_grid = metrics_data
+                            else:
+                                gp_access_by_grid = pd.concat([gp_access_by_grid, metrics_data])
+
+                        nrows, _ = gp_access_by_grid.shape
+                        gp_access_by_grid['pnt-opt index'] = [mode] * nrows
+
+                        if len(gp_acces_by_mode) == 0:
+                            gp_acces_by_mode = gp_access_by_grid
+                        else:
+                            gp_acces_by_mode = pd.concat([gp_acces_by_mode, gp_access_by_grid])
+                        # gp_acces_by_mode.append(gp_access_by_grid)
+
+                    nrows, _ = gp_acces_by_mode.shape
+                    gp_access_by_grid['instrument'] = [instrument['name']] * nrows
+                    # gp_access_data[ins_name] = gp_acces_by_mode
+
+                    if len(gp_access_data) == 0:
+                        gp_access_data = gp_acces_by_mode
+                    else:
+                        gp_access_data = pd.concat([gp_access_data, gp_acces_by_mode])
+                
+                nrows, _ = gp_access_data.shape
+                gp_access_data['agent name'] = [spacecraft['name']] * nrows
+
+                grid_data_compiled = []
+                for grid in mission_dict.get('grid'):
+                    grid : dict
+                    if grid.get('@type') == 'customGrid':
+                        grid_file = grid.get('covGridFilePath')
+                        # grid_data = pd.read_csv(grid_file)
+                    elif grid.get('@type') == 'autogrid':
+                        i_grid = mission_dict.get('grid').index(grid)
+                        grid_file = data_dir + f'grid{i_grid}.csv'
+                    else:
+                        raise NotImplementedError(f"Loading of grids of type `{grid.get('@type')} not yet supported.`")
+
+                    grid_data = pd.read_csv(grid_file)
+                    nrows, _ = grid_data.shape
+                    grid_data['GP index'] = [i for i in range(nrows)]
+                    grid_data['grid index'] = [i_grid] * nrows
+                    grid_data_compiled.append(grid_data)
+
+                return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
+
     def from_directory(scenario_dir: str) -> dict:
         """
         Loads orbit data from a directory containig a json file specifying the details of the mission being simulated.
@@ -297,7 +509,6 @@ class OrbitData:
         The data gets stored as a dictionary, with each entry containing the orbit data of each agent in the mission 
         indexed by the name of the agent.
         """
-        data_dir = scenario_dir + '/orbit_data/'
         with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
             
             # load json file as dictionary
@@ -311,164 +522,20 @@ class OrbitData:
             if spacecraft_list:
                 for spacecraft in spacecraft_list:
                     spacecraft : dict
-                    name = spacecraft.get('name')
-                    index = spacecraft_list.index(spacecraft)
-                    agent_folder = "sat" + str(index) + '/'
+                    agent_name = spacecraft.get('name')
 
-                    # load eclipse data
-                    eclipse_file = data_dir + agent_folder + "eclipses.csv"
-                    eclipse_data = pd.read_csv(eclipse_file, skiprows=range(3))
-                    
-                    # load position data
-                    position_file = data_dir + agent_folder + "state_cartesian.csv"
-                    position_data = pd.read_csv(position_file, skiprows=range(4))
+                    data[agent_name] = OrbitData.load(scenario_dir, agent_name)
 
-                    # load propagation time data
-                    time_data =  pd.read_csv(position_file, nrows=3)
-                    _, epoc_type, _, epoc = time_data.at[0,time_data.axes[1][0]].split(' ')
-                    epoc_type = epoc_type[1 : -1]
-                    epoc = float(epoc)
-                    _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
-                    time_step = float(time_step)
-
-                    time_data = { "epoc": epoc, 
-                                "epoc type": epoc_type, 
-                                "time step": time_step }
-
-                    # load inter-satellite link data
-                    isl_data = dict()
-                    for file in os.listdir(data_dir + '/comm/'):                
-                        isl = re.sub(".csv", "", file)
-                        sender, _, receiver = isl.split('_')
-
-                        if 'sat' + str(index) in sender or 'sat' + str(index) in receiver:
-                            isl_file = data_dir + 'comm/' + file
-                            if 'sat' + str(index) in sender:
-                                receiver_index = int(re.sub("[^0-9]", "", receiver))
-                                receiver_name = spacecraft_list[receiver_index].get('name')
-                                isl_data[receiver_name] = pd.read_csv(isl_file, skiprows=range(3))
-                            else:
-                                sender_index = int(re.sub("[^0-9]", "", sender))
-                                sender_name = spacecraft_list[sender_index].get('name')
-                                isl_data[sender_name] = pd.read_csv(isl_file, skiprows=range(3))
-
-                    # load ground station access data
-                    gs_access_data = pd.DataFrame(columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]'])
-                    for file in os.listdir(data_dir + agent_folder):
-                        if 'gndStn' in file:
-                            gndStn_access_file = data_dir + agent_folder + file
-                            gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
-                            nrows, _ = gndStn_access_data.shape
-
-                            if nrows > 0:
-                                gndStn, _ = file.split('_')
-                                gndStn_index = int(re.sub("[^0-9]", "", gndStn))
-                                
-                                gndStn_name = ground_station_list[gndStn_index].get('name')
-                                gndStn_id = ground_station_list[gndStn_index].get('@id')
-                                gndStn_lat = ground_station_list[gndStn_index].get('latitude')
-                                gndStn_lon = ground_station_list[gndStn_index].get('longitude')
-
-                                gndStn_name_column = [gndStn_name] * nrows
-                                gndStn_id_column = [gndStn_id] * nrows
-                                gndStn_lat_column = [gndStn_lat] * nrows
-                                gndStn_lon_column = [gndStn_lon] * nrows
-
-                                gndStn_access_data['gndStn name'] = gndStn_name_column
-                                gndStn_access_data['gndStn id'] = gndStn_id_column
-                                gndStn_access_data['lat [deg]'] = gndStn_lat_column
-                                gndStn_access_data['lon [deg]'] = gndStn_lon_column
-
-                                if len(gs_access_data) == 0:
-                                    gs_access_data = gndStn_access_data
-                                else:
-                                    gs_access_data = pd.concat([gs_access_data, gndStn_access_data])
-
-                    # land coverage data metrics data
-                    payload = spacecraft.get('instrument', None)
-                    if not isinstance(payload, list):
-                        payload = [payload]
-
-                    gp_access_data = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]', 'agent','instrument',
-                                                                    'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
-
-                    for instrument in payload:
-                        i_ins = payload.index(instrument)
-                        gp_acces_by_mode = []
-
-                        # modes = spacecraft.get('instrument', None)
-                        # if not isinstance(modes, list):
-                        #     modes = [0]
-                        modes = [0]
-
-                        gp_acces_by_mode = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]','instrument',
-                                                                    'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
-                        for mode in modes:
-                            i_mode = modes.index(mode)
-                            gp_access_by_grid = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]',
-                                                                    'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
-
-                            for grid in mission_dict.get('grid'):
-                                i_grid = mission_dict.get('grid').index(grid)
-                                metrics_file = data_dir + agent_folder + f'datametrics_instru{i_ins}_mode{i_mode}_grid{i_grid}.csv'
-                                metrics_data = pd.read_csv(metrics_file, skiprows=range(4))
-                                
-                                nrows, _ = metrics_data.shape
-                                grid_id_column = [i_grid] * nrows
-                                metrics_data['grid index'] = grid_id_column
-
-                                if len(gp_access_by_grid) == 0:
-                                    gp_access_by_grid = metrics_data
-                                else:
-                                    gp_access_by_grid = pd.concat([gp_access_by_grid, metrics_data])
-
-                            nrows, _ = gp_access_by_grid.shape
-                            gp_access_by_grid['pnt-opt index'] = [mode] * nrows
-
-                            if len(gp_acces_by_mode) == 0:
-                                gp_acces_by_mode = gp_access_by_grid
-                            else:
-                                gp_acces_by_mode = pd.concat([gp_acces_by_mode, gp_access_by_grid])
-                            # gp_acces_by_mode.append(gp_access_by_grid)
-
-                        nrows, _ = gp_acces_by_mode.shape
-                        gp_access_by_grid['instrument'] = [instrument['name']] * nrows
-                        # gp_access_data[ins_name] = gp_acces_by_mode
-
-                        if len(gp_access_data) == 0:
-                            gp_access_data = gp_acces_by_mode
-                        else:
-                            gp_access_data = pd.concat([gp_access_data, gp_acces_by_mode])
-                    
-                    nrows, _ = gp_access_data.shape
-                    gp_access_data['agent name'] = [spacecraft['name']] * nrows
-
-                    grid_data_compiled = []
-                    for grid in mission_dict.get('grid'):
-                        grid : dict
-                        if grid.get('@type') == 'customGrid':
-                            grid_file = grid.get('covGridFilePath')
-                            # grid_data = pd.read_csv(grid_file)
-                        elif grid.get('@type') == 'autogrid':
-                            i_grid = mission_dict.get('grid').index(grid)
-                            grid_file = data_dir + f'grid{i_grid}.csv'
-                        else:
-                            raise NotImplementedError(f"Loading of grids of type `{grid.get('@type')} not yet supported.`")
-
-                        grid_data = pd.read_csv(grid_file)
-                        nrows, _ = grid_data.shape
-                        grid_data['GP index'] = [i for i in range(nrows)]
-                        grid_data['grid index'] = [i_grid] * nrows
-                        grid_data_compiled.append(grid_data)
-
-                    data[name] = OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
+            if uav_list:
+                for uav in uav_list:
+                    raise NotImplementedError('Orbitdata for UAVs not yet supported')
 
             if ground_station_list:
                 for groundstation in ground_station_list:
-                    pass
+                    raise NotImplementedError('Orbitdata for ground stations not yet supported')
 
             return data
-
+        
 """
 TESTING
 """

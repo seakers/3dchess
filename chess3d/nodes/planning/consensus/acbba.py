@@ -1,6 +1,10 @@
+import logging
+import math
+from typing import Callable
 import numpy as np
 
 from dmas.utils import runtime_tracker
+from traitlets import Callable
 
 from nodes.states import *
 from nodes.planning.consensus.bids import UnconstrainedBid
@@ -8,13 +12,69 @@ from nodes.planning.consensus.consensus import AbstractConsensusReplanner
 from nodes.science.reqs import MeasurementRequest
 
 
-class ACBBAReplanner(AbstractConsensusReplanner):
-    
-    def _generate_bids_from_request(self, req : MeasurementRequest) -> list:
-        return UnconstrainedBid.new_bids_from_request(req, self.parent_name, self.dt_converge)
 
-    # def planning_phase(self, state: SimulationAgentState, current_plan: list, t_next: float) -> tuple:
-    #     return [], [], [], []
+class ACBBAReplanner(AbstractConsensusReplanner):
+    def __init__(self, utility_func: Callable, max_bundle_size: int = 1, dt_converge: float = 0, logger: logging.Logger = None) -> None:
+        super().__init__(utility_func, max_bundle_size, dt_converge, logger)
+        self.prev_bundle = []
+        self.converged = False
+
+    def _generate_bids_from_request(self, req : MeasurementRequest, state : SimulationAgentState) -> list:
+        """ Creages bids from given measurement request """
+        return UnconstrainedBid.new_bids_from_request(req, state.agent_name, self.dt_converge)
+
+    def is_converged(self) -> bool:
+        """ Checks if consensus has been reached and plans are coverged """       
+        self.prev_bundle = [b for b in self.bundle]
+
+        if self.converged:
+            self.converged = False
+            return True
+        else:
+            self.converged = self._compare_bundles(self.bundle, self.prev_bundle)
+            return False
+
+    def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
+        """ Compares two bundles. Returns true if they are equal and false if not. """
+        if len(bundle_1) == len(bundle_2):
+            for req, subtask, bid in bundle_1:
+                if (req, subtask, bid) not in bundle_2:            
+                    return False
+            return True
+        return False
+    
+    def log_results(self, dsc : str, results : dict, level=logging.DEBUG) -> None:
+        """
+        Logs current results at a given time for debugging purposes
+
+        ### Argumnents:
+            - dsc (`str`): description of what is to be logged
+            - results (`dict`): results to be logged
+            - level (`int`): logging level to be used
+        """
+        out = f'{dsc}\n'
+        line = 'Req ID\t\tj\tins\tdep\twinner\tbid\tt_img\tt_update\n'
+        out += line 
+        for _ in range(len(line)):
+            out += '-'
+        out += '\n'
+        
+        for req_id in results:
+            req_id : str
+            req_id_short = req_id.split('-')[0]
+
+            for bid in results[req_id]:
+                bid : UnconstrainedBid
+                req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
+                ins, deps = req.measurement_groups[bid.subtask_index]
+                line = f'{req_id_short}\t{bid.subtask_index}\t{ins}\t{deps}\t{bid.winner}\t{np.round(bid.winning_bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\n'
+                out += line
+
+            for _ in range(len(line)):
+                out += '--'
+            out += '\n'
+
+        print(out)
 
     def _can_bid(self, 
                 state : SimulationAgentState, 
@@ -22,9 +82,8 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                 req : MeasurementRequest, 
                 subtask_index : int
                 ) -> bool:
-        """
-        Checks if an agent has the ability to bid on a measurement task
-        """
+        """ Checks if an agent has the ability to bid on a measurement task """
+
         # check capabilities - TODO: Replace with knowledge graph
         bid : UnconstrainedBid = results[req.id][subtask_index]
         if bid.main_measurement not in [instrument for instrument in state.payload]:
@@ -38,27 +97,21 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         return True
 
     @runtime_tracker
-    def calc_imaging_time(  self, 
-                            state : SimulationAgentState, 
-                            path : list,
-                            req : MeasurementRequest, 
-                            subtask_index : int
-                         ) -> float:
+    def calc_imaging_time(self, state : SimulationAgentState, path : list, req : MeasurementRequest, subtask_index : int) -> float:
         """
-        Computes the ideal" time when a task in the path would be performed
+        Computes the ideal time when a task in the path would be performed
+        
         ### Returns
             - t_img (`float`): earliest available imaging time
         """
         # calculate the state of the agent prior to performing the measurement request
-        def is_path_element(path_element) -> bool:
-            path_req, path_subtask_index, _, _ = path_element
-            return path_req == req and path_subtask_index == subtask_index
-
-        path_element = list(filter(is_path_element, path))
+        path_element = [(path_req, path_subtask_index, _, __ )
+                        for path_req, path_subtask_index, _, __ in path
+                        if path_req == req and path_subtask_index == subtask_index]
         if len(path_element) != 1:
             # path contains more than one measurement of the same request and subtask or does not contain it at all
             return -1
-
+        
         i = path.index(path_element[0])
         if i == 0:
             t_prev = state.t
@@ -87,6 +140,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             else:
                 raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
+        # calculate arrival time
         if isinstance(state, SatelliteAgentState):
             instrument, _ = req.measurement_groups[subtask_index]
             t_img = -1
@@ -99,31 +153,9 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                     return t_arrival
 
             return t_img
-
-        # elif isinstance(state, UAVAgentState):
-        #     pass
         
         else:
             raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
-
-    def _is_bundle_converged(   self, 
-                                state : SimulationAgentState, 
-                                results : dict, 
-                                bundle : list, 
-                                prev_bundle: list
-                            ) -> bool:
-        """ Checks if the constructed bundle is ready for excution"""
-        return self._compare_bundles(bundle, prev_bundle)
-
-    def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
-        """ Compares two bundles. Returns true if they are equal and false if not. """
-        if len(bundle_1) == len(bundle_2):
-            for req, subtask in bundle_1:
-                if (req, subtask) not in bundle_2:            
-                    return False
-            return True
-        return False
-
 
     # def calc_arrival_times(self, state : SimulationAgentState, req : MeasurementRequest, t_prev : Union[int, float]) -> float:
     #     """

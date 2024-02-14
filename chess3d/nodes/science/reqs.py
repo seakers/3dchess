@@ -182,7 +182,13 @@ class MeasurementRequest(object):
             raise NotImplementedError(f"Requests of type `{req['request_type']}` not yet supported.")
 
     def __eq__(self, other) -> bool:
-        return self.to_dict() == other.to_dict()
+        my_dict : dict = self.to_dict()
+        other_dict : dict = other.to_dict()
+
+        my_dict.pop('id')
+        other_dict.pop('id')
+
+        return my_dict == other_dict
 
     def pos_to_lat_lon(pos : list) -> list:
         R = 6.3781363e+003

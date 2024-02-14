@@ -1,10 +1,10 @@
-import os
-import re
-import time
-from typing import Any, Callable
-from nodes.planning.preplanners import AbstractPreplanner
-from nodes.planning.replanners import AbstractReplanner
-from nodes.orbitdata import OrbitData
+
+import math
+import queue
+from typing import Callable, Any
+
+from nodes.planning.plan import Plan, Preplan
+from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
 from nodes.science.reqs import *
 from messages import *
@@ -12,908 +12,510 @@ from dmas.modules import *
 from dmas.utils import runtime_tracker
 import pandas as pd
 
-class PlanningModule(InternalModule):
+
+class AbstractPlanner(ABC):
     def __init__(self, 
-                results_path : str, 
-                parent_name : str,
-                parent_network_config: NetworkConfig, 
-                utility_func : Callable[[], Any],
-                preplanner : AbstractPreplanner = None,
-                replanner : AbstractReplanner = None,
-                planning_horizon : float = np.Inf,
-                initial_reqs : list = [],
-                level: int = logging.INFO, 
-                logger: logging.Logger = None
-                ) -> None:
-                       
-        # setup network settings
-        addresses = parent_network_config.get_internal_addresses()        
-        sub_addesses = []
-        sub_address : str = addresses.get(zmq.PUB)[0]
-        sub_addesses.append( sub_address.replace('*', 'localhost') )
-
-        if len(addresses.get(zmq.SUB)) > 1:
-            sub_address : str = addresses.get(zmq.SUB)[1]
-            sub_addesses.append( sub_address.replace('*', 'localhost') )
-
-        pub_address : str = addresses.get(zmq.SUB)[0]
-        pub_address = pub_address.replace('localhost', '*')
-
-        addresses = parent_network_config.get_manager_addresses()
-        push_address : str = addresses.get(zmq.PUSH)[0]
-
-        planner_network_config =  NetworkConfig(parent_name,
-                                        manager_address_map = {
-                                        zmq.REQ: [],
-                                        zmq.SUB: sub_addesses,
-                                        zmq.PUB: [pub_address],
-                                        zmq.PUSH: [push_address]})
-
-        # intialize module
-        super().__init__(f'{parent_name}-PLANNING_MODULE', 
-                        planner_network_config, 
-                        parent_network_config, 
-                        level, 
-                        logger)
+                 utility_func : Callable[[], Any], 
+                 logger : logging.Logger = None
+                 ) -> None:
         
-        # initialize default attributes
-        self.results_path = results_path
-        self.parent_name = parent_name
-        self.utility_func = utility_func
-
-        self.preplanner : AbstractPreplanner = preplanner
-        self.replanner : AbstractReplanner = replanner
-        self.planning_horizon : float = planning_horizon
-        
-        self.plan_history = []
-        self.stats = {
-                    }
-
-        self.t_plan = -1.0
-        self.agent_state : SimulationAgentState = None
-        self.parent_agent_type = None
-        self.orbitdata : OrbitData = None
-        self.other_modules_exist : bool = False
-
-        self.initial_reqs = []
-        for req in initial_reqs:
-            req : MeasurementRequest
-            if req.t_start > 0:
-                continue
-            self.initial_reqs.append(req)
-
-    async def sim_wait(self, delay: float) -> None:
-        # does nothing
-        return
-
-    async def setup(self) -> None:
-        # initialize internal messaging queues
-        self.states_inbox = asyncio.Queue()
-        self.action_status_inbox = asyncio.Queue()
-        self.req_inbox = asyncio.Queue()
-        self.measurement_inbox = asyncio.Queue()
-        self.misc_inbox = asyncio.Queue()
-
-        # setup agent state locks
-        self.agent_state_lock = asyncio.Lock()
-        self.agent_state_updated = asyncio.Event()
-
-        # place all initial requests into requests inbox
-        for req in self.initial_reqs:
-            await self.req_inbox.put(req)
-
-    async def live(self) -> None:
-        """
-        Performs two concurrent tasks:
-        - Listener: receives messages from the parent agent and checks results
-        - Bundle-builder: plans and bids according to local information
-        """
-        try:
-            listener_task = asyncio.create_task(self.listener(), name='listener()')
-            bundle_builder_task = asyncio.create_task(self.planner(), name='planner()')
-            
-            tasks = [listener_task, bundle_builder_task]
-
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-
-        finally:
-            for task in done:
-                self.log(f'`{task.get_name()}` task finalized! Terminating all other tasks...')
-
-            for task in pending:
-                task : asyncio.Task
-                if not task.done():
-                    task.cancel()
-                    await task
-
-    """
-    -----------------
-        LISTENER
-    -----------------
-    """
-    async def listener(self) -> None:
-        """
-        Listens for any incoming messages, unpacks them and classifies them into 
-        internal inboxes for future processing
-        """
-        try:
-            # listen for broadcasts and place in the appropriate inboxes
-            while True:
-                self.log('listening to manager broadcast!')
-                _, _, content = await self.listen_manager_broadcast()
-
-                # if sim-end message, end agent `live()`
-                if content['msg_type'] == ManagerMessageTypes.SIM_END.value:
-                    self.log(f"received manager broadcast or type {content['msg_type']}! terminating `live()`...")
-                    return
-
-                elif content['msg_type'] == SimulationMessageTypes.SENSES.value:
-                    # received agent sense message from parent
-                    self.log(f"received senses from parent agent!", level=logging.DEBUG)
-
-                    # unpack message 
-                    senses_msg : SensesMessage = SensesMessage(**content)
-
-                    senses = []
-                    senses.append(senses_msg.state)
-                    senses.extend(senses_msg.senses)     
-
-                    for sense in senses:
-                        if sense['msg_type'] == SimulationMessageTypes.AGENT_ACTION.value:
-                            # unpack message 
-                            action_msg = AgentActionMessage(**sense)
-                            self.log(f"received agent action of status {action_msg.status}!")
-                            
-                            # send to planner
-                            await self.action_status_inbox.put(action_msg)
-
-                        elif sense['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-                            # unpack message 
-                            state_msg : AgentStateMessage = AgentStateMessage(**sense)
-                            self.log(f"received agent state message!")
-                              
-                            state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
-
-                            if self.parent_agent_type is None:
-                                if isinstance(state, SatelliteAgentState):
-                                    # import orbit data
-                                    self.orbitdata : OrbitData = self._load_orbit_data()
-                                    self.parent_agent_type = SimulationAgentTypes.SATELLITE.value
-                                elif isinstance(state, UAVAgentState):
-                                    self.parent_agent_type = SimulationAgentTypes.UAV.value
-                                elif isinstance(state, GroundStationAgentState):
-                                    self.parent_agent_type = SimulationAgentTypes.GROUND_STATION.value
-                                else:
-                                    raise NotImplementedError(f"states of type {state_msg.state['state_type']} not supported for planners.")
-                            
-                            await self.states_inbox.put(state)
-
-                        elif sense['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
-                            # request received directly from another agent
-                            
-                            # unpack message 
-                            req_msg = MeasurementRequestMessage(**sense)
-                            req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
-                            self.log(f"received measurement request message!")
-                            
-                            # send to planner
-                            await self.req_inbox.put(req)
-
-                        # TODO support down-linked information processing
-
-                        elif sense['msg_type'] == SimulationMessageTypes.MEASUREMENT.value:
-                            # measurement was just performed by agent
-                            msg = message_from_dict(**sense)
-                            await self.measurement_inbox.put(msg)
-
-                        else:
-                            # other type of message was received
-                            msg = message_from_dict(**sense)
-                            await self.misc_inbox.put(msg)
-
-                else:
-                    # other type of message was received
-                    if not self.other_modules_exist:
-                        self.other_modules_exist = True
-
-                    msg = message_from_dict(**content)
-                    await self.internal_inbox.put(msg)
-
-        except asyncio.CancelledError:
-            return
-        
-    def _load_orbit_data(self) -> OrbitData:
-        """
-        Loads agent orbit data from pre-computed csv files in scenario directory
-        """
-        if self.parent_agent_type != None:
-            raise RuntimeError(f"orbit data already loaded. It can only be assigned once.")            
-
-        results_path_list = self.results_path.split('/')
-        while "" in results_path_list:
-            results_path_list.remove("")
-        if 'results' in results_path_list[-1]:
-            results_path_list.pop()
-
-        scenario_name = results_path_list[-1]
-        scenario_dir = f'./scenarios/{scenario_name}/'
-        data_dir = scenario_dir + 'orbit_data/'
-
-        with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
-            # load json file as dictionary
-            mission_dict : dict = json.load(scenario_specs)
-            spacecraft_list : list = mission_dict.get('spacecraft', None)
-            ground_station_list = mission_dict.get('groundStation', None)
-            
-            for spacecraft in spacecraft_list:
-                spacecraft : dict
-                name = spacecraft.get('name')
-                index = spacecraft_list.index(spacecraft)
-                agent_folder = "sat" + str(index) + '/'
-
-                if name != self.get_parent_name():
-                    continue
-
-                # load eclipse data
-                eclipse_file = data_dir + agent_folder + "eclipses.csv"
-                eclipse_data = pd.read_csv(eclipse_file, skiprows=range(3))
-                
-                # load position data
-                position_file = data_dir + agent_folder + "state_cartesian.csv"
-                position_data = pd.read_csv(position_file, skiprows=range(4))
-
-                # load propagation time data
-                time_data =  pd.read_csv(position_file, nrows=3)
-                _, epoc_type, _, epoc = time_data.at[0,time_data.axes[1][0]].split(' ')
-                epoc_type = epoc_type[1 : -1]
-                epoc = float(epoc)
-                _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
-                time_step = float(time_step)
-
-                time_data = { "epoc": epoc, 
-                            "epoc type": epoc_type, 
-                            "time step": time_step }
-
-                # load inter-satellite link data
-                isl_data = dict()
-                for file in os.listdir(data_dir + '/comm/'):                
-                    isl = re.sub(".csv", "", file)
-                    sender, _, receiver = isl.split('_')
-
-                    if 'sat' + str(index) in sender or 'sat' + str(index) in receiver:
-                        isl_file = data_dir + 'comm/' + file
-                        if 'sat' + str(index) in sender:
-                            receiver_index = int(re.sub("[^0-9]", "", receiver))
-                            receiver_name = spacecraft_list[receiver_index].get('name')
-                            isl_data[receiver_name] = pd.read_csv(isl_file, skiprows=range(3))
-                        else:
-                            sender_index = int(re.sub("[^0-9]", "", sender))
-                            sender_name = spacecraft_list[sender_index].get('name')
-                            isl_data[sender_name] = pd.read_csv(isl_file, skiprows=range(3))
-
-                # load ground station access data
-                gs_access_data = pd.DataFrame(columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]'])
-                for file in os.listdir(data_dir + agent_folder):
-                    if 'gndStn' in file:
-                        gndStn_access_file = data_dir + agent_folder + file
-                        gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
-                        nrows, _ = gndStn_access_data.shape
-
-                        if nrows > 0:
-                            gndStn, _ = file.split('_')
-                            gndStn_index = int(re.sub("[^0-9]", "", gndStn))
-                            
-                            gndStn_name = ground_station_list[gndStn_index].get('name')
-                            gndStn_id = ground_station_list[gndStn_index].get('@id')
-                            gndStn_lat = ground_station_list[gndStn_index].get('latitude')
-                            gndStn_lon = ground_station_list[gndStn_index].get('longitude')
-
-                            gndStn_name_column = [gndStn_name] * nrows
-                            gndStn_id_column = [gndStn_id] * nrows
-                            gndStn_lat_column = [gndStn_lat] * nrows
-                            gndStn_lon_column = [gndStn_lon] * nrows
-
-                            gndStn_access_data['gndStn name'] = gndStn_name_column
-                            gndStn_access_data['gndStn id'] = gndStn_id_column
-                            gndStn_access_data['lat [deg]'] = gndStn_lat_column
-                            gndStn_access_data['lon [deg]'] = gndStn_lon_column
-
-                            if len(gs_access_data) == 0:
-                                gs_access_data = gndStn_access_data
-                            else:
-                                gs_access_data = pd.concat([gs_access_data, gndStn_access_data])
-
-                # land coverage data metrics data
-                payload = spacecraft.get('instrument', None)
-                if not isinstance(payload, list):
-                    payload = [payload]
-
-                gp_access_data = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]', 'agent','instrument',
-                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
-
-                for instrument in payload:
-                    i_ins = payload.index(instrument)
-                    gp_acces_by_mode = []
-
-                    # modes = spacecraft.get('instrument', None)
-                    # if not isinstance(modes, list):
-                    #     modes = [0]
-                    modes = [0]
-
-                    gp_acces_by_mode = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]','instrument',
-                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
-                    for mode in modes:
-                        i_mode = modes.index(mode)
-                        gp_access_by_grid = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]',
-                                                                'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
-
-                        for grid in mission_dict.get('grid'):
-                            i_grid = mission_dict.get('grid').index(grid)
-                            metrics_file = data_dir + agent_folder + f'datametrics_instru{i_ins}_mode{i_mode}_grid{i_grid}.csv'
-                            metrics_data = pd.read_csv(metrics_file, skiprows=range(4))
-                            
-                            nrows, _ = metrics_data.shape
-                            grid_id_column = [i_grid] * nrows
-                            metrics_data['grid index'] = grid_id_column
-
-                            if len(gp_access_by_grid) == 0:
-                                gp_access_by_grid = metrics_data
-                            else:
-                                gp_access_by_grid = pd.concat([gp_access_by_grid, metrics_data])
-
-                        nrows, _ = gp_access_by_grid.shape
-                        gp_access_by_grid['pnt-opt index'] = [mode] * nrows
-
-                        if len(gp_acces_by_mode) == 0:
-                            gp_acces_by_mode = gp_access_by_grid
-                        else:
-                            gp_acces_by_mode = pd.concat([gp_acces_by_mode, gp_access_by_grid])
-                        # gp_acces_by_mode.append(gp_access_by_grid)
-
-                    nrows, _ = gp_acces_by_mode.shape
-                    gp_access_by_grid['instrument'] = [instrument['name']] * nrows
-                    # gp_access_data[ins_name] = gp_acces_by_mode
-
-                    if len(gp_access_data) == 0:
-                        gp_access_data = gp_acces_by_mode
-                    else:
-                        gp_access_data = pd.concat([gp_access_data, gp_acces_by_mode])
-                
-                nrows, _ = gp_access_data.shape
-                gp_access_data['agent name'] = [spacecraft['name']] * nrows
-
-                grid_data_compiled = []
-                for grid in mission_dict.get('grid'):
-                    grid : dict
-                    if grid.get('@type') == 'customGrid':
-                        grid_file = grid.get('covGridFilePath')
-                        # grid_data = pd.read_csv(grid_file)
-                    elif grid.get('@type') == 'autogrid':
-                        i_grid = mission_dict.get('grid').index(grid)
-                        grid_file = data_dir + f'grid{i_grid}.csv'
-                    else:
-                        raise NotImplementedError(f"Loading of grids of type `{grid.get('@type')} not yet supported.`")
-
-                    grid_data = pd.read_csv(grid_file)
-                    nrows, _ = grid_data.shape
-                    grid_data['GP index'] = [i for i in range(nrows)]
-                    grid_data['grid index'] = [i_grid] * nrows
-                    grid_data_compiled.append(grid_data)
-
-                return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
-    
-    """
-    -----------------
-         PLANNER
-    -----------------
-    """
-    async def planner(self) -> None:
-        """
-        Generates a plan for the parent agent to perform
-        """
-        try:
-            # initialize results vectors
-            plan = []
-
-            # level = logging.WARNING
-            level = logging.DEBUG
-
-            while True:
-                # wait for agent to update state
-                state : SimulationAgentState = await self.states_inbox.get()
-                await self.agent_state_lock.acquire()
-                await self.update_current_time(state.t)
-                self.agent_state = state
-                self.agent_state_lock.release()
-
-                assert abs(self.get_current_time() - self.agent_state.t) <= 1e-2
-
-                # --- Check incoming information ---
-                # check action completion
-                completed_actions, aborted_actions, pending_actions = await self.__check_action_completion(plan, level)
-
-                # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # all_actions = [action for action in completed_actions]
-                # all_actions.extend([action for action in aborted_actions])
-                # all_actions.extend([action for action in pending_actions])
-
-                # if len(all_actions) > 0:
-                #     out = '\nACTION STATUS:\n'
-                #     for action in all_actions:
-                #         action : AgentAction
-                #         out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-                #     self.log(out, logging.WARNING)
-                # -------------------------------------
-
-                # remove aborted or completed actions from plan
-                plan, performed_actions = self.__remove_performed_actions_from_plan(plan, completed_actions, aborted_actions)
-                
-                # Read incoming messages
-                incoming_reqs, generated_reqs, misc_messages = await self._wait_for_messages()
-                
-                # --- Create plan ---
-                # Check if reeplanning is needed
-                await self.agent_state_lock.acquire()
-                agent_state = self.agent_state.copy()
-                self.agent_state_lock.release()
-
-                # check if plan has been initialized
-                if (self.preplanner is not None                                         # there is a preplanner assigned to this planner
-                    and self.preplanner.needs_initialized_plan(                         # there is a need to construct a new plan
-                                                                agent_state,
-                                                                plan, 
-                                                                performed_actions,
-                                                                incoming_reqs,
-                                                                generated_reqs,
-                                                                misc_messages,
-                                                                self.t_plan,
-                                                                self.planning_horizon,
-                                                                self.orbitdata
-                                                            )
-                    ):
-
-                    # initialize plan
-                    plan = await self._preplan( plan, 
-                                                performed_actions,
-                                                incoming_reqs,
-                                                generated_reqs,
-                                                misc_messages,
-                                                level)   
-                    
-                    # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
-                    # -------------------------------------
-
-                # Check if reeplanning is needed
-                await self.agent_state_lock.acquire()
-                agent_state = self.agent_state.copy()
-                self.agent_state_lock.release()
-
-                if (    
-                    self.replanner is not None and                          # there is a replanner assigned to this planner
-                    self.replanner.needs_replanning(                        # there is new relevant information to be considered
-                                                    agent_state,
-                                                    plan, 
-                                                    performed_actions,
-                                                    incoming_reqs,
-                                                    generated_reqs,
-                                                    misc_messages,
-                                                    self.t_plan,
-                                                    self.t_next,
-                                                    self.planning_horizon,
-                                                    self.orbitdata
-                                                )
-                    ):
-                    
-                    # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
-                    # -------------------------------------
-
-                    # replan
-                    plan : list = await self._replan(   
-                                                        plan, 
-                                                        performed_actions,
-                                                        incoming_reqs, 
-                                                        generated_reqs, 
-                                                        misc_messages
-                                                    )     
-                    
-                    # clear pending actions
-                    pending_actions = []
-
-                    # --- FOR DEBUGGING PURPOSES ONLY: ---
-                    # self.__log_plan(plan, "REPLAN", logging.WARNING)
-                    # -------------------------------------
-
-                # --- Execute plan ---
-
-                # check plan feasibility
-                if not self.is_plan_feasible(plan):
-                    raise RuntimeError("Planner generated an unfeasible plan.")
-
-                # get next action to perform
-                plan_out = self._get_next_actions(plan, pending_actions, generated_reqs, self.get_current_time())
-
-                # check plan feasibility
-                if not self.is_plan_feasible(plan_out):
-                    raise RuntimeError("Planner generated an unfeasible plan.")
-
-                # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
-                # -------------------------------------
-
-                # send plan to parent agent
-                self.log(f'sending {len(plan_out)} actions to parent agent...')
-                plan_msg = PlanMessage(self.get_element_name(), self.get_network_name(), plan_out, self.get_current_time())
-                await self._send_manager_msg(plan_msg, zmq.PUB)
-
-                self.log(f'actions sent!')
-
-        except asyncio.CancelledError:
-            return
-        
-    def is_plan_feasible(self, plan : list) -> bool:
-        """ Checks if the plan generated can be performed by the agent """
-
-        # check if actions dont overlap
-        t_start_prev, t_end_prev = None, None
-        for action in plan:
-            if isinstance(action, AgentAction):
-                t_start = action.t_start
-                t_end = action.t_end
-            elif isinstance(action, dict):
-                t_start = action['t_start']
-                t_end = action['t_end']
-            else:
-                raise ValueError(f"Cannot check plan of actions of type {type(action)}")
-
-            if t_start_prev is not None and t_end_prev is not None:
-                if t_start_prev > t_start:
-                    return False
-                elif t_end_prev > t_start:
-                    return False
-
-            t_start_prev = t_start
-            t_end_prev = t_end
-
-        return True
-        
-    @runtime_tracker
-    async def __check_action_completion(self, current_plan : list, level : int = logging.DEBUG) -> tuple:
-        """
-        Checks incoming messages from agent to check which actions from its plan have been completed, aborted, or are still pending
-
-        ### Arguments:
-            - current_plan (`list`): latest plan generated by this planner
-            - level (`int`): logging level
-
-        ### Returns:
-            - `tuple` of action lists `completed_actions, aborted_actions, pending_actions`
-        """
-        plan_ids = [action.id for action in current_plan]
-        completed_actions = []
-        aborted_actions = []
-        pending_actions = []
-
-        while not self.action_status_inbox.empty():
-            action_msg : AgentActionMessage = await self.action_status_inbox.get()
-            action : AgentAction = action_from_dict(**action_msg.action)
-
-            if action.id in plan_ids:
-                if action_msg.status == AgentAction.COMPLETED:
-                    # planned action completed! 
-                    self.log(f'action of type `{action.action_type}` completed!', level)
-                    completed_actions.append(action)
-                elif action_msg.status == AgentAction.ABORTED:
-                    # planned action aborted! 
-                    self.log(f'action of type `{action.action_type}` aborted!', level)
-                    aborted_actions.append(action)
-                    pass
-                elif action_msg.status == AgentAction.PENDING:
-                    # planned action wasn't completed
-                    self.log(f"action {action.id.split('-')[0]} not completed yet! trying again...", level)
-                    pending_actions.append(action)
-                else: 
-                    # unknowhn action status; ignore
-                    continue
-        
-        return completed_actions, aborted_actions, pending_actions
-    
-    def __remove_performed_actions_from_plan(   self, 
-                                                current_plan : list, 
-                                                completed_actions : list, 
-                                                aborted_actions : list) -> tuple:
-        
-        updated_plan = [action for action in current_plan]
-        performed_actions = [action for action in completed_actions]
-        performed_actions.extend(aborted_actions)
-        for performed_action in performed_actions:
-            performed_action : AgentAction
-            for action in updated_plan:
-                action : AgentAction
-                if performed_action.id == action.id:
-                    updated_plan.remove(action)
-
-        return updated_plan, performed_actions
-                
-    @runtime_tracker
-    async def _preplan( self, 
-                        plan : list,
-                        performed_actions : list,
+        # initialize object
+        super().__init__()
+
+        # initialize valiables
+        self.generated_reqs = []
+        self.completed_requests = []
+        self.completed_broadcasts = []
+        self.completed_actions = []
+        self.pending_relays = []
+        self.access_times = {}
+        self.known_reqs = []
+        self.stats = {}
+        self.plan : Plan = None
+
+        # set parameters
+        self.utility_func = utility_func    # utility function
+        self._logger = logger               # logger for debugging
+
+    def update_precepts(self, 
+                        state : SimulationAgentState,
+                        current_plan : Plan,
+                        completed_actions : list,
+                        aborted_actions : list,
+                        pending_actions : list,
                         incoming_reqs : list,
                         generated_reqs : list,
+                        relay_messages : list,
                         misc_messages : list,
-                        level : int 
-                        ) -> None:
-        # Generate Initial Plan        
-        await self.agent_state_lock.acquire()
-
-        plan = self.preplanner.initialize_plan( self.agent_state, 
-                                                plan,
-                                                performed_actions,
-                                                incoming_reqs,
-                                                generated_reqs,
-                                                misc_messages,
-                                                self.t_plan,
-                                                self._clock_config,
-                                                self.planning_horizon,
-                                                self.orbitdata
-                                                )
-        self.agent_state_lock.release()
-
-        # update last time plan was updated
-        self.t_plan = self.get_current_time()
-        self.t_next = self.t_plan + self.planning_horizon
-
-        # remove all elements of the plan that occur after the planning horizon ends
-        while(len(plan) > 0 and plan[-1].t_end > self.t_next):
-            plan.pop()
-
-        # wait for next planning horizon if needed
-        if len(plan) > 0:
-            if plan[-1].t_end < self.t_next:
-                plan.append(WaitForMessages(plan[-1].t_end, self.t_next))
-        else:
-            plan.append(WaitForMessages(self.agent_state.t, self.t_next))
-
-        # save copy of plan for post-processing
-        plan_copy = []
-        for action in plan:
-            plan_copy.append(action)
-        self.plan_history.append((self.t_plan, plan_copy))
-
-        return plan
-
-    @runtime_tracker
-    async def _replan(  self, 
-                        current_plan : list,
-                        performed_actions : list,
-                        incoming_reqs : list,
-                        generated_reqs : list,
-                        misc_messages : list,
-                        level : int = logging.DEBUG
+                        orbitdata : dict = None
                         ) -> None:
         
-        # Modify current Plan      
-        await self.agent_state_lock.acquire()
+        """ Uses incoming precepts to update internal knowledge of the environment and the state of the parent agent """
+        # update list of requests generated by the parent agent 
+        self.generated_reqs.extend([req for req in generated_reqs 
+                                    if isinstance(req, MeasurementRequest)
+                                    and req not in self.generated_reqs
+                                    and req not in self.known_reqs
+                                    and req.s_max > 0.0])
 
-        plan : list = self.replanner.replan(self.agent_state, 
-                                            current_plan,
-                                            performed_actions,
-                                            incoming_reqs, 
-                                            generated_reqs,
-                                            misc_messages,
-                                            self.t_plan,
-                                            self.t_next,
-                                            self._clock_config,
-                                            self.orbitdata) 
-        self.agent_state_lock.release()
+        # update list of known requests
+        new_reqs : list = self.__get_new_requests(incoming_reqs, generated_reqs)
+        self.known_reqs.extend(new_reqs)
 
-        # update last time plan was updated
-        self.t_plan = self.get_current_time()
+        # update list of performed broadcasts
+        self.completed_broadcasts.extend([message_from_dict(**action.msg) 
+                                          for action in completed_actions 
+                                          if isinstance(action, BroadcastMessageAction)
+                                          and message_from_dict(**action.msg) not in self.completed_broadcasts])
 
-        # remove all elements of the plan that occur after the planning horizon ends
-        while(len(plan) > 0 and plan[-1].t_end > self.t_next):
-            plan.pop()
+        # update list of relays to perform
+        pending_relay_ids = [msg.id for msg in self.pending_relays]
+        self.pending_relays.extend([relay_message 
+                                    for relay_message in relay_messages 
+                                    if relay_message.id not in pending_relay_ids])
 
-        # wait for next planning horizon if needed
-        if len(plan) > 0:
-            if plan[-1].t_end < self.t_next:
-                plan.append(WaitForMessages(plan[-1].t_end, self.t_next))
-        else:
-            plan.append(WaitForMessages(self.agent_state.t, self.t_next))
+        for completed_broadcast in self.completed_broadcasts:
+            completed_broadcast : SimulationMessage
+            for pending_relay in self.pending_relays:
+                pending_relay : SimulationMessage
+                if completed_broadcast.id == pending_relay.id:
+                    self.pending_relays.remove(pending_relay)
+                    break
 
-        # save copy of plan for post-processing
-        plan_copy = []
-        for action in plan:
-            plan_copy.append(action)
-        self.plan_history.append((self.t_plan, plan_copy))
+        # update list of performed actions
+        self.completed_actions.extend([action for action in completed_actions])
 
-        return plan
-    
+        # update list of performed requests
+        completed_requests : list = self.__update_performed_requests(completed_actions, misc_messages)
+        self.completed_requests.extend([req for req in completed_requests 
+                                        if req not in self.completed_requests])
+        
+        # update access times 
+        self._update_access_times(state, orbitdata[state.agent_name])
+        
     @runtime_tracker
-    async def _wait_for_messages(self) -> tuple:
+    def __get_new_requests( self, 
+                            incoming_reqs : list,
+                            generated_reqs : list
+                            ) -> list:
         """
-        Collects and classifies incoming messages. If a measurement was made by the parent agent,
-        it waits until other modules to process the measurement's data and send a response.
-
-        ## Returns:
-            incoming_reqs 
-            generated_reqs 
-            misc_messages
+        Reads incoming requests and determines which ones are new or known
         """
-        incoming_reqs = []
-        while not self.req_inbox.empty():
-            req : MeasurementRequest = await self.req_inbox.get()
-            incoming_reqs.append(req)
+        reqs = [req for req in incoming_reqs]
+        reqs.extend(generated_reqs)
+        return [req for req in reqs if req not in self.known_reqs and req.s_max > 0]
 
-        incoming_measurements = []
-        while not self.measurement_inbox.empty():
-            incoming_measurements.append(await self.measurement_inbox.get())
+    @runtime_tracker
+    def __update_performed_requests(self, performed_actions : list, misc_messages : list) -> list:
+        """ Creates a list the of requests that were just performed by the parent agent or by other agents """
+        performed_requests = []
 
-        generated_reqs = []
-        if (self.other_modules_exist                # other modules exist within the parent agent
-            and len(incoming_measurements) > 0      # the agent just performed a measurement
-            ):
+        # compile measurements performed by parent agent
+        performed_measurements = [action for action in performed_actions 
+                                  if isinstance(action, MeasurementAction)]
+        
+        # compile measurements performed by other agents
+        their_measurements = [MeasurementAction(**msg.measurement_action)
+                              for msg in misc_messages 
+                              if isinstance(msg, MeasurementPerformedMessage)]
+                
+        # compile performed measurements  
+        performed_measurements.extend(their_measurements)
 
-            # wait for science module to send their assesment of the measurement 
-            internal_msg = await self.internal_inbox.get()
+        # check if measurements are attributed to a known measurement request
+        for action in performed_measurements:
+            action : MeasurementAction 
+            req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
+            if (action.status == action.COMPLETED 
+                ):
+                performed_requests.append((req, action.instrument_name))
 
-            if not isinstance(internal_msg, MeasurementRequestMessage):
-                await self.misc_inbox.put(internal_msg)
+        return performed_requests
+
+    @abstractmethod
+    def _update_access_times(  self,
+                                state : SimulationAgentState,
+                                t_plan : float,
+                                agent_orbitdata : OrbitData) -> None:
+        """
+        Calculates and saves the access times of all known requests
+        """
+        pass
+
+    @runtime_tracker
+    def _calc_arrival_times(self, 
+                            state : SimulationAgentState, 
+                            req : MeasurementRequest, 
+                            instrument : str,
+                            t_prev : Union[int, float],
+                            agent_orbitdata : OrbitData) -> float:
+        """
+        Estimates the quickest arrival time from a starting position to a given final position
+        """
+        if isinstance(req, GroundPointMeasurementRequest):
+            # compute earliest time to the task
+            if isinstance(state, SatelliteAgentState):
+                t_imgs = []
+                lat,lon,_ = req.lat_lon_pos
+                t_start = min( max(t_prev, req.t_start), t_prev + self.horizon)     # TODO generalize
+                t_end = min(t_prev + self.horizon, req.t_end)
+                df : pd.DataFrame = agent_orbitdata \
+                                        .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
+
+                for _, row in df.iterrows():
+                    t_img = row['time index'] * agent_orbitdata.time_step
+                    dt = t_img - state.t
+                
+                    # propagate state
+                    propagated_state : SatelliteAgentState = state.propagate(t_prev)
+
+                    # compute off-nadir angle
+                    thf = propagated_state.calc_off_nadir_agle(req)
+                    dth = abs(thf - propagated_state.attitude[0])
+
+                    # estimate arrival time using fixed angular rate TODO change to 
+                    if dt >= dth / state.max_slew_rate: # TODO change maximum angular rate 
+                        t_imgs.append(t_img)
+                        
+                return t_imgs
+
+            elif isinstance(state, UAVAgentState):
+                dr = np.array(req.pos) - np.array(state.pos)
+                norm = np.sqrt( dr.dot(dr) )
+                return [norm / state.max_speed + t_prev]
+
             else:
-                generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
+                raise NotImplementedError(f"arrival time estimation for agents of type `{type(state)}` is not yet supported.")
 
-            while not self.misc_inbox.empty():
-                internal_msg = await self.internal_inbox.get()
-                if not isinstance(internal_msg, MeasurementRequestMessage):
-                    await self.misc_inbox.put(internal_msg)
-                else:
-                    generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
+        else:
+            raise NotImplementedError(f"cannot calculate imaging time for measurement requests of type {type(req)}")       
 
-        misc_messages = []
-        while not self.misc_inbox.empty():
-            misc_messages.append(await self.misc_inbox.get())
-
-        return incoming_reqs, generated_reqs, misc_messages
+    @abstractmethod
+    def needs_planning(self, **kwargs) -> bool:
+        """ Determines whether planning is triggered """ 
+        
+    @abstractmethod
+    def generate_plan(self, **kwargs) -> Plan:
+        """ Creates a plan for the agent to perform """
 
     @runtime_tracker
-    def _get_next_actions(self, plan : list, pending_actions : list, generated_reqs : list, t : float) -> list:
-        """ Parses current plan and outputs list of actions that are to be performed at a given time"""
+    def _schedule_broadcasts(self, 
+                             state : SimulationAgentState, 
+                             measurements : list, 
+                             orbitdata : dict
+                            ) -> list:
+        """ 
+        Schedules any broadcasts to be done. 
+        
+        By default it schedules the broadcast of any newly generated requests
+        and the relay of any incoming relay messages
+        """
+        # initialize list of broadcasts to be done
+        broadcasts = []       
 
-        # get next available action to perform
-        plan_out = [action for action in plan if action.t_start <= t <= action.t_end]
+        # schedule generated measurement request broadcasts
+        ## check which requests have not been broadcasted yet
+        requests_broadcasted = [msg.req['id'] for msg in self.completed_broadcasts 
+                                if isinstance(msg, MeasurementRequestMessage)]
+        requests_to_broadcast = [req for req in self.generated_reqs
+                                 if isinstance(req, MeasurementRequest)
+                                 and req.id not in requests_broadcasted]
 
-        # if broadcasts are to be done, perform them first before any other actions
-        broadcast_actions : list = [action for action in plan_out if isinstance(action, BroadcastMessageAction)]
-        if len(broadcast_actions) > 0:
-            broadcast_actions.extend([action for action in plan if isinstance(action, WaitForMessages)])
+        # Find best path for broadcasts
+        path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, state.t)
 
-        plan_out = broadcast_actions if len(broadcast_actions) > 0 else plan_out
-        plan_out = [action.to_dict() for action in plan_out]
+        ## create a broadcast action for all unbroadcasted measurement requests
+        for req in requests_to_broadcast:        
+            # if found, create broadcast action
+            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+            
+            if t_start >= 0:
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                
+                broadcasts.append(broadcast_action)
 
-        # re-attempt pending actions 
-        for action in pending_actions:
-            action : AgentAction
-            if action.to_dict() not in plan_out:
-                plan_out.insert(0, action.to_dict())
+        # schedule message relay
+        for relay in self.pending_relays:
+            raise NotImplementedError('Relay scheduling not yet supported.')
 
-        # broadcasts all newly generated requests if they have a non-zero scientific value
-        for req in generated_reqs:
-            req : MeasurementRequest
-            if req.s_max <= 0.0:
-                continue
+            relay : SimulationMessage
 
-            req_msg = MeasurementRequestMessage("", "", req.to_dict())
-            plan_out.insert(0, BroadcastMessageAction(  req_msg.to_dict(), 
-                                                        self.get_current_time()).to_dict()
-                                                    )
+            assert relay.path
 
-        # idle if no more actions can be performed
-        if len(plan_out) == 0:
-            t_idle = plan[0].t_start if len(plan) > 0 else self.t_next
-            # t_idle = plan[0].t_start if len(plan) > 0 and plan[0].t_end <= t else self.t_next
-            action = WaitForMessages(t, t_idle)
-            plan_out.append(action.to_dict())     
+            # find next destination and access time
+            next_dst = relay.path[0]
+            
+            # query next access interval to children nodes
+            sender_orbitdata : OrbitData = orbitdata[state.agent_name]
+            access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(next_dst, state.t)
+            t_start : float = access_interval.start
 
-        # sort plan in order of ascending start time 
-        if len(plan_out) > 1:
-            plan_out.sort(key=lambda a: a['t_start'])
+            if t_start < np.Inf:
+                # if found, create broadcast action
+                broadcast_action = BroadcastMessageAction(relay.to_dict(), t_start)
+                
+                # check broadcast start; only add to plan if it's within the planning horizon
+                if t_start <= state.t + self.horizon:
+                    broadcasts.append(broadcast_action)
+                        
+        # return scheduled broadcasts
+        return broadcasts   
 
-        return plan_out     
+    @runtime_tracker
+    def _schedule_maneuvers(    self, 
+                                state : SimulationAgentState, 
+                                observations : list,
+                                broadcasts : list,
+                                clock_config : ClockConfig
+                            ) -> list:
+        """
+        Generates a list of AgentActions from the current path.
+
+        Agents look to move to their designated measurement target and perform the measurement.
+
+        ## Arguments:
+            - state (:obj:`SimulationAgentState`): state of the agent at the start of the path
+            - path (`list`): list of tuples indicating the sequence of observations to be performed and time of observation
+            - t_init (`float`): start time for plan
+            - clock_config (:obj:`ClockConfig`): clock being used for this simulation
+        """
+
+        # initialize maneuver list
+        maneuvers = []
+
+        for i in range(len(observations)):
+            action_sequence_i = []
+
+            measurement_action : MeasurementAction = observations[i]
+            measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
+            t_img = measurement_action.t_start
+
+            if isinstance(state, SatelliteAgentState):
+                imaging_state : SimulationAgentState = state.propagate(t_img)
+            else:
+                raise NotImplemented(f"maneuver scheduling for states of type `{type(state)}` not yet supported")
+
+            if not isinstance(measurement_req, GroundPointMeasurementRequest):
+                raise NotImplementedError(f"Cannot create plan for requests of type {type(measurement_req)}")
+            
+            # Estimate previous state
+            if i == 0:
+                if isinstance(state, SatelliteAgentState):
+                    t_prev = state.t
+                    prev_state : SatelliteAgentState = state.copy()
+
+                # elif isinstance(state, UAVAgentState):
+                #     t_prev = state.t # TODO consider wait time for convergence
+                #     prev_state : UAVAgentState = state.copy()
+
+                else:
+                    raise NotImplemented(f"maneuver scheduling for states of type `{type(state)}` not yet supported")
+            else:
+                prev_measurement : MeasurementAction = observations[i-1]
+                prev_req = MeasurementRequest.from_dict(prev_measurement.measurement_req)
+                t_prev = prev_measurement.t_end if prev_measurement is not None else state.t
+
+                if isinstance(state, SatelliteAgentState):
+                    prev_state : SatelliteAgentState = state.propagate(t_prev)
+                    prev_state.attitude = [
+                                        prev_state.calc_off_nadir_agle(prev_req),
+                                        0.0,
+                                        0.0
+                                    ]
+
+                elif isinstance(state, UAVAgentState):
+                    prev_state : UAVAgentState = state.copy()
+                    prev_state.t = t_prev
+
+                    if isinstance(prev_req, GroundPointMeasurementRequest):
+                        prev_state.pos = prev_req.pos
+                    else:
+                        raise NotImplementedError(f"cannot calculate travel time start for requests of type {type(prev_req)} for uav agents")
+
+                else:
+                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
+                
+            # maneuver to point to target
+            t_maneuver_end = None
+            if isinstance(state, SatelliteAgentState):
+                prev_state : SatelliteAgentState
+                imaging_state : SatelliteAgentState
+
+                t_maneuver_start = prev_state.t
+                th_f = imaging_state.calc_off_nadir_agle(measurement_req)
+                dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
+                t_maneuver_end = t_maneuver_start + dt
+
+                if t_maneuver_end > t_img:
+                    x = 1
+
+                if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
+                    action_sequence_i.append(ManeuverAction([th_f, 0, 0], 
+                                                            t_maneuver_start, 
+                                                            t_maneuver_end))   
+                else:
+                    t_maneuver_end = None
+
+            # move to target
+            t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
+            if isinstance(state, SatelliteAgentState):
+                t_move_end = t_img
+                future_state : SatelliteAgentState = state.propagate(t_move_end)
+                final_pos = future_state.pos
+
+            elif isinstance(state, UAVAgentState):
+                final_pos = measurement_req.pos
+                dr = np.array(final_pos) - np.array(prev_state.pos)
+                norm = np.sqrt( dr.dot(dr) )
+                
+                t_move_end = t_move_start + norm / state.max_speed
+
+            else:
+                raise NotImplementedError(f"cannot calculate travel time end for agent states of type {type(state)}")
+            
+            # quantize travel maneuver times if needed
+            if isinstance(clock_config, FixedTimesStepClockConfig):
+                dt = clock_config.dt
+                if t_move_start < np.Inf:
+                    t_move_start = dt * math.floor(t_move_start/dt)
+                if t_move_end < np.Inf:
+                    t_move_end = dt * math.ceil(t_move_end/dt)
+            
+            # add travel maneuver if required
+            if abs(t_move_start - t_move_end) >= 1e-3:
+                move_action = TravelAction(final_pos, t_move_start, t_move_end)
+                action_sequence_i.append(move_action)
+            
+            # wait for measurement action to start
+            if t_move_end < t_img:
+                action_sequence_i.append( WaitForMessages(t_move_end, t_img) )
+
+            maneuvers.extend(action_sequence_i)
+
+        return maneuvers
     
-    def __log_plan(self, plan : list, title : str, level : int = logging.DEBUG) -> None:
-        out = f'\n{title}\nid\taction type\tt_start\tt_end\n'
-
-        for action in plan:
-            if isinstance(action, AgentAction):
-                out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-            elif isinstance(action, dict):
-                out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+    def _create_broadcast_path(self, agent_name : str, orbitdata : dict, t : float) -> tuple:
+        """ 
+        Finds the best path for broadcasting a message to all agents using depth-first-search
+        """
+        # get list of agents
+        agents = [agent for agent in orbitdata if agent != agent_name]
         
-        self.log(out, level)
-               
-    async def teardown(self) -> None:
-        # log plan history
-        headers = ['plan_index', 't_plan', 'req_id', 'subtask_index', 't_img', 'u_exp']
-        data = []
+        # check if broadcast needs to be routed
+        if agents:
+            earliest_accesses = [orbitdata[agent].get_next_agent_access(agent_name, t) for agent in agents]           
+            same_access_start = [access.start == earliest_accesses[0].start for access in earliest_accesses if isinstance(access, TimeInterval)]
+            same_access_end = [access.end == earliest_accesses[0].end for access in earliest_accesses if isinstance(access, TimeInterval)]
+
+            if all(same_access_start) and all(same_access_end):
+                # all agents are accessing eachother at the same time; no need for mesasge relays
+                return ([], t)   
+            
+        else:
+            # no other agents in the simulation; no need for relays
+            return ([], t)
+
+        # initialte queue
+        q = queue.Queue()
         
-        for i in range(len(self.plan_history)):
-            t_plan, plan = self.plan_history[i]
-            t_plan : float; plan : list
+        # initialize min path and min path cost
+        min_path = []
+        min_times = []
+        min_cost = np.Inf
 
-            for action in plan:
-                if not isinstance(action, MeasurementAction):
-                    continue
+        # add parent agent as the root node
+        q.put((agent_name, [], [], 0.0))
 
-                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
-                line_data = [   i,
-                                np.round(t_plan,3),
-                                req.id.split('-')[0],
-                                action.subtask_index,
-                                np.round(action.t_start,3 ),
-                                np.round(action.u_exp,3)
-                ]
-                data.append(line_data)
+        # iterate through depth-first search
+        while not q.empty():
+            # get next node in the search
+            sender_agent, current_path, current_times, path_cost = q.get()
 
-        df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
-        df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
+            # check if path is complete
+            if len(agents) == len(current_path):
+                # check if minimum cost
+                if path_cost < min_cost:
+                    min_cost = path_cost
+                    min_path = [path_element for path_element in current_path]
+                    min_times = [path_time for path_time in current_times]
 
-        # log performance stats
-        n_decimals = 3
-        headers = ['routine','t_avg','t_std','t_med','n']
-        data = []
+            # add children nodes to queue
+            for receiver_agent in [receiver_agent for receiver_agent in agents 
+                                    if receiver_agent not in current_path
+                                    and receiver_agent != agent_name
+                                    ]:
+                # query next access interval to children nodes
+                t_access : float = t + path_cost
 
-        for routine in self.stats:
-            n = len(self.stats[routine])
-            t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
-            t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
-            t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+                sender_orbitdata : OrbitData = orbitdata[sender_agent]
+                access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(receiver_agent, t_access)
+                
+                if access_interval.start < np.Inf:
+                    new_path = [path_element for path_element in current_path]
+                    new_path.append(receiver_agent)
 
-            line_data = [ 
-                            routine,
-                            t_avg,
-                            t_std,
-                            t_median,
-                            n
+                    new_cost = access_interval.start - t
+
+                    new_times = [path_time for path_time in current_times]
+                    new_times.append(new_cost + t)
+
+                    q.put((receiver_agent, new_path, new_times, new_cost))
+
+        if min_times:
+            assert t <= min_times[0]
+
+        # return path and broadcast start time
+        return (min_path, min_times[0]) if min_path else ([], np.Inf)
+    
+    def _print_observation_path(self, state : SatelliteAgentState, path : list) -> None :
+        """ Debugging tool. Prints current observations plan being considered. """
+
+        out = f'\n{state.agent_name}:\n\n\nID\t  j\tt_img\tth\tdt_mmt\tdt_mvr\tValid\tu_exp\n'
+
+        out_temp = [f"N\A       ",
+                    f"N\A",
+                    f"\t{np.round(state.t,3)}",
+                    f"\t{np.round(state.attitude[0],3)}",
+                    f"\t-",
+                    f"\t-",
+                    f"\t-"
+                    f"\t{0.0}",
+                    f"\n"
+                    ]
+        out += ''.join(out_temp)
+
+        for i in range(len(path)):
+            if i > 0:
+                measurement_prev : MeasurementAction = path[i-1]
+                t_prev = measurement_prev.t_end
+                req_prev : MeasurementRequest = MeasurementRequest.from_dict(measurement_prev.measurement_req)
+                state_prev : SatelliteAgentState = state.propagate(t_prev)
+                th_prev = state_prev.calc_off_nadir_agle(req_prev)
+            else:
+                t_prev = state.t
+                state_prev : SatelliteAgentState = state
+                th_prev = state.attitude[0]
+
+            measurement_i : MeasurementAction = path[i]
+            t_i = measurement_i.t_start
+            req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+            state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
+            th_i = state_i.calc_off_nadir_agle(req_i)
+
+            dt_maneuver = abs(th_i - th_prev) / state.max_slew_rate
+            dt_measurements = t_i - t_prev
+
+            out_temp = [f"{req_i.id.split('-')[0]}",
+                            f"  {measurement_i.subtask_index}",
+                            f"\t{np.round(measurement_i.t_start,3)}",
+                            f"\t{np.round(th_i,3)}",
+                            f"\t{np.round(dt_measurements,3)}",
+                            f"\t{np.round(dt_maneuver,3)}",
+                            f"\t{dt_maneuver <= dt_measurements}"
+                            f"\t{np.round(measurement_i.u_exp,3)}",
+                            f"\n"
                             ]
-            data.append(line_data)
+            out += ''.join(out_temp)
+        out += f'\nn measurements: {len(path)}\n'
 
-        if isinstance(self.preplanner, AbstractPreplanner):
-            for routine in self.preplanner.stats:
-                n = len(self.preplanner.stats[routine])
-                t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
-                t_std = np.round(np.std(self.preplanner.stats[routine]),n_decimals) if n > 0 else 0.0
-                t_median = np.round(np.median(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
-
-                line_data = [ 
-                                f"preplanner/{routine}",
-                                t_avg,
-                                t_std,
-                                t_median,
-                                n
-                                ]
-                data.append(line_data)
-
-        if isinstance(self.replanner, AbstractReplanner):
-            for routine in self.replanner.stats:
-                n = len(self.replanner.stats[routine])
-                t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
-                t_std = np.round(np.std(self.replanner.stats[routine]),n_decimals) if n > 0 else 0.0
-                t_median = np.round(np.median(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
-
-                line_data = [ 
-                                f"replanner/{routine}",
-                                t_avg,
-                                t_std,
-                                t_median,
-                                n
-                                ]
-                data.append(line_data)
-
-        stats_df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-        stats_df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_runtime_stats.csv", index=False)
-
-        await super().teardown()
+        print(out)

@@ -10,6 +10,7 @@ class SimulationMessageTypes(Enum):
     PLAN = 'PLAN'
     SENSES = 'SENSES'
     MEASUREMENT = 'MEASUREMENT'
+    MEASUREMENT_PERFORMED = 'MEASUREMENT_PERFORMED'
     BUS = 'BUS'
 
 def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
@@ -32,6 +33,8 @@ def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
         return SensesMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.MEASUREMENT.value:
         return MeasurementResultsRequestMessage(**kwargs)
+    elif msg_type == SimulationMessageTypes.MEASUREMENT_PERFORMED.value:
+        return MeasurementPerformedMessage(**kwargs)
     else:
         raise NotImplementedError(f'Action of type {msg_type} not yet implemented.')
 
@@ -53,8 +56,9 @@ class AgentStateMessage(SimulationMessage):
                 dst: str, 
                 state : dict,
                 id: str = None, 
+                path: list = [],
                 **_):
-        super().__init__(src, dst, SimulationMessageTypes.AGENT_STATE.value, id)
+        super().__init__(src, dst, SimulationMessageTypes.AGENT_STATE.value, id, path)
         self.state = state
 
 class AgentConnectivityUpdate(SimulationMessage):
@@ -72,17 +76,18 @@ class AgentConnectivityUpdate(SimulationMessage):
         - id (`str`) : Universally Unique IDentifier for this message
         - state (`dict`): dictionary discribing the state of the agent sending this message
     """
-    def __init__(self, dst: str, target : str, connected : int, id: str = None, **_):
+    def __init__(self, dst: str, target : str, connected : int, id: str = None, path: list = [], **_):
         super().__init__(SimulationElementRoles.ENVIRONMENT.value, 
                          dst, 
                          SimulationMessageTypes.CONNECTIVITY_UPDATE.value, 
-                         id)
+                         id,
+                         path)
         self.target = target
         self.connected = connected
 
 class MeasurementRequestMessage(SimulationMessage):
     """
-    ## Task Request Message 
+    ## Measurement Request Message 
 
     Describes a task request being between simulation elements
 
@@ -93,8 +98,8 @@ class MeasurementRequestMessage(SimulationMessage):
         - id (`str`) : Universally Unique IDentifier for this message
         - req (`dict`) : dictionary describing measurement request to be performed
     """
-    def __init__(self, src: str, dst: str, req : dict, id: str = None, **_):
-        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_REQ.value, id)
+    def __init__(self, src: str, dst: str, req : dict, id: str = None, path : list = [], **_):
+        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_REQ.value, id, path)
         
         if not isinstance(req, dict):
             raise AttributeError(f'`req` must be of type `dict`; is of type {type(req)}.')
@@ -113,8 +118,8 @@ class MeasurementResultsRequestMessage(SimulationMessage):
         - id (`str`) : Universally Unique IDentifier for this message
         - measurement (`dict`) : measurement data being communicated
     """
-    def __init__(self, src: str, dst: str, agent_state : dict, measurement_action : dict, id: str = None, **_):
-        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT.value, id)
+    def __init__(self, src: str, dst: str, agent_state : dict, measurement_action : dict, id: str = None, path : list = [], **_):
+        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT.value, id, path)
         
         if not isinstance(measurement_action, dict):
             raise AttributeError(f'`measurement_req` must be of type `dict`; is of type {type(measurement_action)}.')
@@ -124,6 +129,23 @@ class MeasurementResultsRequestMessage(SimulationMessage):
         self.measurement_action = measurement_action
         self.agent_state = agent_state
         self.measurement = {}
+
+class MeasurementPerformedMessage(SimulationMessage):
+    def __init__(self, 
+                 src: str, 
+                 dst: str, 
+                 measurement_action : dict,
+                 id: str = None,
+                 path : list = [],
+                 **_
+                 ):
+        """
+        ## Measurement Perfromed Message
+
+        Informs other agents that a measurement action was performed to satisfy a measurement request
+        """
+        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_PERFORMED.value, id, path)
+        self.measurement_action = measurement_action
 
 class MeasurementBidMessage(SimulationMessage):
     """
@@ -142,7 +164,9 @@ class MeasurementBidMessage(SimulationMessage):
                 src: str, 
                 dst: str, 
                 bid: dict, 
-                id: str = None, **_):
+                id: str = None,
+                path : list = [],
+                **_):
         """
         Creates an instance of a task bid message
 
@@ -152,7 +176,7 @@ class MeasurementBidMessage(SimulationMessage):
             - bid (`dict`): bid information being shared
             - id (`str`) : Universally Unique IDentifier for this message
         """
-        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_BID.value, id)
+        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_BID.value, id, path)
         self.bid = bid
 
 class PlanMessage(SimulationMessage):
@@ -170,7 +194,7 @@ class PlanMessage(SimulationMessage):
         - t_plan (`float`): time at which the plan was created
         - id (`str`) : Universally Unique IDentifier for this message
     """
-    def __init__(self, src: str, dst: str, plan : list, t_plan : float, id: str = None, **_):
+    def __init__(self, src: str, dst: str, plan : list, t_plan : float, id: str = None, path : list = [], **_):
         """
         Creates an instance of a plan message
 
@@ -181,7 +205,7 @@ class PlanMessage(SimulationMessage):
             - t_plan (`float`): time at which the plan was created
             - id (`str`) : Universally Unique IDentifier for this message
         """
-        super().__init__(src, dst, SimulationMessageTypes.PLAN.value, id)
+        super().__init__(src, dst, SimulationMessageTypes.PLAN.value, id, path)
         self.plan = plan
         self.t_plan = t_plan
 
@@ -199,7 +223,7 @@ class SensesMessage(SimulationMessage):
         - msg_type (`str`): type of message being sent
         - id (`str`) : Universally Unique IDentifier for this message
     """
-    def __init__(self, src: str, dst: str, state : dict, senses : list, id: str = None, **_):
+    def __init__(self, src: str, dst: str, state : dict, senses : list, id: str = None, path : list = [], **_):
         """
         Creates an instance of a plan message
 
@@ -209,7 +233,7 @@ class SensesMessage(SimulationMessage):
             - senses (`list`): list of senses from the agent
             - id (`str`) : Universally Unique IDentifier for this message
         """
-        super().__init__(src, dst, SimulationMessageTypes.SENSES.value, id)
+        super().__init__(src, dst, SimulationMessageTypes.SENSES.value, id, path)
         self.state = state
         self.senses = senses
 
@@ -219,8 +243,8 @@ class AgentActionMessage(SimulationMessage):
 
     Informs the receiver of a action to be performed and its completion status
     """
-    def __init__(self, src: str, dst: str, action : dict, status : str=None, id: str = None, **_):
-        super().__init__(src, dst, SimulationMessageTypes.AGENT_ACTION.value, id)
+    def __init__(self, src: str, dst: str, action : dict, status : str=None, id: str = None, path : list = [], **_):
+        super().__init__(src, dst, SimulationMessageTypes.AGENT_ACTION.value, id, path)
         self.action = action
         self.status = None
         self.status = status if status is not None else action.get('status', None)
@@ -231,8 +255,8 @@ class BusMessage(SimulationMessage):
 
     A longer message containing a list of other messages to be sent in the same transmission
     """
-    def __init__(self, src: str, dst: str, msgs : list, id: str = None, **_):
-        super().__init__(src, dst, SimulationMessageTypes.BUS.value, id)
+    def __init__(self, src: str, dst: str, msgs : list, id: str = None, path : list = [], **_):
+        super().__init__(src, dst, SimulationMessageTypes.BUS.value, id, path)
         
         if not isinstance(msgs, list):
             raise AttributeError(f'`msgs` must be of type `list`; is of type {type(msgs)}')

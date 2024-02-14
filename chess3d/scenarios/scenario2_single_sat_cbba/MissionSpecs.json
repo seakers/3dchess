@@ -101,9 +101,15 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",                
-                "replanner" : "CBBA",   
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "True"
+                },                
+                "replanner" : {
+                    "@type" : "ACBBA",
+                    "bundle size" : 1,
+                    "dt_convergence" : 0.0
+                },
                 "utility" : "LINEAR"
             },
             "science" : "True",

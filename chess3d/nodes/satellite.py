@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Callable
 from nodes.science.science import ScienceModule
-from nodes.planning.planners import PlanningModule
+from chess3d.nodes.planning.planner import PlanningModule
 from nodes.agent import SimulationAgentState
 from dmas.network import NetworkConfig
 from nodes.agent import SimulationAgent

@@ -29,6 +29,7 @@ class SimulationAgentState(AbstractAgentState):
     LISTENING = 'LISTENING'
 
     def __init__(   self, 
+                    agent_name : str,
                     state_type : str,
                     payload : list,
                     pos : list,
@@ -45,6 +46,7 @@ class SimulationAgentState(AbstractAgentState):
         """
         super().__init__()
         
+        self.agent_name = agent_name
         self.state_type = state_type
         self.payload = payload
         self.pos : list = pos
@@ -211,6 +213,7 @@ class GroundStationAgentState(SimulationAgentState):
     Describes the state of a Ground Station Agent
     """
     def __init__(self, 
+                agent_name : str,
                 lat: float, 
                 lon: float,
                 alt: float, 
@@ -231,7 +234,8 @@ class GroundStationAgentState(SimulationAgentState):
         ]
         vel = [0, 0, 0]
         
-        super().__init__(SimulationAgentTypes.GROUND_STATION.value, 
+        super().__init__(agent_name,
+                        SimulationAgentTypes.GROUND_STATION.value, 
                         [],
                         pos, 
                         vel,
@@ -263,6 +267,7 @@ class SatelliteAgentState(SimulationAgentState):
     Describes the state of a Satellite Agent
     """
     def __init__( self, 
+                    agent_name : str,
                     orbit_state : dict,
                     payload : list,
                     time_step : float = None,
@@ -306,7 +311,7 @@ class SatelliteAgentState(SimulationAgentState):
         else:
             self.eps = self.__calc_eps(pos) if self.time_step else 1e-6
         
-        super().__init__(   
+        super().__init__(   agent_name,
                             SimulationAgentTypes.SATELLITE.value, 
                             payload,
                             pos, 
@@ -577,6 +582,7 @@ class UAVAgentState(SimulationAgentState):
     Describes the state of a UAV Agent
     """
     def __init__(   self, 
+                    agent_name : str,
                     payload : list,
                     pos: list, 
                     max_speed: float,
@@ -588,7 +594,7 @@ class UAVAgentState(SimulationAgentState):
                     **_
                 ) -> None:
                 
-        super().__init__(
+        super().__init__(   agent_name,
                             SimulationAgentTypes.UAV.value, 
                             payload,
                             pos, 

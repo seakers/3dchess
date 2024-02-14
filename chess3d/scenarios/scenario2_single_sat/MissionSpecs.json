@@ -101,15 +101,19 @@
                 }
             },
             "planner" : {
-                "horizon" : 3600,
-                "preplanner" : "FIFO",
-                "replanner" : "FIFO",
-                "utility" : "LINEAR"
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "False"
+                },
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration " : "False"
+                },
+                "utility" : "LINEAR"                
             },
             "science" : "True",
             "notifier": "False",
-            "missionProfile": "3D-CHESS",
-            "preplan": "False"
+            "missionProfile": "3D-CHESS"
         }
     ],
     "groundStation": [

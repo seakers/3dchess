@@ -5,7 +5,7 @@ from pandas import DataFrame
 from instrupy.base import Instrument
 from nodes.states import SimulationAgentState
 from nodes.science.reqs import MeasurementRequest
-from nodes.planning.planners import PlanningModule
+from chess3d.nodes.planning.planner import PlanningModule
 from nodes.science.science import ScienceModule
 from utils import setup_results_directory
 from nodes.actions import *
@@ -215,9 +215,6 @@ class SimulationAgent(Agent):
     
     @runtime_tracker
     async def get_agent_broadcasts(self) -> list:
-        if self.get_element_name() == 'img_1':
-            x= 1
-
         return await self.__empty_queue(self.external_inbox)
 
     """
@@ -260,9 +257,6 @@ class SimulationAgent(Agent):
                     self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
                     actions.append(action_dict)  
                 break
-            else:
-                # ignore
-                x = 1
         
         self.log(f"plan of {len(actions)} actions received from planner module!")
         return actions
@@ -285,7 +279,7 @@ class SimulationAgent(Agent):
                 action.status = AgentAction.PENDING
                 statuses.append((action, action.status))
 
-                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action_dict['action_type']} before it started (start time {action.t_start}[s]) at time {self.get_current_time()}[s]")
+                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action.action_type} before it started (start time {action.t_start}[s]) at time {self.get_current_time()}[s]")
                 # continue
             
             if (self.get_current_time() - action.t_end) > np.finfo(np.float32).eps:
@@ -293,7 +287,7 @@ class SimulationAgent(Agent):
                 action.status = AgentAction.ABORTED
                 statuses.append((action, action.status))
 
-                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action_dict['action_type']} after it ended (start/end times {action.t_start}[s], {action.t_end}[s]) at time {self.get_current_time()}[s]")
+                raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action.action_type} after it ended (start/end times {action.t_start}[s], {action.t_end}[s]) at time {self.get_current_time()}[s]")
                 continue
 
             self.log(f"performing action of type {action.action_type}...", level=logging.INFO)    

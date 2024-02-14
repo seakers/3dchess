@@ -7,7 +7,6 @@ from instrupy.base import Instrument
 import orbitpy.util
 import pandas as pd
 import random
-import sys
 import zmq
 import concurrent.futures
 
@@ -25,7 +24,7 @@ from nodes.uav import UAVAgent
 from nodes.agent import SimulationAgent
 from nodes.groundstat import GroundStationAgent
 from nodes.satellite import SatelliteAgent
-from nodes.planning.planners import PlanningModule
+from chess3d.nodes.planning.planner import PlanningModule
 from nodes.science.science import ScienceModule
 from nodes.science.utility import utility_function
 from nodes.science.reqs import GroundPointMeasurementRequest
@@ -74,8 +73,9 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
                 if (
                        scenario_dict['epoch'] != mission_dict['epoch']
                     or scenario_dict['duration'] != mission_dict['duration']
-                    or scenario_dict['groundStation'] != mission_dict['groundStation']
+                    or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
                     or scenario_dict['grid'] != mission_dict['grid']
+                    # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
                     ):
                     return True
                 
@@ -118,7 +118,7 @@ def precompute_orbitdata(scenario_name) -> str:
     scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
     data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
    
-    changes_to_scenario = check_changes_to_scenario(scenario_dir, data_dir)
+    changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
 
     if not os.path.exists(data_dir):
         # if directory does not exists, create it
@@ -135,7 +135,7 @@ def precompute_orbitdata(scenario_name) -> str:
         else:
             print('Orbit data not found.')
 
-        # print('Clearing \'orbitdata\' directory...')    
+        print('Clearing \'orbitdata\' directory...')    
         # clear files if they exist
         if os.path.exists(data_dir):
             for f in os.listdir(data_dir):
@@ -145,7 +145,7 @@ def precompute_orbitdata(scenario_name) -> str:
                     os.rmdir(data_dir + f)
                 else:
                     os.remove(os.path.join(data_dir, f)) 
-        # print('\'orbitddata\' cleared!')
+        print('\'orbitddata\' cleared!')
 
         with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
             # load json file as dictionary
@@ -239,40 +239,49 @@ def agent_factory(  scenario_name : str,
     ## load planner module
     if planner_dict is not None:
         planner_dict : dict
-        preplanner_type = planner_dict.get('preplanner', None)
-        replanner_type = planner_dict.get('replanner', None)
-        planning_horizon = planner_dict.get('horizon', np.Inf)
-        utility = utility_function[planner_dict.get('utility', 'NONE')]
+        utility_func = utility_function[planner_dict.get('utility', 'NONE')]
         
-        if preplanner_type is not None:
-            if preplanner_type == 'FIFO':
-                preplanner = FIFOPreplanner(utility)
+        preplanner_dict = planner_dict.get('preplanner', None)
+        if isinstance(preplanner_dict, dict):
+            preplanner_type = preplanner_dict.get('@type', None)
+            period = preplanner_dict.get('period', np.Inf)
+            horizon = preplanner_dict.get('horizon', np.Inf)
+
+            if preplanner_type == "FIFO":
+                collaboration = preplanner_dict.get('collaboration ', "False") == "True"
+                preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
             else:
-                raise NotImplementedError(f'preplanner of type `{preplanner_type}` not yet supported.')
+                raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
         else:
             preplanner = None
 
-        if replanner_type is not None:
+        replanner_dict = planner_dict.get('replanner', None)
+        if isinstance(replanner_dict, dict):
+            replanner_type = replanner_dict.get('@type', None)
+            
             if replanner_type == 'FIFO':
-                replanner = FIFOReplanner(utility)
+                collaboration = replanner_dict.get('collaboration ', "False") == "True"
+                replanner = FIFOReplanner(utility_func, collaboration)
+
             elif replanner_type == 'ACBBA':
-                max_bundle_size = planner_dict.get('bundle size', 3)
-                dt_converge = planner_dict.get('dt_convergence', 0.0)
-                replanner = ACBBAReplanner(agent_name, utility, max_bundle_size, dt_converge)
+                max_bundle_size = replanner_dict.get('bundle size', 3)
+                dt_converge = replanner_dict.get('dt_convergence', 0.0)
+                replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge)
+            
             else:
-                raise NotImplementedError(f'replanner of type `{replanner_type}` not yet supported.')
+                raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
         else:
-            replanner = None
+            # replanner = None
+            replanner = RelayReplanner()
     else:
         preplanner, replanner = None, None
 
     planner = PlanningModule(   results_path, 
                                 agent_name, 
                                 agent_network_config, 
-                                utility, 
+                                utility_func, 
                                 preplanner,
                                 replanner,
-                                planning_horizon,
                                 initial_reqs
                             )    
         
@@ -286,7 +295,8 @@ def agent_factory(  scenario_name : str,
             else:
                 eps = 1e-6
 
-            initial_state = UAVAgentState(  [instrument.name for instrument in payload], 
+            initial_state = UAVAgentState(  agent_name,
+                                            [instrument.name for instrument in payload], 
                                             pos, 
                                             max_speed, 
                                             eps=eps )
@@ -311,7 +321,8 @@ def agent_factory(  scenario_name : str,
         l : str = time_data.at[1,time_data.axes[1][0]]
         _, _, _, _, dt = l.split(' '); dt = float(dt)
 
-        initial_state = SatelliteAgentState(orbit_state_dict, 
+        initial_state = SatelliteAgentState(agent_name,
+                                            orbit_state_dict, 
                                             [instrument.name for instrument in payload], 
                                             time_step=dt) 
         
