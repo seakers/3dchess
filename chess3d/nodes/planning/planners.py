@@ -92,11 +92,6 @@ class AbstractPlanner(ABC):
         
         # update access times 
         self._update_access_times(state, orbitdata[state.agent_name])
-
-        if any([req.id not in self.access_times for req in self.known_reqs]):
-            x = 1
-        if any([req_id not in [req.id for req in self.known_reqs] for req_id in self.access_times]):
-            x = 1
         
     @runtime_tracker
     def __get_new_requests( self, 
