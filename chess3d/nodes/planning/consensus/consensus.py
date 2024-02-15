@@ -74,14 +74,16 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # perform consesus phase
         self.results, self.bundle, \
-            self.path, _, self.bids_to_rebroadcasts = self.consensus_phase( state,
+            self.path, changes, self.bids_to_rebroadcasts = self.consensus_phase( state,
                                                                             self.results,
                                                                             self.bundle, 
                                                                             self.path, 
                                                                             bids_received,
                                                                             completed_measurements)
-        self.log_results('Updated precepts', self.results, logging.WARNING)
-        x = 1
+        
+        if changes: 
+            self.log_results('Updated precepts', state, self.results, logging.WARNING)
+            x = 1
 
     def _compile_bids(self, 
                       state : SimulationAgentState, 
@@ -885,7 +887,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
     --------------------
     """
     @abstractmethod
-    def log_results(self, dsc : str, results : dict, level=logging.DEBUG) -> None:
+    def log_results(self, dsc : str, state : SimulationAgentState, results : dict, level=logging.DEBUG) -> None:
         """
         Logs current results at a given time for debugging purposes
 

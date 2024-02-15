@@ -43,7 +43,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             return True
         return False
     
-    def log_results(self, dsc : str, results : dict, level=logging.DEBUG) -> None:
+    def log_results(self, dsc : str, state : SimulationAgentState, results : dict, level=logging.DEBUG) -> None:
         """
         Logs current results at a given time for debugging purposes
 
@@ -52,7 +52,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             - results (`dict`): results to be logged
             - level (`int`): logging level to be used
         """
-        out = f'{dsc}\n'
+        out = f'T{state.t}:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'Req ID\t\tj\tins\tdep\twinner\tbid\tt_img\tt_update\n'
         out += line 
         for _ in range(len(line)):
