@@ -81,7 +81,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                                                             bids_received,
                                                                             completed_measurements)
         
-        if changes: 
+        if changes or self.bids_to_rebroadcasts: 
             self.log_results('Updated precepts', state, self.results, logging.WARNING)
             x = 1
 
@@ -134,10 +134,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         return completed_measurements
 
-    def needs_replanning(self, state : SimulationAgentState, plan : Plan) -> bool:   
+    def needs_planning(self, state : SimulationAgentState, plan : Plan) -> bool:   
         if not self.is_converged():
             x = 1
-        if len(self.bids_to_rebroadcasts) > 0:
+        if self.bids_to_rebroadcasts:
             x = 1
 
         # replan if relevant changes have been made to the bundle
@@ -178,7 +178,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             bid : Bid
             msg = MeasurementBidMessage(state.agent_name, state.agent_name, bid.to_dict())
             broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
-            plan.add(broadcast_action)
+            plan.add(broadcast_action, state.t)
             
         # reset broadcast list
         self.rebroadcasts = []
