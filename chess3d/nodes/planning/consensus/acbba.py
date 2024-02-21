@@ -23,6 +23,31 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         """ Creages bids from given measurement request """
         return UnconstrainedBid.new_bids_from_request(req, state.agent_name, self.dt_converge)
 
+    def _can_access(self, 
+                     state : SimulationAgentState, 
+                     results : dict,
+                     req : MeasurementRequest, 
+                     subtask_index : int,
+                     path : list
+                     ) -> bool:
+        """ Checks if an agent can access the location of a measurement request """
+        if isinstance(state, SatelliteAgentState):
+            bid : Bid = results[req.id][subtask_index]
+            t_arrivals = [t 
+                          for t in self.access_times[req.id][bid.main_measurement] 
+                          if req.t_start <= t <= req.t_end
+                          ]
+            
+            if not t_arrivals:
+                # cannot access ground point, 
+                return False
+            
+            #
+
+        else:
+            raise NotImplementedError(f"listing of available requests for agents with state of type {type(state)} not yet supported.")
+
+
     def is_converged(self) -> bool:
         """ Checks if consensus has been reached and plans are coverged """       
         return True # TODO
@@ -58,9 +83,11 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         line = 'Req ID\t  j\tins\tdep\twinner\tbid\tt_img\tt_update\n'
         out += line 
         for _ in range(len(line) + 25):
-            out += '-'
+            out += '='
         out += '\n'
         
+        n = 5
+        i = 1
         for req_id in results:
             req_id : str
             req_id_short = req_id.split('-')[0]
@@ -70,16 +97,24 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                 continue
 
             for bid in bids:
+                if i > n:
+                    break
+
                 bid : UnconstrainedBid
+                if bid.winner == bid.NONE: continue
+
                 req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
                 ins, deps = req.measurement_groups[bid.subtask_index]
                 line = f'{req_id_short}  {bid.subtask_index}\t{ins}\t{deps}\t{bid.winner}\t{np.round(bid.winning_bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\n'
-                if bid.winner == bid.NONE: continue
                 out += line
+                i +=1
 
             for _ in range(len(line) + 35):
                 out += '-'
             out += '\n'
+
+            if i > n:
+                break
 
         print(out)
 

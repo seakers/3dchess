@@ -189,14 +189,23 @@ class AbstractConsensusReplanner(AbstractReplanner):
         if (state.t - self.preplan.t) < 1e-3 and not conflicts:
             # plan was just developed by preplanner; no need to replan
             return False
-
-        if not self.is_converged():
-            x = 1
+        
         if self.bids_to_rebroadcasts:
-            x = 1
+            # relevant changes were made to the results database; replan
+            return True
+
+        if len(self.bundle) < self.max_bundle_size and self._get_available_requests(state, self.results, self.bundle, self.path):
+            # there are bids that can placed for tasks that have not been done yet; replan
+            return True
+        
+        # no need to replan
+        return False
+
+        # if not self.is_converged():
+        #     x = 1
 
         # replan if relevant changes have been made to the bundle
-        return len(self.bids_to_rebroadcasts) > 0 or not self.is_converged()
+        # return len(self.bids_to_rebroadcasts) > 0 or not self.is_converged()
 
     def compile_planning_conflicts(self, state : SimulationAgentState, plan : Plan) -> list:
         """checks for ay conflicts between the current plan and any incoming plans"""
@@ -292,7 +301,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # check convergence
         if self.is_converged():
-            plan : Replan = self._plan_from_path(state, self.path, clock_config, orbitdata)
+            plan : Replan = self._plan_from_path(state, self.results, self.path, clock_config, orbitdata)
         else:
             plan : Preplan = self.preplan
 
@@ -330,6 +339,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
     def _plan_from_path(self, 
                         state : SimulationAgentState, 
+                        results : dict,
                         path : list,
                         clock_config: ClockConfig, 
                         orbitdata: OrbitData = None
@@ -337,7 +347,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ creates a new plan to be performed by the agent based on the results of the planning phase """
 
         # schedule measurements
-        measurements : list = self._compile_measurements(path)
+        measurements : list = self._compile_measurements(results, path)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = [action for action in self.preplan.actions if isinstance(action, BroadcastMessageAction)]
@@ -347,7 +357,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         return Replan(measurements, broadcasts, maneuvers, t=state.t, t_next=self.preplan.t_next)
         
-    def _compile_measurements(self, path : list) -> list:
+    def _compile_measurements(self, results : dict, path : list) -> list:
         """ compiles and merges lists of measurement actions to be performed by the agent """
         # get list of preplanned measurements
         preplanned_measurements = [action for action in self.preplan.actions 
@@ -360,7 +370,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
             req : MeasurementRequest
             subtask_index : int
 
-            instrument_name, _ = req.measurement_groups[subtask_index]
+            bid : Bid = results[req.id][subtask_index]
+            instrument_name = bid.main_measurement
             new_measurements.append(MeasurementAction(req.to_dict(), 
                                                       subtask_index, 
                                                       instrument_name, 
@@ -817,7 +828,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 subtask_bid : Bid = results[req_id][subtask_index]; 
                 req = MeasurementRequest.from_dict(subtask_bid.req)
 
-                is_accessible = self.__can_access(state, req, subtask_index)
+                is_accessible = self._can_access(state, results, req, subtask_index, path)
                 is_biddable = self._can_bid(state, results, req, subtask_index)
                 already_in_bundle = (req, subtask_index, subtask_bid) in bundle
                 already_in_path = (req, subtask_index) in path_reqs
@@ -842,26 +853,16 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 
         return available
    
-    def __can_access(self, 
+    @abstractmethod
+    def _can_access(self, 
                      state : SimulationAgentState, 
+                     results : dict,
                      req : MeasurementRequest, 
-                     subtask_index : int
+                     subtask_index : int,
+                     path : list
                      ) -> bool:
         """ Checks if an agent can access the location of a measurement request """
-        if isinstance(state, SatelliteAgentState):
-            main_instrument, _ = req.measurement_groups[subtask_index]
-            t_arrivals = [t 
-                          for t in self.access_times[req.id][main_instrument] 
-                          if req.t_start <= t <= req.t_end
-                          ]
-            
-            if len(t_arrivals) == 0 and len(self.access_times[req.id][main_instrument]) > 0:
-                y = 1
-
-            return len(t_arrivals) > 0
-        else:
-            raise NotImplementedError(f"listing of available requests for agents with state of type {type(state)} not yet supported.")
-
+        
     @abstractmethod
     def _can_bid(self, 
                 state : SimulationAgentState, 
