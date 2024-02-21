@@ -7,7 +7,7 @@ from dmas.utils import runtime_tracker
 from traitlets import Callable
 
 from nodes.states import *
-from nodes.planning.consensus.bids import UnconstrainedBid
+from nodes.planning.consensus.bids import Bid, UnconstrainedBid
 from nodes.planning.consensus.consensus import AbstractConsensusReplanner
 from nodes.science.reqs import MeasurementRequest
 
@@ -17,7 +17,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
     def __init__(self, utility_func: Callable, max_bundle_size: int = 1, dt_converge: float = 0, logger: logging.Logger = None) -> None:
         super().__init__(utility_func, max_bundle_size, dt_converge, logger)
         self.prev_bundle = []
-        self.converged = False
+        self.converged = True
 
     def _generate_bids_from_request(self, req : MeasurementRequest, state : SimulationAgentState) -> list:
         """ Creages bids from given measurement request """
@@ -25,6 +25,8 @@ class ACBBAReplanner(AbstractConsensusReplanner):
 
     def is_converged(self) -> bool:
         """ Checks if consensus has been reached and plans are coverged """       
+        return True # TODO
+        
         self.prev_bundle = [b for b in self.bundle]
 
         if self.converged:
@@ -53,9 +55,9 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             - level (`int`): logging level to be used
         """
         out = f'T{state.t}:\t\'{state.agent_name}\'\n{dsc}\n'
-        line = 'Req ID\t\tj\tins\tdep\twinner\tbid\tt_img\tt_update\n'
+        line = 'Req ID\t  j\tins\tdep\twinner\tbid\tt_img\tt_update\n'
         out += line 
-        for _ in range(len(line)):
+        for _ in range(len(line) + 25):
             out += '-'
         out += '\n'
         
@@ -63,15 +65,20 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             req_id : str
             req_id_short = req_id.split('-')[0]
 
-            for bid in results[req_id]:
+            bids : list[Bid] = results[req_id]
+            if all([bid.winner == bid.NONE for bid in bids]):
+                continue
+
+            for bid in bids:
                 bid : UnconstrainedBid
                 req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
                 ins, deps = req.measurement_groups[bid.subtask_index]
-                line = f'{req_id_short}\t{bid.subtask_index}\t{ins}\t{deps}\t{bid.winner}\t{np.round(bid.winning_bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\n'
+                line = f'{req_id_short}  {bid.subtask_index}\t{ins}\t{deps}\t{bid.winner}\t{np.round(bid.winning_bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\n'
+                if bid.winner == bid.NONE: continue
                 out += line
 
-            for _ in range(len(line)):
-                out += '--'
+            for _ in range(len(line) + 35):
+                out += '-'
             out += '\n'
 
         print(out)

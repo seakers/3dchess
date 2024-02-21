@@ -331,12 +331,8 @@ class SimulationAgent(Agent):
         self.state_history.append(self.state.to_dict())
 
         if dt > 0:
-            try:
-                # perfrom time wait if needed
-                await self.sim_wait(dt)
-
-            except asyncio.CancelledError:
-                return
+            # perfrom time wait if needed
+            await self.perform_wait_for_messages(WaitForMessages(t, t+dt))
 
             # update the agent's state
             status, _ = self.state.perform_action(action, self.get_current_time())

@@ -216,7 +216,7 @@ class Bid(ABC):
                     return BidComparisonResults.UPDATE,\
                           RebroadcastComparisonResults.REBROADCAST_OTHER
                 
-                elif other.winning_bid == self.winning_bid and self._tie_breaker(other, self):
+                elif other.winning_bid == self.winning_bid and self != self._tie_breaker(other, self):
                     # update & rebroadcast other's bid
                     return BidComparisonResults.UPDATE, \
                         RebroadcastComparisonResults.REBROADCAST_OTHER
@@ -302,7 +302,7 @@ class Bid(ABC):
                     return BidComparisonResults.UPDATE,\
                         RebroadcastComparisonResults.REBROADCAST_OTHER
                 
-                elif other.winning_bid == self.winning_bid and self._tie_breaker(other, self): 
+                elif other.winning_bid == self.winning_bid and self != self._tie_breaker(other, self): 
                     # update & rebroadcast other's bid
                     return BidComparisonResults.UPDATE,\
                           RebroadcastComparisonResults.REBROADCAST_OTHER
@@ -474,7 +474,7 @@ class Bid(ABC):
         else:
             return bid2
 
-    def set_bid(self, new_bid : Union[int, float], t_img : Union[int, float], t_update : Union[int, float]) -> None:
+    def set(self, new_bid : Union[int, float], t_img : Union[int, float], t_update : Union[int, float]) -> None:
         """
         Sets new values for this bid
 

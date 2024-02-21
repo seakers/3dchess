@@ -32,7 +32,7 @@ class AbstractReplanner(AbstractPlanner):
         
         self.preplan : Preplan = Preplan(t=-1.0)
 
-    def update_precepts(self, 
+    def update_percepts(self, 
                         state: SimulationAgentState, 
                         current_plan: Plan, 
                         completed_actions: list, 
@@ -48,7 +48,7 @@ class AbstractReplanner(AbstractPlanner):
         if state.t == current_plan.t and isinstance(current_plan, Preplan): 
             self.preplan = current_plan.copy() 
         
-        return super().update_precepts(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, orbitdata)
+        return super().update_percepts(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, orbitdata)
 
     def needs_planning(self, *_) -> bool:
         # check if there any requests that have not been broadcasted yet
@@ -193,7 +193,7 @@ class FIFOReplanner(ReactivePlanner):
         self.other_plans = {}
         self.ignored_reqs = []
 
-    def update_precepts(self, 
+    def update_percepts(self, 
                         state: SimulationAgentState, 
                         current_plan: Plan, 
                         completed_actions: list, 
@@ -207,7 +207,7 @@ class FIFOReplanner(ReactivePlanner):
                         ) -> None:
         
         # initialize update
-        super().update_precepts(state, 
+        super().update_percepts(state, 
                                 current_plan, 
                                 completed_actions, 
                                 aborted_actions, 

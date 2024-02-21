@@ -37,7 +37,7 @@ class AbstractPlanner(ABC):
         self.utility_func = utility_func    # utility function
         self._logger = logger               # logger for debugging
 
-    def update_precepts(self, 
+    def update_percepts(self, 
                         state : SimulationAgentState,
                         current_plan : Plan,
                         completed_actions : list,

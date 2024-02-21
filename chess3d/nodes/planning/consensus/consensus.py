@@ -33,12 +33,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.results = {}
         self.bids_to_rebroadcasts = []
         self.completed_measurements = []
+        self.other_plans = {}
+        self.recently_completed_measurments = []
 
         # set paremeters
         self.max_bundle_size = max_bundle_size
         self.dt_converge = dt_converge
 
-    def update_precepts(self, 
+    def update_percepts(self, 
                         state: SimulationAgentState, 
                         current_plan: Plan, 
                         completed_actions: list, 
@@ -51,8 +53,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         orbitdata: dict = None
                         ) -> None:
        
-        # update other precepts
-        super().update_precepts(state, 
+        # update other percepts
+        super().update_percepts(state, 
                                 current_plan,    
                                 completed_actions, 
                                 aborted_actions, 
@@ -62,57 +64,79 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                 relay_messages, 
                                 misc_messages, 
                                 orbitdata)
-        
-        # compile received bids
-        bids_received = self._compile_bids( state,
-                                            incoming_reqs, 
-                                            generated_reqs, 
-                                            misc_messages)
+
+        # update latest preplan
+        if state.t == current_plan.t and isinstance(current_plan, Preplan): 
+            self.preplan = current_plan.copy() 
+            self.path = [(MeasurementRequest.from_dict(action.measurement_req), 
+                         action.subtask_index, 
+                         action.t_start, 
+                         action.u_exp) 
+                         for action in current_plan
+                         if isinstance(action, MeasurementAction)]
 
         # compile completed measurements
-        completed_measurements = self._compile_completed_measurements(completed_actions, misc_messages)
+        completed_measurements = self._compile_completed_measurements(completed_actions, 
+                                                                        misc_messages)
+        self.completed_measurements.extend(completed_measurements)
+        self.recently_completed_measurments = completed_measurements
 
-        # perform consesus phase
-        self.results, self.bundle, \
-            self.path, changes, self.bids_to_rebroadcasts = self.consensus_phase( state,
-                                                                            self.results,
-                                                                            self.bundle, 
-                                                                            self.path, 
-                                                                            bids_received,
-                                                                            completed_measurements)
-        
-        if changes or self.bids_to_rebroadcasts: 
-            self.log_results('Updated precepts', state, self.results, logging.WARNING)
-            x = 1
 
-    def _compile_bids(self, 
-                      state : SimulationAgentState, 
-                      incoming_reqs : list, 
-                      generated_reqs : list, 
-                      misc_messages : list
-                      ) -> list:
-        """ Reads incoming messages and requests and checks if bids were received """
-        # get bids from misc messages
-        bids = [Bid.from_dict(msg.bid) 
-                for msg in misc_messages 
-                if isinstance(msg, MeasurementBidMessage)]
-        
-        # check for new requests from incoming requests
-        new_reqs = [req for req in incoming_reqs 
-                    if req.id not in self.results]
-        
-        #check for new requests from generated requests
-        new_reqs.extend([req for req in generated_reqs 
-                         if req.id not in self.results 
-                         and req not in new_reqs])
-        
-        # generate bids for new requests
-        for new_req in new_reqs:
-            new_req : MeasurementRequest
-            req_bids : list = self._generate_bids_from_request(new_req, state)
-            bids.extend(req_bids)
+        # update incoming bids
+        self.incoming_bids = [  Bid.from_dict(msg.bid) 
+                                for msg in misc_messages 
+                                if isinstance(msg, MeasurementBidMessage)]
 
-        return bids
+        
+        # compile incoming plans
+        incoming_plans = [(msg.src, 
+                           Plan([action_from_dict(**action) 
+                                 for action in msg.plan],t=msg.t_plan))
+                            for msg in misc_messages
+                            if isinstance(msg, PlanMessage)]
+        
+        # update internal knowledge base of other agent's 
+        for src, plan in incoming_plans:
+            plan : Plan
+            if src not in self.other_plans:
+                # new agent has sent their current plan
+                self.other_plans[src] = (plan, state.t)
+            
+            other_plan, _ = self.other_plans[src]
+            other_plan : Plan
+            if plan.t > other_plan.t:
+                # only update if a newer plan was received
+                self.other_plans[src] = (plan, state.t)
+        
+    # def _compile_bids(self, 
+    #                   state : SimulationAgentState, 
+    #                   incoming_reqs : list, 
+    #                   generated_reqs : list, 
+    #                   misc_messages : list
+    #                   ) -> list:
+    #     """ Reads incoming messages and requests and checks if bids were received """
+        
+    #     # get explisit bids from misc messages
+    #     bids = [Bid.from_dict(msg.bid) 
+    #             for msg in misc_messages 
+    #             if isinstance(msg, MeasurementBidMessage)]
+        
+        # # check for new requests from incoming requests
+        # new_reqs = [req for req in incoming_reqs 
+        #             if req.id not in self.results]
+        
+        # #check for new requests from generated requests
+        # new_reqs.extend([req for req in generated_reqs 
+        #                  if req.id not in self.results 
+        #                  and req not in new_reqs])
+        
+        # # generate bids for new requests
+        # for new_req in new_reqs:
+        #     new_req : MeasurementRequest
+        #     req_bids : list = self._generate_bids_from_request(new_req, state)
+        #     bids.extend(req_bids)
+              
+        # return bids
     
     @abstractmethod
     def _generate_bids_from_request(self, req : MeasurementRequest, state : SimulationAgentState) -> list:
@@ -125,7 +149,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ Reads incoming precepts and compiles all measurement actions performed by the parent agent or other agents """
         # checks measurements performed by the parent agent
         completed_measurements = [action for action in completed_actions
-                                  if isinstance(action, MeasurementAction)]
+                                  if isinstance(action, MeasurementAction)
+                                  and action not in self.completed_actions]
         
         # checks measuremetns performed by other agents
         completed_measurements.extend([action_from_dict(**msg.measurement_action) 
@@ -135,6 +160,36 @@ class AbstractConsensusReplanner(AbstractReplanner):
         return completed_measurements
 
     def needs_planning(self, state : SimulationAgentState, plan : Plan) -> bool:   
+    
+        # compile any conflicts in newly received plans
+        conflicts : list[Bid] = self.compile_planning_conflicts(state, plan)
+        self.incoming_bids.extend(conflicts)
+                    
+        # check if any new measurement requests have been received
+        new_req_bids : list[Bid] = self.compile_new_measurement_request_bids(state, plan)
+        self.incoming_bids.extend(new_req_bids)
+
+        if conflicts:
+            x = 1
+        
+        if new_req_bids:
+            x = 1
+        
+        # perform consesus phase
+        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        self.results, self.bundle, \
+            self.path, changes, self.bids_to_rebroadcasts = self.consensus_phase( state,
+                                                                            self.results,
+                                                                            self.bundle, 
+                                                                            self.path, 
+                                                                            self.incoming_bids,
+                                                                            self.recently_completed_measurments)
+        
+        self.log_results('CONSENSUS PHASE', state, self.results)
+        if (state.t - self.preplan.t) < 1e-3 and not conflicts:
+            # plan was just developed by preplanner; no need to replan
+            return False
+
         if not self.is_converged():
             x = 1
         if self.bids_to_rebroadcasts:
@@ -142,6 +197,75 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # replan if relevant changes have been made to the bundle
         return len(self.bids_to_rebroadcasts) > 0 or not self.is_converged()
+
+    def compile_planning_conflicts(self, state : SimulationAgentState, plan : Plan) -> list:
+        """checks for ay conflicts between the current plan and any incoming plans"""
+        # TODO make sure to only check for conflicts whenever 
+
+        my_measurements = [action for action in plan if isinstance(action, MeasurementAction)]
+
+        conflicts : list[Bid] = []
+        for other_agent, other_plan in self.other_plans.items():
+            their_plan, t_received = other_plan
+            their_plan : Plan
+
+            if abs(t_received - state.t) >= 1e-3:
+                continue
+                
+            # check if another agent is planning on doing the same task as I am
+            other_measurements = [action for action in their_plan 
+                                    if isinstance(action, MeasurementAction)]
+            for other_measurement in other_measurements:
+                other_measurement : MeasurementAction
+                conflicting_measurements = [my_measurement for my_measurement in my_measurements
+                                            if isinstance(my_measurement,MeasurementAction)
+                                            and my_measurement.measurement_req['id'] == other_measurement.measurement_req['id']
+                                            and my_measurement.subtask_index == other_measurement.subtask_index]
+                
+                # there are scheduling conflicts; two agents are planning on performing the same task
+                for conflict in conflicting_measurements:
+                    conflict : MeasurementAction
+                    # add measurement to list of conflicts
+                    req = MeasurementRequest.from_dict(conflict.measurement_req)
+                    bids : list[Bid] = self._generate_bids_from_request(req, state)
+
+                    conflicting_bid : Bid = bids[other_measurement.subtask_index]
+                    conflicting_bid.winner = other_agent
+                    conflicting_bid.bidder = other_agent
+                    conflicting_bid.set(conflict.u_exp, conflict.t_start, their_plan.t)
+                    conflicts.append(conflicting_bid)
+        
+        return conflicts
+
+    def compile_new_measurement_request_bids(self, state : SimulationAgentState, plan : Plan) -> list:
+        """ Checks for all requests that havent been considered in current bidding process """
+        # compile list of tasks currently planned to be performed 
+        planned_reqs = [(action.measurement_req, action.subtask_index)
+                        for action in plan 
+                        if isinstance(action,MeasurementAction)]
+        
+        # compile list of new bids
+        new_request_bids : list[Bid] = []
+        for req in [req for req in self.known_reqs if req.id not in self.results]:
+            req : MeasurementRequest
+
+            # create new bids for measurement request
+            bids : list[Bid] = self._generate_bids_from_request(req, state)
+
+            # update bids with currently planned values
+            for bid in bids:
+                if (req.to_dict(), bid.subtask_index) in planned_reqs:
+                    action = [action for action in plan 
+                              if isinstance(action, MeasurementAction)
+                              and action.measurement_req == req.to_dict()
+                              and action.subtask_index == bid.subtask_index]
+                    action : MeasurementAction = action[0]
+                    bid.set(action.u_exp, action.t_start, state.t)
+
+            # add to list of new bids
+            new_request_bids.extend(bids)
+
+        return new_request_bids
 
     @abstractmethod
     def is_converged(self) -> bool:
@@ -337,15 +461,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # compile changes
         changes = []
-        changes.extend(comp_changes)
-        changes.extend(exp_changes)
         changes.extend(done_changes)
+        changes.extend(exp_changes)
+        changes.extend(comp_changes)
 
         # compile rebroadcasts
         rebroadcasts = []
-        rebroadcasts.extend(comp_rebroadcasts)
-        rebroadcasts.extend(exp_rebroadcasts)
         rebroadcasts.extend(done_rebroadcasts)
+        rebroadcasts.extend(exp_rebroadcasts)
+        rebroadcasts.extend(comp_rebroadcasts)
 
         return results, bundle, path, changes, rebroadcasts
 
@@ -516,9 +640,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 # was not aware of this request; add to results as a blank bid
                 results[req.id] = self._generate_bids_from_request(req, state)
 
-                # add to changes broadcast
+                # add to changes broadcast in case this request was generated by me
                 my_bid : Bid = results[req.id][0]
-                rebroadcasts.append(my_bid)
                                     
             # compare bids
             my_bid : Bid = results[their_bid.req_id][their_bid.subtask_index]
@@ -654,7 +777,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                     # register maximum utility 
                     max_bid : Bid = old_bid.copy()
-                    max_bid.set_bid(u_exp, t_img, state.t)
+                    max_bid.set(u_exp, t_img, state.t)
                     max_path = projected_path
                     max_path_utility = projected_path_utility
                     max_req = req
