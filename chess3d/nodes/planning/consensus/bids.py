@@ -430,6 +430,8 @@ class Bid(ABC):
         self.t_update = t
         self.performed = other.performed if not self.performed else True # Check if this hold true for all values
 
+        assert self.t_img == other.t_img
+
     def _reset(self, t_update) -> None:
         """
         Resets the values of this bid while keeping track of lates update time

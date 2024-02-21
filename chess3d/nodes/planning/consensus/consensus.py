@@ -74,6 +74,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
                          action.u_exp) 
                          for action in current_plan
                          if isinstance(action, MeasurementAction)]
+            
+            #TODO reset bundle and results
+            self.bundle = []
 
         # compile completed measurements
         completed_measurements = self._compile_completed_measurements(completed_actions, 
@@ -86,15 +89,13 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.incoming_bids = [  Bid.from_dict(msg.bid) 
                                 for msg in misc_messages 
                                 if isinstance(msg, MeasurementBidMessage)]
-
         
         # compile incoming plans
         incoming_plans = [(msg.src, 
-                           Plan([action_from_dict(**action) 
-                                 for action in msg.plan],t=msg.t_plan))
-                            for msg in misc_messages
-                            if isinstance(msg, PlanMessage)]
-        
+                           Plan([action_from_dict(**action) for action in msg.plan],t=msg.t_plan))
+                           for msg in misc_messages
+                           if isinstance(msg, PlanMessage)]
+    
         # update internal knowledge base of other agent's 
         for src, plan in incoming_plans:
             plan : Plan
@@ -107,41 +108,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
             if plan.t > other_plan.t:
                 # only update if a newer plan was received
                 self.other_plans[src] = (plan, state.t)
-        
-    # def _compile_bids(self, 
-    #                   state : SimulationAgentState, 
-    #                   incoming_reqs : list, 
-    #                   generated_reqs : list, 
-    #                   misc_messages : list
-    #                   ) -> list:
-    #     """ Reads incoming messages and requests and checks if bids were received """
-        
-    #     # get explisit bids from misc messages
-    #     bids = [Bid.from_dict(msg.bid) 
-    #             for msg in misc_messages 
-    #             if isinstance(msg, MeasurementBidMessage)]
-        
-        # # check for new requests from incoming requests
-        # new_reqs = [req for req in incoming_reqs 
-        #             if req.id not in self.results]
-        
-        # #check for new requests from generated requests
-        # new_reqs.extend([req for req in generated_reqs 
-        #                  if req.id not in self.results 
-        #                  and req not in new_reqs])
-        
-        # # generate bids for new requests
-        # for new_req in new_reqs:
-        #     new_req : MeasurementRequest
-        #     req_bids : list = self._generate_bids_from_request(new_req, state)
-        #     bids.extend(req_bids)
-              
-        # return bids
-    
-    @abstractmethod
-    def _generate_bids_from_request(self, req : MeasurementRequest, state : SimulationAgentState) -> list:
-        """ Creages bids from given measurement request """
-        pass
 
     def _compile_completed_measurements(self, 
                                         completed_actions : list, 
@@ -168,24 +134,19 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # check if any new measurement requests have been received
         new_req_bids : list[Bid] = self.compile_new_measurement_request_bids(state, plan)
         self.incoming_bids.extend(new_req_bids)
-
-        if conflicts:
-            x = 1
-        
-        if new_req_bids:
-            x = 1
         
         # perform consesus phase
         self.log_results('PRE-CONSENSUS PHASE', state, self.results)
         self.results, self.bundle, \
-            self.path, changes, self.bids_to_rebroadcasts = self.consensus_phase( state,
-                                                                            self.results,
-                                                                            self.bundle, 
-                                                                            self.path, 
-                                                                            self.incoming_bids,
-                                                                            self.recently_completed_measurments)
+            self.path, changes, self.bids_to_rebroadcasts = self.consensus_phase(   state,
+                                                                                    self.results,
+                                                                                    self.bundle, 
+                                                                                    self.path, 
+                                                                                    self.incoming_bids,
+                                                                                    self.recently_completed_measurments)
         
         self.log_results('CONSENSUS PHASE', state, self.results)
+
         if (state.t - self.preplan.t) < 1e-3 and not conflicts:
             # plan was just developed by preplanner; no need to replan
             return False
@@ -194,22 +155,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
             # relevant changes were made to the results database; replan
             return True
 
-        if len(self.bundle) < self.max_bundle_size and self._get_available_requests(state, self.results, self.bundle, self.path):
-            # there are bids that can placed for tasks that have not been done yet; replan
-            return True
-        
         # no need to replan
         return False
 
-        # if not self.is_converged():
-        #     x = 1
-
-        # replan if relevant changes have been made to the bundle
-        # return len(self.bids_to_rebroadcasts) > 0 or not self.is_converged()
-
     def compile_planning_conflicts(self, state : SimulationAgentState, plan : Plan) -> list:
         """checks for ay conflicts between the current plan and any incoming plans"""
-        # TODO make sure to only check for conflicts whenever 
 
         my_measurements = [action for action in plan if isinstance(action, MeasurementAction)]
 
@@ -219,6 +169,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             their_plan : Plan
 
             if abs(t_received - state.t) >= 1e-3:
+                # only checks for conflicts when when new plan was just received
                 continue
                 
             # check if another agent is planning on doing the same task as I am
@@ -241,7 +192,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     conflicting_bid : Bid = bids[other_measurement.subtask_index]
                     conflicting_bid.winner = other_agent
                     conflicting_bid.bidder = other_agent
-                    conflicting_bid.set(conflict.u_exp, conflict.t_start, their_plan.t)
+                    conflicting_bid.set(other_measurement.u_exp, other_measurement.t_start, their_plan.t)
                     conflicts.append(conflicting_bid)
         
         return conflicts
@@ -300,10 +251,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             self.planning_phase(state, self.results, self.bundle, self.path)
         
         # check convergence
-        if self.is_converged():
-            plan : Replan = self._plan_from_path(state, self.results, self.path, clock_config, orbitdata)
-        else:
-            plan : Preplan = self.preplan
+        plan : Replan = self._plan_from_path(state, self.results, self.path, clock_config, orbitdata)
 
         # broadcast changes to plan
         broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
@@ -522,11 +470,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
             changes.append(bid)
 
         # check for task completion in bundle
-        for task_to_remove in [(req, subtask_index, current_bid)
-                               for req, subtask_index, current_bid in bundle
-                               if results[req.id][subtask_index].performed]:
+        for task in [(req, subtask_index, current_bid)
+                    for req, subtask_index, current_bid in bundle
+                    if results[req.id][subtask_index].performed]:
             ## remove all completed tasks from bundle
-            self.bundle.remove(task_to_remove)
+            self.bundle.remove(task)
         
         # check if any mutually exclusive tasks have been performed
         task_to_remove = None
@@ -665,6 +613,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
             # update results with modified bid
             # self.log(f'\nupdated: {my_bid}\n', level=logging.DEBUG) #DEBUG PRINTOUT
             results[their_bid.req_id][their_bid.subtask_index] = updated_bid
+
+            if bid_changed:
+                if my_bid.winner != their_bid.winner and their_bid.winning_bid > my_bid.winning_bid:
+                    x = 1
+
+                assert my_bid != updated_bid
+                assert results[their_bid.req_id][their_bid.subtask_index] == updated_bid
+                assert results[their_bid.req_id][their_bid.subtask_index] != my_bid
                 
             # if relevant changes were made, add to changes and rebroadcast lists respectively
             if bid_changed or is_new_req:
@@ -692,7 +648,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     measurement_req, subtask_index, current_bid = bundle.pop(outbid_index)
 
                     # remove from path
-                    path.remove((measurement_req, subtask_index, current_bid))
+                    path.remove((measurement_req, subtask_index, my_bid.t_img, my_bid.winning_bid))
 
                     # reset bid results
                     current_bid : Bid; measurement_req : MeasurementRequest
@@ -702,6 +658,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                         rebroadcasts.append(reset_bid)
                         changes.append(reset_bid)
+            
+            # if outbid for a bid in the bundle; remove from path
+            if ((req, my_bid.subtask_index, my_bid.t_img, my_bid.winning_bid) in path
+                and updated_bid.winner != state.agent_name):
+
+                path.remove((req, my_bid.subtask_index, my_bid.t_img, my_bid.winning_bid))
         
         return results, bundle, path, changes, rebroadcasts
 
@@ -722,15 +684,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """
         # initialzie changes
         changes = []
-
-        # get current measurement path from preplan
-        path = []
-        for measurement_action in [action for action in self.preplan.actions if isinstance(action, MeasurementAction)]:
-            req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
-            path.append((req, 
-                         measurement_action.subtask_index, 
-                         measurement_action.t_start, 
-                         measurement_action.u_exp))
 
         # check if bundle is full
         if len(bundle) >= self.max_bundle_size:
@@ -828,32 +781,31 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 subtask_bid : Bid = results[req_id][subtask_index]; 
                 req = MeasurementRequest.from_dict(subtask_bid.req)
 
-                is_accessible = self._can_access(state, results, req, subtask_index, path)
-                is_biddable = self._can_bid(state, results, req, subtask_index)
-                already_in_bundle = (req, subtask_index, subtask_bid) in bundle
-                already_in_path = (req, subtask_index) in path_reqs
-                already_performed = self.__request_has_been_performed(results, req, subtask_index, state.t)
-                
-                if (is_accessible 
-                    or is_biddable 
-                    or not already_in_bundle 
-                    or not already_performed
-                    ) and not already_in_path:
-                    x = 1
-                if not already_in_path:
-                    print(is_accessible, is_biddable, not already_in_bundle, not already_in_path, not already_performed)
+                # cehck if the agent has access to the task
+                if not self._can_access(state, results, req, subtask_index, path):
+                    continue 
 
-                if (is_accessible 
-                    and is_biddable 
-                    and not already_in_bundle 
-                    and not already_in_path
-                    and not already_performed
-                    ):
-                    available.append((req, subtask_bid.subtask_index))       
+                # check if the agent can bid on the tasks
+                if not self._can_bid(state, results, req, subtask_index):
+                    continue
+                
+                # check if already in bundle
+                if (req, subtask_index, subtask_bid) in bundle:
+                    continue
+
+                # check if task is already in the path
+                if (req, subtask_index) in path_reqs:
+                    continue
+
+                # cchek if the task has already been performed
+                if self.__request_has_been_performed(results, req, subtask_index, state.t):
+                    continue
+
+                available.append((req, subtask_bid.subtask_index))  
+                    
                 
         return available
    
-    @abstractmethod
     def _can_access(self, 
                      state : SimulationAgentState, 
                      results : dict,
@@ -862,6 +814,16 @@ class AbstractConsensusReplanner(AbstractReplanner):
                      path : list
                      ) -> bool:
         """ Checks if an agent can access the location of a measurement request """
+        if isinstance(state, SatelliteAgentState):
+            bid : Bid = results[req.id][subtask_index]
+            t_arrivals = [t 
+                          for t in self.access_times[req.id][bid.main_measurement] 
+                          if req.t_start <= t <= req.t_end]
+            
+            return True if t_arrivals else False
+        else:
+            raise NotImplementedError(f"listing of available requests for agents with state of type {type(state)} not yet supported.")
+
         
     @abstractmethod
     def _can_bid(self, 

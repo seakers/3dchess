@@ -23,31 +23,6 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         """ Creages bids from given measurement request """
         return UnconstrainedBid.new_bids_from_request(req, state.agent_name, self.dt_converge)
 
-    def _can_access(self, 
-                     state : SimulationAgentState, 
-                     results : dict,
-                     req : MeasurementRequest, 
-                     subtask_index : int,
-                     path : list
-                     ) -> bool:
-        """ Checks if an agent can access the location of a measurement request """
-        if isinstance(state, SatelliteAgentState):
-            bid : Bid = results[req.id][subtask_index]
-            t_arrivals = [t 
-                          for t in self.access_times[req.id][bid.main_measurement] 
-                          if req.t_start <= t <= req.t_end
-                          ]
-            
-            if not t_arrivals:
-                # cannot access ground point, 
-                return False
-            
-            #
-
-        else:
-            raise NotImplementedError(f"listing of available requests for agents with state of type {type(state)} not yet supported.")
-
-
     def is_converged(self) -> bool:
         """ Checks if consensus has been reached and plans are coverged """       
         return True # TODO
@@ -114,6 +89,10 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             out += '\n'
 
             if i > n:
+                out += '\t\t\t...\n'
+                for _ in range(len(line) + 35):
+                    out += '-'
+                out += '\n'
                 break
 
         print(out)
