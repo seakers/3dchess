@@ -697,11 +697,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
             x = 1
 
         # initialize path of maximum utility
-        max_path = [path_element for path_element in path]; 
-        max_path_bids = {req.id : {} for req, _, _, _ in path if isinstance(req, MeasurementRequest)}
-        for req, subtask_index, _, _ in path:
-            req : MeasurementRequest
-            max_path_bids[req.id][subtask_index] = results[req.id][subtask_index]
+        max_path = [path_element for path_element in path]
+        max_path_utility = sum([u_exp for _,_,_,u_exp in path])
 
         # begin bid process
         max_req = -1
