@@ -149,7 +149,9 @@ class Plan(ABC):
         """ returns a list of dicts """
 
         # get next available action to perform
-        plan_out = [action.to_dict() for action in self.actions if action.t_start <= t <= action.t_end]
+        plan_out = [action.to_dict() 
+                    for action in self.actions 
+                    if action.t_start <= t <= action.t_end]
 
         # idle if no more actions can be performed
         if not plan_out:
@@ -158,7 +160,12 @@ class Plan(ABC):
             plan_out.append(action.to_dict())     
 
         # sort plan in order of ascending start time 
-        plan_out.sort(key=lambda a: a['t_start'])
+        plan_out.sort(key=lambda a: a['t_end'])
+
+        if any([action_out['t_start'] == action_out['t_end']
+                for action_out in plan_out]):
+            plan_out = [action_out for action_out in plan_out
+                       if action_out['t_start'] == action_out['t_end']]
 
         # check plan feasibility
         try:

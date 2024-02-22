@@ -138,6 +138,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                 
             assert len(tasks) == len(tasks_unique)
             assert len(tasks) == len(winning_path)
+            assert self.is_path_valid(state, winning_path)
 
         return winning_path, winning_path_utility
     
@@ -228,94 +229,88 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         ### Returns
             - t_img (`float`): earliest available imaging time
         """
-        # calculate the state of the agent prior to performing the measurement request
-        path_element = [(path_req, path_subtask_index, _, __ )
-                        for path_req, path_subtask_index, _, __ in path
-                        if path_req == req and path_subtask_index == subtask_index]
-        if len(path_element) != 1:
-            # path contains more than one measurement of the same request and subtask or does not contain it at all
-            return -1
+        main_measurement = req.measurements[subtask_index]
+        proposed_path = [path_element for path_element in path]
+        proposed_path_tasks = [(path_req, path_j) for path_req, path_j,_,_ in path]
+        j = proposed_path_tasks.index((req,subtask_index))  
         
-        i = path.index(path_element[0])
-        if i == 0:
-            t_prev = state.t
-            prev_state = state.copy()
+        # get access times for all available measurements
+        if j > 0:
+            _,_,t_prev,_ = path[j-1]
+            t_start = max(t_prev, req.t_start)
+            access_times = [t_img 
+                            for t_img in self.access_times[req.id][main_measurement]
+                            if t_start <= t_img <= req.t_end]
+
         else:
-            prev_req, _, t_img, _ = path[i-1]
-            prev_req : MeasurementRequest
-            t_prev : float = t_img + prev_req.duration
+            t_start = max(state.t, req.t_start)
+            access_times = [t_img 
+                            for t_img in self.access_times[req.id][main_measurement]
+                            if t_start <= t_img <= req.t_end]
 
-            if isinstance(state, SatelliteAgentState):
-                prev_state : SatelliteAgentState = state.propagate(t_prev)
-                
-                prev_state.attitude = [
-                                        prev_state.calc_off_nadir_agle(prev_req),
-                                        0.0,
-                                        0.0
-                                    ]
-            elif isinstance(state, UAVAgentState):
-                prev_state = state.copy()
-                prev_state.t = t_prev
-                
-                if isinstance(prev_req, GroundPointMeasurementRequest):
-                    prev_state.pos = prev_req.pos
-                else:
-                    raise NotImplementedError
-            else:
-                raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
-        # calculate arrival time
-        if isinstance(state, SatelliteAgentState):
-            instrument, _ = req.measurement_groups[subtask_index]
-            t_img = -1
+        while access_times:
+            t_img = access_times.pop(0)
+            u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+    
+            proposed_path[j] = (req, subtask_index, t_img, u_exp)
 
-            for t_arrival in [t for t in self.access_times[req.id][instrument] if t >= t_prev] :
-                th_i = prev_state.attitude[0]
-                state_j : SatelliteAgentState = state.propagate(t_arrival)
-                th_j = state_j.calc_off_nadir_agle(req)
-                
-                if abs(th_j - th_i) / state.max_slew_rate <= t_arrival - t_prev:
-                    return t_arrival
+            if self.is_path_valid(state, proposed_path):
+                return t_img
 
-            return t_img
+        return -1
+        # # calculate the state of the agent prior to performing the measurement request
+        # path_element = [(path_req, path_subtask_index, _, __ )
+        #                 for path_req, path_subtask_index, _, __ in path
+        #                 if path_req == req and path_subtask_index == subtask_index]
         
-        else:
-            raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
+        # # if len(path_element) != 1:
+        # #     # path contains more than one measurement of the same request and subtask or does not contain it at all
+        # #     return -1
+        
+        # i = path.index(path_element[0])
+        # if i == 0:
+        #     t_prev = state.t
+        #     prev_state = state.copy()
+        # else:
+        #     prev_req, _, t_img, _ = path[i-1]
+        #     prev_req : MeasurementRequest
+        #     t_prev : float = t_img + prev_req.duration
 
-    # def calc_arrival_times(self, state : SimulationAgentState, req : MeasurementRequest, t_prev : Union[int, float]) -> float:
-    #     """
-    #     Estimates the quickest arrival time from a starting position to a given final position
-    #     """
-    #     if isinstance(req, GroundPointMeasurementRequest):
-    #         # compute earliest time to the task
-    #         if isinstance(state, SatelliteAgentState):
-    #             t_imgs = []
-    #             lat,lon,_ = req.lat_lon_pos
-    #             df : pd.DataFrame = self.orbitdata.get_ground_point_accesses_future(lat, lon, t_prev)
-
-    #             for _, row in df.iterrows():
-    #                 t_img = row['time index'] * self.orbitdata.time_step
-    #                 dt = t_img - state.t
+        #     if isinstance(state, SatelliteAgentState):
+        #         prev_state : SatelliteAgentState = state.propagate(t_prev)
                 
-    #                 # propagate state
-    #                 propagated_state : SatelliteAgentState = state.propagate(t_img)
+        #         prev_state.attitude = [
+        #                                 prev_state.calc_off_nadir_agle(prev_req),
+        #                                 0.0,
+        #                                 0.0
+        #                             ]
+        #     elif isinstance(state, UAVAgentState):
+        #         prev_state = state.copy()
+        #         prev_state.t = t_prev
+                
+        #         if isinstance(prev_req, GroundPointMeasurementRequest):
+        #             prev_state.pos = prev_req.pos
+        #         else:
+        #             raise NotImplementedError
+        #     else:
+        #         raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
-    #                 # compute off-nadir angle
-    #                 thf = propagated_state.calc_off_nadir_agle(req)
-    #                 dth = abs(thf - propagated_state.attitude[0])
+        # # calculate arrival time
+        # if isinstance(state, SatelliteAgentState):
+        #     instrument, _ = req.measurement_groups[subtask_index]
 
-    #                 # estimate arrival time using fixed angular rate TODO change to 
-    #                 if dt >= dth / state.max_slew_rate: # TODO change maximum angular rate 
-    #                     t_imgs.append(t_img)
-    #             return t_imgs if len(t_imgs) > 0 else [-1]
+        #     for t_arrival in [t for t in self.access_times[req.id][instrument] if t >= t_prev] :
+        #         th_i = prev_state.attitude[0]
+        #         state_j : SatelliteAgentState = state.propagate(t_arrival)
+        #         th_j = state_j.calc_off_nadir_agle(req)
+                
+        #         if th_j - th_i / state.max_slew_rate <= t_arrival - t_prev:
+        #             return t_arrival
 
-    #         elif isinstance(state, UAVAgentState):
-    #             dr = np.array(req.pos) - np.array(state.pos)
-    #             norm = np.sqrt( dr.dot(dr) )
-    #             return [norm / state.max_speed + t_prev]
+        #     return -1
+        
+        # else:
+        #     raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
-    #         else:
-    #             raise NotImplementedError(f"arrival time estimation for agents of type {self.parent_agent_type} is not yet supported.")
-
-    #     else:
-    #         raise NotImplementedError(f"cannot calculate imaging time for measurement requests of type {type(req)}")       
+    

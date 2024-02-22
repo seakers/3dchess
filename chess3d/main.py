@@ -565,29 +565,29 @@ def main(   scenario_name : str,
             agents.append(agent)
             agent_port += 6
 
-    if gstation_dict is not None:
-        # Create ground station agents
-        for d in gstation_dict:
-            d : dict
-            agent_name = d['name']
-            lat = d['latitude']
-            lon = d['longitude']
-            alt = d['altitude']
-            initial_state = GroundStationAgentState(lat,
-                                                    lon,
-                                                    alt)
+    # if gstation_dict is not None:
+    #     # Create ground station agents
+    #     for d in gstation_dict:
+    #         d : dict
+    #         agent_name = d['name']
+    #         lat = d['latitude']
+    #         lon = d['longitude']
+    #         alt = d['altitude']
+    #         initial_state = GroundStationAgentState(lat,
+    #                                                 lon,
+    #                                                 alt)
 
-            agent = GroundStationAgent( agent_name, 
-                                        results_path,
-                                        scenario_name,
-                                        agent_port,
-                                        manager_network_config,
-                                        initial_state,
-                                        utility_function[env_utility_function],
-                                        initial_reqs=measurement_reqs,
-                                        logger=logger)
-            agents.append(agent)
-            agent_port += 6
+    #         agent = GroundStationAgent( agent_name, 
+    #                                     results_path,
+    #                                     scenario_name,
+    #                                     agent_port,
+    #                                     manager_network_config,
+    #                                     initial_state,
+    #                                     utility_function[env_utility_function],
+    #                                     initial_reqs=measurement_reqs,
+    #                                     logger=logger)
+    #         agents.append(agent)
+    #         agent_port += 6
 
     # create environment
     env_subs = []

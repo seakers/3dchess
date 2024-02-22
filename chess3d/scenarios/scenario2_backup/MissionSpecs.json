@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 1,
+    "duration": 0.5,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -101,7 +101,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -195,7 +196,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -289,7 +291,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -383,7 +386,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -477,7 +481,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -571,7 +576,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -665,7 +671,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -759,7 +766,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -853,7 +861,8 @@
                 }
             },
             "planner" : {
-                "@type" : "GREEDY",
+                "preplanner" : "FIFO",
+                "replanner" : "FIFO",
                 "utility" : "LINEAR"
             },
             "notifier": "False",
@@ -909,7 +918,8 @@
     ],
     "scenario": {   
                     "@type": "PREDEF", 
-                    "gpRequestFilePath": "./scenarios/scenario2/resources/initial_requests_merged.csv",
+                    "initialRequestsPath" : "./scenarios/scenario2/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/scenario2/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
                     "connectivity" : "FULL", 
                     "utility" : "LINEAR"
