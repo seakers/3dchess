@@ -35,6 +35,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.completed_measurements = []
         self.other_plans = {}
         self.recently_completed_measurments = []
+        self.planner_changes = []
 
         # set paremeters
         self.max_bundle_size = max_bundle_size
@@ -137,8 +138,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # perform consesus phase
         self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        print(f'length of path: {len(self.path)}\n')
         self.results, self.bundle, \
-            self.path, changes, self.bids_to_rebroadcasts = self.consensus_phase(   state,
+            self.path, _, self.bids_to_rebroadcasts = self.consensus_phase(   state,
                                                                                     self.results,
                                                                                     self.bundle, 
                                                                                     self.path, 
@@ -146,6 +148,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                                                                     self.recently_completed_measurments)
         
         self.log_results('CONSENSUS PHASE', state, self.results)
+        print(f'length of path: {len(self.path)}\n')
 
         if (state.t - self.preplan.t) < 1e-3 and not conflicts:
             # plan was just developed by preplanner; no need to replan
@@ -196,6 +199,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     conflicts.append(conflicting_bid)
         
         return conflicts
+    
+    @abstractmethod
+    def _generate_bids_from_request(self, req : MeasurementRequest, state : SimulationAgentState) -> list:
+        """ Creages bids from given measurement request """
 
     def compile_new_measurement_request_bids(self, state : SimulationAgentState, plan : Plan) -> list:
         """ Checks for all requests that havent been considered in current bidding process """
@@ -245,38 +252,37 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         clock_config : ClockConfig,
                         orbitdata : dict = None
                     ) -> list:
+        
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        out = f'{state.agent_name} - Observations in Original Path:\n'
+        original_obs_actions = [action for action in current_plan if isinstance(action, MeasurementAction)]
+        # out += 'ID\t\tsubtask index\n'
+        # for action in original_obs_actions:
+        #     out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
+        # out += f'n_observations: {len(original_obs_actions)}\n'
+        # print(out)
+        # -------------------------------
 
         # bidding phase
-        self.results, self.bid, self.path, planner_changes = \
+        self.results, self.bid, self.path, self.planner_changes = \
             self.planning_phase(state, self.results, self.bundle, self.path)
         
         # check convergence
-        plan : Replan = self._plan_from_path(state, self.results, self.path, clock_config, orbitdata)
-
-        # broadcast changes to plan
-        broadcast_bids : list = self._compile_broadcast_bids(planner_changes)       
-        for bid in broadcast_bids:
-            bid : Bid
-            msg = MeasurementBidMessage(state.agent_name, state.agent_name, bid.to_dict())
-            broadcast_action = BroadcastMessageAction(msg.to_dict(), state.t)
-            plan.add(broadcast_action, state.t)
+        plan : Replan = self._plan_from_path(state, self.results, self.path, clock_config, orbitdata)     
             
         # reset broadcast list
         self.rebroadcasts = []
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        print('Observations in Original Path:')
-        original_obs_actions = [action for action in self.preplan if isinstance(action, MeasurementAction)]
-        for action in original_obs_actions:
-            print(action.measurement_req['id'].split('-')[0], action.subtask_index)
-        print(len(original_obs_actions))
-            
-        print('Observations in Modified Path:')
+        out = f'{state.agent_name} - Observations in Modified Path:\n'
         obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
-        for action in obs_actions:
-            print(action.measurement_req['id'].split('-')[0], action.subtask_index)
-        print(len(obs_actions))
+        # out += 'ID\t\tsubtask index\n'
+        # for action in obs_actions:
+        #     out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
+        out += f'n_observations: {len(obs_actions)}\n'
+        # print(out)
 
         if len(original_obs_actions) != len(obs_actions):
             x = 1
@@ -295,32 +301,27 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ creates a new plan to be performed by the agent based on the results of the planning phase """
 
         # schedule measurements
-        measurements : list = self._compile_measurements(results, path)
+        measurements : list = self._schdule_measurements(results, path)
 
-        # schedule broadcasts to be perfomed
-        broadcasts : list = [action for action in self.preplan.actions if isinstance(action, BroadcastMessageAction)]
+        # schedule bruadcasts
+        broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
 
         # generate maneuver and travel actions from measurements
         maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
 
         return Replan(measurements, broadcasts, maneuvers, t=state.t, t_next=self.preplan.t_next)
         
-    def _compile_measurements(self, results : dict, path : list) -> list:
+    def _schdule_measurements(self, results : dict, path : list) -> list:
         """ compiles and merges lists of measurement actions to be performed by the agent """
-        # get list of preplanned measurements
-        preplanned_measurements = [action for action in self.preplan.actions 
-                                   if isinstance(action, MeasurementAction)]
-        preplanned_measurements.sort(key=lambda a : a.t_start)
 
-        # get list of new measurements to add to plan
-        new_measurements = []
+        measurements = []
         for req, subtask_index, t_img, u_exp in path:
             req : MeasurementRequest
             subtask_index : int
 
             bid : Bid = results[req.id][subtask_index]
             instrument_name = bid.main_measurement
-            new_measurements.append(MeasurementAction(req.to_dict(), 
+            measurements.append(MeasurementAction(req.to_dict(), 
                                                       subtask_index, 
                                                       instrument_name, 
                                                       u_exp, 
@@ -328,36 +329,66 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                                       t_img+req.duration
                                                       )
                                     )    
-        new_measurements.sort(key=lambda a : a.t_start)
+        # sort list of measurements
+        measurements.sort(key=lambda a : a.t_start)
 
-        # merge measurements 
-        measurements = [action for action in preplanned_measurements]
-        for new_measurement in new_measurements:
-            new_measurement : MeasurementAction
-            i = -1
-            replace = False
-            insert = False
-            
-            for measurement in measurements:
-                measurement : MeasurementAction
-                
-                replace = (measurement.t_start < new_measurement.t_end <= measurement.t_end
-                            or measurement.t_start <= new_measurement.t_start < measurement.t_end)
-                insert = new_measurement.t_end <= measurement.t_start
-                
-                if replace or insert:
-                    i = measurements.index(measurement)
-                    break
-
-            if replace:
-                measurements[i] = new_measurement
-            elif insert:
-                measurements.insert(i, new_measurement)
-            else:
-                measurements.append(new_measurement)
+        # check for if the right number of measurements was created
+        assert len(measurements) == len(path)
 
         return measurements
     
+    def _schedule_broadcasts(self, 
+                             state: SimulationAgentState, 
+                             measurements: list, 
+                             orbitdata: dict
+                             ) -> list:
+        broadcasts : list[BroadcastMessageAction] = super()._schedule_broadcasts(state, 
+                                                                                 measurements, 
+                                                                                 orbitdata)
+        
+        # compile bids to be broadcasted
+        compiled_bids : list[Bid] = [bid for bid in self.bids_to_rebroadcasts]
+        compiled_bids.extend(self.planner_changes)
+        
+        # sort and make sure the latest update of each task is broadcasted
+        bids = {}
+        for bid_to_rebroadcast in compiled_bids: 
+            bid_to_rebroadcast : Bid
+            req : MeasurementRequest = MeasurementRequest.from_dict(bid_to_rebroadcast.req)
+
+            if req.id not in bids:
+                bids[req.id] = [None for _ in range(len(self._generate_bids_from_request(req, state)))]
+                bids[req.id][bid_to_rebroadcast.subtask_index] = bid_to_rebroadcast
+                continue
+
+            current_bid : Bid = bids[req.id][bid_to_rebroadcast.subtask_index]
+            if current_bid.t_update <= bid_to_rebroadcast.t_update:
+                bids[req.id][bid_to_rebroadcast.subtask_index] = bid_to_rebroadcast
+            
+        # Find best path for broadcasts
+        relay_path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, state.t)
+
+        # Schedule bid re-broadcast and planner changes
+        bids_out = [bid_to_rebroadcast 
+                    for req_id in bids 
+                    for bid_to_rebroadcast in bids[req_id] 
+                    if bid_to_rebroadcast is not None]
+        
+        for bid_out in bids_out:
+            bid_out : Bid
+            msg = MeasurementBidMessage(state.agent_name, state.agent_name, bid_out.to_dict(), path=relay_path)
+            
+            if t_start >= 0:
+                broadcasts.append(BroadcastMessageAction(msg.to_dict(), t_start))
+
+        # ensure the right number of broadcasts were created
+        if len(bids_out) <= len(compiled_bids):
+            pass
+        else:
+            assert len(bids_out) <= len(compiled_bids)
+        
+        return broadcasts
+
     def _compile_broadcast_bids(self, planner_changes : list) -> list:        
         """ Compiles changes in bids from consensus and planning phase and returns a list of the most updated bids """
         broadcast_bids = {}
@@ -451,6 +482,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
             - path
             - changes
         """
+
+        for req, subtask_index, bid in bundle:
+            bid : Bid
+            assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
+
         # initialize bundle changes and rebroadcast lists
         changes = []
         rebroadcasts = []
@@ -534,6 +570,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
             - changes
             - rebroadcasts 
         """
+
+        for req, subtask_index, bid in bundle:
+            bid : Bid
+            assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
+
         # initialize bundle changes and rebroadcast lists
         changes = []
         rebroadcasts = []
@@ -588,6 +629,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
         changes = []
         rebroadcasts = []
 
+        for req, subtask_index, bid in bundle:
+            bid : Bid
+            assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
+
         for their_bid in bids_received:
             their_bid : Bid            
 
@@ -613,14 +658,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
             # update results with modified bid
             # self.log(f'\nupdated: {my_bid}\n', level=logging.DEBUG) #DEBUG PRINTOUT
             results[their_bid.req_id][their_bid.subtask_index] = updated_bid
-
-            if bid_changed:
-                if my_bid.winner != their_bid.winner and their_bid.winning_bid > my_bid.winning_bid:
-                    x = 1
-
-                assert my_bid != updated_bid
-                assert results[their_bid.req_id][their_bid.subtask_index] == updated_bid
-                assert results[their_bid.req_id][their_bid.subtask_index] != my_bid
                 
             # if relevant changes were made, add to changes and rebroadcast lists respectively
             if bid_changed or is_new_req:
@@ -642,13 +679,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                 outbid_index = bundle.index((req, my_bid.subtask_index, my_bid))
 
+                for req, subtask_index, bid in bundle:
+                    bid : Bid
+                    assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
+
                 # remove all subsequent bids
                 for bundle_index in range(outbid_index, len(bundle)):
                     # remove from bundle
                     measurement_req, subtask_index, current_bid = bundle.pop(outbid_index)
 
                     # remove from path
-                    path.remove((measurement_req, subtask_index, my_bid.t_img, my_bid.winning_bid))
+                    path.remove((measurement_req, subtask_index, current_bid.t_img, current_bid.winning_bid))
 
                     # reset bid results
                     current_bid : Bid; measurement_req : MeasurementRequest
@@ -693,9 +734,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # get requests that can be bid on by this agent
         available_reqs : list = self._get_available_requests(state, results, bundle, path)
 
-        if available_reqs:
-            x = 1
-
         # initialize path of maximum utility
         max_path = [path_element for path_element in path]
         max_path_utility = sum([u_exp for _,_,_,u_exp in path])
@@ -724,30 +762,38 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 if projected_path is None:
                     continue
 
-                # compare to maximum task
-                if (
-                    max_req is None or projected_path_utility > max_path_utility
-                    ):
-                    # get time and utility gained from said action
-                    path_elements = [item 
-                                     for item in path 
-                                     if item[0] == req and item[1] == subtask_index
-                                     ]
-                    _, _, t_img, u_exp = path_elements[0]
-                    old_bid : Bid = results[req.id][subtask_index]
+                # get time and utility gained from said action
+                path_elements = [(path_req, path_subtask, path_t, path_u) 
+                                    for path_req, path_subtask, path_t, path_u in projected_path 
+                                    if path_req == req and path_subtask == subtask_index]
+                _, _, t_img, u_exp = path_elements[0]
+                old_bid : Bid = results[req.id][subtask_index]
 
+                if old_bid.winner == state.agent_name:
+                    is_max = projected_path_utility > max_path_utility
+                else:
+                    is_max = (projected_path_utility > max_path_utility 
+                              and u_exp > old_bid.winning_bid)
+
+                # compare to maximum task
+                # if max_req is None or is_max:
+                if is_max:
                     # register maximum utility 
                     max_bid : Bid = old_bid.copy()
                     max_bid.set(u_exp, t_img, state.t)
-                    max_path = projected_path
+                    max_path = [path_elem for path_elem in projected_path]
                     max_path_utility = projected_path_utility
                     max_req = req
                     max_subtask = subtask_index
+
+                    assert (req, subtask_index, t_img, u_exp) in max_path
             
-            if max_req is not None:
-                # max bid found! place task with the best bid in the bundle and the path
+            if max_req is not None: # max bid found! 
+                #place task with the best bid in the bundle and the path
                 bundle.append((max_req, max_subtask, max_bid))
-                path = max_path
+                path = [path_elem for path_elem in max_path]
+
+                assert (max_req, max_subtask, max_bid.t_img, max_bid.winning_bid) in path
 
                 # update results
                 for req, subtask_index, new_bid in bundle:
@@ -760,6 +806,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     if old_bid != new_bid:
                         changes.append(new_bid.copy())
                         results[req.id][subtask_index] = new_bid
+
+        for req, subtask_index, bid in bundle:
+            assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
 
         return results, bundle, path, changes 
     
@@ -859,7 +908,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         return False
 
 
-    @runtime_tracker
+    @abstractmethod
     def calc_path_bid(
                         self, 
                         state : SimulationAgentState, 
@@ -868,84 +917,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         req : MeasurementRequest, 
                         subtask_index : int
                     ) -> tuple:
-        state : SimulationAgentState = state.copy()
-        winning_path = None
-        winning_path_utility = 0.0
-
-        # check if the subtask to be added is mutually exclusive with something in the bundle
-        for req_i, subtask_j, _, _ in original_path:
-            req_i : MeasurementRequest; subtask_j : int
-            if req_i.id == req.id:
-                if req.dependency_matrix[subtask_j][subtask_index] < 0:
-                    return winning_path, winning_path_utility
-
-        # find best placement in path
-        # self.log_task_sequence('original path', original_path, level=logging.WARNING)
-
-        ## insert strategy
-        for i in range(len(original_path)+1):
-            # generate possible path
-            path = [scheduled_obs for scheduled_obs in original_path]
-            
-            path.insert(i, (req, subtask_index, -1, -1))
-            # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
-
-            # recalculate bids for each task in the path if needed
-            for j in range(len(path)):
-                req_i, subtask_j, t_img, u = path[j]
-
-                if j < i:
-                    # element from previous path is unchanged; maintain current bid
-                    path[j] = (req, subtask_index, t_img, u)
-                    
-                elif j == i:
-                    # new request and subtask are being added; recalculate bid
-
-                    # calculate imaging time
-                    req_i : MeasurementRequest
-                    subtask_j : int
-                    t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
-
-                    # calc utility
-                    params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
-                    utility = self.utility_func(**params) * synergy_factor(**params) if t_img >= 0 else np.NINF
-
-                    # place bid in path
-                    path[j] = (req, subtask_index, t_img, utility)
-
-                else:
-                    # elements from previous path are being adapted to new path
-
-                    ## calculate imaging time
-                    req_i : MeasurementRequest
-                    subtask_j : int
-                    t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
-
-                    _, _, t_img_prev, _ = original_path[j - 1]
-
-                    if abs(t_img - t_img_prev) <= 1e-3:
-                        # path was unchanged; keep the remaining elements of the previous path                    
-                        break
-                    else:
-                        # calc utility
-                        params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
-                        utility = self.utility_func(**params) * synergy_factor(**params) if t_img >= 0 else np.NINF
-
-                        # place bid in path
-                        path[j] = (req, subtask_index, t_img, utility)
-
-            # look for path with the best utility
-            path_utility = self.__sum_path_utility(path)
-            if path_utility > winning_path_utility:
-                winning_path = path
-                winning_path_utility = path_utility
-        
-        ## replacement strategy
-        if winning_path is None:
-            # TODO add replacement strategy
-            pass
-
-        return winning_path, winning_path_utility
+        """finds the best placement of a task at a given path. returns None if this is not possible"""
+        pass
 
     @abstractmethod
     def calc_imaging_time(self, state : SimulationAgentState, path : list, req : MeasurementRequest, subtask_index : int) -> float:
@@ -956,12 +929,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """
         pass 
 
-    def __sum_path_utility(self, path : list) -> float:
-        """ Gives the total utility of a proposed observations sequence """
-        if -1 in [t_img for _,_,t_img,_ in path]:
-            return 0.0
-        
-        return sum([u for _,_,_,u in path])  
+    
 
 
     """

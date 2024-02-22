@@ -6,6 +6,7 @@ import numpy as np
 from dmas.utils import runtime_tracker
 from traitlets import Callable
 
+from nodes.science.utility import synergy_factor
 from nodes.states import *
 from nodes.planning.consensus.bids import Bid, UnconstrainedBid
 from nodes.planning.consensus.consensus import AbstractConsensusReplanner
@@ -45,6 +46,108 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             return True
         return False
     
+    @runtime_tracker
+    def calc_path_bid(
+                        self, 
+                        state : SimulationAgentState, 
+                        original_results : dict,
+                        original_path : list, 
+                        req : MeasurementRequest, 
+                        subtask_index : int
+                    ) -> tuple:
+        state : SimulationAgentState = state.copy()
+        winning_path = None
+        winning_path_utility = 0.0
+
+        # find best placement in path
+        # self.log_task_sequence('original path', original_path, level=logging.WARNING)
+
+        ## insert strategy
+        for i in range(len(original_path)+1):
+            # generate possible path
+            path = [scheduled_obs for scheduled_obs in original_path]
+            path.insert(i, (req, subtask_index, -1, -1))
+            
+            # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
+
+            # recalculate bids for each task in the path if needed
+            for j in range(len(path)):
+                req_i, subtask_j, t_img, u = path[j]
+
+                if j < i:
+                    # element from previous path is unchanged; maintain current bid
+                    path[j] = (req_i, subtask_j, t_img, u)
+                    
+                elif j == i:
+                    # new request and subtask are being added; recalculate bid
+
+                    # calculate imaging time
+                    req_i : MeasurementRequest
+                    subtask_j : int
+                    t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
+
+                    # calc utility
+                    params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
+                    utility = self.utility_func(**params) * synergy_factor(**params) if t_img >= 0 else np.NINF
+
+                    # place bid in path
+                    path[j] = (req_i, subtask_j, t_img, utility)
+
+                else:
+                    # elements from previous path are being adapted to new path
+
+                    ## calculate imaging time
+                    req_i : MeasurementRequest
+                    subtask_j : int
+                    t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
+
+                    _, _, t_img_prev, _ = original_path[j - 1]
+
+                    if abs(t_img - t_img_prev) <= 1e-3:
+                        # path was unchanged; keep the remaining elements of the previous path                    
+                        break
+                    else:
+                        # calc utility
+                        params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
+                        utility = self.utility_func(**params) * synergy_factor(**params) if t_img >= 0 else np.NINF
+
+                        # place bid in path
+                        path[j] = (req_i, subtask_j, t_img, utility)
+
+            # look for path with the best utility
+            path_utility = self.__sum_path_utility(path)
+            if path_utility > winning_path_utility:
+                winning_path = [scheduled_obs for scheduled_obs in path]
+                winning_path_utility = path_utility
+        
+        ## replacement strategy
+        if winning_path is None:
+            # TODO add replacement strategy
+            pass
+        
+        # ensure winning path contains desired task 
+        if winning_path:
+            assert len(winning_path) == len(original_path) + 1
+
+            tasks = [(path_req, path_subtask_index) for path_req, path_subtask_index, _, __ in winning_path]
+            assert (req, subtask_index) in tasks
+
+            tasks_unique = []
+            for task in tasks:
+                if task not in tasks_unique: tasks_unique.append(task)
+                
+            assert len(tasks) == len(tasks_unique)
+            assert len(tasks) == len(winning_path)
+
+        return winning_path, winning_path_utility
+    
+    def __sum_path_utility(self, path : list) -> float:
+        """ Gives the total utility of a proposed observations sequence """
+        if -1 in [t_img for _,_,t_img,_ in path]:
+            return 0.0
+        
+        return sum([u for _,_,_,u in path])  
+    
     def log_results(self, dsc : str, state : SimulationAgentState, results : dict, level=logging.DEBUG) -> None:
         """
         Logs current results at a given time for debugging purposes
@@ -61,7 +164,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             out += '='
         out += '\n'
         
-        n = 5
+        n = 15
         i = 1
         for req_id in results:
             req_id : str
@@ -168,7 +271,8 @@ class ACBBAReplanner(AbstractConsensusReplanner):
 
             for t_arrival in [t for t in self.access_times[req.id][instrument] if t >= t_prev] :
                 th_i = prev_state.attitude[0]
-                th_j = state.calc_off_nadir_agle(req)
+                state_j : SatelliteAgentState = state.propagate(t_arrival)
+                th_j = state_j.calc_off_nadir_agle(req)
                 
                 if abs(th_j - th_i) / state.max_slew_rate <= t_arrival - t_prev:
                     return t_arrival

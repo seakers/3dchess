@@ -175,7 +175,7 @@ class MeasurementRequest(object):
         """
         return dict(self.__dict__)
 
-    def from_dict(req : dict):
+    def from_dict(req : dict) -> object:
         if req['request_type'] == MeasurementRequetTypes.GROUND_POINT.value:
             return GroundPointMeasurementRequest(**req)
         else:

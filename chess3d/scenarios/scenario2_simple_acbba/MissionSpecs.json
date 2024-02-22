@@ -226,8 +226,8 @@
     ],
     "scenario": {   
                     "@type": "PREDEF", 
-                    "initialRequestsPath" : "./scenarios/scenario2_simple/resources/initial_requests_merged.csv",
-                    "eventsPath" : "./scenarios/scenario2_simple/resources/all_events_formatted.csv", 
+                    "initialRequestsPath" : "./scenarios/scenario2_simple_acbba/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/scenario2_simple_acbba/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
                     "connectivity" : "FULL", 
                     "utility" : "LINEAR"
