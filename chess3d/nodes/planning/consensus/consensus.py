@@ -90,7 +90,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.incoming_bids = [  Bid.from_dict(msg.bid) 
                                 for msg in misc_messages 
                                 if isinstance(msg, MeasurementBidMessage)]
+        self_bids =   [Bid.from_dict(msg.bid) 
+                        for msg in misc_messages 
+                        if isinstance(msg, MeasurementBidMessage)
+                        if msg.src == state.agent_name]
         
+
         # compile incoming plans
         incoming_plans = [(msg.src, 
                            Plan([action_from_dict(**action) for action in msg.plan],t=msg.t_plan))
@@ -137,18 +142,18 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.incoming_bids.extend(new_req_bids)
         
         # perform consesus phase
-        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\n')
+        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        # print(f'length of path: {len(self.path)}\n')
         self.results, self.bundle, \
-            self.path, _, self.bids_to_rebroadcasts = self.consensus_phase(   state,
-                                                                                    self.results,
-                                                                                    self.bundle, 
-                                                                                    self.path, 
-                                                                                    self.incoming_bids,
-                                                                                    self.recently_completed_measurments)
+            self.path, _, self.bids_to_rebroadcasts = self.consensus_phase( state,
+                                                                            self.results,
+                                                                            self.bundle, 
+                                                                            self.path, 
+                                                                            self.incoming_bids,
+                                                                            self.recently_completed_measurments)
         
-        self.log_results('CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\n')
+        # self.log_results('CONSENSUS PHASE', state, self.results)
+        # print(f'length of path: {len(self.path)}\n')
 
         if (state.t - self.preplan.t) < 1e-3 and not conflicts:
             # plan was just developed by preplanner; no need to replan
@@ -167,13 +172,16 @@ class AbstractConsensusReplanner(AbstractReplanner):
         my_measurements = [action for action in plan if isinstance(action, MeasurementAction)]
 
         conflicts : list[Bid] = []
-        for other_agent, other_plan in self.other_plans.items():
+        other_plans = [(other_agent, other_plan) for other_agent, other_plan in self.other_plans.items()]
+        
+
+        for other_agent, other_plan in other_plans:
             their_plan, t_received = other_plan
             their_plan : Plan
 
-            if abs(t_received - state.t) >= 1e-3:
-                # only checks for conflicts when when new plan was just received
-                continue
+            # if abs(t_received - state.t) >= 1e-3:
+            #     # only checks for conflicts when when new plan was just received
+            #     continue
                 
             # check if another agent is planning on doing the same task as I am
             other_measurements = [action for action in their_plan 
@@ -196,7 +204,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     conflicting_bid.winner = other_agent
                     conflicting_bid.bidder = other_agent
                     conflicting_bid.set(other_measurement.u_exp, other_measurement.t_start, their_plan.t)
+                                        
                     conflicts.append(conflicting_bid)
+            
+            # 
+            self.other_plans.pop(other_agent)
         
         return conflicts
     
