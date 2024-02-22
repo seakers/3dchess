@@ -103,11 +103,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -205,11 +204,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -307,11 +305,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -409,11 +406,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -511,11 +507,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -613,11 +608,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -715,11 +709,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -817,11 +810,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -919,11 +911,10 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "FIFO",
-                    "collaboration" : "False"
+                    "collaboration" : "True"
                 },              
                 "replanner" : {
-                    "@type" : "FIFO",
-                    "collaboration " : "False",
+                    "@type" : "ACBBA",
                     "bundle size " : 1
                 },
                 "utility" : "LINEAR"
@@ -941,8 +932,8 @@
     ],
     "scenario": {   
                     "@type": "PREDEF", 
-                    "initialRequestsPath" : "./scenarios/scenario2/resources/initial_requests_merged.csv",
-                    "eventsPath" : "./scenarios/scenario2/resources/all_events_formatted.csv", 
+                    "initialRequestsPath" : "./scenarios/aist/scenario2_cbba/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/aist/scenario2_cbba/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
                     "connectivity" : "FULL", 
                     "utility" : "LINEAR"

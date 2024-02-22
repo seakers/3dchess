@@ -503,6 +503,7 @@ class SimulationEnvironment(EnvironmentNode):
             measurement_reqs = [req.copy() for req in self.measurement_reqs]
             measurement_reqs.extend([req.copy() for req in self.initial_reqs])
 
+        
             for req in measurement_reqs:
                 req_id : str = req.id
                 req_id_short = req_id.split('-')[0]
@@ -513,12 +514,9 @@ class SimulationEnvironment(EnvironmentNode):
                 req_utility = 0
                 for idx, row_i in req_measurements.iterrows():
                     t_img_i = row_i['t_img']
-                    measurement_i = row_i['measurement']
+                    measurement_i = row_i['measurement']                   
+
                     correlated_measurements = []
-
-                    if (req_id_short, measurement_i) not in unique_observations:
-                        unique_observations.append( (req_id_short, measurement_i) )
-
                     for _, row_j in req_measurements.iterrows():
                         measurement_j = row_j['measurement']
                         t_img_j = row_j['t_img']
@@ -555,7 +553,10 @@ class SimulationEnvironment(EnvironmentNode):
                                 "t_img" : t_img_i
                             }
                     utility = self.utility_func(**params) * synergy_factor(**params)
-                    req_utility += utility
+
+                    if (req_id_short, measurement_i) not in unique_observations:
+                        unique_observations.append( (req_id_short, measurement_i) )
+                        req_utility += utility
 
                     received_measurements_df.loc[idx,'u']=utility
 

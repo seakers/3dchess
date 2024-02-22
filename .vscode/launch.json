@@ -162,7 +162,7 @@
             "args": "scenario2_single_sat_cbba"
         },
         {
-            "name": "SCENARIO 2 - CBBA",
+            "name": "SCENARIO 2 - ACBBA",
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/chess3d/main.py",
@@ -199,6 +199,19 @@
                 "PYTHONPATH": "${workspaceRoot}"
             },
             "args": "aist/scenario2_fifo_no_colab"
+        },
+        {
+            "name": "AIST - Batch",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/batch.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist"
         }
     ],
     "compounds": [

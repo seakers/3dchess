@@ -941,7 +941,7 @@
     ],
     "scenario": {   
                     "@type": "PREDEF", 
-                    "initialRequestsPath" : "./scenarios/aist/scenario2_fifo_no_colab/resources/initial_requests_merged.csv",
+                    "initialRequestsPath" : "./scenarios/aist/scenario2_cbba/resources/initial_requests_merged.csv",
                     "eventsPath" : "./scenarios/aist/scenario2_fifo_no_colab/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
                     "connectivity" : "FULL", 

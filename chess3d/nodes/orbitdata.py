@@ -314,7 +314,7 @@ class OrbitData:
         """
         Loads agent orbit data from pre-computed csv files in scenario directory
         """
-        data_dir = scenario_dir + 'orbit_data/'
+        data_dir = scenario_dir + '/orbit_data/'
 
         with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
             # load json file as dictionary

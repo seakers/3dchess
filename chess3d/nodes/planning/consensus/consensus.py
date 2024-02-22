@@ -375,7 +375,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 bids[req.id] = [None for _ in range(len(self._generate_bids_from_request(req, state)))]
                 bids[req.id][bid_to_rebroadcast.subtask_index] = bid_to_rebroadcast
                 continue
-
+            
+            if bids[req.id][bid_to_rebroadcast.subtask_index] is None:
+                bids[req.id][bid_to_rebroadcast.subtask_index] = bid_to_rebroadcast
+                continue
+            
             current_bid : Bid = bids[req.id][bid_to_rebroadcast.subtask_index]
             if current_bid.t_update <= bid_to_rebroadcast.t_update:
                 bids[req.id][bid_to_rebroadcast.subtask_index] = bid_to_rebroadcast
