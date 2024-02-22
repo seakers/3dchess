@@ -172,7 +172,33 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_cbba"
+            "args": "aist/scenario2_cbba"
+        },
+        {
+            "name": "SCENARIO 2 - FIFO Colab",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist/scenario2_fifo_colab"
+        },
+        {
+            "name": "SCENARIO 2 - FIFO No Colab",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist/scenario2_fifo_no_colab"
         }
     ],
     "compounds": [

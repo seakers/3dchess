@@ -1,0 +1,16 @@
+routine,t_avg,t_std,t_med,n
+_read_incoming_messages,0.0,0.0,0.0,1424
+__check_action_completion,0.0,0.002,0.0,1424
+preplanner/__get_new_requests,0.0,0.0,0.0,1424
+preplanner/__update_performed_requests,0.0,0.0,0.0,1424
+preplanner/_update_access_times,0.035,1.308,0.0,1424
+preplanner/needs_planning,0.0,0.0,0.0,1424
+preplanner/_get_available_requests,0.0,0.0,0.0,1
+preplanner/_schedule_measurements,1.67,0.0,1.67,1
+preplanner/_schedule_broadcasts,1.071,0.82,1.071,2
+preplanner/_schedule_maneuvers,1.188,0.0,1.188,1
+preplanner/__schedule_periodic_replan,0.447,0.0,0.447,1
+preplanner/generate_plan,5.889,0.0,5.889,1
+replanner/__get_new_requests,0.0,0.0,0.0,1424
+replanner/__update_performed_requests,0.0,0.0,0.0,1424
+replanner/_update_access_times,0.104,2.259,0.0,1424

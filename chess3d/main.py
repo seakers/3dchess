@@ -69,6 +69,8 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
 
                 scenario_dict.pop('settings')
                 mission_dict.pop('settings')
+                scenario_dict.pop('scenario')
+                mission_dict.pop('scenario')
 
                 if (
                        scenario_dict['epoch'] != mission_dict['epoch']
@@ -752,3 +754,4 @@ if __name__ == "__main__":
     orbitdata_dir = precompute_orbitdata(scenario_name) if spacecraft_dict is not None else None
  
     main(scenario_name, scenario_path, orbitdata_dir, plot_results, save_plot, levels)
+    
