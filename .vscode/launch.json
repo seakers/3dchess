@@ -13,7 +13,6 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "scenario2_single_sat",
             ]
         },
         {
@@ -45,32 +44,6 @@
             ]
         },
         {
-            "name": "ACBBA TEST - UAVS",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "acbba_test_uav"
-        },
-        {
-            "name": "ACBBA TEST - SAT",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "acbba_test_sat"
-        },
-        {
             "name": "VISUALIZER TEST - SAT SIM",
             "type": "python",
             "request": "launch",
@@ -94,7 +67,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2"
+            "args": "scenario2/scenario2_base"
         },
         {
             "name": "SCENARIO 2 - REDUCED",
@@ -107,7 +80,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_reduced"
+            "args": "scenario2/scenario2_reduced"
         },
         {
             "name": "SCENARIO 2 - SIMPLE",
@@ -120,7 +93,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_simple"
+            "args": "scenario2/scenario2_simple"
         },
         {
             "name": "SCENARIO 2 - SIMPLE ACBBA",
@@ -133,7 +106,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_simple_acbba"
+            "args": "scenario2/scenario2_simple_acbba"
         },
         {
             "name": "SCENARIO 2 - SINGLE SAT",
@@ -146,7 +119,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_single_sat"
+            "args": "scenario2/scenario2_single_sat"
         },
         {
             "name": "SCENARIO 2 - SINGLE SAT ACBBA",
@@ -159,7 +132,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_single_sat_cbba"
+            "args": "scenario2/scenario2_single_sat_cbba"
         },
         {
             "name": "SCENARIO 2 - ACBBA",

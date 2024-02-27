@@ -3,6 +3,7 @@ from ctypes import Union
 import logging
 import uuid
 import numpy as np
+from nodes.orbitdata import OrbitData
 from nodes.engineering.actions import *
 from utils import ModuleTypes
 
@@ -14,6 +15,7 @@ class EngineeringModule(object):
     """
     def __init__(   self, 
                     subsystems : list,
+                    orbitdata : OrbitData,
                     t : Union[int, float] = 0.0,
                     level: int = logging.INFO, 
                     logger: logging.Logger = None,
@@ -36,6 +38,8 @@ class EngineeringModule(object):
             
         self.name = ModuleTypes.ENGINEERING.value
         self.subsystems = subsystems
+        self.orbitdata = orbitdata
+        self.t = t
         self.level = level
         self.logger = logger
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())

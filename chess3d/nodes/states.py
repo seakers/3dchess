@@ -92,7 +92,7 @@ class SimulationAgentState(AbstractAgentState):
         propagated : SimulationAgentState = self.copy()
 
         if propagated.engineering_module is not None:
-            propagated.engineering_module : EngineeringModule = propagated.engineering_module.propagate(tf)
+            propagated.engineering_module = propagated.engineering_module.propagate(tf)
         
         propagated.pos, propagated.vel, propagated.attitude, propagated.attitude_rates = propagated.kinematic_model(tf)
 
