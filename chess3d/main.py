@@ -111,7 +111,7 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
 
                     if scenario_sat != mission_sat:
                         return True
-
+                    
     return False
 
 def precompute_orbitdata(scenario_name) -> str:

@@ -159,7 +159,7 @@
                 }
             },
             "instrument": {
-                "name": "sar",
+                "name": "visible",
                 "mass": 10,
                 "volume": 12.45,
                 "dataRate": 40,
@@ -193,11 +193,11 @@
                 "state": {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                     "sma": 7078,
-                    "ecc": 0.01,
+                    "ecc": 0.00,
                     "inc": 0,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": -1.0
+                    "ta": -0.50
                 }
             },
             "planner" : {

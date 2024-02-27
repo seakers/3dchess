@@ -149,16 +149,36 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                                                             self.path, 
                                                                             self.incoming_bids,
                                                                             self.recently_completed_measurments)
-        if not self.is_path_valid(state, self.path):
-            x = 1
-            
+        
         assert self.is_path_valid(state, self.path)
+                       
         self.log_results('CONSENSUS PHASE', state, self.results)
         print(f'length of path: {len(self.path)}\n')
 
-        if (state.t - self.preplan.t) < 1e-3 and not conflicts:
-            # plan was just developed by preplanner; no need to replan
-            return False
+        msgs_to_broadcasts : set[SimulationMessage] = {message_from_dict(**action.msg) for action in plan 
+                                                       if isinstance(action, BroadcastMessageAction)}
+        plans_to_broadcast : set[AgentAction] = {action_from_dict(**action) 
+                                                 for msg in msgs_to_broadcasts
+                                                 if isinstance(msg, PlanMessage)
+                                                 for action in msg.plan}
+        reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(action.measurement_req)
+                                                       for action in plans_to_broadcast
+                                                       if isinstance(action,MeasurementAction)}
+        bid_reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(bid.req) 
+                                                        for bid in self.bids_to_rebroadcasts
+                                                        if isinstance(bid, Bid)}
+        if any([req not in reqs_to_broadcast for req in bid_reqs_to_broadcast]):
+            # there is new information that needs to be broadcasted that is not currently scheduled
+            return True
+        
+        x = 1 
+        
+        # plan was just developed by preplanner; no need to replan
+
+
+        if conflicts:
+            # received information from other agents that creates conflicts with current plan
+            return True
         
         if self.bids_to_rebroadcasts:
             # relevant changes were made to the results database; replan

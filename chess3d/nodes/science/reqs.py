@@ -190,6 +190,9 @@ class MeasurementRequest(object):
 
         return my_dict == other_dict
 
+    def __hash__(self) -> int:
+        return hash(repr(self))
+
     def pos_to_lat_lon(pos : list) -> list:
         R = 6.3781363e+003
         pos_vec = np.array(pos)
