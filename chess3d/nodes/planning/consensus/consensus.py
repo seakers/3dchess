@@ -140,8 +140,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.incoming_bids.extend(new_req_bids)
         
         # perform consesus phase
-        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        # print(f'length of path: {len(self.path)}\n')
+        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        print(f'length of path: {len(self.path)}\n')
         self.results, self.bundle, \
             self.path, _, self.bids_to_rebroadcasts = self.consensus_phase( state,
                                                                             self.results,
@@ -153,8 +153,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
             x = 1
             
         assert self.is_path_valid(state, self.path)
-        # self.log_results('CONSENSUS PHASE', state, self.results)
-        # print(f'length of path: {len(self.path)}\n')
+        self.log_results('CONSENSUS PHASE', state, self.results)
+        print(f'length of path: {len(self.path)}\n')
 
         if (state.t - self.preplan.t) < 1e-3 and not conflicts:
             # plan was just developed by preplanner; no need to replan

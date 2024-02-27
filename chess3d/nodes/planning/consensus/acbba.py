@@ -160,8 +160,9 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         """
         out = f'T{state.t}:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'Req ID\t  j\tins\tdep\twinner\tbid\tt_img\tt_update\n'
+        L_LINE = len(line)
         out += line 
-        for _ in range(len(line) + 25):
+        for _ in range(L_LINE + 25):
             out += '='
         out += '\n'
         
@@ -172,15 +173,13 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             req_id_short = req_id.split('-')[0]
 
             bids : list[Bid] = results[req_id]
-            if all([bid.winner == bid.NONE for bid in bids]):
-                continue
+            # if all([bid.winner == bid.NONE for bid in bids]): continue
 
             for bid in bids:
-                if i > n:
-                    break
+                # if i > n: break
 
                 bid : UnconstrainedBid
-                if bid.winner == bid.NONE: continue
+                # if bid.winner == bid.NONE: continue
 
                 req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
                 ins, deps = req.measurement_groups[bid.subtask_index]
@@ -188,13 +187,13 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                 out += line
                 i +=1
 
-            for _ in range(len(line) + 35):
+            for _ in range(L_LINE + 25):
                 out += '-'
             out += '\n'
 
             if i > n:
                 out += '\t\t\t...\n'
-                for _ in range(len(line) + 35):
+                for _ in range(L_LINE + 25):
                     out += '-'
                 out += '\n'
                 break

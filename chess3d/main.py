@@ -62,53 +62,55 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
 
     with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
         # check if data has been previously calculated
-        if os.path.exists(data_dir + 'MissionSpecs.json'):
-            with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
-                scenario_dict : dict = json.load(scenario_specs)
-                mission_dict : dict = json.load(mission_specs)
+        if not os.path.exists(data_dir + 'MissionSpecs.json'):
+            return True
+            
+        with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
+            scenario_dict : dict = json.load(scenario_specs)
+            mission_dict : dict = json.load(mission_specs)
 
-                scenario_dict.pop('settings')
-                mission_dict.pop('settings')
-                scenario_dict.pop('scenario')
-                mission_dict.pop('scenario')
+            scenario_dict.pop('settings')
+            mission_dict.pop('settings')
+            scenario_dict.pop('scenario')
+            mission_dict.pop('scenario')
 
-                if (
-                       scenario_dict['epoch'] != mission_dict['epoch']
-                    or scenario_dict['duration'] != mission_dict['duration']
-                    or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
-                    or scenario_dict['grid'] != mission_dict['grid']
-                    # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
-                    ):
+            if (
+                    scenario_dict['epoch'] != mission_dict['epoch']
+                or scenario_dict['duration'] != mission_dict['duration']
+                or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
+                or scenario_dict['grid'] != mission_dict['grid']
+                # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
+                ):
+                return True
+            
+            if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
+                if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
                     return True
                 
-                if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
-                    if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
-                        return True
+                for i in range(len(scenario_dict['spacecraft'])):
+                    scenario_sat : dict = scenario_dict['spacecraft'][i]
+                    mission_sat : dict = mission_dict['spacecraft'][i]
                     
-                    for i in range(len(scenario_dict['spacecraft'])):
-                        scenario_sat : dict = scenario_dict['spacecraft'][i]
-                        mission_sat : dict = mission_dict['spacecraft'][i]
-                        
-                        if "planner" in scenario_sat:
-                            scenario_sat.pop("planner")
-                        if "science" in scenario_sat:
-                            scenario_sat.pop("science")
-                        if "notifier" in scenario_sat:
-                            scenario_sat.pop("notifier") 
-                        if "missionProfile" in scenario_sat:
-                            scenario_sat.pop("missionProfile")
+                    if "planner" in scenario_sat:
+                        scenario_sat.pop("planner")
+                    if "science" in scenario_sat:
+                        scenario_sat.pop("science")
+                    if "notifier" in scenario_sat:
+                        scenario_sat.pop("notifier") 
+                    if "missionProfile" in scenario_sat:
+                        scenario_sat.pop("missionProfile")
 
-                        if "planner" in mission_sat:
-                            mission_sat.pop("planner")
-                        if "science" in mission_sat:
-                            mission_sat.pop("science")
-                        if "notifier" in mission_sat:
-                            mission_sat.pop("notifier") 
-                        if "missionProfile" in mission_sat:
-                            mission_sat.pop("missionProfile")
+                    if "planner" in mission_sat:
+                        mission_sat.pop("planner")
+                    if "science" in mission_sat:
+                        mission_sat.pop("science")
+                    if "notifier" in mission_sat:
+                        mission_sat.pop("notifier") 
+                    if "missionProfile" in mission_sat:
+                        mission_sat.pop("missionProfile")
 
-                        if scenario_sat != mission_sat:
-                            return True
+                    if scenario_sat != mission_sat:
+                        return True
 
     return False
 
@@ -120,12 +122,12 @@ def precompute_orbitdata(scenario_name) -> str:
     scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
     data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
    
-    changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
-
     if not os.path.exists(data_dir):
         # if directory does not exists, create it
         os.mkdir(data_dir)
         changes_to_scenario = True
+    else:
+        changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
 
     if not changes_to_scenario:
         # if propagation data files already exist, load results
