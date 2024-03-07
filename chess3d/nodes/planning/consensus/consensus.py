@@ -127,13 +127,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
         return completed_measurements
 
     def needs_planning(self, state : SimulationAgentState, plan : Plan) -> bool:   
-        if not self.is_path_valid(state, self.path):
-            x = 1
-            self.is_path_valid(state, self.path)
 
         # compile any conflicts in newly received plans
-        conflicts : list[Bid] = self.compile_planning_conflicts(state, plan)
-        self.incoming_bids.extend(conflicts)
+        external_plan_bids : list[Bid] = self.compile_external_plan_bids(state, plan)
+        self.incoming_bids.extend(external_plan_bids)
                     
         # check if any new measurement requests have been received
         new_req_bids : list[Bid] = self.compile_new_measurement_request_bids(state, plan)
@@ -167,71 +164,63 @@ class AbstractConsensusReplanner(AbstractReplanner):
         bid_reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(bid.req) 
                                                         for bid in self.bids_to_rebroadcasts
                                                         if isinstance(bid, Bid)}
-        if any([req not in reqs_to_broadcast for req in bid_reqs_to_broadcast]):
-            # there is new information that needs to be broadcasted that is not currently scheduled
-            return True
         
-        x = 1 
         
-        # plan was just developed by preplanner; no need to replan
+
+        # if any([req not in reqs_to_broadcast for req in bid_reqs_to_broadcast]):
+        #     # there is new information that needs to be broadcasted that is not currently scheduled
+        #     return True
+        
+        # x = 1 
+        
+        # # plan was just developed by preplanner; no need to replan
 
 
-        if conflicts:
-            # received information from other agents that creates conflicts with current plan
-            return True
+        # if conflicts:
+        #     # received information from other agents that creates conflicts with current plan
+        #     return True
         
-        if self.bids_to_rebroadcasts:
-            # relevant changes were made to the results database; replan
-            return True
+        # if self.bids_to_rebroadcasts:
+        #     # relevant changes were made to the results database; replan
+        #     return True
 
         # no need to replan
         return False
 
-    def compile_planning_conflicts(self, state : SimulationAgentState, plan : Plan) -> list:
-        """checks for ay conflicts between the current plan and any incoming plans"""
+    def compile_external_plan_bids(self, state : SimulationAgentState, plan : Plan) -> list:
+        """ checks if any new plan has been received from other agents and create bids accordingly """
 
-        my_measurements = [action for action in plan if isinstance(action, MeasurementAction)]
-
-        conflicts : list[Bid] = []
-        other_plans = [(other_agent, other_plan) for other_agent, other_plan in self.other_plans.items()]
+        # initialize list of bids received
+        bids : list[Bid] = []
         
-
+        # copy list of plans currently received by the agent
+        other_plans = [(other_agent, other_plan) 
+                       for other_agent, other_plan in self.other_plans.items()]
         for other_agent, other_plan in other_plans:
-            their_plan, t_received = other_plan
+            their_plan, _ = other_plan
             their_plan : Plan
 
-            # if abs(t_received - state.t) >= 1e-3:
-            #     # only checks for conflicts when when new plan was just received
-            #     continue
-                
-            # check if another agent is planning on doing the same task as I am
+            # extract measurements from other agent's plan
             other_measurements = [action for action in their_plan 
                                     if isinstance(action, MeasurementAction)]
+            
+            # create a bid for every planned measurement
             for other_measurement in other_measurements:
                 other_measurement : MeasurementAction
-                conflicting_measurements = [my_measurement for my_measurement in my_measurements
-                                            if isinstance(my_measurement,MeasurementAction)
-                                            and my_measurement.measurement_req['id'] == other_measurement.measurement_req['id']
-                                            and my_measurement.subtask_index == other_measurement.subtask_index]
-                
-                # there are scheduling conflicts; two agents are planning on performing the same task
-                for conflict in conflicting_measurements:
-                    conflict : MeasurementAction
-                    # add measurement to list of conflicts
-                    req = MeasurementRequest.from_dict(conflict.measurement_req)
-                    bids : list[Bid] = self._generate_bids_from_request(req, state)
+                req = MeasurementRequest.from_dict(other_measurement.measurement_req)
+                bids : list[Bid] = self._generate_bids_from_request(req, state)
 
-                    conflicting_bid : Bid = bids[other_measurement.subtask_index]
-                    conflicting_bid.winner = other_agent
-                    conflicting_bid.bidder = other_agent
-                    conflicting_bid.set(other_measurement.u_exp, other_measurement.t_start, their_plan.t)
-                                        
-                    conflicts.append(conflicting_bid)
-            
-            # 
+                bid : Bid = bids[other_measurement.subtask_index]
+                bid.winner = other_agent
+                bid.bidder = other_agent
+                bid.set(other_measurement.u_exp, other_measurement.t_start, their_plan.t)
+                                    
+                bids.append(bid)
+        
+            # remove processed plan from list of received plans
             self.other_plans.pop(other_agent)
         
-        return conflicts
+        return bids
     
     @abstractmethod
     def _generate_bids_from_request(self, req : MeasurementRequest, state : SimulationAgentState) -> list:

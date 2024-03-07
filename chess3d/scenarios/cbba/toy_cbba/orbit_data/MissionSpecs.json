@@ -101,10 +101,6 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "True"
-                },
                 "replanner": {
                     "@type": "ACBBA",
                     "bundle size ": 2
@@ -159,7 +155,7 @@
                 }
             },
             "instrument": {
-                "name": "visible",
+                "name": "sar",
                 "mass": 10,
                 "volume": 12.45,
                 "dataRate": 40,
@@ -201,10 +197,6 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "True"
-                },
                 "replanner": {
                     "@type": "ACBBA",
                     "bundle size ": 2
