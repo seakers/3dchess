@@ -49,6 +49,7 @@ class AbstractReplanner(AbstractPlanner):
         if state.t == current_plan.t and isinstance(current_plan, Preplan): 
             self.preplan = current_plan.copy() 
         
+        # update orbit data if it hasn't been saved yet 
         if isinstance(state, SatelliteAgentState) and self.orbitdata is None:
             self.orbitdata = orbitdata[state.agent_name]
         
