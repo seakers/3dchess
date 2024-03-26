@@ -174,13 +174,13 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             req_id_short = req_id.split('-')[0]
 
             bids : list[Bid] = results[req_id]
-            # if all([bid.winner == bid.NONE for bid in bids]): continue
+            if all([bid.winner == bid.NONE for bid in bids]): continue
 
             for bid in bids:
                 # if i > n: break
 
                 bid : UnconstrainedBid
-                # if bid.winner == bid.NONE: continue
+                if bid.winner == bid.NONE: continue
 
                 req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
                 ins, deps = req.measurement_groups[bid.subtask_index]

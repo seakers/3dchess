@@ -197,7 +197,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "cbba/toy_fifo"
+            "args": "toy/toy_fifo"
         },
         {
             "name": "CBBA - Toy Example FIFO w/ Colab",
@@ -210,7 +210,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "cbba/toy_fifo_colab"
+            "args": "toy/toy_fifo_colab"
         },
         {
             "name": "CBBA - Toy Example CBBA",
@@ -223,7 +223,20 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "cbba/toy_cbba"
+            "args": "toy/toy_cbba"
+        },
+        {
+            "name": "AIST PROPOSAL - Single Sat CBBA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "scenario2_proposal/scenario2_single_sat"
         }
     ],
     "compounds": [
