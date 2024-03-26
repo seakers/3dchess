@@ -74,7 +74,7 @@
                 },
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
-                    "angleHeight": 60,
+                    "angleHeight": 10,
                     "angleWidth": 60
                 },
                 "@id": "bs1",
@@ -170,7 +170,7 @@
                 },
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
-                    "angleHeight": 60,
+                    "angleHeight": 10,
                     "angleWidth": 60
                 },
                 "@id": "bs1",

@@ -26,16 +26,17 @@ class ACBBAReplanner(AbstractConsensusReplanner):
 
     def is_converged(self) -> bool:
         """ Checks if consensus has been reached and plans are coverged """       
-        return True # TODO
+        return True
         
-        self.prev_bundle = [b for b in self.bundle]
+        # TODO
+        # self.prev_bundle = [b for b in self.bundle]
 
-        if self.converged:
-            self.converged = False
-            return True
-        else:
-            self.converged = self._compare_bundles(self.bundle, self.prev_bundle)
-            return False
+        # if self.converged:
+        #     self.converged = False
+        #     return True
+        # else:
+        #     self.converged = self._compare_bundles(self.bundle, self.prev_bundle)
+        #     return False
 
     def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
         """ Compares two bundles. Returns true if they are equal and false if not. """
@@ -250,7 +251,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
 
         while access_times:
             t_img = access_times.pop(0)
-            u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+            u_exp = self.utility_func(req.to_dict(), t_img)
     
             proposed_path[j] = (req, subtask_index, t_img, u_exp)
 
@@ -258,59 +259,6 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                 return t_img
 
         return -1
-        # # calculate the state of the agent prior to performing the measurement request
-        # path_element = [(path_req, path_subtask_index, _, __ )
-        #                 for path_req, path_subtask_index, _, __ in path
-        #                 if path_req == req and path_subtask_index == subtask_index]
-        
-        # # if len(path_element) != 1:
-        # #     # path contains more than one measurement of the same request and subtask or does not contain it at all
-        # #     return -1
-        
-        # i = path.index(path_element[0])
-        # if i == 0:
-        #     t_prev = state.t
-        #     prev_state = state.copy()
-        # else:
-        #     prev_req, _, t_img, _ = path[i-1]
-        #     prev_req : MeasurementRequest
-        #     t_prev : float = t_img + prev_req.duration
-
-        #     if isinstance(state, SatelliteAgentState):
-        #         prev_state : SatelliteAgentState = state.propagate(t_prev)
-                
-        #         prev_state.attitude = [
-        #                                 prev_state.calc_off_nadir_agle(prev_req),
-        #                                 0.0,
-        #                                 0.0
-        #                             ]
-        #     elif isinstance(state, UAVAgentState):
-        #         prev_state = state.copy()
-        #         prev_state.t = t_prev
-                
-        #         if isinstance(prev_req, GroundPointMeasurementRequest):
-        #             prev_state.pos = prev_req.pos
-        #         else:
-        #             raise NotImplementedError
-        #     else:
-        #         raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
-
-        # # calculate arrival time
-        # if isinstance(state, SatelliteAgentState):
-        #     instrument, _ = req.measurement_groups[subtask_index]
-
-        #     for t_arrival in [t for t in self.access_times[req.id][instrument] if t >= t_prev] :
-        #         th_i = prev_state.attitude[0]
-        #         state_j : SatelliteAgentState = state.propagate(t_arrival)
-        #         th_j = state_j.calc_off_nadir_agle(req)
-                
-        #         if th_j - th_i / state.max_slew_rate <= t_arrival - t_prev:
-        #             return t_arrival
-
-        #     return -1
-        
-        # else:
-        #     raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
     def is_path_valid(self, state : SimulationAgentState, path : list) -> bool:
         if isinstance(state, SatelliteAgentState):

@@ -823,6 +823,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # ensure the generated path is valid
         assert self.is_path_valid(state, path)
+        assert len(bundle) <= self.max_bundle_size
 
         return results, bundle, path, changes 
     
@@ -883,6 +884,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             t_arrivals = [t 
                           for t in self.access_times[req.id][bid.main_measurement] 
                           if req.t_start <= t <= req.t_end]
+            
             return True if t_arrivals else False
         else:
             raise NotImplementedError(f"listing of available requests for agents with state of type {type(state)} not yet supported.")
@@ -920,8 +922,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         current_bid : Bid = results[req.id][subtask_index]
         subtask_already_performed = t > current_bid.t_img >= 0 + req.duration and current_bid.winner != Bid.NONE
         if subtask_already_performed or current_bid.performed:
-            return True
-       
+            return True       
         return False
 
 
