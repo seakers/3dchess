@@ -120,13 +120,13 @@ class AbstractPreplanner(AbstractPlanner):
                     ) -> Plan:
         
         # schedule measurements
-        measurements : list = self._schedule_measurements(state, clock_config)
+        measurements : list = self._schedule_measurements(state, clock_config, orbitdata)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
 
         # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config, orbitdata)
         
         # wait for next planning period to start
         replan : list = self.__schedule_periodic_replan(state, measurements, maneuvers)
@@ -138,7 +138,7 @@ class AbstractPreplanner(AbstractPlanner):
         return self.plan
         
     @abstractmethod
-    def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig) -> list:
+    def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig, orbitdata : dict = None) -> list:
         """ Creates a list of measurement actions to be performed by the agent """
 
     @runtime_tracker
@@ -251,7 +251,7 @@ class FIFOPreplanner(AbstractPreplanner):
         self.collaboration = collaboration    
 
     @runtime_tracker
-    def _schedule_measurements(self, state : SimulationAgentState, _ : ClockConfig) -> list:
+    def _schedule_measurements(self, state : SimulationAgentState, _ : ClockConfig, orbitdata : dict = None) -> list:
         """ 
         Schedule a sequence of observations based on the current state of the agent 
         
@@ -308,16 +308,31 @@ class FIFOPreplanner(AbstractPreplanner):
                         measurement_i : MeasurementAction = measurements[i]
                         state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
                         req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                        th_i = state_i.calc_off_nadir_agle(req_i)
+                        # th_i = state_i.calc_off_nadir_agle(req_i)
+
+                        lat, lon, _ = req_i.lat_lon_pos
+                        main_instrument_i = measurement_i.instrument_name
+                        t_i = measurement_i.t_start
+
+                        agent_orbitdata : OrbitData = orbitdata[state.agent_name]
+                        obs_i = agent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_i, t_i)
+                        th_i = obs_i['look angle [deg]']
+
                         t_i = measurement_i.t_end
                     else:
                         th_i = state.attitude[0]
                         t_i = state.t
 
                     measurement_j : MeasurementAction = measurements[j]
-                    state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
-                    req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-                    th_j = state_j.calc_off_nadir_agle(req_j)
+                    req_j : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
+                    
+                    lat, lon, _ = req_j.lat_lon_pos
+                    main_instrument_j = measurement_j.instrument_name
+                    t_j = measurement_j.t_start
+
+                    agent_orbitdata : OrbitData = orbitdata[state.agent_name]
+                    obs_j = agent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_j, t_j)
+                    th_j = obs_j['look angle [deg]']
 
                     dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
                     dt_measurements = measurement_j.t_start - t_i
@@ -442,3 +457,12 @@ class FIFOPreplanner(AbstractPreplanner):
 
         # return broadcast list
         return broadcasts
+
+class CommonToDoPreplanner(FIFOPreplanner):
+    def __init__(self, 
+                 utility_func: Callable[[], Any], 
+                 period: float = np.Inf, 
+                 horizon: float = np.Inf,  
+                 logger: logging.Logger = None, 
+                 **kwargs) -> None:
+        super().__init__(utility_func, period, horizon, True, logger, **kwargs)

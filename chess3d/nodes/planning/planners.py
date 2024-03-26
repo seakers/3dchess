@@ -274,7 +274,8 @@ class AbstractPlanner(ABC):
                                 state : SimulationAgentState, 
                                 observations : list,
                                 broadcasts : list,
-                                clock_config : ClockConfig
+                                clock_config : ClockConfig,
+                                orbitdata : dict = None
                             ) -> list:
         """
         Generates a list of AgentActions from the current path.
@@ -297,12 +298,7 @@ class AbstractPlanner(ABC):
             measurement_action : MeasurementAction = observations[i]
             measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
             t_img = measurement_action.t_start
-
-            if isinstance(state, SatelliteAgentState):
-                imaging_state : SimulationAgentState = state.propagate(t_img)
-            else:
-                raise NotImplemented(f"maneuver scheduling for states of type `{type(state)}` not yet supported")
-
+            
             if not isinstance(measurement_req, GroundPointMeasurementRequest):
                 raise NotImplementedError(f"Cannot create plan for requests of type {type(measurement_req)}")
             
@@ -325,11 +321,16 @@ class AbstractPlanner(ABC):
 
                 if isinstance(state, SatelliteAgentState):
                     prev_state : SatelliteAgentState = state.propagate(t_prev)
-                    prev_state.attitude = [
-                                        prev_state.calc_off_nadir_agle(prev_req),
-                                        0.0,
-                                        0.0
-                                    ]
+
+                    prev_req : GroundPointMeasurementRequest
+                    lat,lon,_ =  prev_req.lat_lon_pos
+                    main_instrument = prev_measurement.instrument_name
+
+                    parent_orbitdata : OrbitData = orbitdata[state.agent_name]
+                    obs_prev = parent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_prev)
+                    th_f = obs_prev['look angle [deg]']
+                    
+                    prev_state.attitude = [th_f, 0.0, 0.0]
 
                 elif isinstance(state, UAVAgentState):
                     prev_state : UAVAgentState = state.copy()
@@ -347,15 +348,18 @@ class AbstractPlanner(ABC):
             t_maneuver_end = None
             if isinstance(state, SatelliteAgentState):
                 prev_state : SatelliteAgentState
-                imaging_state : SatelliteAgentState
 
                 t_maneuver_start = prev_state.t
-                th_f = imaging_state.calc_off_nadir_agle(measurement_req)
+                
+                lat,lon, _ =  measurement_req.lat_lon_pos
+                main_instrument = measurement_action.instrument_name
+
+                parent_orbitdata : OrbitData = orbitdata[state.agent_name]
+                obs_j = parent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_img)
+                th_f = obs_j['look angle [deg]']
+
                 dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
                 t_maneuver_end = t_maneuver_start + dt
-
-                if t_maneuver_end > t_img:
-                    x = 1
 
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
                     action_sequence_i.append(ManeuverAction([th_f, 0, 0], 
