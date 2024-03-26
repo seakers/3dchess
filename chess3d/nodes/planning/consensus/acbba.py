@@ -159,7 +159,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             - level (`int`): logging level to be used
         """
         out = f'T{state.t}:\t\'{state.agent_name}\'\n{dsc}\n'
-        line = 'Req ID\t  j\tins\tdep\twinner\tbid\tt_img\tt_update\n'
+        line = 'Req ID\t  j\tins\tdep\twinner\tbid\tt_img\tt_update  performed\n'
         L_LINE = len(line)
         out += line 
         for _ in range(L_LINE + 25):
@@ -183,7 +183,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
 
                 req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
                 ins, deps = req.measurement_groups[bid.subtask_index]
-                line = f'{req_id_short}  {bid.subtask_index}\t{ins}\t{deps}\t{bid.winner}\t{np.round(bid.winning_bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\n'
+                line = f'{req_id_short}  {bid.subtask_index}\t{ins}\t{deps}\t{bid.winner}\t{np.round(bid.winning_bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\t  {int(bid.performed)}\n'
                 out += line
                 i +=1
 

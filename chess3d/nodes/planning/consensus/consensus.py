@@ -143,7 +143,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # perform consesus phase
         self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\n')
+        print(f'length of path: {len(self.path)}\nbids received: {len(self.incoming_bids)}\n')
         self.results, self.bundle, \
             self.path, _, self.bids_to_rebroadcasts = self.consensus_phase( state,
                                                                             self.results,
@@ -155,46 +155,47 @@ class AbstractConsensusReplanner(AbstractReplanner):
         assert self.is_path_valid(state, self.path)
                        
         self.log_results('CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\n')
-        print(f'# bids to rebradcast: {len(self.bids_to_rebroadcasts)}\n')
+        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}\n')
 
         return len(self.bids_to_rebroadcasts) > 0
-
+        
         # TODO: Consider preplan
-        # msgs_to_broadcasts : set[SimulationMessage] = {message_from_dict(**action.msg) for action in plan 
-        #                                                if isinstance(action, BroadcastMessageAction)}
-        # plans_to_broadcast : set[AgentAction] = {action_from_dict(**action) 
-        #                                          for msg in msgs_to_broadcasts
-        #                                          if isinstance(msg, PlanMessage)
-        #                                          for action in msg.plan}
-        # reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(action.measurement_req)
-        #                                                for action in plans_to_broadcast
-        #                                                if isinstance(action,MeasurementAction)}
-        # bid_reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(bid.req) 
-        #                                                 for bid in self.bids_to_rebroadcasts
-        #                                                 if isinstance(bid, Bid)}
+        """
+        msgs_to_broadcasts : set[SimulationMessage] = {message_from_dict(**action.msg) for action in plan 
+                                                       if isinstance(action, BroadcastMessageAction)}
+        plans_to_broadcast : set[AgentAction] = {action_from_dict(**action) 
+                                                 for msg in msgs_to_broadcasts
+                                                 if isinstance(msg, PlanMessage)
+                                                 for action in msg.plan}
+        reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(action.measurement_req)
+                                                       for action in plans_to_broadcast
+                                                       if isinstance(action,MeasurementAction)}
+        bid_reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(bid.req) 
+                                                        for bid in self.bids_to_rebroadcasts
+                                                        if isinstance(bid, Bid)}
         
         
 
-        # if any([req not in reqs_to_broadcast for req in bid_reqs_to_broadcast]):
-        #     # there is new information that needs to be broadcasted that is not currently scheduled
-        #     return True
+        if any([req not in reqs_to_broadcast for req in bid_reqs_to_broadcast]):
+            # there is new information that needs to be broadcasted that is not currently scheduled
+            return True
         
-        # x = 1 
+        x = 1 
         
-        # # plan was just developed by preplanner; no need to replan
+        # plan was just developed by preplanner; no need to replan
 
 
-        # if conflicts:
-        #     # received information from other agents that creates conflicts with current plan
-        #     return True
+        if conflicts:
+            # received information from other agents that creates conflicts with current plan
+            return True
         
-        # if self.bids_to_rebroadcasts:
-        #     # relevant changes were made to the results database; replan
-        #     return True
+        if self.bids_to_rebroadcasts:
+            # relevant changes were made to the results database; replan
+            return True
 
-        # # no need to replan
-        # return False
+        # no need to replan
+        return False
+        """
 
     def compile_external_plan_bids(self, state : SimulationAgentState, plan : Plan) -> list:
         """ checks if any new plan has been received from other agents and create bids accordingly """
@@ -288,13 +289,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # -------------------------------
         # DEBUG PRINTOUTS
-        out = f'{state.agent_name} - Observations in Original Path:\n'
-        original_obs_actions = [action for action in current_plan if isinstance(action, MeasurementAction)]
-        out += 'ID\t\tsubtask index\n'
-        for action in original_obs_actions:
-            out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
-        out += f'n_observations: {len(original_obs_actions)}\n'
-        print(out)
+        self.log_results('PRE-PLANNING PHASE', state, self.results)
+        # out = f'{state.agent_name} - Observations in Original Path:\n'
+        # original_obs_actions = [action for action in current_plan if isinstance(action, MeasurementAction)]
+        # out += 'ID\t\tsubtask index\n'
+        # for action in original_obs_actions:
+        #     out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
+        # out += f'n_observations: {len(original_obs_actions)}\n'
+        # print(out)
         # -------------------------------
 
         # bidding phase
@@ -309,16 +311,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        out = f'{state.agent_name} - Observations in Modified Path:\n'
-        obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
-        out += 'ID\t\tsubtask index\n'
-        for action in obs_actions:
-            out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
-        out += f'n_observations: {len(obs_actions)}\n'
-        print(out)
+        self.log_results('PLANNING PHASE', state, self.results)
+        # out = f'{state.agent_name} - Observations in Modified Path:\n'
+        # obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
+        # out += 'ID\t\tsubtask index\n'
+        # for action in obs_actions:
+        #     out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
+        # out += f'n_observations: {len(obs_actions)}\n'
+        # print(out)
 
-        if len(original_obs_actions) != len(obs_actions):
-            x = 1
+        # if len(original_obs_actions) != len(obs_actions):
+        #     x = 1
         # -------------------------------
 
         # output plan
@@ -528,14 +531,13 @@ class AbstractConsensusReplanner(AbstractReplanner):
             action : MeasurementAction
 
             # set bid as completed           
-            completed_req : MeasurementRequest \
-                = MeasurementRequest.from_dict(action.measurement_req)
+            completed_req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
             bid : Bid = results[completed_req.id][action.subtask_index]
-            results[completed_req.id][action.subtask_index] \
-                  = bid.update(None, BidComparisonResults.COMPLETED, state.t)
+            results[completed_req.id][action.subtask_index] = bid.update(None, BidComparisonResults.COMPLETED, state.t)
 
-            # add to changes list
-            changes.append(bid)
+            # add to changes and rebroadcast lists
+            changes.append(results[completed_req.id][action.subtask_index].copy())
+            rebroadcasts.append(results[completed_req.id][action.subtask_index].copy())
 
         # check for task completion in bundle
         for task in [(req, subtask_index, current_bid)
@@ -588,9 +590,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                 # add to changes and rebroadcast lists
                 changes.append(reset_bid)
-                rebroadcasts.append(reset_bid)
-
-        
+                rebroadcasts.append(reset_bid)       
 
         return results, bundle, path, changes, rebroadcasts
 
