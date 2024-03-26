@@ -290,13 +290,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # -------------------------------
         # DEBUG PRINTOUTS
         self.log_results('PRE-PLANNING PHASE', state, self.results)
-        # out = f'{state.agent_name} - Observations in Original Path:\n'
-        # original_obs_actions = [action for action in current_plan if isinstance(action, MeasurementAction)]
-        # out += 'ID\t\tsubtask index\n'
-        # for action in original_obs_actions:
-        #     out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
-        # out += f'n_observations: {len(original_obs_actions)}\n'
-        # print(out)
         # -------------------------------
 
         # bidding phase
@@ -312,16 +305,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # -------------------------------
         # DEBUG PRINTOUTS
         self.log_results('PLANNING PHASE', state, self.results)
-        # out = f'{state.agent_name} - Observations in Modified Path:\n'
-        # obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
-        # out += 'ID\t\tsubtask index\n'
-        # for action in obs_actions:
-        #     out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
-        # out += f'n_observations: {len(obs_actions)}\n'
-        # print(out)
-
-        # if len(original_obs_actions) != len(obs_actions):
-        #     x = 1
         # -------------------------------
 
         # output plan
