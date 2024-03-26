@@ -36,6 +36,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.other_plans = {}
         self.recently_completed_measurments = []
         self.planner_changes = []
+        self.agent_orbitdata : OrbitData = None
 
         # set paremeters
         self.max_bundle_size = max_bundle_size
@@ -109,6 +110,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
             if plan.t > other_plan.t:
                 # only update if a newer plan was received
                 self.other_plans[src] = (plan, state.t)
+
+        # update orbitdata for this agent if it hasn't been saved yet
+        if isinstance(state, SatelliteAgentState) and self.agent_orbitdata is None:
+            self.agent_orbitdata : OrbitData = orbitdata[state.agent_name]
 
     def _compile_completed_measurements(self, 
                                         completed_actions : list, 
@@ -324,7 +329,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         results : dict,
                         path : list,
                         clock_config: ClockConfig, 
-                        orbitdata: OrbitData = None
+                        orbitdata: dict = None
                         ) -> Replan:
         """ creates a new plan to be performed by the agent based on the results of the planning phase """
 
@@ -335,7 +340,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
 
         # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config, orbitdata)
 
         return Replan(measurements, broadcasts, maneuvers, t=state.t, t_next=self.preplan.t_next)
         
