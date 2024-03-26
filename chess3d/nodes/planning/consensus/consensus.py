@@ -10,7 +10,7 @@ from traitlets import Callable
 from chess3d.nodes.states import SimulationAgentState
 
 from nodes.planning.plan import Plan, Preplan, Replan
-from nodes.planning.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults, UnconstrainedBid
+from nodes.planning.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
 from nodes.planning.replanners import AbstractReplanner
 from nodes.science.utility import *
 from nodes.orbitdata import OrbitData
@@ -155,7 +155,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
         assert self.is_path_valid(state, self.path)
                        
         self.log_results('CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}\n')
+        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+
+        print(f'bundle:')
+        for req, subtask_index, bid in self.bundle:
+            req : MeasurementRequest
+            id_short = req.id.split('-')[0]
+            print(f'\t{id_short}, {subtask_index}')
+        print('')
 
         return len(self.bids_to_rebroadcasts) > 0
         
@@ -535,45 +542,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     if req.id in results
                     and results[req.id][subtask_index].performed]:
             ## remove all completed tasks from path
-            self.path.remove(task)
-
-        # check if any mutually exclusive tasks have been performed
-        task_to_remove = None
-        for req, subtask_index, current_bid in bundle:
-            req : MeasurementRequest
-            
-            ## check for all known bids related to the relevant measurement request
-            for bid_index in range(len(results[req.id])):
-                bid : Bid = results[req.id][bid_index]
-                if (bid.performed                                               # the other bid was performed
-                    and req.dependency_matrix[subtask_index][bid_index] < 0):   # is mutually exclusive with the bid at hand
-                    
-                    ## a mutually exclusive bid was performed
-                    task_to_remove = (req, subtask_index, current_bid)
-                    break   
-
-            if task_to_remove is not None:
-                break
-        
-        if task_to_remove is not None:
-            ## a mutually exclusive bid was performed; 
-            ## remove mutually exclusive task from bundle and all subsequent tasks
-            expired_index : int = bundle.index(task_to_remove)
-            for _ in range(expired_index, len(bundle)):
-                # remove from bundle
-                measurement_req, subtask_index, current_bid = bundle.pop(expired_index)
-
-                # remove from path
-                path.remove((measurement_req, subtask_index, current_bid))
-
-                # reset bid results
-                current_bid : Bid; measurement_req : MeasurementRequest
-                reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
-                results[measurement_req.id][subtask_index] = reset_bid
-
-                # add to changes and rebroadcast lists
-                changes.append(reset_bid)
-                rebroadcasts.append(reset_bid)       
+            self.path.remove(task) 
 
         return results, bundle, path, changes, rebroadcasts
 
