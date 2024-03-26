@@ -149,7 +149,7 @@ def precompute_orbitdata(scenario_name) -> str:
                     os.rmdir(data_dir + f)
                 else:
                     os.remove(os.path.join(data_dir, f)) 
-        print('\'orbitddata\' cleared!')
+        print('\'orbitdata\' cleared!')
 
         with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
             # load json file as dictionary

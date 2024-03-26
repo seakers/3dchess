@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 0.25,
+    "duration": 0.05,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -94,17 +94,14 @@
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                     "sma": 7078,
                     "ecc": 0.00,
-                    "inc": 0.0,
+                    "inc": 180.0,
                     "raan": 0.0,
                     "aop": 0.0,
                     "ta": 0.0
                 }
             },
             "planner" : {  
-                "preplanner" :{
-                    "@type" : "FIFO",
-                    "collaboration" : "True"
-                },
+                
                 "replanner" : {
                     "@type" : "ACBBA",
                     "bundle size " : 2
@@ -194,17 +191,13 @@
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                     "sma": 7078,
                     "ecc": 0.00,
-                    "inc": 0,
+                    "inc": 180,
                     "raan": 0.0,
                     "aop": 0.0,
                     "ta": -0.50
                 }
             },
-            "planner" : {           
-                "preplanner" :{
-                    "@type" : "FIFO",
-                    "collaboration" : "True"
-                },   
+            "planner" : {      
                 "replanner" : {
                     "@type" : "ACBBA",
                     "bundle size " : 2

@@ -312,4 +312,43 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         # else:
         #     raise NotImplementedError(f"cannot calculate imaging time for agent states of type {type(state)}")
 
-    
+    def is_path_valid(self, state : SimulationAgentState, path : list) -> bool:
+        if isinstance(state, SatelliteAgentState):
+            for j in range(len(path)):
+                i = j - 1
+
+
+                # estimate maneuver time 
+                if i >= 0:
+                    # req_i, _, t_i, _ = path[i]
+                    # state_i : SatelliteAgentState = state.propagate(t_i)
+                    # th_i = state_i.calc_off_nadir_agle(req_i)
+                    
+                    req_i, subtask_i, t_i, _ = path[i]
+                    req_i : GroundPointMeasurementRequest
+                    lat,lon,_ =  req_i.lat_lon_pos
+                    main_instrument = req_i.measurements[subtask_i]
+
+                    obs_i = self.orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_i)
+                    th_i = obs_i['look angle [deg]']
+                else:
+                    th_i = state.attitude[0]
+                    t_i = state.t
+
+                req_j, subtask_j, t_j, _ = path[j]
+                req_j : GroundPointMeasurementRequest
+                lat,lon,_ =  req_j.lat_lon_pos
+                main_instrument = req_j.measurements[subtask_j]
+
+                obs_j = self.orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_j)
+                th_j = obs_j['look angle [deg]']
+
+                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
+                dt_measurements = t_j - t_i
+
+                # check if there's enough time to maneuver from one observation to another
+                if dt_maneuver - dt_measurements > 1e-3 :
+                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
+                    return False
+
+        return True

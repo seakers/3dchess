@@ -151,19 +151,23 @@ class AbstractConsensusReplanner(AbstractReplanner):
                        
         self.log_results('CONSENSUS PHASE', state, self.results)
         print(f'length of path: {len(self.path)}\n')
+        print(f'# bids to rebradcast: {len(self.bids_to_rebroadcasts)}\n')
 
-        msgs_to_broadcasts : set[SimulationMessage] = {message_from_dict(**action.msg) for action in plan 
-                                                       if isinstance(action, BroadcastMessageAction)}
-        plans_to_broadcast : set[AgentAction] = {action_from_dict(**action) 
-                                                 for msg in msgs_to_broadcasts
-                                                 if isinstance(msg, PlanMessage)
-                                                 for action in msg.plan}
-        reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(action.measurement_req)
-                                                       for action in plans_to_broadcast
-                                                       if isinstance(action,MeasurementAction)}
-        bid_reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(bid.req) 
-                                                        for bid in self.bids_to_rebroadcasts
-                                                        if isinstance(bid, Bid)}
+        return len(self.bids_to_rebroadcasts) > 0
+
+        # TODO: Consider preplan
+        # msgs_to_broadcasts : set[SimulationMessage] = {message_from_dict(**action.msg) for action in plan 
+        #                                                if isinstance(action, BroadcastMessageAction)}
+        # plans_to_broadcast : set[AgentAction] = {action_from_dict(**action) 
+        #                                          for msg in msgs_to_broadcasts
+        #                                          if isinstance(msg, PlanMessage)
+        #                                          for action in msg.plan}
+        # reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(action.measurement_req)
+        #                                                for action in plans_to_broadcast
+        #                                                if isinstance(action,MeasurementAction)}
+        # bid_reqs_to_broadcast : set[MeasurementRequest] = {MeasurementRequest.from_dict(bid.req) 
+        #                                                 for bid in self.bids_to_rebroadcasts
+        #                                                 if isinstance(bid, Bid)}
         
         
 
@@ -184,8 +188,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
         #     # relevant changes were made to the results database; replan
         #     return True
 
-        # no need to replan
-        return False
+        # # no need to replan
+        # return False
 
     def compile_external_plan_bids(self, state : SimulationAgentState, plan : Plan) -> list:
         """ checks if any new plan has been received from other agents and create bids accordingly """
@@ -281,16 +285,16 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # DEBUG PRINTOUTS
         out = f'{state.agent_name} - Observations in Original Path:\n'
         original_obs_actions = [action for action in current_plan if isinstance(action, MeasurementAction)]
-        # out += 'ID\t\tsubtask index\n'
-        # for action in original_obs_actions:
-        #     out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
-        # out += f'n_observations: {len(original_obs_actions)}\n'
-        # print(out)
+        out += 'ID\t\tsubtask index\n'
+        for action in original_obs_actions:
+            out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
+        out += f'n_observations: {len(original_obs_actions)}\n'
+        print(out)
         # -------------------------------
 
         # bidding phase
         self.results, self.bid, self.path, self.planner_changes = \
-            self.planning_phase(state, self.results, self.bundle, self.path)
+            self.planning_phase(state, self.results, self.bundle, self.path, orbitdata)
         
         # check convergence
         plan : Replan = self._plan_from_path(state, self.results, self.path, clock_config, orbitdata)     
@@ -302,11 +306,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # DEBUG PRINTOUTS
         out = f'{state.agent_name} - Observations in Modified Path:\n'
         obs_actions = [action for action in plan if isinstance(action, MeasurementAction)]
-        # out += 'ID\t\tsubtask index\n'
-        # for action in obs_actions:
-        #     out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
+        out += 'ID\t\tsubtask index\n'
+        for action in obs_actions:
+            out += f"{action.measurement_req['id'].split('-')[0]}\t{action.subtask_index}\n"
         out += f'n_observations: {len(obs_actions)}\n'
-        # print(out)
+        print(out)
 
         if len(original_obs_actions) != len(obs_actions):
             x = 1
@@ -754,7 +758,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         state : SimulationAgentState, 
                         results : dict, 
                         bundle : list,
-                        path : list
+                        path : list,
+                        orbitdata : OrbitData
                     ) -> tuple:
         """
         Creates a modified plan from all known requests and current plan
@@ -829,12 +834,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     assert (req, subtask_index, t_img, u_exp) in max_path
             
             if max_req is not None: # max bid found! 
+
                 #place task with the best bid in the bundle and the path
                 bundle.append((max_req, max_subtask, max_bid))
                 path = [path_elem for path_elem in max_path]
 
+                # check if path is valid
                 assert self.is_path_valid(state, path)
 
+                # ensure chosen request and subtasks are in the path
                 assert (max_req, max_subtask, max_bid.t_img, max_bid.winning_bid) in path
 
                 # update results
@@ -849,9 +857,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         changes.append(new_bid.copy())
                         results[req.id][subtask_index] = new_bid
 
+                # remove chosen request from list of available requests
+                available_reqs.remove((max_req, max_subtask))
+
+        # ensure that every task in the bundle is included in the path
         for req, subtask_index, bid in bundle:
             assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
 
+        # ensure the generated path is valid
         assert self.is_path_valid(state, path)
 
         return results, bundle, path, changes 
@@ -871,13 +884,13 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 subtask_bid : Bid = results[req_id][subtask_index]; 
                 req = MeasurementRequest.from_dict(subtask_bid.req)
 
-                # cehck if the agent has access to the task
-                if not self._can_access(state, results, req, subtask_index, path):
-                    continue 
-
                 # check if the agent can bid on the tasks
                 if not self._can_bid(state, results, req, subtask_index):
                     continue
+
+                # check if the agent has access to the task
+                if not self._can_access(state, results, req, subtask_index, path):
+                    continue 
                 
                 # check if already in bundle
                 if (req, subtask_index, subtask_bid) in bundle:
@@ -896,34 +909,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 
         return available
     
+    @abstractmethod
     def is_path_valid(self, state : SimulationAgentState, path : list) -> bool:
-        
-        if isinstance(state, SatelliteAgentState):
-            for j in range(len(path)):
-                i = j - 1
-
-                # estimate maneuver time 
-                if i >= 0:
-                    req_i, _, t_i, _ = path[i]
-                    state_i : SatelliteAgentState = state.propagate(t_i)
-                    th_i = state_i.calc_off_nadir_agle(req_i)
-                else:
-                    th_i = state.attitude[0]
-                    t_i = state.t
-
-                req_j, _, t_j, _ = path[j]
-                state_j : SatelliteAgentState = state.propagate(t_j)
-                th_j = state_j.calc_off_nadir_agle(req_j)
-
-                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                dt_measurements = t_j - t_i
-
-                # check if there's enough time to maneuver from one observation to another
-                if dt_maneuver - dt_measurements > 1e-3 :
-                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
-                    return False
-
-        return True
+        pass
    
     def _can_access(self, 
                      state : SimulationAgentState, 
@@ -938,7 +926,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
             t_arrivals = [t 
                           for t in self.access_times[req.id][bid.main_measurement] 
                           if req.t_start <= t <= req.t_end]
-            
             return True if t_arrivals else False
         else:
             raise NotImplementedError(f"listing of available requests for agents with state of type {type(state)} not yet supported.")

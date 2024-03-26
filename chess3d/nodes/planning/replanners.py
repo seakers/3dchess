@@ -31,6 +31,7 @@ class AbstractReplanner(AbstractPlanner):
         super().__init__(utility_func, logger)
         
         self.preplan : Preplan = Preplan(t=-1.0)
+        self.orbitdata : OrbitData = None
 
     def update_percepts(self, 
                         state: SimulationAgentState, 
@@ -47,6 +48,9 @@ class AbstractReplanner(AbstractPlanner):
         # update latest preplan
         if state.t == current_plan.t and isinstance(current_plan, Preplan): 
             self.preplan = current_plan.copy() 
+        
+        if isinstance(state, SatelliteAgentState) and self.orbitdata is None:
+            self.orbitdata = orbitdata[state.agent_name]
         
         return super().update_percepts(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, orbitdata)
 
