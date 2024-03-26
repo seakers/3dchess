@@ -142,8 +142,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.incoming_bids.extend(new_req_bids)
         
         # perform consesus phase
-        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\nbids received: {len(self.incoming_bids)}\n')
+        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        # print(f'length of path: {len(self.path)}\nbids received: {len(self.incoming_bids)}\n')
+
         self.results, self.bundle, \
             self.path, _, self.bids_to_rebroadcasts = self.consensus_phase( state,
                                                                             self.results,
@@ -154,15 +155,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         assert self.is_path_valid(state, self.path)
                        
-        self.log_results('CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+        # self.log_results('CONSENSUS PHASE', state, self.results)
+        # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
 
-        print(f'bundle:')
-        for req, subtask_index, bid in self.bundle:
-            req : MeasurementRequest
-            id_short = req.id.split('-')[0]
-            print(f'\t{id_short}, {subtask_index}')
-        print('')
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}')
+        # print('')
 
         return len(self.bids_to_rebroadcasts) > 0
         
@@ -296,7 +297,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # -------------------------------
         # DEBUG PRINTOUTS
-        self.log_results('PRE-PLANNING PHASE', state, self.results)
+        # self.log_results('PRE-PLANNING PHASE', state, self.results)
         # -------------------------------
 
         # bidding phase
@@ -311,7 +312,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        self.log_results('PLANNING PHASE', state, self.results)
+        # self.log_results('PLANNING PHASE', state, self.results)
         # -------------------------------
 
         # output plan

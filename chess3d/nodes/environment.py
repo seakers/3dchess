@@ -111,12 +111,17 @@ class SimulationEnvironment(EnvironmentNode):
         self.stats = {}
         self.events_path = events_path
 
+        self.t_0 = None
+        self.t_f = None
+
     async def setup(self) -> None:
         # nothing to set up
         return
 
     async def live(self) -> None:
         try:
+            self.t_0 = time.perf_counter()
+
             # create port poller 
             poller = azmq.Poller()
 
@@ -405,6 +410,8 @@ class SimulationEnvironment(EnvironmentNode):
 
     async def teardown(self) -> None:
         try:
+            self.t_f = time.perf_counter()
+
             # print final time
             self.log(f'Environment shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
             
@@ -618,7 +625,8 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_obs', len(self.measurement_history)],
                         ['u_max', max_utility], 
                         ['u_total', utility_total],
-                        ['u_norm', utility_total/max_utility]
+                        ['u_norm', utility_total/max_utility],
+                        ['t_runtime', self.t_f - self.t_0]
                     ]
 
             # log and save results
