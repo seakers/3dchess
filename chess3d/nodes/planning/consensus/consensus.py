@@ -157,7 +157,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                        
         # self.log_results('CONSENSUS PHASE', state, self.results)
         # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-
         # print(f'bundle:')
         # for req, subtask_index, bid in self.bundle:
         #     req : MeasurementRequest

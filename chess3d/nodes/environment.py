@@ -436,7 +436,8 @@ class SimulationEnvironment(EnvironmentNode):
                                 t_img,
                                 measurement_data['u_max'],
                                 measurement_data['u_exp'],
-                                measurement_data['u']]
+                                measurement_data['u']
+                            ]
                 data.append(line_data)
 
             received_measurements_df = DataFrame(data, columns=headers)

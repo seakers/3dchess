@@ -236,7 +236,33 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_proposal/scenario2_single_sat"
+            "args": "scenario2_proposal/single_sat"
+        },
+        {
+            "name": "AIST PROPOSAL - Two Sats CBBA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "scenario2_proposal/two_sats"
+        },
+        {
+            "name": "AIST PROPOSAL - Two Colaborative Sats CBBA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "scenario2_proposal/two_sats_colab"
         }
     ],
     "compounds": [
