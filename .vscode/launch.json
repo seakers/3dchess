@@ -236,7 +236,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_proposal/single_sat"
+            "args": "aist_proposal/single_sat"
         },
         {
             "name": "AIST PROPOSAL - Two Sats CBBA",
@@ -249,7 +249,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_proposal/two_sats"
+            "args": "aist_proposal/two_sats"
         },
         {
             "name": "AIST PROPOSAL - Two Colaborative Sats CBBA",
@@ -262,7 +262,85 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "scenario2_proposal/two_sats_colab"
+            "args": "aist_proposal/two_sats_colab"
+        },
+        {
+            "name": "AIST PROPOSAL - FIFO w/o Colab",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist_proposal/fifo_no_colab"
+        },
+        {
+            "name": "AIST PROPOSAL - FIFO w/ Colab",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist_proposal/fifo_colab"
+        },
+        {
+            "name": "AIST PROPOSAL - CBBA (N=1)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist_proposal/cbba_1"
+        },
+        {
+            "name": "AIST PROPOSAL - CBBA (N=2)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist_proposal/cbba_2"
+        },
+        {
+            "name": "AIST PROPOSAL - CBBA (N=3)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist_proposal/cbba_3"
+        },
+        {
+            "name": "AIST PROPOSAL - CBBA (N=5)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "aist_proposal/cbba_5"
         }
     ],
     "compounds": [
