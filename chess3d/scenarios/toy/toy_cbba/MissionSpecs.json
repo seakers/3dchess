@@ -101,7 +101,6 @@
                 }
             },
             "planner" : {  
-                
                 "replanner" : {
                     "@type" : "ACBBA",
                     "bundle size" : 2
