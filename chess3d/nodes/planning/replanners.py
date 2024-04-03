@@ -166,19 +166,19 @@ class ReactivePlanner(AbstractReplanner):
                       ) -> Plan:
         
         # schedule measurements
-        measurements : list = self._schedule_measurements(state, current_plan, clock_config)
+        measurements : list = self._schedule_measurements(state, current_plan, clock_config, orbitdata)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
 
         # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config, orbitdata)
         
         # generate plan from actions
         return Replan(measurements, maneuvers, broadcasts, t=state.t, t_next=self.preplan.t_next)    
 
     @abstractmethod
-    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, clock_config : ClockConfig) -> list:
+    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, clock_config : ClockConfig, orbitdata : dict) -> list:
         pass
 
 class FIFOReplanner(ReactivePlanner):
@@ -310,7 +310,7 @@ class FIFOReplanner(ReactivePlanner):
         return available_reqs
 
     @runtime_tracker
-    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, _ : ClockConfig) -> list:
+    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, _ : ClockConfig, __ : dict) -> list:
         """ 
         Schedule a sequence of observations based on the current state of the agent 
         
@@ -396,8 +396,8 @@ class FIFOReplanner(ReactivePlanner):
                     continue
                 req : MeasurementRequest
                 
-                if req.id not in access_times:
-                    access_times[req.id] = {instrument : [] for instrument in req.measurements}
+                if req.id not in self.access_times:
+                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
                 
                 # get access times for all available measurements
                 main_measurement, _ = req.measurement_groups[subtask_index]  
