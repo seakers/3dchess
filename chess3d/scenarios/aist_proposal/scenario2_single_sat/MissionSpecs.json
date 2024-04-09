@@ -10,11 +10,9 @@
     },
     "duration": 1,
     "propagator": {
-        "@type": "J2 ANALYTICAL PROPAGATOR",
-        "stepSize": 30.46533781725041
+        "@type": "J2 ANALYTICAL PROPAGATOR"
     },
-    "spacecraft": [
-        {
+    "spacecraft": [{
             "@id": "imaging_sat_0_0",
             "name": "img_0",
             "spacecraftBus": {
@@ -100,35 +98,35 @@
                     "ta": 120.0
                 }
             },
-            "planner": {
-                "replanner": {
-                    "@type": "ACBBA",
-                    "bundle size": 5
+            "planner" : {    
+                "preplanner" : {
+                    "@type" : "FIFO"
                 },
-                "utility": "LINEAR"
+                "replanner" : {
+                    "@type" : "FIFO"
+                },
+                "utility" : "LINEAR"
             },
-            "science": "False",
+            "science" : "True",
             "notifier": "False",
-            "missionProfile": "3D-CHESS",
-            "preplan": "False"
+            "missionProfile": "3D-CHESS"
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/scenario2_proposal/base/resources/lake_event_points.csv"
+            "covGridFilePath": "./scenarios/aist_proposal/scenario2_base/resources/lake_event_points.csv"
         }
     ],
-    "scenario": {
-        "@type": "PREDEF",
-        "initialRequestsPath": "./scenarios/scenario2_proposal/single_sat/resources/initial_requests_merged.csv",
-        "eventsPath": "./scenarios/scenario2_proposal/single_sat/resources/all_events_formatted.csv",
-        "duration": 30.0,
-        "connectivity": "FULL",
-        "utility": "LINEAR"
-    },
+    "scenario": {   
+                    "@type": "PREDEF", 
+                    "initialRequestsPath" : "./scenarios/aist_proposal/scenario2_base/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/aist_proposal/scenario2_base/resources/all_events_formatted.csv", 
+                    "duration": 30.0, 
+                    "connectivity" : "FULL", 
+                    "utility" : "LINEAR"
+                },
     "settings": {
-        "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/scenario2_proposal/single_sat//orbit_data/"
+        "coverageType": "GRID COVERAGE"
     }
 }

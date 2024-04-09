@@ -310,7 +310,7 @@ class FIFOReplanner(ReactivePlanner):
         return available_reqs
 
     @runtime_tracker
-    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, _ : ClockConfig, __ : dict) -> list:
+    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, _ : ClockConfig, orbitdata : dict) -> list:
         """ 
         Schedule a sequence of observations based on the current state of the agent 
         
@@ -420,41 +420,61 @@ class FIFOReplanner(ReactivePlanner):
                     proposed_path = [action for action in my_measurements]
                     proposed_path.insert(i, proposed_measurement)
 
-                    if self.is_path_valid(state, proposed_path):
-                        my_measurements = proposed_path
+                    if self.is_measurement_path_valid(state, proposed_path, orbitdata):
+                        my_measurements = [action for action in proposed_path]
                         break
+                    else:
+                        x = 1
         else:
             raise NotImplementedError(f'fifo replanner not yet supported for agents with state of type {type(state)}.')
 
+        if not self.is_measurement_path_valid(state, my_measurements, orbitdata):
+            x = 1
+            y = self.is_measurement_path_valid(state, my_measurements, orbitdata)
+
+        assert self.is_measurement_path_valid(state, my_measurements, orbitdata)
+
         return my_measurements
 
-    def is_path_valid(self, state : SimulationAgentState, measurements : list) -> bool:
+    def is_measurement_path_valid(self, state : SimulationAgentState, measurements : list, orbitdata : dict) -> bool:
         
         if isinstance(state, SatelliteAgentState):
+            # get parent agent's orbit data 
+            parent_orbitdata : OrbitData = orbitdata[state.agent_name]
+
+            # check for 
             for j in range(len(measurements)):
                 i = j - 1
 
                 # estimate maneuver time 
                 if i >= 0:
                     measurement_i : MeasurementAction = measurements[i]
-                    state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
-                    req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                    th_i = state_i.calc_off_nadir_agle(req_i)
+                    req_i : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+                    main_instrument_i = measurement_i.instrument_name
+                    lat,lon,_ =  req_i.lat_lon_pos
+
+                    obs_prev = parent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_i, measurement_i.t_end)
+                    th_i = obs_prev['look angle [deg]']
                     t_i = measurement_i.t_end
+
                 else:
                     th_i = state.attitude[0]
                     t_i = state.t
 
                 measurement_j : MeasurementAction = measurements[j]
-                state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
-                req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-                th_j = state_j.calc_off_nadir_agle(req_j)
+                req_j : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
+                main_instrument_j = measurement_j.instrument_name
+                lat,lon,_ =  req_j.lat_lon_pos
+
+                obs_prev = parent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_j, measurement_j.t_end)
+                th_j = obs_prev['look angle [deg]']
+                t_j = measurement_j.t_start
 
                 dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                dt_measurements = measurement_j.t_start - t_i
+                dt_measurements = t_j - t_i
 
                 # check if there's enough time to maneuver from one observation to another
-                if dt_maneuver > dt_measurements:
+                if dt_maneuver - dt_measurements >= 1e-9:
                     # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
                     return False
 

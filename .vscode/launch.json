@@ -135,6 +135,19 @@
             "args": "scenario2/scenario2_single_sat_cbba"
         },
         {
+            "name": "SCENARIO 2 - SINGLE SAT FIFO",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "scenario2/scenario2_single_sat_fifo"
+        },
+        {
             "name": "SCENARIO 2 - ACBBA",
             "type": "python",
             "request": "launch",
@@ -236,7 +249,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "aist_proposal/single_sat"
+            "args": "aist_proposal/scenario2_single_sat"
         },
         {
             "name": "AIST PROPOSAL - Two Sats CBBA",
