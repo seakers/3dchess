@@ -167,6 +167,7 @@ class ReactivePlanner(AbstractReplanner):
         
         # schedule measurements
         measurements : list = self._schedule_measurements(state, current_plan, clock_config, orbitdata)
+        assert self.is_observation_path_valid(state, measurements, orbitdata)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
@@ -280,7 +281,13 @@ class FIFOReplanner(ReactivePlanner):
                 if t_accesses and req not in self.ignored_reqs:
                     # measurement request is accessible and hasent been considered yet
                     return True
-                
+        
+        if super().needs_planning(state, current_plan) or len(self.pending_relays) > 0:
+            if super().needs_planning(state, current_plan):
+                x = 1
+            elif len(self.pending_relays) > 0:
+                x = 1
+
         return super().needs_planning(state, current_plan) or len(self.pending_relays) > 0
                 
     @runtime_tracker
@@ -380,11 +387,21 @@ class FIFOReplanner(ReactivePlanner):
             for instrument in self.access_times[req.id]:
                 if self.access_times[req.id][instrument]:
                     # measurement request is accessible and hasent been considered yet
+                    accessible = False
                     for subtask_index in range(len(req.measurement_groups)):
                         main_instrument, _ = req.measurement_groups[subtask_index]
                         if main_instrument == instrument:
                             available_reqs.append((req, subtask_index))
+                            accessible = True
                             break
+                    
+                    if not accessible and req not in self.ignored_reqs:
+                        # gp is not accessible by agent; add to list of ignored requests
+                        self.ignored_reqs.append(req)
+
+                elif req not in self.ignored_reqs:
+                    # gp is not accessible by agent; add to list of ignored requests
+                    self.ignored_reqs.append(req)
 
         planned_reqs = [(MeasurementRequest.from_dict(action.measurement_req), action.subtask_index)
                         for action in my_measurements]
@@ -420,65 +437,14 @@ class FIFOReplanner(ReactivePlanner):
                     proposed_path = [action for action in my_measurements]
                     proposed_path.insert(i, proposed_measurement)
 
-                    if self.is_measurement_path_valid(state, proposed_path, orbitdata):
+                    if self.is_observation_path_valid(state, proposed_path, orbitdata):
                         my_measurements = [action for action in proposed_path]
                         break
-                    else:
-                        x = 1
+
         else:
             raise NotImplementedError(f'fifo replanner not yet supported for agents with state of type {type(state)}.')
 
-        if not self.is_measurement_path_valid(state, my_measurements, orbitdata):
-            x = 1
-            y = self.is_measurement_path_valid(state, my_measurements, orbitdata)
-
-        assert self.is_measurement_path_valid(state, my_measurements, orbitdata)
-
         return my_measurements
-
-    def is_measurement_path_valid(self, state : SimulationAgentState, measurements : list, orbitdata : dict) -> bool:
-        
-        if isinstance(state, SatelliteAgentState):
-            # get parent agent's orbit data 
-            parent_orbitdata : OrbitData = orbitdata[state.agent_name]
-
-            # check for 
-            for j in range(len(measurements)):
-                i = j - 1
-
-                # estimate maneuver time 
-                if i >= 0:
-                    measurement_i : MeasurementAction = measurements[i]
-                    req_i : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                    main_instrument_i = measurement_i.instrument_name
-                    lat,lon,_ =  req_i.lat_lon_pos
-
-                    obs_prev = parent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_i, measurement_i.t_end)
-                    th_i = obs_prev['look angle [deg]']
-                    t_i = measurement_i.t_end
-
-                else:
-                    th_i = state.attitude[0]
-                    t_i = state.t
-
-                measurement_j : MeasurementAction = measurements[j]
-                req_j : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-                main_instrument_j = measurement_j.instrument_name
-                lat,lon,_ =  req_j.lat_lon_pos
-
-                obs_prev = parent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_j, measurement_j.t_end)
-                th_j = obs_prev['look angle [deg]']
-                t_j = measurement_j.t_start
-
-                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                dt_measurements = t_j - t_i
-
-                # check if there's enough time to maneuver from one observation to another
-                if dt_maneuver - dt_measurements >= 1e-9:
-                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
-                    return False
-
-        return True
     
     @runtime_tracker
     def _schedule_broadcasts(self, 

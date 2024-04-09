@@ -121,6 +121,7 @@ class AbstractPreplanner(AbstractPlanner):
         
         # schedule measurements
         measurements : list = self._schedule_measurements(state, clock_config, orbitdata)
+        assert self.is_observation_path_valid(state, measurements, orbitdata)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
@@ -140,6 +141,8 @@ class AbstractPreplanner(AbstractPlanner):
     @abstractmethod
     def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig, orbitdata : dict = None) -> list:
         """ Creates a list of measurement actions to be performed by the agent """
+
+    
 
     @runtime_tracker
     def _generate_broadcasts(self, 
@@ -306,9 +309,7 @@ class FIFOPreplanner(AbstractPreplanner):
 
                     if i >= 0:
                         measurement_i : MeasurementAction = measurements[i]
-                        state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
                         req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                        # th_i = state_i.calc_off_nadir_agle(req_i)
 
                         lat, lon, _ = req_i.lat_lon_pos
                         main_instrument_i = measurement_i.instrument_name

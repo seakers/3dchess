@@ -531,3 +531,52 @@ class AbstractPlanner(ABC):
         out += f'\nn measurements: {len(path)}\n'
 
         print(out)
+
+    def is_observation_path_valid(self, state : SimulationAgentState, measurements : list, orbitdata : dict) -> bool:
+        """ 
+        Checks if a given measurement or observation plan is valid given the type of agent performing them 
+        """
+        
+        if isinstance(state, SatelliteAgentState):
+            # get parent agent's orbit data 
+            parent_orbitdata : OrbitData = orbitdata[state.agent_name]
+
+            # check for 
+            for j in range(len(measurements)):
+                i = j - 1
+
+                # estimate maneuver time 
+                if i >= 0:
+                    measurement_i : MeasurementAction = measurements[i]
+                    req_i : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
+                    main_instrument_i = measurement_i.instrument_name
+                    lat,lon,_ =  req_i.lat_lon_pos
+
+                    obs_prev = parent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_i, measurement_i.t_end)
+                    th_i = obs_prev['look angle [deg]']
+                    t_i = measurement_i.t_end
+
+                else:
+                    th_i = state.attitude[0]
+                    t_i = state.t
+
+                measurement_j : MeasurementAction = measurements[j]
+                req_j : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
+                main_instrument_j = measurement_j.instrument_name
+                lat,lon,_ =  req_j.lat_lon_pos
+
+                obs_prev = parent_orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_j, measurement_j.t_end)
+                th_j = obs_prev['look angle [deg]']
+                t_j = measurement_j.t_start
+
+                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
+                dt_measurements = t_j - t_i
+
+                # check if there's enough time to maneuver from one observation to another
+                if dt_maneuver - dt_measurements >= 1e-9:
+                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
+                    return False
+        else:
+            raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
+
+        return True
