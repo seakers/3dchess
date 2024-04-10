@@ -281,12 +281,6 @@ class FIFOReplanner(ReactivePlanner):
                 if t_accesses and req not in self.ignored_reqs:
                     # measurement request is accessible and hasent been considered yet
                     return True
-        
-        if super().needs_planning(state, current_plan) or len(self.pending_relays) > 0:
-            if super().needs_planning(state, current_plan):
-                x = 1
-            elif len(self.pending_relays) > 0:
-                x = 1
 
         return super().needs_planning(state, current_plan) or len(self.pending_relays) > 0
                 
