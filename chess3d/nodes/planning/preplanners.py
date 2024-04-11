@@ -348,6 +348,12 @@ class FIFOPreplanner(AbstractPreplanner):
                         if len(t_arrivals) > 0:     # try again for the next access period
                             # pick next access time
                             t_img = t_arrivals.pop(0)
+                            while t_img < t_i + dt_maneuver and t_arrivals:
+                                t_img = t_arrivals.pop(0)
+                            
+                            if not (t_img < t_i + dt_maneuver and t_arrivals):
+                                j_remove = j
+
                             u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
                             # update measurement action

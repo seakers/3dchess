@@ -318,6 +318,7 @@ class FIFOReplanner(ReactivePlanner):
         ### Arguments:
             - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
         """
+        
         my_measurements = [ action
                             for action in current_plan
                             if isinstance(action, MeasurementAction)]
@@ -382,7 +383,7 @@ class FIFOReplanner(ReactivePlanner):
                 if self.access_times[req.id][instrument]:
                     # measurement request is accessible and hasent been considered yet
                     accessible = False
-                    for subtask_index in range(len(req.measurement_groups)):
+                    for subtask_index in range(len(req.measurement_groups)):                        
                         main_instrument, _ = req.measurement_groups[subtask_index]
                         if main_instrument == instrument:
                             available_reqs.append((req, subtask_index))
@@ -401,18 +402,26 @@ class FIFOReplanner(ReactivePlanner):
                         for action in my_measurements]
 
         if isinstance(state, SatelliteAgentState):
-            access_times = {}
             for req, subtask_index in available_reqs:
+                req : MeasurementRequest
+                if req.id not in self.access_times:
+                    continue
                 if (req, subtask_index) in planned_reqs:
                     continue
-                req : MeasurementRequest
-                
-                if req.id not in self.access_times:
-                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
                 
                 # get access times for all available measurements
                 main_measurement, _ = req.measurement_groups[subtask_index]  
                 access_times = [t_img for t_img in self.access_times[req.id][main_measurement]]
+
+                # remove access times that overlap with existing measurements
+                for action in my_measurements:
+                    action : MeasurementAction
+                    access_times = [t_img 
+                                    for t_img in access_times
+                                    if not (action.t_start <= t_img <= action.t_end)]
+                    
+                    if not access_times:
+                        break
 
                 while access_times:
                     t_img = access_times.pop(0)
