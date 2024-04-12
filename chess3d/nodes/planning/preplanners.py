@@ -273,6 +273,66 @@ class FIFOPreplanner(AbstractPreplanner):
 
         if isinstance(state, SatelliteAgentState):
 
+            # available_req_times = []
+            # for req, subtask_index in available_reqs:
+            #     req : MeasurementRequest
+            #     main_measurement, _ = req.measurement_groups[subtask_index]  
+            #     t_arrivals : list = self.access_times[req.id][main_measurement]
+
+            #     available_req_times.append((req, subtask_index, t_arrivals))
+
+            # while available_req_times:
+            #     req_min, subtask_index_min, t_arrivals_min, measurement_min = None, None, None, None
+            #     req_times_to_delete = []
+            #     for req, subtask_index, t_arrivals in available_req_times:
+            #         req : MeasurementRequest
+            #         t_arrivals : list
+
+            #         # if measurements:
+            #         #     t_arrivals = [t_img for t_img in t_arrivals
+            #         #                 for measurement in measurements
+            #         #                 if isinstance(measurement, MeasurementAction)
+            #         #                 and not (measurement.t_start < t_img < measurement.t_end)]
+
+            #         if len(t_arrivals) == 0:
+            #             req_times_to_delete.append((req, subtask_index, t_arrivals))
+            #             continue
+
+            #         proposed_measurement = None
+            #         while len(t_arrivals) > 0:
+            #             t_img = t_arrivals.pop(0)
+            #             u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
+
+            #             proposed_path = [action for action in measurements]
+            #             proposed_measurement = MeasurementAction(req.to_dict(),
+            #                                                      subtask_index, 
+            #                                                      main_measurement,
+            #                                                      u_exp,
+            #                                                      t_img, 
+            #                                                      t_img + req.duration
+            #                                                     )
+            #             proposed_path.append(proposed_measurement)
+                        
+            #             if self.is_observation_path_valid(state, proposed_path, orbitdata):
+            #                 break
+
+                    
+            #         if (isinstance(proposed_measurement, MeasurementAction)
+            #             and (measurement_min is None or proposed_measurement.t_end < measurement_min.t_start)
+            #             ):
+            #             req_min = req
+            #             subtask_index_min = subtask_index
+            #             t_arrivals_min = t_arrivals
+            #             measurement_min = proposed_measurement
+                
+            #     if isinstance(measurement_min, MeasurementAction):
+            #         measurements.append(measurement_min)
+            #         available_req_times.remove((req_min, subtask_index_min, t_arrivals_min))
+
+            #     for req, subtask_index, t_arrivals in req_times_to_delete:
+            #         available_req_times.remove((req, subtask_index, t_arrivals))
+            #     x = 1
+
             # create first assignment of observations
             for req, subtask_index in available_reqs:
                 req : MeasurementRequest
@@ -348,12 +408,6 @@ class FIFOPreplanner(AbstractPreplanner):
                         if len(t_arrivals) > 0:     # try again for the next access period
                             # pick next access time
                             t_img = t_arrivals.pop(0)
-                            while t_img < t_i + dt_maneuver and t_arrivals:
-                                t_img = t_arrivals.pop(0)
-                            
-                            if not (t_img < t_i + dt_maneuver and t_arrivals):
-                                j_remove = j
-
                             u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
                             # update measurement action

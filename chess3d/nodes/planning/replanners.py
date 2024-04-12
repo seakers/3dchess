@@ -418,7 +418,7 @@ class FIFOReplanner(ReactivePlanner):
                     action : MeasurementAction
                     access_times = [t_img 
                                     for t_img in access_times
-                                    if not (action.t_start <= t_img <= action.t_end)]
+                                    if not (action.t_start < t_img < action.t_end)]
                     
                     if not access_times:
                         break

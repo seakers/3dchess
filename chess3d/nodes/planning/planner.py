@@ -378,7 +378,7 @@ class PlanningModule(InternalModule):
                     
                     if self.replanner.needs_planning(state, plan):
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
