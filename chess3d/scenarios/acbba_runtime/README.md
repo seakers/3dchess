@@ -46,3 +46,15 @@ Most of the runtime is consumed during the planning phase of the algorithm. This
 #### `needs_replanning()`:
 - Attempted to implement periodic replanning but this increased runtime. This idea was abandoned and it was chosen to maintian event-oriented structure.
 - Allowed for bids to accumulate in an internal buffer and only trigger replanning once their number exceed a given threshold (set to a default of 1). This resembles Luke Johnson's implementation 
+
+#### `planning_phase()`:
+- Implemented graph-search approach for bundle cunstruction. Avoids doing full factorial permutation search and prevents dedundant calculations for arrival time.
+
+| n | t_plan [s] |  n_max   | n_visited |
+|---|------------|----------|-----------| 
+| 1 | 0.599      | -1 | -1 |
+| 2 | 8.64       | 90 | 74 |
+| 3 | 79.449     | -1 | -1 |
+| 4 | 421.548    | -1 | -1 |
+
+_Initial bundle construction runtime for_ `scenario2_two_sat`

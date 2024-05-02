@@ -1,4 +1,6 @@
+import itertools
 import logging
+from queue import Queue
 import time
 from typing import Any, Callable
 from numpy import Inf
@@ -712,6 +714,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
         PLANNING PHASE
     -----------------------
     """
+    def calc_path_times():
+        pass
+
     @runtime_tracker
     def planning_phase( self, 
                         state : SimulationAgentState, 
@@ -726,117 +731,88 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # initialzie changes
         changes = []
 
+        # get current path elements 
+        current_bundle_reqs = [(req, subtask_index) for req,subtask_index,_, in bundle]
+
         # get requests that can be bid on by this agent
         available_reqs : list = self._get_available_requests(state, results, bundle, path)
+        available_reqs.extend(current_bundle_reqs)
+                
+        queue = Queue()
+        queue.put([])
 
-        # initialize path of maximum utility
         max_path = [path_element for path_element in path]
         max_path_utility = sum([u_exp for _,_,_,u_exp in path])
 
-        assert self.is_path_valid(state, path)
+        n_visited = 0
+        n_max = len(list(itertools.permutations(available_reqs, self.max_bundle_size)))
 
-        # begin bid process
-        max_req = -1
-
-        # while ( len(available_reqs) > 0                     # there are available tasks to be bid on
-        #         and len(bundle) < self.max_bundle_size      # there is space in the bundle
-        #         and max_req is not None                     # there is a request that maximizes utility
-        #     ):   
-        for _ in range(self.max_bundle_size - len(self.bundle)):
-            if len(available_reqs) == 0 or max_req is None:
-                break
-
-            max_req = None 
-            max_subtask = None
-            max_bid = None
-            unavailable_reqs = []
-
-            # find next best task to put in bundle (greedy)
-            for req, subtask_index in available_reqs:
-                
-                # calculate best bid and path for a given request and subtask
-                projected_path, projected_path_utility, t_img, u_exp \
-                     = self.calc_path_bid(  state, 
-                                            results, 
-                                            path, 
-                                            req, 
-                                            subtask_index)
-
-                # check if path was found
-                if projected_path is None:
-                    # request and subtask cannot be placed in the path
-                    
-                    # flag to remove from available reqs
-                    unavailable_reqs.append((req, subtask_index))
-
-                    # check next request and subtask
-                    continue
-                
-                # check validity of path from the bid generator
-                assert self.is_path_valid(state, projected_path)
-
-                # get time and utility gained from said action
-                old_bid : Bid = results[req.id][subtask_index]
-
-                if old_bid.winner == state.agent_name:
-                    is_max = projected_path_utility > max_path_utility
-                else:
-                    is_max = (projected_path_utility > max_path_utility 
-                              and u_exp > old_bid.winning_bid)
-
-                # compare to maximum task
-                # if max_req is None or is_max:
-                if is_max:
-                    # register maximum utility 
-                    max_bid : Bid = old_bid.copy()
-                    max_bid.set(u_exp, t_img, state.t)
-                    max_path = [path_elem for path_elem in projected_path]
-                    max_path_utility = projected_path_utility
-                    max_req = req
-                    max_subtask = subtask_index
-
-                    assert (req, subtask_index, t_img, u_exp) in max_path
+        t_0 = time.perf_counter()
+        while not queue.empty():
+            # get next path in the queue
+            n_visited += 1 
+            path_i : list = queue.get()
+            path_reqs = [(req, subtask_index) for req,subtask_index,_,_ in path_i]
             
-            if max_req is not None: # max bid found! 
+            # check if the new path contains all tasks from the initial bundle
+            if all([current_bundle_req in path_reqs 
+                    for current_bundle_req in current_bundle_reqs]):
+                
+                # check if it out-performs the current best path
+                path_utility = sum([u_exp for _,_,_,u_exp in path_i])
+                
+                if path_utility > max_path_utility:
+                    max_path = [path_element for path_element in path_i]
+                    max_path_utility = path_utility
 
-                #place task with the best bid in the bundle and the path
-                bundle.append((max_req, max_subtask, max_bid))
-                path = [path_elem for path_elem in max_path]
+            # check if there is room to be added to the bundle
+            if len(path_i) < self.max_bundle_size:
+                # add available requests to the path and place it in the queue
+                
+                # TODO reduce search by checking if remaining slots in the bundle are for the tasks in existing bundle
+                if 0 < (self.max_bundle_size - len(path_i)) <= len(current_bundle_reqs):
+                    x = 1
+                else:
+                    reqs_to_add = [(req, subtask_index) 
+                                for req, subtask_index in available_reqs
+                                if (req, subtask_index) not in path_reqs
+                                ]
+                
+                for req, subtask_index in reqs_to_add:
+                    path_j = [path_element_i for path_element_i in path_i]
+                    path_j.append((req, subtask_index, -1, -1))
+                    t_img = self.calc_imaging_time(state, path_j, req, subtask_index)
+                    u_exp = self.utility_func(req.to_dict(), t_img)
+                    path_j[-1] = (req, subtask_index, t_img, u_exp)
 
-                # check if path is valid
-                assert self.is_path_valid(state, path)
+                    # check if can be performed 
+                    if self.is_path_valid(state, path_j):
+                        queue.put(path_j)
+            
 
-                # ensure chosen request and subtasks are in the path
-                assert (max_req, max_subtask, max_bid.t_img, max_bid.winning_bid) in path
+        dt = time.perf_counter() - t_0
+        x = 1
 
-                # update results
-                for req, subtask_index, new_bid in bundle:
-                    req : MeasurementRequest
-                    subtask_index : int
-                    new_bid : Bid
+        # update bundle and results 
+        bundle = []
+        for req, subtask_index, t_img, u_exp in max_path:
+            # update bid
+            old_bid : Bid = results[req.id][subtask_index]
+            new_bid : Bid = old_bid.copy()
+            new_bid.set(u_exp, t_img, state.t)
 
-                    old_bid : Bid = results[req.id][subtask_index]
+            # place in bundle
+            bundle.append((req, subtask_index, new_bid))
 
-                    if old_bid != new_bid:
-                        changes.append(new_bid.copy())
-                        results[req.id][subtask_index] = new_bid
+            # if changed, update results
+            if old_bid != new_bid:
+                changes.append(new_bid.copy())
+                results[req.id][subtask_index] = new_bid
 
-                # remove chosen request from list of available requests
-                available_reqs.remove((max_req, max_subtask))
-            else:
-                break
+        # update path
+        path = [path_elem for path_elem in max_path]
 
-            # remove unavailable reqs
-            for req, subtask_index in unavailable_reqs:
-                if (req, subtask_index) in available_reqs:
-                    available_reqs.remove((req, subtask_index))
-
-        # ensure that every task in the bundle is included in the path
-        for req, subtask_index, bid in bundle:
-            bid : Bid
-            assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
-
-        # ensure the generated path is valid
+        # check if path is valid
         assert self.is_path_valid(state, path)
 
         # ensure that bundle is within the allowed size
@@ -844,7 +820,129 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # return results
         return results, bundle, path, changes 
+
+        # all_paths = list(itertools.permutations(available_reqs, self.max_bundle_size))
+        # all_paths = [[(req, subtask_index, -1, -1) for req, subtask_index in path_i] for path_i in all_paths]
+
+        # remove all paths that do not include all tasks in the current bundle
+
+        # # initialize path of maximum utility
+        # max_path = [path_element for path_element in path]
+        # max_path_utility = sum([u_exp for _,_,_,u_exp in path])
+
+        # assert self.is_path_valid(state, path)
+
+        # # begin bid process
+        # max_req = -1
+
+        # # while ( len(available_reqs) > 0                     # there are available tasks to be bid on
+        # #         and len(bundle) < self.max_bundle_size      # there is space in the bundle
+        # #         and max_req is not None                     # there is a request that maximizes utility
+        # #     ):   
+        # for _ in range(self.max_bundle_size - len(self.bundle)):
+        #     if len(available_reqs) == 0 or max_req is None:
+        #         break
+
+        #     max_req = None 
+        #     max_subtask = None
+        #     max_bid = None
+        #     unavailable_reqs = []
+
+        #     # find next best task to put in bundle (greedy)
+        #     for req, subtask_index in available_reqs:
+                
+        #         # calculate best bid and path for a given request and subtask
+        #         projected_path, projected_path_utility, t_img, u_exp \
+        #              = self.calc_path_bid(  state, 
+        #                                     results, 
+        #                                     path, 
+        #                                     req, 
+        #                                     subtask_index)
+
+        #         # check if path was found
+        #         if projected_path is None:
+        #             # request and subtask cannot be placed in the path
+                    
+        #             # flag to remove from available reqs
+        #             unavailable_reqs.append((req, subtask_index))
+
+        #             # check next request and subtask
+        #             continue
+                
+        #         # check validity of path from the bid generator
+        #         assert self.is_path_valid(state, projected_path)
+
+        #         # get time and utility gained from said action
+        #         old_bid : Bid = results[req.id][subtask_index]
+
+        #         if old_bid.winner == state.agent_name:
+        #             is_max = projected_path_utility > max_path_utility
+        #         else:
+        #             is_max = (projected_path_utility > max_path_utility 
+        #                       and u_exp > old_bid.winning_bid)
+
+        #         # compare to maximum task
+        #         # if max_req is None or is_max:
+        #         if is_max:
+        #             # register maximum utility 
+                    # max_bid : Bid = old_bid.copy()
+                    # max_bid.set(u_exp, t_img, state.t)
+        #             max_path = [path_elem for path_elem in projected_path]
+        #             max_path_utility = projected_path_utility
+        #             max_req = req
+        #             max_subtask = subtask_index
+
+        #             assert (req, subtask_index, t_img, u_exp) in max_path
+            
+        #     if max_req is not None: # max bid found! 
+
+                # #place task with the best bid in the bundle and the path
+                # bundle.append((max_req, max_subtask, max_bid))
+                # path = [path_elem for path_elem in max_path]
+
+                # # check if path is valid
+                # assert self.is_path_valid(state, path)
+
+                # # ensure chosen request and subtasks are in the path
+                # assert (max_req, max_subtask, max_bid.t_img, max_bid.winning_bid) in path
+
+                # # update results
+                # for req, subtask_index, new_bid in bundle:
+                #     req : MeasurementRequest
+                #     subtask_index : int
+                #     new_bid : Bid
+
+                    # old_bid : Bid = results[req.id][subtask_index]
+
+                    # if old_bid != new_bid:
+                    #     changes.append(new_bid.copy())
+                    #     results[req.id][subtask_index] = new_bid
+
+                # # remove chosen request from list of available requests
+                # available_reqs.remove((max_req, max_subtask))
+        #     else:
+        #         break
+
+        #     # remove unavailable reqs
+        #     for req, subtask_index in unavailable_reqs:
+        #         if (req, subtask_index) in available_reqs:
+        #             available_reqs.remove((req, subtask_index))
+
+        # # ensure that every task in the bundle is included in the path
+        # for req, subtask_index, bid in bundle:
+        #     bid : Bid
+        #     assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
+
+        # # ensure the generated path is valid
+        # assert self.is_path_valid(state, path)
+
+        # # ensure that bundle is within the allowed size
+        # assert len(bundle) <= self.max_bundle_size
+
+        # # return results
+        # return results, bundle, path, changes 
     
+    @runtime_tracker
     def _get_available_requests(self, 
                                 state : SimulationAgentState, 
                                 results : dict, 
@@ -856,9 +954,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
         available = []        
 
         for req_id in results:
-            for subtask_index in range(len(results[req_id])):
-                subtask_bid : Bid = results[req_id][subtask_index]; 
+            for subtask_bid in results[req_id]:
+                subtask_bid : Bid
                 req = MeasurementRequest.from_dict(subtask_bid.req)
+                subtask_index = subtask_bid.subtask_index
 
                 # check if the agent can bid on the tasks
                 if not self._can_bid(state, results, req, subtask_index):
@@ -881,8 +980,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     continue
 
                 available.append((req, subtask_bid.subtask_index))  
-                    
-                
+                                    
         return available
     
     @abstractmethod
@@ -963,10 +1061,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         ### Returns
             - t_img (`float`): earliest available imaging time
         """
-        pass 
-
-    
-
+        pass  
 
     """
     --------------------

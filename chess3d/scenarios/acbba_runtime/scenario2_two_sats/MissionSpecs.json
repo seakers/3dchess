@@ -102,7 +102,7 @@
             "planner" : {      
                 "replanner" : {
                     "@type" : "ACBBA",
-                    "bundle size" : 3,
+                    "bundle size" : 2,
                     "horizon" : 3600
                 },
                 "utility" : "LINEAR"
@@ -200,7 +200,7 @@
             "planner" : {      
                 "replanner" : {
                     "@type" : "ACBBA",
-                    "bundle size" : 3,
+                    "bundle size" : 2,
                     "horizon" : 3600
                 },
                 "utility" : "LINEAR"
