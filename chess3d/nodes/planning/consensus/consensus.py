@@ -171,11 +171,13 @@ class AbstractConsensusReplanner(AbstractReplanner):
         #     print(f'\t{id_short}, {subtask_index}')
         # print('')
 
-        if not isinstance(plan, Replan):
-            # if replanner hasn't been initialized or preplan has just been calculated; replan
-            return True
+        return len(self.bids_to_rebroadcasts) >= self.replan_threshold
+        # if not isinstance(plan, Replan) and len(self.bids_to_rebroadcasts) >= self.replan_threshold:
+        #     # if replanner hasn't been initialized or preplan has just been calculated; replan
+        #     return True
 
-        return len(self.bids_to_rebroadcasts) >= self.replan_threshold and state.t >= plan.t_next
+        # # only replan if enough replanning incoming 
+        # return state.t >= plan.t_next and len(self.bids_to_rebroadcasts) >= self.replan_threshold
         
         # TODO: Consider preplan
 
@@ -277,27 +279,20 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # self.log_results('PRE-PLANNING PHASE', state, self.results)
         # -------------------------------
 
-        if not isinstance(current_plan, Replan) or len(self.bids_to_rebroadcasts) >= self.replan_threshold:
-
-            # bidding phase
+        # check if bundle is full
+        if len(self.bundle) < self.max_bundle_size:
+            # There is room in the bundle; perform bidding phase
             self.results, self.bid, self.path, self.planner_changes = \
                 self.planning_phase(state, self.results, self.bundle, self.path, orbitdata)
+        
+        # TODO check convergence
+
+        # generate plan from bids
+        plan : Replan = self._plan_from_path(state, self.results, self.path, clock_config, orbitdata)     
             
-            # TODO check convergence
-
-            # generate plan from bids
-            plan : Replan = self._plan_from_path(state, self.results, self.path, clock_config, orbitdata)     
-                
-            # reset broadcast list
-            # TODO only reset after broadcasts have been performed?
-            self.bids_to_rebroadcasts = []
-
-        else:
-            # generate plan from bids
-            plan : Replan = current_plan
-            t_next = state.t + self.replan_period
-            plan.add(WaitForMessages(t_next, t_next),state.t)
-            plan.t_next = t_next
+        # reset broadcast list
+        # TODO only reset after broadcasts have been performed?
+        self.bids_to_rebroadcasts = []
 
         # -------------------------------
         # DEBUG PRINTOUTS
@@ -438,16 +433,20 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def _schedule_waits(self, state : SimulationAgentState) -> list:
         """ schedules periodic rescheduling checks """
 
-        horizon = self.planning_horizon if self.planning_horizon < np.Inf else 10*24*3600
+        # horizon = self.planning_horizon if self.planning_horizon < np.Inf else 10*24*3600
         
-        # n_steps = int((state.t + horizon)/self.replan_period)
-        n_steps = 1
+        # # n_steps = int((state.t + horizon)/self.replan_period)
+        # n_steps = 1
         
-        waits = [WaitForMessages(state.t+self.replan_period*step, 
-                                 state.t+self.replan_period*step)
-                 for step in range(1,n_steps+1)]
+        # waits = [WaitForMessages(state.t+self.replan_period*step, 
+        #                          state.t+self.replan_period*step)
+        #          for step in range(1,n_steps+1)]
 
-        return waits 
+        # return waits 
+        # t_horizon = state.t + self.planning_horizon
+        # return [WaitForMessages(t_horizon, t_horizon)]
+    
+        return []
 
     """
     -----------------------
@@ -727,11 +726,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # initialzie changes
         changes = []
 
-        # check if bundle is full
-        if len(bundle) >= self.max_bundle_size:
-            # Bundle is full; cannot modify 
-            return results, bundle, path, changes
-
         # get requests that can be bid on by this agent
         available_reqs : list = self._get_available_requests(state, results, bundle, path)
 
@@ -756,7 +750,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             for req, subtask_index in available_reqs:
                 
                 # calculate best bid and path for a given request and subtask
-                projected_path, projected_path_utility \
+                projected_path, projected_path_utility, t_img, u_exp \
                      = self.calc_path_bid(  state, 
                                             results, 
                                             path, 
@@ -777,10 +771,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 assert self.is_path_valid(state, projected_path)
 
                 # get time and utility gained from said action
-                path_elements = [(path_req, path_subtask, path_t, path_u) 
-                                    for path_req, path_subtask, path_t, path_u in projected_path 
-                                    if path_req == req and path_subtask == subtask_index]
-                _, _, t_img, u_exp = path_elements[0]
                 old_bid : Bid = results[req.id][subtask_index]
 
                 if old_bid.winner == state.agent_name:

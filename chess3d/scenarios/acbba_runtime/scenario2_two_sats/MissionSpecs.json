@@ -102,7 +102,8 @@
             "planner" : {      
                 "replanner" : {
                     "@type" : "ACBBA",
-                    "bundle size" : 1
+                    "bundle size" : 3,
+                    "horizon" : 3600
                 },
                 "utility" : "LINEAR"
             },
@@ -199,7 +200,8 @@
             "planner" : {      
                 "replanner" : {
                     "@type" : "ACBBA",
-                    "bundle size" : 1
+                    "bundle size" : 3,
+                    "horizon" : 3600
                 },
                 "utility" : "LINEAR"
             },
@@ -211,13 +213,13 @@
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/acbba_runtime/two_sats/resources/lake_event_points.csv"
+            "covGridFilePath": "./scenarios/acbba_runtime/scenario2_two_sats/resources/lake_event_points.csv"
         }
     ],
     "scenario": {   
                     "@type": "PREDEF", 
-                    "initialRequestsPath" : "./scenarios/acbba_runtime/two_sats/resources/initial_requests_merged.csv",
-                    "eventsPath" : "./scenarios/acbba_runtime/two_sats/resources/all_events_formatted.csv", 
+                    "initialRequestsPath" : "./scenarios/acbba_runtime/scenario2_two_sats/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/acbba_runtime/scenario2_two_sats/resources/all_events_formatted.csv", 
                     "duration": 30.0, 
                     "connectivity" : "FULL", 
                     "utility" : "LINEAR"

@@ -20,7 +20,7 @@ These scenarios were created with the goal of improving the runtime of the ACBBA
 Most of the runtime is consumed during the planning phase of the algorithm. This is when a bundle is constucted and communicated to the rest of the constellation. 
 
 ### Recommendations for improvement
-- `generate_plan()` takes up the most runtime, therefore limiting the number of times this method is called would have the most impact in overall runtime. For a simulation that generated 32 task-requests, replanning was called 86 times. `needs_replanning()` needs to be revised to ensure replanning is done in the appropriate times (see Luke's ACBBA paper for guidance).
+- `generate_plan()` takes up the most runtime, therefore limiting the number of times this method is called would have the most impact in overall runtime. For a simulation that generated 32 task-requests, replanning was called 86 times. `needs_replanning()` needs to be revised to ensure replanning is done in the appropriate times (see Luke Johnson's ACBBA paper for guidance).
 
 - `generate_plan()`'s runtime is split between `planning_phase()` and `plan_from_path()`, improving their respective runtimes will have an overal effect on runtime.
 
@@ -43,3 +43,6 @@ Most of the runtime is consumed during the planning phase of the algorithm. This
 - Removed redundant loops and collapsed them into a single loop using python's built-in filtering functionality.
 - Run-time improvement: ~0.01[sec/iter]
 
+#### `needs_replanning()`:
+- Attempted to implement periodic replanning but this increased runtime. This idea was abandoned and it was chosen to maintian event-oriented structure.
+- Allowed for bids to accumulate in an internal buffer and only trigger replanning once their number exceed a given threshold (set to a default of 1). This resembles Luke Johnson's implementation 

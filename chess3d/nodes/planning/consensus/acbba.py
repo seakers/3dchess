@@ -59,29 +59,8 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         state : SimulationAgentState = state.copy()
         winning_path = None
         winning_path_utility = 0.0
-
-        # find best placement in path
-        # self.log_task_sequence('original path', original_path, level=logging.WARNING)
-
-        ## insert strategy
-
-        # # TODO: currently only adds to end of plan.
-        # # generate possible path
-        # path = [scheduled_obs for scheduled_obs in original_path]
-        # path.insert(-1, (req, subtask_index, -1, -1))
-
-        # # place bid in path
-        # t_img = self.calc_imaging_time(state, path, req, subtask_index)
-        # params = {"req" : req.to_dict(), "subtask_index" : subtask_index, "t_img" : t_img}
-        # utility = self.utility_func(**params) * synergy_factor(**params) if t_img >= 0 else np.NINF
-
-        # path[-1] = (req, subtask_index, t_img, utility)
-
-        # # look for path with the best utility
-        # path_utility = self.__sum_path_utility(path)
-        # if path_utility > winning_path_utility and self.is_path_valid(state, path):
-        #     winning_path = [scheduled_obs for scheduled_obs in path]
-        #     winning_path_utility = path_utility
+        winning_t_img = -1
+        winning_utility = 0.0
 
         # TODO: Improve runtime efficiency:
         for i in range(len(original_path)+1):
@@ -134,6 +113,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             if path_utility > winning_path_utility:
                 winning_path = [scheduled_obs for scheduled_obs in path]
                 winning_path_utility = path_utility
+                _, _, winning_t_img, winning_utility = path[i]
         
         ## replacement strategy
         if winning_path is None:
@@ -157,7 +137,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         else:
             x = 1
 
-        return winning_path, winning_path_utility
+        return winning_path, winning_path_utility, winning_t_img, winning_utility
     
     def __sum_path_utility(self, path : list) -> float:
         """ Gives the total utility of a proposed observations sequence """

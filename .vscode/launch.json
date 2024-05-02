@@ -366,7 +366,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
-            "args": "acbba_runtime/two_sats"
+            "args": "acbba_runtime/scenario2_two_sats"
         },
     ],
     "compounds": [
