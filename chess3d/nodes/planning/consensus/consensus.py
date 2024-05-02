@@ -737,16 +737,21 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # begin bid process
         max_req = -1
-        while ( len(available_reqs) > 0                     # there are available tasks to be bid on
-                and len(bundle) < self.max_bundle_size      # there is space in the bundle
-                and max_req is not None                     # there is a request that maximizes utility
-            ):   
-             # find next best task to put in bundle (greedy)
+
+        # while ( len(available_reqs) > 0                     # there are available tasks to be bid on
+        #         and len(bundle) < self.max_bundle_size      # there is space in the bundle
+        #         and max_req is not None                     # there is a request that maximizes utility
+        #     ):   
+        for _ in range(self.max_bundle_size - len(self.bundle)):
+            if len(available_reqs) == 0 or max_req is None:
+                break
+
             max_req = None 
             max_subtask = None
             max_bid = None
-
             unavailable_reqs = []
+
+            # find next best task to put in bundle (greedy)
             for req, subtask_index in available_reqs:
                 
                 # calculate best bid and path for a given request and subtask
@@ -828,12 +833,16 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # ensure that every task in the bundle is included in the path
         for req, subtask_index, bid in bundle:
+            bid : Bid
             assert (req, subtask_index, bid.t_img, bid.winning_bid) in path
 
         # ensure the generated path is valid
         assert self.is_path_valid(state, path)
+
+        # ensure that bundle is within the allowed size
         assert len(bundle) <= self.max_bundle_size
 
+        # return results
         return results, bundle, path, changes 
     
     def _get_available_requests(self, 
