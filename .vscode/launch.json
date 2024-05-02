@@ -341,7 +341,33 @@
                 "PYTHONPATH": "${workspaceRoot}"
             },
             "args": "aist_proposal/scenario2_cbba_5"
-        }
+        },
+        {
+            "name": "ACBBA RUNTIME FIX - FULL SCENARIO2 (N=1)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "acbba_runtime/scenario2_cbba_1"
+        },
+        {
+            "name": "ACBBA RUNTIME FIX - 2 SATS",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/chess3d/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}/chess3d",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": "acbba_runtime/two_sats"
+        },
     ],
     "compounds": [
         //{

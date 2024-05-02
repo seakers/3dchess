@@ -186,7 +186,8 @@ def agent_factory(  scenario_name : str,
                     clock_config : float,
                     logger : logging.Logger,
                     initial_reqs : list,
-                    events_path : str
+                    events_path : str,
+                    delta : timedelta
                 ) -> SimulationAgent:
     ## unpack mission specs
     agent_name = agent_dict['name']
@@ -270,7 +271,11 @@ def agent_factory(  scenario_name : str,
             elif replanner_type == 'ACBBA':
                 max_bundle_size = replanner_dict.get('bundle size', 3)
                 dt_converge = replanner_dict.get('dt_convergence', 0.0)
-                replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge)
+                period = replanner_dict.get('period', 60.0)
+                threshold = replanner_dict.get('threshold', 1)
+                horizon = replanner_dict.get('horizon', delta.total_seconds())
+
+                replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
             
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
@@ -544,7 +549,8 @@ def main(   scenario_name : str,
                                     clock_config, 
                                     logger,
                                     measurement_reqs,
-                                    events_path
+                                    events_path,
+                                    delta
                                 )
             agents.append(agent)
             agent_port += 6
@@ -564,7 +570,8 @@ def main(   scenario_name : str,
                                     clock_config, 
                                     logger,
                                     measurement_reqs,
-                                    events_path
+                                    events_path,
+                                    delta
                                 )
             agents.append(agent)
             agent_port += 6

@@ -103,11 +103,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -205,11 +205,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -307,11 +307,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -409,11 +409,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -511,11 +511,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -613,11 +613,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -715,11 +715,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -817,11 +817,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -919,11 +919,11 @@
             "planner": {
                 "preplanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "replanner": {
                     "@type": "FIFO",
-                    "collaboration": "True"
+                    "collaboration": "False"
                 },
                 "utility": "LINEAR"
             },
@@ -949,6 +949,6 @@
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/aist_proposal/scenario2_fifo_colab//orbit_data/"
+        "outDir": "./scenarios/aist_proposal/scenario2_fifo_no_colab//orbit_data/"
     }
 }

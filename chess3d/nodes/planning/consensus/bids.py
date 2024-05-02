@@ -635,7 +635,7 @@ class UnconstrainedBid(Bid):
             subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
             
             if len(dependent_measurements) > 0: 
-                continue
+                break
             
             subtasks.append(UnconstrainedBid(   req.to_dict(), 
                                                 subtask_index,

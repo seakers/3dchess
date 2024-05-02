@@ -4,6 +4,7 @@ from typing import Callable
 import numpy as np
 
 from dmas.utils import runtime_tracker
+from numpy import Inf
 from traitlets import Callable
 
 from nodes.science.utility import synergy_factor
@@ -15,10 +16,9 @@ from nodes.science.reqs import MeasurementRequest
 
 
 class ACBBAReplanner(AbstractConsensusReplanner):
-    def __init__(self, utility_func: Callable, max_bundle_size: int = 1, dt_converge: float = 0, logger: logging.Logger = None) -> None:
-        super().__init__(utility_func, max_bundle_size, dt_converge, logger)
+    def __init__(self, utility_func: Callable, max_bundle_size: int = 1, dt_converge: float = 0, replan_period: float = 60.0, replan_threshold: int = 1, planning_horizon: float = np.Inf, logger: logging.Logger = None) -> None:
+        super().__init__(utility_func, max_bundle_size, dt_converge, replan_period, replan_threshold, planning_horizon, logger)
         self.prev_bundle = []
-        self.converged = True
 
     def _generate_bids_from_request(self, req : MeasurementRequest, state : SimulationAgentState) -> list:
         """ Creages bids from given measurement request """
@@ -64,6 +64,26 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         # self.log_task_sequence('original path', original_path, level=logging.WARNING)
 
         ## insert strategy
+
+        # # TODO: currently only adds to end of plan.
+        # # generate possible path
+        # path = [scheduled_obs for scheduled_obs in original_path]
+        # path.insert(-1, (req, subtask_index, -1, -1))
+
+        # # place bid in path
+        # t_img = self.calc_imaging_time(state, path, req, subtask_index)
+        # params = {"req" : req.to_dict(), "subtask_index" : subtask_index, "t_img" : t_img}
+        # utility = self.utility_func(**params) * synergy_factor(**params) if t_img >= 0 else np.NINF
+
+        # path[-1] = (req, subtask_index, t_img, utility)
+
+        # # look for path with the best utility
+        # path_utility = self.__sum_path_utility(path)
+        # if path_utility > winning_path_utility and self.is_path_valid(state, path):
+        #     winning_path = [scheduled_obs for scheduled_obs in path]
+        #     winning_path_utility = path_utility
+
+        # TODO: Improve runtime efficiency:
         for i in range(len(original_path)+1):
             # generate possible path
             path = [scheduled_obs for scheduled_obs in original_path]
@@ -72,14 +92,10 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
 
             # recalculate bids for each task in the path if needed
-            for j in range(len(path)):
-                req_i, subtask_j, t_img, u = path[j]
-
-                if j < i:
-                    # element from previous path is unchanged; maintain current bid
-                    path[j] = (req_i, subtask_j, t_img, u)
+            for j in range(i, len(path), 1):
+                req_i, subtask_j, t_img_prev, _ = path[j]
                     
-                elif j == i:
+                if j == i:
                     # new request and subtask are being added; recalculate bid
 
                     # calculate imaging time
@@ -101,8 +117,6 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                     req_i : MeasurementRequest
                     subtask_j : int
                     t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
-
-                    _, _, t_img_prev, _ = original_path[j - 1]
 
                     if abs(t_img - t_img_prev) <= 1e-3:
                         # path was unchanged; keep the remaining elements of the previous path                    
@@ -140,6 +154,8 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             assert len(tasks) == len(tasks_unique)
             assert len(tasks) == len(winning_path)
             assert self.is_path_valid(state, winning_path)
+        else:
+            x = 1
 
         return winning_path, winning_path_utility
     
@@ -277,6 +293,9 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                     th_i = state.attitude[0]
                     t_i = state.t
                 assert th_i is not None
+
+                if t_i < 0.0:
+                    return False
 
                 # calculate off-nadir angle for observation j
                 req_j, subtask_j, t_j, _ = path[j]

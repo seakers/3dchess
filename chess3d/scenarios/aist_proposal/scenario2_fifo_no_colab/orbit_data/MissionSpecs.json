@@ -100,18 +100,18 @@
                     "ta": 0.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -202,18 +202,18 @@
                     "ta": 120.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -304,18 +304,18 @@
                     "ta": 240.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -406,18 +406,18 @@
                     "ta": 40.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -508,18 +508,18 @@
                     "ta": 160.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -610,18 +610,18 @@
                     "ta": 280.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -712,18 +712,18 @@
                     "ta": 80.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -814,18 +814,18 @@
                     "ta": 200.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -916,18 +916,18 @@
                     "ta": 320.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
+                },              
+                "replanner" : {
+                    "@type" : "FIFO",
+                    "collaboration" : "False"
                 },
-                "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
-                "utility": "LINEAR"
+                "utility" : "LINEAR"
             },
-            "science": "True",
+            "science" : "True",
             "notifier": "False",
             "missionProfile": "3D-CHESS",
             "preplan": "False"
@@ -936,19 +936,18 @@
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/aist_proposal/base/resources/lake_event_points.csv"
+            "covGridFilePath": "./scenarios/aist_proposal/scenario2_base/resources/lake_event_points.csv"
         }
     ],
-    "scenario": {
-        "@type": "PREDEF",
-        "initialRequestsPath": "./scenarios/aist_proposal/base/resources/initial_requests_merged.csv",
-        "eventsPath": "./scenarios/aist_proposal/base/resources/all_events_formatted.csv",
-        "duration": 30.0,
-        "connectivity": "FULL",
-        "utility": "LINEAR"
-    },
+    "scenario": {   
+                    "@type": "PREDEF", 
+                    "initialRequestsPath" : "./scenarios/aist_proposal/scenario2_base/resources/initial_requests_merged.csv",
+                    "eventsPath" : "./scenarios/aist_proposal/scenario2_base/resources/all_events_formatted.csv", 
+                    "duration": 30.0, 
+                    "connectivity" : "FULL", 
+                    "utility" : "LINEAR"
+                },
     "settings": {
-        "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/aist_proposal/fifo_no_colab//orbit_data/"
+        "coverageType": "GRID COVERAGE"
     }
 }

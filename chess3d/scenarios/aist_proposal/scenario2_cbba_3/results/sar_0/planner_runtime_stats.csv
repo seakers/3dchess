@@ -1,0 +1,15 @@
+routine,t_avg,t_std,t_med,n
+_read_incoming_messages,0.001,0.007,0.0,1527
+__check_action_completion,0.0,0.0,0.0,1527
+replanner/__get_new_requests,0.0,0.0,0.0,1527
+replanner/__update_performed_requests,0.0,0.0,0.0,1527
+replanner/_update_access_times,0.033,1.247,0.0,1527
+replanner/update_percepts,0.034,1.247,0.0,1527
+replanner/check_request_completion,0.0,0.0,0.0,1527
+replanner/check_request_end_time,0.0,0.002,0.0,1527
+replanner/compare_bids,0.015,0.372,0.0,1527
+replanner/calc_imaging_time,0.173,0.584,0.081,20145
+replanner/calc_path_bid,1.091,2.61,0.593,3470
+replanner/planning_phase,43.841,186.533,24.966,94
+replanner/_schedule_broadcasts,0.021,0.025,0.016,94
+replanner/_schedule_maneuvers,0.107,0.216,0.048,94

@@ -206,7 +206,7 @@ class AbstractPlanner(ABC):
     def generate_plan(self, **kwargs) -> Plan:
         """ Creates a plan for the agent to perform """
 
-    @runtime_tracker
+    # @runtime_tracker
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
                              measurements : list, 
@@ -235,9 +235,8 @@ class AbstractPlanner(ABC):
         ## create a broadcast action for all unbroadcasted measurement requests
         for req in requests_to_broadcast:        
             # if found, create broadcast action
-            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-            
             if t_start >= 0:
+                msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
                 broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
                 
                 broadcasts.append(broadcast_action)

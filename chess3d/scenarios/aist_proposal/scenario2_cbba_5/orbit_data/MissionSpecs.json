@@ -101,13 +101,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -203,13 +199,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -305,13 +297,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -407,13 +395,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -509,13 +493,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -611,13 +591,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -713,13 +689,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -815,13 +787,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -917,13 +885,9 @@
                 }
             },
             "planner": {
-                "preplanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
-                },
                 "replanner": {
-                    "@type": "FIFO",
-                    "collaboration": "False"
+                    "@type": "ACBBA",
+                    "bundle size": 5
                 },
                 "utility": "LINEAR"
             },
@@ -936,19 +900,19 @@
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/aist_proposal/base/resources/lake_event_points.csv"
+            "covGridFilePath": "./scenarios/aist_proposal/scenario2_base/resources/lake_event_points.csv"
         }
     ],
     "scenario": {
         "@type": "PREDEF",
-        "initialRequestsPath": "./scenarios/aist_proposal/base/resources/initial_requests_merged.csv",
-        "eventsPath": "./scenarios/aist_proposal/base/resources/all_events_formatted.csv",
+        "initialRequestsPath": "./scenarios/aist_proposal/scenario2_base/resources/initial_requests_merged.csv",
+        "eventsPath": "./scenarios/aist_proposal/scenario2_base/resources/all_events_formatted.csv",
         "duration": 30.0,
         "connectivity": "FULL",
         "utility": "LINEAR"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/aist_proposal/fifo_no_colab//orbit_data/"
+        "outDir": "./scenarios/aist_proposal/scenario2_cbba_5//orbit_data/"
     }
 }

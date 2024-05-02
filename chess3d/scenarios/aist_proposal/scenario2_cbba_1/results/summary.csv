@@ -3,7 +3,7 @@ t_start,2020-01-01 00:00:00+00:00
 t_end,2020-01-02 00:00:00+00:00
 n_events,790
 n_events_detected,32
-n_events_obs,27
+n_events_obs,29
 n_reqs_total,158
 n_reqs_init,101
 n_reqs_gen,57
@@ -13,6 +13,6 @@ n_obs_unique,350
 n_obs_co,100
 n_obs,702
 u_max,373.1890651390677
-u_total,108.84559646261364
-u_norm,0.29166341308005017
-t_runtime,1709.7319710299998
+u_total,109.02441497085287
+u_norm,0.29214257639147406
+t_runtime,1855.6865574010008

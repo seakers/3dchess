@@ -242,7 +242,7 @@ class Plan(ABC):
         """ Checks if the current plan is empty """
         return not bool(self.actions)
     
-    def __iter__(self) -> list:
+    def __iter__(self):
         for action in self.actions:
             yield action
 
@@ -283,8 +283,9 @@ class Replan(Plan):
         super().__init__(*actions, t=t)
 
     def add(self, action: AgentAction, t: float) -> None:
-        if self.t_next < action.t_end:
-            raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
+        # if self.t_next < action.t_end:
+        #     return
+        #     # raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
 
         super().add(action, t)
 
