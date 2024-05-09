@@ -236,13 +236,13 @@ class ACBBAReplanner(AbstractConsensusReplanner):
             t_start = max(t_prev, req.t_start)
             access_times = [t_img 
                             for t_img in self.access_times[req.id][main_measurement]
-                            if t_start <= t_img <= req.t_end]
+                            if state.t <= t_start <= t_img <= req.t_end]
 
         else:
             t_start = max(state.t, req.t_start)
             access_times = [t_img 
                             for t_img in self.access_times[req.id][main_measurement]
-                            if t_start <= t_img <= req.t_end]
+                            if state.t <= t_start <= t_img <= req.t_end]
 
 
         while access_times:

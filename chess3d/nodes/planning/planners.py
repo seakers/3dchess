@@ -99,7 +99,9 @@ class AbstractPlanner(ABC):
                                         if req not in self.completed_requests])
         
         # update access times 
-        self._update_access_times(state, orbitdata[state.agent_name])
+        agent_orbitdata : OrbitData = orbitdata[state.agent_name]
+        self._update_access_times(state, agent_orbitdata)
+        self.access_times_timestep = agent_orbitdata.time_step
         
     @runtime_tracker
     def __get_new_requests( self, 

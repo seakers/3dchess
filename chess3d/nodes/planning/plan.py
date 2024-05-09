@@ -149,9 +149,10 @@ class Plan(ABC):
         """ returns a list of dicts """
 
         # get next available action to perform
+        eps = 1e-9
         plan_out = [action.to_dict() 
                     for action in self.actions 
-                    if action.t_start <= t <= action.t_end]
+                    if action.t_start - eps <= t <= action.t_end + eps]
 
         # idle if no more actions can be performed
         if not plan_out:
@@ -172,6 +173,9 @@ class Plan(ABC):
             self.__is_feasible(plan_out)
         except ValueError as e:
             raise RuntimeError(f"Unfeasible plan. {e}")
+
+        if t > 10906.5:
+            x = 1
 
         return plan_out    
     

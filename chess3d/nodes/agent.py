@@ -371,7 +371,7 @@ class SimulationAgent(Agent):
                 if t_curr < 1e-3 or action.t_end == np.Inf:
                     await asyncio.sleep(1e-2)
                 else:
-                    await asyncio.sleep(1e-3)
+                    await asyncio.sleep(1e-2)
 
             receive_broadcast = asyncio.create_task(self.external_inbox.get())
             timeout = asyncio.create_task(self.sim_wait(action.t_end - t_curr))
