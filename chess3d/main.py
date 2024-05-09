@@ -139,8 +139,8 @@ def precompute_orbitdata(scenario_name) -> str:
         else:
             print('Orbit data not found.')
 
-        print('Clearing \'orbitdata\' directory...')    
         # clear files if they exist
+        print('Clearing \'orbitdata\' directory...')    
         if os.path.exists(data_dir):
             for f in os.listdir(data_dir):
                 if os.path.isdir(os.path.join(data_dir, f)):
@@ -526,14 +526,13 @@ def main(   scenario_name : str,
     
     monitor = ResultsMonitor(clock_config, monitor_network_config, logger=logger)
 
-    # # create environment
+    # # unpack scenario
     scenario_config_dict : dict = scenario_dict['scenario']
-    env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
-    events_path = scenario_dict['scenario'].get('eventsPath', None)
-    agent_port = port + 6
+    events_path = scenario_config_dict.get('eventsPath', None)
     
     # Create agents 
     agents = []
+    agent_port = port + 6
     if spacecraft_dict is not None:
         for d in spacecraft_dict:
             # Create spacecraft agents
@@ -576,9 +575,11 @@ def main(   scenario_name : str,
             agents.append(agent)
             agent_port += 6
 
-    # if gstation_dict is not None:
-    #     # Create ground station agents
-    #     for d in gstation_dict:
+    if gstation_dict is not None:
+        # TODO Create ground station agents
+        raise NotImplementedError('Ground Station agents not yet implemented.')
+        # for d in gstation_dict:
+        #     pass
     #         d : dict
     #         agent_name = d['name']
     #         lat = d['latitude']
@@ -601,13 +602,19 @@ def main(   scenario_name : str,
     #         agent_port += 6
 
     # create environment
+    ## unpack config
+    env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
+    env_connectivity = scenario_config_dict.get('connectivity', 'FULL')
+    
+    ## subscribe to all elements in the network
     env_subs = []
     for agent in agents:
         agent_pubs : str = agent._network_config.external_address_map[zmq.PUB]
         for agent_pub in agent_pubs:
             env_sub : str = agent_pub.replace('*', 'localhost')
             env_subs.append(env_sub)
-
+    
+    ## create network config
     env_network_config = NetworkConfig( manager.get_network_config().network_name,
 											manager_address_map = {
 													zmq.REQ: [f'tcp://localhost:{port}'],
@@ -620,6 +627,7 @@ def main(   scenario_name : str,
                                                     zmq.SUB: env_subs
 											})
     
+    ## initialize environment
     environment = SimulationEnvironment(scenario_path, 
                                         results_path, 
                                         env_network_config, 

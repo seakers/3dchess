@@ -99,7 +99,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.incoming_bids = [  Bid.from_dict(msg.bid) 
                                 for msg in misc_messages 
                                 if isinstance(msg, MeasurementBidMessage)]
-        
+
         # compile incoming plans
         incoming_plans = [(msg.src, 
                            Plan([action_from_dict(**action) for action in msg.plan],t=msg.t_plan))
@@ -151,11 +151,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.incoming_bids.extend(new_req_bids)
         
         # perform consesus phase
-        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        # print(f'length of path: {len(self.path)}\nbids received: {len(self.incoming_bids)}\n')
-
-        if external_plan_bids:
-            x = 1
+        # DEBUGGING OUTPUTS --------------
+        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+        print(f'bundle:')
+        for req, subtask_index, bid in self.bundle:
+            req : MeasurementRequest
+            bid : Bid
+            id_short = req.id.split('-')[0]
+            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.winning_bid)}')
+        print('')
+        # ---------------------------------
 
         self.results, self.bundle, \
             self.path, _, bids_to_rebroadcasts = self.consensus_phase( state,
@@ -168,14 +174,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         assert self.is_path_valid(state, self.path)
                        
-        # self.log_results('CONSENSUS PHASE', state, self.results)
-        # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}')
-        # print('')
+        # DEBUGGING OUTPUTS --------------
+        self.log_results('CONSENSUS PHASE', state, self.results)
+        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+        print(f'bundle:')
+        for req, subtask_index, bid in self.bundle:
+            req : MeasurementRequest
+            bid : Bid
+            id_short = req.id.split('-')[0]
+            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.winning_bid)}')
+        print('')
+        # ---------------------------------
 
         if len(self.bids_to_rebroadcasts) >= self.replan_threshold:
             return True
@@ -381,10 +390,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
             bid_to_rebroadcast : Bid
             req_id = bid_to_rebroadcast.req['id']
 
-            if bid_to_rebroadcast.performed:
-                x = 1
-                continue
-
             if req_id not in bids:
                 bids[req_id] = {}
             
@@ -505,8 +510,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
         rebroadcasts.extend(exp_rebroadcasts)
         rebroadcasts.extend(comp_rebroadcasts)
 
-        return results, bundle, path, changes, rebroadcasts
+        if rebroadcasts:
+            x = 1
 
+        return results, bundle, path, changes, rebroadcasts
     
     @runtime_tracker
     def check_request_completion(self, 

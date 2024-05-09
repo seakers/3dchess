@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
+from numpy import Inf
 import pandas as pd
 
 from messages import *
@@ -527,3 +528,13 @@ class CommonToDoPreplanner(FIFOPreplanner):
                  logger: logging.Logger = None, 
                  **kwargs) -> None:
         super().__init__(utility_func, period, horizon, True, logger, **kwargs)
+
+
+class PredefinedPlanner(AbstractPreplanner):
+    def __init__(self, 
+                 utility_func: Callable[[], Any], 
+                 horizon: float = np.Inf, 
+                 period: float = np.Inf, 
+                 logger: logging.Logger = None
+                 ) -> None:
+        super().__init__(utility_func, horizon, period, logger)

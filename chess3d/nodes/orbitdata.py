@@ -71,7 +71,7 @@ class OrbitData:
         # inter-satellite communication access times
         self.isl_data = { satellite_name : isl_data[satellite_name].sort_values(by=['start index']) 
                          for satellite_name in isl_data.keys() }
-
+        
         # ground station access times
         self.gs_access_data = gs_access_data.sort_values(by=['start index'])
         
@@ -368,7 +368,9 @@ class OrbitData:
                                 ):
                                 # modify connectivity if specified 
                                 columns = ['start index', 'end index']
-                                data = [[0.0, timedelta(days=mission_dict["duration"]).seconds]]
+                                duration = timedelta(days=float(mission_dict["duration"]))
+                                data = [[0.0, duration.total_seconds()]]
+                                assert data[0][1] > 0.0
                                 isl_data[receiver_name] = pd.DataFrame(data=data, columns=columns)
                             else:
                                 # load connectivity
@@ -382,7 +384,9 @@ class OrbitData:
                                 ):
                                 # modify connectivity if specified 
                                 columns = ['start index', 'end index']
-                                data = [[0.0, timedelta(days=mission_dict["duration"]).seconds]]
+                                duration = timedelta(days=float(mission_dict["duration"]))
+                                data = [[0.0, duration.total_seconds()]]
+                                assert data[0][1] > 0.0
                                 isl_data[sender_name] = pd.DataFrame(data=data, columns=columns)
                             else:
                                 # load connectivity
