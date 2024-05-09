@@ -151,16 +151,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.incoming_bids.extend(new_req_bids)
         
         # perform consesus phase
-        # DEBUGGING OUTPUTS --------------
-        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-        print(f'bundle:')
-        for req, subtask_index, bid in self.bundle:
-            req : MeasurementRequest
-            bid : Bid
-            id_short = req.id.split('-')[0]
-            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.winning_bid)}')
-        print('')
+        # ---------------------------------
+        # DEBUGGING OUTPUTS 
+        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.winning_bid)}')
+        # print('')
         # ---------------------------------
 
         self.results, self.bundle, \
@@ -173,17 +174,18 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.bids_to_rebroadcasts.extend(bids_to_rebroadcasts)
         
         assert self.is_path_valid(state, self.path)
-                       
-        # DEBUGGING OUTPUTS --------------
-        self.log_results('CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-        print(f'bundle:')
-        for req, subtask_index, bid in self.bundle:
-            req : MeasurementRequest
-            bid : Bid
-            id_short = req.id.split('-')[0]
-            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.winning_bid)}')
-        print('')
+        
+        # ---------------------------------
+        # DEBUGGING OUTPUTS 
+        # self.log_results('CONSENSUS PHASE', state, self.results)
+        # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.winning_bid)}')
+        # print('')
         # ---------------------------------
 
         if len(self.bids_to_rebroadcasts) >= self.replan_threshold:
@@ -314,6 +316,13 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # -------------------------------
         # DEBUG PRINTOUTS
         # self.log_results('PLANNING PHASE', state, self.results)
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.winning_bid)}')
+        # print('')
         # -------------------------------
 
         # output plan
@@ -773,7 +782,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         if len(bundle) == 0: # create bundle from scratch
             # generate path 
-            max_path = self._generate_path(state, available_reqs)
+            max_path = self._generate_path(state, results, available_reqs)
 
             # update bundle and results 
             bundle = []
@@ -863,7 +872,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         #             bid = results[req.id][subtask_index]
         #             bundle.append((req, subtask_index, bid))
     
-    def _generate_path(self, state :SimulationAgentState, available_reqs : list) -> list:
+    def _generate_path(self, state :SimulationAgentState, results : dict, available_reqs : list) -> list:
         # count maximum number of paths to be searched
         n_max = 0
         for n in range(1,self.max_bundle_size+1):
@@ -887,10 +896,19 @@ class AbstractConsensusReplanner(AbstractReplanner):
             path_i : list = queue.get()
                 
             # check if it out-performs the current best path
+            if any([results[req.id][subtask_index].winning_bid >= u_exp     # at least one bid is outbid by competitors
+                    for req,subtask_index,_,u_exp in path_i]):
+                # ignore path
+                continue
+            
             path_utility = sum([u_exp for _,_,_,u_exp in path_i])
-            if path_utility > max_path_utility:
+            if (path_utility > max_path_utility                             # path utility is increased
+                and all([results[req.id][subtask_index].winning_bid < u_exp # all new bids outbid competitors
+                         for req,subtask_index,_,u_exp in path_i])
+                ):
                 max_path = [path_element for path_element in path_i]
                 max_path_utility = path_utility
+
 
             # check if there is room to be added to the bundle
             if len(path_i) >= self.max_bundle_size:
