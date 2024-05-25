@@ -2,7 +2,7 @@
 
 Repository containing tools related to NASA's 3DCHESS AIST project. 
 
-See each dorectory for installation and use instructions.
+See each directory for installation and use instructions.
 
 ---
 ## Contact 
