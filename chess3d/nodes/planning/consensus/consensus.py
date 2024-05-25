@@ -339,7 +339,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ creates a new plan to be performed by the agent based on the results of the planning phase """
 
         # schedule measurements
-        measurements : list = self._schdule_measurements(results, path)
+        measurements : list = self._schedule_measurements(results, path)
 
         # schedule bruadcasts
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
@@ -353,7 +353,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         return Replan(measurements, broadcasts, maneuvers, waits, t=state.t, t_next=state.t + self.replan_period)
     
     @runtime_tracker
-    def _schdule_measurements(self, results : dict, path : list) -> list:
+    def _schedule_measurements(self, results : dict, path : list) -> list:
         """ compiles and merges lists of measurement actions to be performed by the agent """
 
         measurements = []
