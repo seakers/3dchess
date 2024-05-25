@@ -165,28 +165,6 @@ class SimulationAgent(Agent):
 
             if isinstance(resp_msg, AgentStateMessage):
                 # update state
-                pos, vel, t = resp_msg.state['pos'], resp_msg.state['vel'], resp_msg.state['t']
-            
-                # # update time
-                # if abs(t - self.get_current_time()) >= 1e-3:
-                #     x=1
-
-                # if t > self.get_current_time():
-                #     await self.update_current_time(t)                
-
-                # if (not self.state.comp_vectors(self.state.pos, pos) or 
-                #     not self.state.comp_vectors(self.state.vel, vel)
-                #     ):
-                #     self.state.update_state(self.get_current_time(), state=resp_msg.state)
-                #     self.state_history.append(self.state.to_dict())
-                #     senses.append(resp_msg)
-                    
-                # else:
-                #     state_msg = AgentStateMessage(  self.get_element_name(), 
-                #                                     self.get_element_name(),
-                #                                     self.state.to_dict()
-                #                                 )
-                #     senses.append(state_msg) 
                 state_msg = AgentStateMessage(  self.get_element_name(), 
                                                 self.get_element_name(),
                                                 self.state.to_dict()
@@ -331,12 +309,8 @@ class SimulationAgent(Agent):
         self.state_history.append(self.state.to_dict())
 
         if dt > 0:
-            try:
-                # perfrom time wait if needed
-                await self.sim_wait(dt)
-
-            except asyncio.CancelledError:
-                return
+            # perfrom time wait if needed
+            await self.perform_wait_for_messages(WaitForMessages(t, t+dt))
 
             # update the agent's state
             status, _ = self.state.perform_action(action, self.get_current_time())
@@ -347,7 +321,7 @@ class SimulationAgent(Agent):
     @runtime_tracker
     async def perform_broadcast(self, action : BroadcastMessageAction) -> str:
         # unpackage action
-        msg_out = message_from_dict(**action.msg)
+        msg_out : SimulationMessage = message_from_dict(**action.msg)
 
         # update state
         self.state.update_state(self.get_current_time(), status=SimulationAgentState.MESSAGING)
@@ -357,6 +331,8 @@ class SimulationAgent(Agent):
         msg_out.src = self.get_element_name()
         msg_out.dst = self.get_network_name()
         await self.send_peer_broadcast(msg_out)
+
+        self.log(f'\n\tSent broadcast!\n\tfrom:\t{msg_out.src}\n\tto:\t{msg_out.dst}',level=logging.DEBUG)
 
         return AgentAction.COMPLETED
     
@@ -370,12 +346,12 @@ class SimulationAgent(Agent):
             return AgentAction.COMPLETED
         
         else:
-            if isinstance(self._clock_config, FixedTimesStepClockConfig) or isinstance(self._clock_config, EventDrivenClockConfig):
-                # give the agent time to finish sending/processing messages before submitting a tic-request
-                if t_curr < 1e-3 or action.t_end == np.Inf:
-                    await asyncio.sleep(1e-2)
-                else:
-                    await asyncio.sleep(1e-3)
+            if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
+                    or isinstance(self._clock_config, EventDrivenClockConfig)) 
+                and self.external_inbox.empty()):
+                # give the agent time to finish processing messages before submitting a tic-request
+                t_wait = 1e-2 if t_curr < 1e-3 or action.t_end == np.Inf else 1e-3
+                await asyncio.sleep(t_wait)
 
             receive_broadcast = asyncio.create_task(self.external_inbox.get())
             timeout = asyncio.create_task(self.sim_wait(action.t_end - t_curr))
@@ -394,6 +370,7 @@ class SimulationAgent(Agent):
 
                     # update action completion status
                     return AgentAction.COMPLETED                
+
             else:
                 # timer ran out or time advanced
                 try:

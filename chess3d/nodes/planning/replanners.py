@@ -32,7 +32,7 @@ class AbstractReplanner(AbstractPlanner):
         
         self.preplan : Preplan = Preplan(t=-1.0)
 
-    def update_precepts(self, 
+    def update_percepts(self, 
                         state: SimulationAgentState, 
                         current_plan: Plan, 
                         completed_actions: list, 
@@ -48,7 +48,7 @@ class AbstractReplanner(AbstractPlanner):
         if state.t == current_plan.t and isinstance(current_plan, Preplan): 
             self.preplan = current_plan.copy() 
         
-        return super().update_precepts(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, orbitdata)
+        return super().update_percepts(state, current_plan, completed_actions, aborted_actions, pending_actions, incoming_reqs, generated_reqs, relay_messages, misc_messages, orbitdata)
 
     def needs_planning(self, *_) -> bool:
         # check if there any requests that have not been broadcasted yet
@@ -166,19 +166,20 @@ class ReactivePlanner(AbstractReplanner):
                       ) -> Plan:
         
         # schedule measurements
-        measurements : list = self._schedule_measurements(state, current_plan, clock_config)
+        measurements : list = self._schedule_measurements(state, current_plan, clock_config, orbitdata)
+        assert self.is_observation_path_valid(state, measurements, orbitdata)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, measurements, orbitdata)
 
         # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config)
+        maneuvers : list = self._schedule_maneuvers(state, measurements, broadcasts, clock_config, orbitdata)
         
         # generate plan from actions
         return Replan(measurements, maneuvers, broadcasts, t=state.t, t_next=self.preplan.t_next)    
 
     @abstractmethod
-    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, clock_config : ClockConfig) -> list:
+    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, clock_config : ClockConfig, orbitdata : dict) -> list:
         pass
 
 class FIFOReplanner(ReactivePlanner):
@@ -193,7 +194,7 @@ class FIFOReplanner(ReactivePlanner):
         self.other_plans = {}
         self.ignored_reqs = []
 
-    def update_precepts(self, 
+    def update_percepts(self, 
                         state: SimulationAgentState, 
                         current_plan: Plan, 
                         completed_actions: list, 
@@ -207,7 +208,7 @@ class FIFOReplanner(ReactivePlanner):
                         ) -> None:
         
         # initialize update
-        super().update_precepts(state, 
+        super().update_percepts(state, 
                                 current_plan, 
                                 completed_actions, 
                                 aborted_actions, 
@@ -280,7 +281,7 @@ class FIFOReplanner(ReactivePlanner):
                 if t_accesses and req not in self.ignored_reqs:
                     # measurement request is accessible and hasent been considered yet
                     return True
-                
+
         return super().needs_planning(state, current_plan) or len(self.pending_relays) > 0
                 
     @runtime_tracker
@@ -310,13 +311,14 @@ class FIFOReplanner(ReactivePlanner):
         return available_reqs
 
     @runtime_tracker
-    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, _ : ClockConfig) -> list:
+    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, _ : ClockConfig, orbitdata : dict) -> list:
         """ 
         Schedule a sequence of observations based on the current state of the agent 
         
         ### Arguments:
             - state (:obj:`SimulationAgentState`): state of the agent at the time of planning
         """
+        
         my_measurements = [ action
                             for action in current_plan
                             if isinstance(action, MeasurementAction)]
@@ -380,28 +382,46 @@ class FIFOReplanner(ReactivePlanner):
             for instrument in self.access_times[req.id]:
                 if self.access_times[req.id][instrument]:
                     # measurement request is accessible and hasent been considered yet
-                    for subtask_index in range(len(req.measurement_groups)):
+                    accessible = False
+                    for subtask_index in range(len(req.measurement_groups)):                        
                         main_instrument, _ = req.measurement_groups[subtask_index]
                         if main_instrument == instrument:
                             available_reqs.append((req, subtask_index))
+                            accessible = True
                             break
+                    
+                    if not accessible and req not in self.ignored_reqs:
+                        # gp is not accessible by agent; add to list of ignored requests
+                        self.ignored_reqs.append(req)
+
+                elif req not in self.ignored_reqs:
+                    # gp is not accessible by agent; add to list of ignored requests
+                    self.ignored_reqs.append(req)
 
         planned_reqs = [(MeasurementRequest.from_dict(action.measurement_req), action.subtask_index)
                         for action in my_measurements]
 
         if isinstance(state, SatelliteAgentState):
-            access_times = {}
             for req, subtask_index in available_reqs:
+                req : MeasurementRequest
+                if req.id not in self.access_times:
+                    continue
                 if (req, subtask_index) in planned_reqs:
                     continue
-                req : MeasurementRequest
-                
-                if req.id not in access_times:
-                    access_times[req.id] = {instrument : [] for instrument in req.measurements}
                 
                 # get access times for all available measurements
                 main_measurement, _ = req.measurement_groups[subtask_index]  
                 access_times = [t_img for t_img in self.access_times[req.id][main_measurement]]
+
+                # remove access times that overlap with existing measurements
+                for action in my_measurements:
+                    action : MeasurementAction
+                    access_times = [t_img 
+                                    for t_img in access_times
+                                    if not (action.t_start < t_img < action.t_end)]
+                    
+                    if not access_times:
+                        break
 
                 while access_times:
                     t_img = access_times.pop(0)
@@ -420,45 +440,14 @@ class FIFOReplanner(ReactivePlanner):
                     proposed_path = [action for action in my_measurements]
                     proposed_path.insert(i, proposed_measurement)
 
-                    if self.is_path_valid(state, proposed_path):
-                        my_measurements = proposed_path
+                    if self.is_observation_path_valid(state, proposed_path, orbitdata):
+                        my_measurements = [action for action in proposed_path]
                         break
+
         else:
             raise NotImplementedError(f'fifo replanner not yet supported for agents with state of type {type(state)}.')
 
         return my_measurements
-
-    def is_path_valid(self, state : SimulationAgentState, measurements : list) -> bool:
-        
-        if isinstance(state, SatelliteAgentState):
-            for j in range(len(measurements)):
-                i = j - 1
-
-                # estimate maneuver time 
-                if i >= 0:
-                    measurement_i : MeasurementAction = measurements[i]
-                    state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
-                    req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                    th_i = state_i.calc_off_nadir_agle(req_i)
-                    t_i = measurement_i.t_end
-                else:
-                    th_i = state.attitude[0]
-                    t_i = state.t
-
-                measurement_j : MeasurementAction = measurements[j]
-                state_j : SatelliteAgentState = state.propagate(measurement_j.t_start)
-                req_j : MeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-                th_j = state_j.calc_off_nadir_agle(req_j)
-
-                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                dt_measurements = measurement_j.t_start - t_i
-
-                # check if there's enough time to maneuver from one observation to another
-                if dt_maneuver > dt_measurements:
-                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
-                    return False
-
-        return True
     
     @runtime_tracker
     def _schedule_broadcasts(self, 

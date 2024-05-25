@@ -216,7 +216,7 @@ class Bid(ABC):
                     return BidComparisonResults.UPDATE,\
                           RebroadcastComparisonResults.REBROADCAST_OTHER
                 
-                elif other.winning_bid == self.winning_bid and self._tie_breaker(other, self):
+                elif other.winning_bid == self.winning_bid and self != self._tie_breaker(other, self):
                     # update & rebroadcast other's bid
                     return BidComparisonResults.UPDATE, \
                         RebroadcastComparisonResults.REBROADCAST_OTHER
@@ -302,7 +302,7 @@ class Bid(ABC):
                     return BidComparisonResults.UPDATE,\
                         RebroadcastComparisonResults.REBROADCAST_OTHER
                 
-                elif other.winning_bid == self.winning_bid and self._tie_breaker(other, self): 
+                elif other.winning_bid == self.winning_bid and self != self._tie_breaker(other, self): 
                     # update & rebroadcast other's bid
                     return BidComparisonResults.UPDATE,\
                           RebroadcastComparisonResults.REBROADCAST_OTHER
@@ -430,6 +430,8 @@ class Bid(ABC):
         self.t_update = t
         self.performed = other.performed if not self.performed else True # Check if this hold true for all values
 
+        assert self.t_img == other.t_img
+
     def _reset(self, t_update) -> None:
         """
         Resets the values of this bid while keeping track of lates update time
@@ -474,7 +476,7 @@ class Bid(ABC):
         else:
             return bid2
 
-    def set_bid(self, new_bid : Union[int, float], t_img : Union[int, float], t_update : Union[int, float]) -> None:
+    def set(self, new_bid : Union[int, float], t_img : Union[int, float], t_update : Union[int, float]) -> None:
         """
         Sets new values for this bid
 
@@ -633,7 +635,7 @@ class UnconstrainedBid(Bid):
             subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
             
             if len(dependent_measurements) > 0: 
-                continue
+                break
             
             subtasks.append(UnconstrainedBid(   req.to_dict(), 
                                                 subtask_index,

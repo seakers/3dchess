@@ -149,7 +149,10 @@ class Plan(ABC):
         """ returns a list of dicts """
 
         # get next available action to perform
-        plan_out = [action.to_dict() for action in self.actions if action.t_start <= t <= action.t_end]
+        eps = 1e-9
+        plan_out = [action.to_dict() 
+                    for action in self.actions 
+                    if action.t_start - eps <= t <= action.t_end + eps]
 
         # idle if no more actions can be performed
         if not plan_out:
@@ -158,13 +161,21 @@ class Plan(ABC):
             plan_out.append(action.to_dict())     
 
         # sort plan in order of ascending start time 
-        plan_out.sort(key=lambda a: a['t_start'])
+        plan_out.sort(key=lambda a: a['t_end'])
+
+        if any([action_out['t_start'] == action_out['t_end']
+                for action_out in plan_out]):
+            plan_out = [action_out for action_out in plan_out
+                       if action_out['t_start'] == action_out['t_end']]
 
         # check plan feasibility
         try:
             self.__is_feasible(plan_out)
         except ValueError as e:
             raise RuntimeError(f"Unfeasible plan. {e}")
+
+        if t > 10906.5:
+            x = 1
 
         return plan_out    
     
@@ -235,7 +246,7 @@ class Plan(ABC):
         """ Checks if the current plan is empty """
         return not bool(self.actions)
     
-    def __iter__(self) -> list:
+    def __iter__(self):
         for action in self.actions:
             yield action
 
@@ -276,8 +287,9 @@ class Replan(Plan):
         super().__init__(*actions, t=t)
 
     def add(self, action: AgentAction, t: float) -> None:
-        if self.t_next < action.t_end:
-            raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
+        # if self.t_next < action.t_end:
+        #     return
+        #     # raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
 
         super().add(action, t)
 

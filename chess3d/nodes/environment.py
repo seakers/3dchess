@@ -111,12 +111,17 @@ class SimulationEnvironment(EnvironmentNode):
         self.stats = {}
         self.events_path = events_path
 
+        self.t_0 = None
+        self.t_f = None
+
     async def setup(self) -> None:
         # nothing to set up
         return
 
     async def live(self) -> None:
         try:
+            self.t_0 = time.perf_counter()
+
             # create port poller 
             poller = azmq.Poller()
 
@@ -405,6 +410,8 @@ class SimulationEnvironment(EnvironmentNode):
 
     async def teardown(self) -> None:
         try:
+            self.t_f = time.perf_counter()
+
             # print final time
             self.log(f'Environment shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
             
@@ -429,7 +436,8 @@ class SimulationEnvironment(EnvironmentNode):
                                 t_img,
                                 measurement_data['u_max'],
                                 measurement_data['u_exp'],
-                                measurement_data['u']]
+                                measurement_data['u']
+                            ]
                 data.append(line_data)
 
             received_measurements_df = DataFrame(data, columns=headers)
@@ -503,6 +511,7 @@ class SimulationEnvironment(EnvironmentNode):
             measurement_reqs = [req.copy() for req in self.measurement_reqs]
             measurement_reqs.extend([req.copy() for req in self.initial_reqs])
 
+        
             for req in measurement_reqs:
                 req_id : str = req.id
                 req_id_short = req_id.split('-')[0]
@@ -513,12 +522,9 @@ class SimulationEnvironment(EnvironmentNode):
                 req_utility = 0
                 for idx, row_i in req_measurements.iterrows():
                     t_img_i = row_i['t_img']
-                    measurement_i = row_i['measurement']
+                    measurement_i = row_i['measurement']                   
+
                     correlated_measurements = []
-
-                    if (req_id_short, measurement_i) not in unique_observations:
-                        unique_observations.append( (req_id_short, measurement_i) )
-
                     for _, row_j in req_measurements.iterrows():
                         measurement_j = row_j['measurement']
                         t_img_j = row_j['t_img']
@@ -555,7 +561,10 @@ class SimulationEnvironment(EnvironmentNode):
                                 "t_img" : t_img_i
                             }
                     utility = self.utility_func(**params) * synergy_factor(**params)
-                    req_utility += utility
+
+                    if (req_id_short, measurement_i) not in unique_observations:
+                        unique_observations.append( (req_id_short, measurement_i) )
+                        req_utility += utility
 
                     received_measurements_df.loc[idx,'u']=utility
 
@@ -617,7 +626,8 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_obs', len(self.measurement_history)],
                         ['u_max', max_utility], 
                         ['u_total', utility_total],
-                        ['u_norm', utility_total/max_utility]
+                        ['u_norm', utility_total/max_utility],
+                        ['t_runtime', self.t_f - self.t_0]
                     ]
 
             # log and save results

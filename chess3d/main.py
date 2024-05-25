@@ -62,52 +62,56 @@ def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
 
     with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
         # check if data has been previously calculated
-        if os.path.exists(data_dir + 'MissionSpecs.json'):
-            with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
-                scenario_dict : dict = json.load(scenario_specs)
-                mission_dict : dict = json.load(mission_specs)
+        if not os.path.exists(data_dir + 'MissionSpecs.json'):
+            return True
+            
+        with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
+            scenario_dict : dict = json.load(scenario_specs)
+            mission_dict : dict = json.load(mission_specs)
 
-                scenario_dict.pop('settings')
-                mission_dict.pop('settings')
+            scenario_dict.pop('settings')
+            mission_dict.pop('settings')
+            scenario_dict.pop('scenario')
+            mission_dict.pop('scenario')
 
-                if (
-                       scenario_dict['epoch'] != mission_dict['epoch']
-                    or scenario_dict['duration'] != mission_dict['duration']
-                    or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
-                    or scenario_dict['grid'] != mission_dict['grid']
-                    # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
-                    ):
+            if (
+                    scenario_dict['epoch'] != mission_dict['epoch']
+                or scenario_dict['duration'] != mission_dict['duration']
+                or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
+                or scenario_dict['grid'] != mission_dict['grid']
+                # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
+                ):
+                return True
+            
+            if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
+                if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
                     return True
                 
-                if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
-                    if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
+                for i in range(len(scenario_dict['spacecraft'])):
+                    scenario_sat : dict = scenario_dict['spacecraft'][i]
+                    mission_sat : dict = mission_dict['spacecraft'][i]
+                    
+                    if "planner" in scenario_sat:
+                        scenario_sat.pop("planner")
+                    if "science" in scenario_sat:
+                        scenario_sat.pop("science")
+                    if "notifier" in scenario_sat:
+                        scenario_sat.pop("notifier") 
+                    if "missionProfile" in scenario_sat:
+                        scenario_sat.pop("missionProfile")
+
+                    if "planner" in mission_sat:
+                        mission_sat.pop("planner")
+                    if "science" in mission_sat:
+                        mission_sat.pop("science")
+                    if "notifier" in mission_sat:
+                        mission_sat.pop("notifier") 
+                    if "missionProfile" in mission_sat:
+                        mission_sat.pop("missionProfile")
+
+                    if scenario_sat != mission_sat:
                         return True
                     
-                    for i in range(len(scenario_dict['spacecraft'])):
-                        scenario_sat : dict = scenario_dict['spacecraft'][i]
-                        mission_sat : dict = mission_dict['spacecraft'][i]
-                        
-                        if "planner" in scenario_sat:
-                            scenario_sat.pop("planner")
-                        if "science" in scenario_sat:
-                            scenario_sat.pop("science")
-                        if "notifier" in scenario_sat:
-                            scenario_sat.pop("notifier") 
-                        if "missionProfile" in scenario_sat:
-                            scenario_sat.pop("missionProfile")
-
-                        if "planner" in mission_sat:
-                            mission_sat.pop("planner")
-                        if "science" in mission_sat:
-                            mission_sat.pop("science")
-                        if "notifier" in mission_sat:
-                            mission_sat.pop("notifier") 
-                        if "missionProfile" in mission_sat:
-                            mission_sat.pop("missionProfile")
-
-                        if scenario_sat != mission_sat:
-                            return True
-
     return False
 
 def precompute_orbitdata(scenario_name) -> str:
@@ -118,12 +122,12 @@ def precompute_orbitdata(scenario_name) -> str:
     scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
     data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
    
-    changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
-
     if not os.path.exists(data_dir):
         # if directory does not exists, create it
         os.mkdir(data_dir)
         changes_to_scenario = True
+    else:
+        changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
 
     if not changes_to_scenario:
         # if propagation data files already exist, load results
@@ -135,8 +139,8 @@ def precompute_orbitdata(scenario_name) -> str:
         else:
             print('Orbit data not found.')
 
-        print('Clearing \'orbitdata\' directory...')    
         # clear files if they exist
+        print('Clearing \'orbitdata\' directory...')    
         if os.path.exists(data_dir):
             for f in os.listdir(data_dir):
                 if os.path.isdir(os.path.join(data_dir, f)):
@@ -145,7 +149,7 @@ def precompute_orbitdata(scenario_name) -> str:
                     os.rmdir(data_dir + f)
                 else:
                     os.remove(os.path.join(data_dir, f)) 
-        print('\'orbitddata\' cleared!')
+        print('\'orbitdata\' cleared!')
 
         with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
             # load json file as dictionary
@@ -182,7 +186,8 @@ def agent_factory(  scenario_name : str,
                     clock_config : float,
                     logger : logging.Logger,
                     initial_reqs : list,
-                    events_path : str
+                    events_path : str,
+                    delta : timedelta
                 ) -> SimulationAgent:
     ## unpack mission specs
     agent_name = agent_dict['name']
@@ -248,7 +253,7 @@ def agent_factory(  scenario_name : str,
             horizon = preplanner_dict.get('horizon', np.Inf)
 
             if preplanner_type == "FIFO":
-                collaboration = preplanner_dict.get('collaboration ', "False") == "True"
+                collaboration = preplanner_dict.get('collaboration', "False") == "True"
                 preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
             else:
                 raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
@@ -260,13 +265,17 @@ def agent_factory(  scenario_name : str,
             replanner_type = replanner_dict.get('@type', None)
             
             if replanner_type == 'FIFO':
-                collaboration = replanner_dict.get('collaboration ', "False") == "True"
+                collaboration = replanner_dict.get('collaboration', "False") == "True"
                 replanner = FIFOReplanner(utility_func, collaboration)
 
             elif replanner_type == 'ACBBA':
                 max_bundle_size = replanner_dict.get('bundle size', 3)
                 dt_converge = replanner_dict.get('dt_convergence', 0.0)
-                replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge)
+                period = replanner_dict.get('period', 60.0)
+                threshold = replanner_dict.get('threshold', 1)
+                horizon = replanner_dict.get('horizon', delta.total_seconds())
+
+                replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
             
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
@@ -517,14 +526,13 @@ def main(   scenario_name : str,
     
     monitor = ResultsMonitor(clock_config, monitor_network_config, logger=logger)
 
-    # # create environment
+    # # unpack scenario
     scenario_config_dict : dict = scenario_dict['scenario']
-    env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
-    events_path = scenario_dict['scenario'].get('eventsPath', None)
-    agent_port = port + 6
+    events_path = scenario_config_dict.get('eventsPath', None)
     
     # Create agents 
     agents = []
+    agent_port = port + 6
     if spacecraft_dict is not None:
         for d in spacecraft_dict:
             # Create spacecraft agents
@@ -540,7 +548,8 @@ def main(   scenario_name : str,
                                     clock_config, 
                                     logger,
                                     measurement_reqs,
-                                    events_path
+                                    events_path,
+                                    delta
                                 )
             agents.append(agent)
             agent_port += 6
@@ -560,43 +569,52 @@ def main(   scenario_name : str,
                                     clock_config, 
                                     logger,
                                     measurement_reqs,
-                                    events_path
+                                    events_path,
+                                    delta
                                 )
             agents.append(agent)
             agent_port += 6
 
     if gstation_dict is not None:
-        # Create ground station agents
-        for d in gstation_dict:
-            d : dict
-            agent_name = d['name']
-            lat = d['latitude']
-            lon = d['longitude']
-            alt = d['altitude']
-            initial_state = GroundStationAgentState(lat,
-                                                    lon,
-                                                    alt)
+        # TODO Create ground station agents
+        raise NotImplementedError('Ground Station agents not yet implemented.')
+        # for d in gstation_dict:
+        #     pass
+    #         d : dict
+    #         agent_name = d['name']
+    #         lat = d['latitude']
+    #         lon = d['longitude']
+    #         alt = d['altitude']
+    #         initial_state = GroundStationAgentState(lat,
+    #                                                 lon,
+    #                                                 alt)
 
-            agent = GroundStationAgent( agent_name, 
-                                        results_path,
-                                        scenario_name,
-                                        agent_port,
-                                        manager_network_config,
-                                        initial_state,
-                                        utility_function[env_utility_function],
-                                        initial_reqs=measurement_reqs,
-                                        logger=logger)
-            agents.append(agent)
-            agent_port += 6
+    #         agent = GroundStationAgent( agent_name, 
+    #                                     results_path,
+    #                                     scenario_name,
+    #                                     agent_port,
+    #                                     manager_network_config,
+    #                                     initial_state,
+    #                                     utility_function[env_utility_function],
+    #                                     initial_reqs=measurement_reqs,
+    #                                     logger=logger)
+    #         agents.append(agent)
+    #         agent_port += 6
 
     # create environment
+    ## unpack config
+    env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
+    env_connectivity = scenario_config_dict.get('connectivity', 'FULL')
+    
+    ## subscribe to all elements in the network
     env_subs = []
     for agent in agents:
         agent_pubs : str = agent._network_config.external_address_map[zmq.PUB]
         for agent_pub in agent_pubs:
             env_sub : str = agent_pub.replace('*', 'localhost')
             env_subs.append(env_sub)
-
+    
+    ## create network config
     env_network_config = NetworkConfig( manager.get_network_config().network_name,
 											manager_address_map = {
 													zmq.REQ: [f'tcp://localhost:{port}'],
@@ -609,6 +627,7 @@ def main(   scenario_name : str,
                                                     zmq.SUB: env_subs
 											})
     
+    ## initialize environment
     environment = SimulationEnvironment(scenario_path, 
                                         results_path, 
                                         env_network_config, 
@@ -752,3 +771,4 @@ if __name__ == "__main__":
     orbitdata_dir = precompute_orbitdata(scenario_name) if spacecraft_dict is not None else None
  
     main(scenario_name, scenario_path, orbitdata_dir, plot_results, save_plot, levels)
+    

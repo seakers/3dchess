@@ -175,7 +175,7 @@ class MeasurementRequest(object):
         """
         return dict(self.__dict__)
 
-    def from_dict(req : dict):
+    def from_dict(req : dict) -> object:
         if req['request_type'] == MeasurementRequetTypes.GROUND_POINT.value:
             return GroundPointMeasurementRequest(**req)
         else:
@@ -189,6 +189,9 @@ class MeasurementRequest(object):
         other_dict.pop('id')
 
         return my_dict == other_dict
+
+    def __hash__(self) -> int:
+        return hash(repr(self))
 
     def pos_to_lat_lon(pos : list) -> list:
         R = 6.3781363e+003

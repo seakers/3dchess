@@ -256,10 +256,19 @@ class PlanningModule(InternalModule):
             results_path_list.remove("")
         if 'results' in results_path_list[-1]:
             results_path_list.pop()
+        if '.' in results_path_list[0]:
+            results_path_list.pop(0)
+        if 'scenarios' in results_path_list[0]:
+            results_path_list.pop(0)
 
-        scenario_name = results_path_list[-1]
-        scenario_dir = f'./scenarios/{scenario_name}/'
-        # return OrbitData.load(scenario_dir, self.get_parent_name())
+
+        scenario_name = []
+        for name_element in results_path_list:
+            scenario_name.extend([name_element, '/'])
+        scenario_name = ''.join(scenario_name)
+
+        scenario_dir = f'./scenarios/{scenario_name}'
+        
         return OrbitData.from_directory(scenario_dir)
         
     """
@@ -312,7 +321,7 @@ class PlanningModule(InternalModule):
                     # there is a preplanner assigned to this planner
 
                     # update preplanner precepts
-                    self.preplanner.update_precepts(state,
+                    self.preplanner.update_percepts(state,
                                                     plan, 
                                                     completed_actions,
                                                     aborted_actions,
@@ -355,7 +364,7 @@ class PlanningModule(InternalModule):
                     # there is a replanner assigned to this planner
 
                     # update replanner precepts
-                    self.replanner.update_precepts( state,
+                    self.replanner.update_percepts( state,
                                                     plan, 
                                                     completed_actions,
                                                     aborted_actions,
@@ -408,6 +417,7 @@ class PlanningModule(InternalModule):
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                x = 1
                 # -------------------------------------
 
                 # send plan to parent agent
