@@ -104,18 +104,20 @@
     ],
     "grid": [
         {
-            "@type": "cluster"
+            "@type": "customgrid",
+            "covGridFilePath": "./scenarios/toy/resources/cluster_grid0.csv"
         }
     ],
-    "scenario": {   
-                    "@type": "PREDEF", 
-                    "initialRequestsPath" : "./scenarios/toy/resources/initial_requests_merged.csv",
-                    "eventsPath" : "./scenarios/toy/resources/all_events_formatted.csv", 
-                    "duration": 30.0, 
-                    "connectivity" : "FULL", 
-                    "utility" : "LINEAR"
-                },
+    "scenario": {
+        "@type": "PREDEF",
+        "initialRequestsPath": "./scenarios/toy/resources/initial_requests_merged.csv",
+        "eventsPath": "./scenarios/toy/resources/all_events_formatted.csv",
+        "duration": 30.0,
+        "connectivity": "FULL",
+        "utility": "LINEAR"
+    },
     "settings": {
-        "coverageType": "GRID COVERAGE"
+        "coverageType": "GRID COVERAGE",
+        "outDir": "./scenarios/toy/orbit_data/"
     }
 }

@@ -9,7 +9,7 @@ import pandas as pd
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 from traitlets import Callable
-from chess3d.nodes.states import SimulationAgentState
+from nodes.states import SimulationAgentState
 
 from nodes.planning.plan import Plan, Preplan, Replan
 from nodes.planning.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults

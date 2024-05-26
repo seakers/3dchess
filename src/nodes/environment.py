@@ -14,7 +14,6 @@ from nodes.states import GroundStationAgentState, UAVAgentState, SatelliteAgentS
 from nodes.actions import MeasurementAction
 from nodes.agent import SimulationAgentState
 from messages import *
-from utils import setup_results_directory
 
 from dmas.environments import *
 from dmas.messages import *

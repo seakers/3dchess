@@ -6,10 +6,10 @@ from numpy import Inf
 import pandas as pd
 from pyparsing import Any
 from traitlets import Callable
-from chess3d.messages import ClockConfig
-from chess3d.nodes.planning.plan import Plan
-from chess3d.nodes.science.utility import synergy_factor
-from chess3d.nodes.states import SimulationAgentState
+from messages import ClockConfig
+from nodes.planning.plan import Plan
+from nodes.science.utility import synergy_factor
+from nodes.states import SimulationAgentState
 
 from nodes.orbitdata import OrbitData
 from nodes.science.reqs import *

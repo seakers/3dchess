@@ -5,9 +5,8 @@ from pandas import DataFrame
 from instrupy.base import Instrument
 from nodes.states import SimulationAgentState
 from nodes.science.reqs import MeasurementRequest
-from chess3d.nodes.planning.planner import PlanningModule
+from nodes.planning.planner import PlanningModule
 from nodes.science.science import ScienceModule
-from utils import setup_results_directory
 from nodes.actions import *
 from dmas.agents import *
 from dmas.network import NetworkConfig

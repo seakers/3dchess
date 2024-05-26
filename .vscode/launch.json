@@ -50,7 +50,7 @@
             "program": "${workspaceRoot}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/src",
+            "cwd": "${workspaceRoot}/src/",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
@@ -63,11 +63,11 @@
             "program": "${workspaceRoot}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/src",
+            "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}"
+                "PYTHONPATH": "${workspaceRoot}/src"
             },
-            "args": "acbba_runtime/scenario2_two_sats"
+            "args": "toy"
         },
     ],
     "compounds": [

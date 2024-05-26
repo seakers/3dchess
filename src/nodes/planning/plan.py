@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import uuid
 import numpy as np
-from chess3d.nodes.actions import AgentAction
+from nodes.actions import AgentAction
 from nodes.actions import *
 
 
