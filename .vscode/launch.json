@@ -19,10 +19,10 @@
             "name": "VISUALIZER TESTER - Plane",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/chess3d/visualizer.py",
+            "program": "${workspaceRoot}/visualizer.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
+            "cwd": "${workspaceRoot}/src",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             }
@@ -31,10 +31,10 @@
             "name": "VISUALIZER TESTER - Earth",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/chess3d/visualizer.py",
+            "program": "${workspaceRoot}/visualizer.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
+            "cwd": "${workspaceRoot}/src",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
@@ -47,322 +47,23 @@
             "name": "VISUALIZER TEST - SAT SIM",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
+            "program": "${workspaceRoot}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
+            "cwd": "${workspaceRoot}/src",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
             "args": "visualizer_test"
         },
         {
-            "name": "SCENARIO 2",
+            "name": "TOY",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
+            "program": "${workspaceRoot}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "scenario2/scenario2_base"
-        },
-        {
-            "name": "SCENARIO 2 - REDUCED",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "scenario2/scenario2_reduced"
-        },
-        {
-            "name": "SCENARIO 2 - SIMPLE",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "scenario2/scenario2_simple"
-        },
-        {
-            "name": "SCENARIO 2 - SIMPLE ACBBA",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "scenario2/scenario2_simple_acbba"
-        },
-        {
-            "name": "SCENARIO 2 - SINGLE SAT",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "scenario2/scenario2_single_sat"
-        },
-        {
-            "name": "SCENARIO 2 - SINGLE SAT ACBBA",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "scenario2/scenario2_single_sat_cbba"
-        },
-        {
-            "name": "SCENARIO 2 - SINGLE SAT FIFO",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "scenario2/scenario2_single_sat_fifo"
-        },
-        {
-            "name": "SCENARIO 2 - ACBBA",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist/scenario2_cbba"
-        },
-        {
-            "name": "SCENARIO 2 - FIFO Colab",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist/scenario2_fifo_colab"
-        },
-        {
-            "name": "SCENARIO 2 - FIFO No Colab",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist/scenario2_fifo_no_colab"
-        },
-        {
-            "name": "AIST - Batch",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/batch.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist"
-        },
-        {
-            "name": "CBBA - Toy Example FIFO",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "toy/toy_fifo"
-        },
-        {
-            "name": "CBBA - Toy Example FIFO w/ Colab",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "toy/toy_fifo_colab"
-        },
-        {
-            "name": "CBBA - Toy Example CBBA",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "toy/toy_cbba"
-        },
-        {
-            "name": "AIST PROPOSAL - Single Sat",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist_proposal/scenario2_single_sat"
-        },
-        {
-            "name": "AIST PROPOSAL - Two Colaborative Sats CBBA",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist_proposal/two_sats_colab"
-        },
-        {
-            "name": "AIST PROPOSAL - FIFO w/o Colab",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist_proposal/scenario2_fifo_no_colab"
-        },
-        {
-            "name": "AIST PROPOSAL - FIFO w/ Colab",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist_proposal/scenario2_fifo_colab"
-        },
-        {
-            "name": "AIST PROPOSAL - CBBA (N=1)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist_proposal/scenario2_cbba_1"
-        },
-        {
-            "name": "AIST PROPOSAL - CBBA (N=2)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist_proposal/scenario2_cbba_2"
-        },
-        {
-            "name": "AIST PROPOSAL - CBBA (N=3)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist_proposal/scenario2_cbba_3"
-        },
-        {
-            "name": "AIST PROPOSAL - CBBA (N=5)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "aist_proposal/scenario2_cbba_5"
-        },
-        {
-            "name": "ACBBA RUNTIME FIX - FULL SCENARIO2 (N=1)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "acbba_runtime/scenario2_cbba_1"
-        },
-        {
-            "name": "ACBBA RUNTIME FIX - 2 SATS",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
+            "cwd": "${workspaceRoot}/src",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },

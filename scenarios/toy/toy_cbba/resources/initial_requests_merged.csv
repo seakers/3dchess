@@ -1,4 +1,0 @@
-lat [deg],lon [deg],start time [s],duration [s],severity,measurements
-0,0,0,86400,1,"['visible']"
--3,5,0,86400,1,"['visible']"
-3,16,0,86400,10,"['visible', 'sar']"

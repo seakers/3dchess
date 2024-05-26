@@ -13,23 +13,23 @@ import concurrent.futures
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
 from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
-from nodes.planning.consensus.acbba import ACBBAReplanner
-from nodes.planning.preplanners import *
-from nodes.planning.replanners import *
-from manager import SimulationManager
-from monitor import ResultsMonitor
+from src.nodes.planning.consensus.acbba import ACBBAReplanner
+from src.nodes.planning.preplanners import *
+from src.nodes.planning.replanners import *
+from src.manager import SimulationManager
+from src.monitor import ResultsMonitor
 
-from nodes.states import *
-from nodes.uav import UAVAgent
-from nodes.agent import SimulationAgent
-from nodes.groundstat import GroundStationAgent
-from nodes.satellite import SatelliteAgent
-from chess3d.nodes.planning.planner import PlanningModule
-from nodes.science.science import ScienceModule
-from nodes.science.utility import utility_function
-from nodes.science.reqs import GroundPointMeasurementRequest
-from nodes.environment import SimulationEnvironment
-from utils import *
+from src.nodes.states import *
+from src.nodes.uav import UAVAgent
+from src.nodes.agent import SimulationAgent
+from src.nodes.groundstat import GroundStationAgent
+from src.nodes.satellite import SatelliteAgent
+from src.nodes.planning.planner import PlanningModule
+from src.nodes.science.science import ScienceModule
+from src.nodes.science.utility import utility_function
+from src.nodes.science.reqs import GroundPointMeasurementRequest
+from src.nodes.environment import SimulationEnvironment
+from src.utils import *
 
 # from satplan.visualizer import Visualizer
 
@@ -46,7 +46,6 @@ from utils import *
 
 Wrapper for running DMAS simulations for the 3DCHESS project
 """
-
 def print_welcome(scenario_name) -> None:
     os.system('cls' if os.name == 'nt' else 'clear')
     out = "\n======================================================"
@@ -56,299 +55,6 @@ def print_welcome(scenario_name) -> None:
     out += "\n======================================================"
     out += f"\nSCENARIO: {scenario_name}"
     print(out)
-
-def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
-    """ Checks if the scenario has already been pre-computed or if relevant changes have been made """
-
-    with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
-        # check if data has been previously calculated
-        if not os.path.exists(data_dir + 'MissionSpecs.json'):
-            return True
-            
-        with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
-            scenario_dict : dict = json.load(scenario_specs)
-            mission_dict : dict = json.load(mission_specs)
-
-            scenario_dict.pop('settings')
-            mission_dict.pop('settings')
-            scenario_dict.pop('scenario')
-            mission_dict.pop('scenario')
-
-            if (
-                    scenario_dict['epoch'] != mission_dict['epoch']
-                or scenario_dict['duration'] != mission_dict['duration']
-                or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
-                or scenario_dict['grid'] != mission_dict['grid']
-                # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
-                ):
-                return True
-            
-            if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
-                if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
-                    return True
-                
-                for i in range(len(scenario_dict['spacecraft'])):
-                    scenario_sat : dict = scenario_dict['spacecraft'][i]
-                    mission_sat : dict = mission_dict['spacecraft'][i]
-                    
-                    if "planner" in scenario_sat:
-                        scenario_sat.pop("planner")
-                    if "science" in scenario_sat:
-                        scenario_sat.pop("science")
-                    if "notifier" in scenario_sat:
-                        scenario_sat.pop("notifier") 
-                    if "missionProfile" in scenario_sat:
-                        scenario_sat.pop("missionProfile")
-
-                    if "planner" in mission_sat:
-                        mission_sat.pop("planner")
-                    if "science" in mission_sat:
-                        mission_sat.pop("science")
-                    if "notifier" in mission_sat:
-                        mission_sat.pop("notifier") 
-                    if "missionProfile" in mission_sat:
-                        mission_sat.pop("missionProfile")
-
-                    if scenario_sat != mission_sat:
-                        return True
-                    
-    return False
-
-def precompute_orbitdata(scenario_name) -> str:
-    """
-    Pre-calculates coverage and position data for a given scenario
-    """
-    
-    scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
-    data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
-   
-    if not os.path.exists(data_dir):
-        # if directory does not exists, create it
-        os.mkdir(data_dir)
-        changes_to_scenario = True
-    else:
-        changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
-
-    if not changes_to_scenario:
-        # if propagation data files already exist, load results
-        print('Orbit data found!')
-    else:
-        # if propagation data files do not exist, propagate and then load results
-        if changes_to_scenario:
-            print('Existing orbit data does not match scenario.')
-        else:
-            print('Orbit data not found.')
-
-        # clear files if they exist
-        print('Clearing \'orbitdata\' directory...')    
-        if os.path.exists(data_dir):
-            for f in os.listdir(data_dir):
-                if os.path.isdir(os.path.join(data_dir, f)):
-                    for h in os.listdir(data_dir + f):
-                            os.remove(os.path.join(data_dir, f, h))
-                    os.rmdir(data_dir + f)
-                else:
-                    os.remove(os.path.join(data_dir, f)) 
-        print('\'orbitdata\' cleared!')
-
-        with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
-            # load json file as dictionary
-            mission_dict : dict = json.load(scenario_specs)
-
-            # set output directory to orbit data directory
-            if mission_dict.get("settings", None) is not None:
-                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
-            else:
-                mission_dict["settings"] = {}
-                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
-
-            # propagate data and save to orbit data directory
-            print("Propagating orbits...")
-            mission : Mission = Mission.from_json(mission_dict)  
-            mission.execute()                
-            print("Propagation done!")
-
-            # save specifications of propagation in the orbit data directory
-            with open(data_dir +'MissionSpecs.json', 'w') as mission_specs:
-                mission_specs.write(json.dumps(mission_dict, indent=4))
-
-    return data_dir
-
-def agent_factory(  scenario_name : str, 
-                    scenario_path : str,
-                    results_path : str,
-                    orbitdata_dir : str,
-                    agent_dict : dict, 
-                    agent_index : int,
-                    manager_network_config : NetworkConfig, 
-                    port : int, 
-                    agent_type : SimulationAgentTypes,
-                    clock_config : float,
-                    logger : logging.Logger,
-                    initial_reqs : list,
-                    events_path : str,
-                    delta : timedelta
-                ) -> SimulationAgent:
-    ## unpack mission specs
-    agent_name = agent_dict['name']
-    planner_dict = agent_dict.get('planner', None)
-    science_dict = agent_dict.get('science', None)
-    instruments_dict = agent_dict.get('instrument', None)
-    orbit_state_dict = agent_dict.get('orbitState', None)
-
-    ## create agent network config
-    manager_addresses : dict = manager_network_config.get_manager_addresses()
-    req_address : str = manager_addresses.get(zmq.REP)[0]
-    req_address = req_address.replace('*', 'localhost')
-
-    sub_address : str = manager_addresses.get(zmq.PUB)[0]
-    sub_address = sub_address.replace('*', 'localhost')
-
-    pub_address : str = manager_addresses.get(zmq.SUB)[0]
-    pub_address = pub_address.replace('*', 'localhost')
-
-    push_address : str = manager_addresses.get(zmq.PUSH)[0]
-
-    agent_network_config = NetworkConfig( 	scenario_name,
-                                            manager_address_map = {
-                                                    zmq.REQ: [req_address],
-                                                    zmq.SUB: [sub_address],
-                                                    zmq.PUB: [pub_address],
-                                                    zmq.PUSH: [push_address]},
-                                            external_address_map = {
-                                                    zmq.REQ: [],
-                                                    zmq.SUB: [f'tcp://localhost:{port+1}'],
-                                                    zmq.PUB: [f'tcp://*:{port+2}']},
-                                            internal_address_map = {
-                                                    zmq.REP: [f'tcp://*:{port+3}'],
-                                                    zmq.PUB: [f'tcp://*:{port+4}'],
-                                                    zmq.SUB: [  
-                                                                f'tcp://localhost:{port+5}',
-                                                                f'tcp://localhost:{port+6}'
-                                                            ]
-                                        })
-
-    ## load payload
-    if instruments_dict:
-        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) # list of instruments
-    else:
-        payload = []
-
-    ## load science module
-    if science_dict is not None and science_dict == "True":
-        science = ScienceModule(results_path,scenario_path,agent_name,agent_network_config,events_path,logger=logger)
-    else:
-        science = None
-        # raise NotImplementedError(f"Science module not yet implemented.")
-
-    ## load planner module
-    if planner_dict is not None:
-        planner_dict : dict
-        utility_func = utility_function[planner_dict.get('utility', 'NONE')]
-        
-        preplanner_dict = planner_dict.get('preplanner', None)
-        if isinstance(preplanner_dict, dict):
-            preplanner_type = preplanner_dict.get('@type', None)
-            period = preplanner_dict.get('period', np.Inf)
-            horizon = preplanner_dict.get('horizon', np.Inf)
-
-            if preplanner_type == "FIFO":
-                collaboration = preplanner_dict.get('collaboration', "False") == "True"
-                preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
-            else:
-                raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
-        else:
-            preplanner = None
-
-        replanner_dict = planner_dict.get('replanner', None)
-        if isinstance(replanner_dict, dict):
-            replanner_type = replanner_dict.get('@type', None)
-            
-            if replanner_type == 'FIFO':
-                collaboration = replanner_dict.get('collaboration', "False") == "True"
-                replanner = FIFOReplanner(utility_func, collaboration)
-
-            elif replanner_type == 'ACBBA':
-                max_bundle_size = replanner_dict.get('bundle size', 3)
-                dt_converge = replanner_dict.get('dt_convergence', 0.0)
-                period = replanner_dict.get('period', 60.0)
-                threshold = replanner_dict.get('threshold', 1)
-                horizon = replanner_dict.get('horizon', delta.total_seconds())
-
-                replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
-            
-            else:
-                raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
-        else:
-            # replanner = None
-            replanner = RelayReplanner()
-    else:
-        preplanner, replanner = None, None
-
-    planner = PlanningModule(   results_path, 
-                                agent_name, 
-                                agent_network_config, 
-                                utility_func, 
-                                preplanner,
-                                replanner,
-                                initial_reqs
-                            )    
-        
-    ## create agent
-    if agent_type == SimulationAgentTypes.UAV:
-        ## load initial state 
-            pos = agent_dict['pos']
-            max_speed = agent_dict['max_speed']
-            if isinstance(clock_config, FixedTimesStepClockConfig):
-                eps = max_speed * clock_config.dt / 2.0
-            else:
-                eps = 1e-6
-
-            initial_state = UAVAgentState(  agent_name,
-                                            [instrument.name for instrument in payload], 
-                                            pos, 
-                                            max_speed, 
-                                            eps=eps )
-
-            ## create agent
-            return UAVAgent(   agent_name, 
-                                results_path,
-                                manager_network_config,
-                                agent_network_config,
-                                initial_state,
-                                payload,
-                                planner,
-                                science,
-                                logger=logger
-                            )
-
-    elif agent_type == SimulationAgentTypes.SATELLITE:
-        agent_folder = "sat" + str(agent_index) + '/'
-
-        position_file = orbitdata_dir + agent_folder + 'state_cartesian.csv'
-        time_data =  pd.read_csv(position_file, nrows=3)
-        l : str = time_data.at[1,time_data.axes[1][0]]
-        _, _, _, _, dt = l.split(' '); dt = float(dt)
-
-        initial_state = SatelliteAgentState(agent_name,
-                                            orbit_state_dict, 
-                                            [instrument.name for instrument in payload], 
-                                            time_step=dt) 
-        
-        return SatelliteAgent(
-                                agent_name,
-                                results_path,
-                                manager_network_config,
-                                agent_network_config,
-                                initial_state, 
-                                planner,
-                                payload,
-                                science,
-                                logger=logger
-                            )
-    else:
-        raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")
-
 
 def main(   scenario_name : str, 
             scenario_path : str,
@@ -703,6 +409,322 @@ def main(   scenario_name : str,
             raise NotImplementedError("Saving of `satplan` animations not yet supported.")
     
     print(f'\nSIMULATION FOR SCENARIO `{scenario_name}` DONE')
+
+def setup_results_directory(scenario_path) -> str:
+    """
+    Creates an empty results directory within the current working directory
+    """
+    results_path = f'{scenario_path}' if '/results/' in scenario_path else f'{scenario_path}/results'
+
+    if not os.path.exists(results_path):
+        # create results directory if it doesn't exist
+        os.makedirs(results_path)
+    else:
+        # clear results in case it already exists
+        results_path
+        for filename in os.listdir(results_path):
+            file_path = os.path.join(results_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+    return results_path
+
+def check_changes_to_scenario(scenario_dir, data_dir) -> bool:
+    """ Checks if the scenario has already been pre-computed or if relevant changes have been made """
+
+    with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
+        # check if data has been previously calculated
+        if not os.path.exists(data_dir + 'MissionSpecs.json'):
+            return True
+            
+        with open(data_dir +'MissionSpecs.json', 'r') as mission_specs:
+            scenario_dict : dict = json.load(scenario_specs)
+            mission_dict : dict = json.load(mission_specs)
+
+            scenario_dict.pop('settings')
+            mission_dict.pop('settings')
+            scenario_dict.pop('scenario')
+            mission_dict.pop('scenario')
+
+            if (
+                    scenario_dict['epoch'] != mission_dict['epoch']
+                or scenario_dict['duration'] != mission_dict['duration']
+                or scenario_dict.get('groundStation', None) != mission_dict.get('groundStation', None)
+                or scenario_dict['grid'] != mission_dict['grid']
+                # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
+                ):
+                return True
+            
+            if scenario_dict['spacecraft'] != mission_dict['spacecraft']:
+                if len(scenario_dict['spacecraft']) != len(mission_dict['spacecraft']):
+                    return True
+                
+                for i in range(len(scenario_dict['spacecraft'])):
+                    scenario_sat : dict = scenario_dict['spacecraft'][i]
+                    mission_sat : dict = mission_dict['spacecraft'][i]
+                    
+                    if "planner" in scenario_sat:
+                        scenario_sat.pop("planner")
+                    if "science" in scenario_sat:
+                        scenario_sat.pop("science")
+                    if "notifier" in scenario_sat:
+                        scenario_sat.pop("notifier") 
+                    if "missionProfile" in scenario_sat:
+                        scenario_sat.pop("missionProfile")
+
+                    if "planner" in mission_sat:
+                        mission_sat.pop("planner")
+                    if "science" in mission_sat:
+                        mission_sat.pop("science")
+                    if "notifier" in mission_sat:
+                        mission_sat.pop("notifier") 
+                    if "missionProfile" in mission_sat:
+                        mission_sat.pop("missionProfile")
+
+                    if scenario_sat != mission_sat:
+                        return True
+                    
+    return False
+
+def precompute_orbitdata(scenario_name) -> str:
+    """
+    Pre-calculates coverage and position data for a given scenario
+    """
+    
+    scenario_dir = f'{scenario_name}' if './scenarios/' in scenario_name else f'./scenarios/{scenario_name}/'
+    data_dir = f'{scenario_name}' if './scenarios/' in scenario_name and 'orbit_data/' in scenario_name else f'./scenarios/{scenario_name}/orbit_data/'
+   
+    if not os.path.exists(data_dir):
+        # if directory does not exists, create it
+        os.mkdir(data_dir)
+        changes_to_scenario = True
+    else:
+        changes_to_scenario : bool = check_changes_to_scenario(scenario_dir, data_dir)
+
+    if not changes_to_scenario:
+        # if propagation data files already exist, load results
+        print('Orbit data found!')
+    else:
+        # if propagation data files do not exist, propagate and then load results
+        if changes_to_scenario:
+            print('Existing orbit data does not match scenario.')
+        else:
+            print('Orbit data not found.')
+
+        # clear files if they exist
+        print('Clearing \'orbitdata\' directory...')    
+        if os.path.exists(data_dir):
+            for f in os.listdir(data_dir):
+                if os.path.isdir(os.path.join(data_dir, f)):
+                    for h in os.listdir(data_dir + f):
+                            os.remove(os.path.join(data_dir, f, h))
+                    os.rmdir(data_dir + f)
+                else:
+                    os.remove(os.path.join(data_dir, f)) 
+        print('\'orbitdata\' cleared!')
+
+        with open(scenario_dir +'MissionSpecs.json', 'r') as scenario_specs:
+            # load json file as dictionary
+            mission_dict : dict = json.load(scenario_specs)
+
+            # set output directory to orbit data directory
+            if mission_dict.get("settings", None) is not None:
+                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+            else:
+                mission_dict["settings"] = {}
+                mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+
+            # propagate data and save to orbit data directory
+            print("Propagating orbits...")
+            mission : Mission = Mission.from_json(mission_dict)  
+            mission.execute()                
+            print("Propagation done!")
+
+            # save specifications of propagation in the orbit data directory
+            with open(data_dir +'MissionSpecs.json', 'w') as mission_specs:
+                mission_specs.write(json.dumps(mission_dict, indent=4))
+
+    return data_dir
+
+def agent_factory(  scenario_name : str, 
+                    scenario_path : str,
+                    results_path : str,
+                    orbitdata_dir : str,
+                    agent_dict : dict, 
+                    agent_index : int,
+                    manager_network_config : NetworkConfig, 
+                    port : int, 
+                    agent_type : SimulationAgentTypes,
+                    clock_config : float,
+                    logger : logging.Logger,
+                    initial_reqs : list,
+                    events_path : str,
+                    delta : timedelta
+                ) -> SimulationAgent:
+    ## unpack mission specs
+    agent_name = agent_dict['name']
+    planner_dict = agent_dict.get('planner', None)
+    science_dict = agent_dict.get('science', None)
+    instruments_dict = agent_dict.get('instrument', None)
+    orbit_state_dict = agent_dict.get('orbitState', None)
+
+    ## create agent network config
+    manager_addresses : dict = manager_network_config.get_manager_addresses()
+    req_address : str = manager_addresses.get(zmq.REP)[0]
+    req_address = req_address.replace('*', 'localhost')
+
+    sub_address : str = manager_addresses.get(zmq.PUB)[0]
+    sub_address = sub_address.replace('*', 'localhost')
+
+    pub_address : str = manager_addresses.get(zmq.SUB)[0]
+    pub_address = pub_address.replace('*', 'localhost')
+
+    push_address : str = manager_addresses.get(zmq.PUSH)[0]
+
+    agent_network_config = NetworkConfig( 	scenario_name,
+                                            manager_address_map = {
+                                                    zmq.REQ: [req_address],
+                                                    zmq.SUB: [sub_address],
+                                                    zmq.PUB: [pub_address],
+                                                    zmq.PUSH: [push_address]},
+                                            external_address_map = {
+                                                    zmq.REQ: [],
+                                                    zmq.SUB: [f'tcp://localhost:{port+1}'],
+                                                    zmq.PUB: [f'tcp://*:{port+2}']},
+                                            internal_address_map = {
+                                                    zmq.REP: [f'tcp://*:{port+3}'],
+                                                    zmq.PUB: [f'tcp://*:{port+4}'],
+                                                    zmq.SUB: [  
+                                                                f'tcp://localhost:{port+5}',
+                                                                f'tcp://localhost:{port+6}'
+                                                            ]
+                                        })
+
+    ## load payload
+    if instruments_dict:
+        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) # list of instruments
+    else:
+        payload = []
+
+    ## load science module
+    if science_dict is not None and science_dict == "True":
+        science = ScienceModule(results_path,scenario_path,agent_name,agent_network_config,events_path,logger=logger)
+    else:
+        science = None
+        # raise NotImplementedError(f"Science module not yet implemented.")
+
+    ## load planner module
+    if planner_dict is not None:
+        planner_dict : dict
+        utility_func = utility_function[planner_dict.get('utility', 'NONE')]
+        
+        preplanner_dict = planner_dict.get('preplanner', None)
+        if isinstance(preplanner_dict, dict):
+            preplanner_type = preplanner_dict.get('@type', None)
+            period = preplanner_dict.get('period', np.Inf)
+            horizon = preplanner_dict.get('horizon', np.Inf)
+
+            if preplanner_type == "FIFO":
+                collaboration = preplanner_dict.get('collaboration', "False") == "True"
+                preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
+            else:
+                raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
+        else:
+            preplanner = None
+
+        replanner_dict = planner_dict.get('replanner', None)
+        if isinstance(replanner_dict, dict):
+            replanner_type = replanner_dict.get('@type', None)
+            
+            if replanner_type == 'FIFO':
+                collaboration = replanner_dict.get('collaboration', "False") == "True"
+                replanner = FIFOReplanner(utility_func, collaboration)
+
+            elif replanner_type == 'ACBBA':
+                max_bundle_size = replanner_dict.get('bundle size', 3)
+                dt_converge = replanner_dict.get('dt_convergence', 0.0)
+                period = replanner_dict.get('period', 60.0)
+                threshold = replanner_dict.get('threshold', 1)
+                horizon = replanner_dict.get('horizon', delta.total_seconds())
+
+                replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
+            
+            else:
+                raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
+        else:
+            # replanner = None
+            replanner = RelayReplanner()
+    else:
+        preplanner, replanner = None, None
+
+    planner = PlanningModule(   results_path, 
+                                agent_name, 
+                                agent_network_config, 
+                                utility_func, 
+                                preplanner,
+                                replanner,
+                                initial_reqs
+                            )    
+        
+    ## create agent
+    if agent_type == SimulationAgentTypes.UAV:
+        ## load initial state 
+            pos = agent_dict['pos']
+            max_speed = agent_dict['max_speed']
+            if isinstance(clock_config, FixedTimesStepClockConfig):
+                eps = max_speed * clock_config.dt / 2.0
+            else:
+                eps = 1e-6
+
+            initial_state = UAVAgentState(  agent_name,
+                                            [instrument.name for instrument in payload], 
+                                            pos, 
+                                            max_speed, 
+                                            eps=eps )
+
+            ## create agent
+            return UAVAgent(   agent_name, 
+                                results_path,
+                                manager_network_config,
+                                agent_network_config,
+                                initial_state,
+                                payload,
+                                planner,
+                                science,
+                                logger=logger
+                            )
+
+    elif agent_type == SimulationAgentTypes.SATELLITE:
+        agent_folder = "sat" + str(agent_index) + '/'
+
+        position_file = orbitdata_dir + agent_folder + 'state_cartesian.csv'
+        time_data =  pd.read_csv(position_file, nrows=3)
+        l : str = time_data.at[1,time_data.axes[1][0]]
+        _, _, _, _, dt = l.split(' '); dt = float(dt)
+
+        initial_state = SatelliteAgentState(agent_name,
+                                            orbit_state_dict, 
+                                            [instrument.name for instrument in payload], 
+                                            time_step=dt) 
+        
+        return SatelliteAgent(
+                                agent_name,
+                                results_path,
+                                manager_network_config,
+                                agent_network_config,
+                                initial_state, 
+                                planner,
+                                payload,
+                                science,
+                                logger=logger
+                            )
+    else:
+        raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")
 
 if __name__ == "__main__":
     

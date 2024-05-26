@@ -1,4 +1,0 @@
-routine,t_avg,t_std,t_med,n
-img_1,0.013,0.01,0.01,61
-img_0,0.012,0.005,0.009,78
-query_measurement_data,0.013,0.003,0.012,21
