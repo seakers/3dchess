@@ -65,9 +65,6 @@ def main(   scenario_name : str,
     """
     Runs Simulation 
     """
-    # create results directory
-    results_path = setup_results_directory(scenario_path)
-
     # select unsused ports
     port = random.randint(5555, 9999)
     
@@ -81,17 +78,14 @@ def main(   scenario_name : str,
     uav_dict        = scenario_dict.get('uav', None)
     gstation_dict   = scenario_dict.get('groundStation', None)
     settings_dict   = scenario_dict.get('settings', None)
-
-    # read agent names
+    
+    # load agent names
     agent_names = [SimulationElementRoles.ENVIRONMENT.value]
-    if spacecraft_dict:
-        agent_names.extend([spacecraft['name'] for spacecraft in spacecraft_dict])
-    if uav_dict:
-        agent_names.extend([uav['name'] for uav in uav_dict])
-    if gstation_dict:
-        agent_names.extend([gstation['name'] for gstation in gstation_dict])
+    if spacecraft_dict: agent_names.extend([spacecraft['name'] for spacecraft in spacecraft_dict])
+    if uav_dict:        agent_names.extend([uav['name'] for uav in uav_dict])
+    if gstation_dict:   agent_names.extend([gstation['name'] for gstation in gstation_dict])
 
-    # read logger level
+    # load logger level
     if isinstance(settings_dict, dict):
         level = settings_dict.get('logger', logging.WARNING)
         if not isinstance(level, int):
@@ -104,6 +98,10 @@ def main(   scenario_name : str,
             level = levels[level]
     else:
         level = logging.WARNING
+
+    # ------------------------------------
+    # create results directory
+    results_path : str = setup_results_directory(scenario_path, agent_names)
 
     # precompute orbit data
     orbitdata_dir = precompute_orbitdata(scenario_name) if spacecraft_dict is not None else None
@@ -122,11 +120,13 @@ def main(   scenario_name : str,
 
     ## define simulation clock
     if spacecraft_dict:
+        if not orbitdata_dir: raise ImportError('Cannot initialize spacecraft agents. Orbit data was not loaded successfully.')
+
         for spacecraft in spacecraft_dict:
             spacecraft_dict : list
             spacecraft : dict
             index = spacecraft_dict.index(spacecraft)
-            agent_dir = f"sat{str(index)}"
+            agent_dir = f"sat{index}"
 
             position_file = os.path.join(orbitdata_dir, agent_dir, 'state_cartesian.csv')
             time_data =  pd.read_csv(position_file, nrows=3)
@@ -137,12 +137,18 @@ def main(   scenario_name : str,
     else:
         dt = delta.total_seconds()/100
 
-    ## load initial measurement request
-    measurement_reqs = load_measurement_reqs(scenario_dict, spacecraft_dict, uav_dict, delta)
-
     # clock_config = FixedTimesStepClockConfig(start_date, end_date, dt)
     clock_config = EventDrivenClockConfig(start_date, end_date)
 
+    # ------------------------------------
+    # unpack scenario
+    scenario_config_dict : dict = scenario_dict['scenario']
+    grid_config_dict : dict = scenario_dict['grid']
+
+    # load events
+    events_path = load_events(scenario_path, clock_config, scenario_config_dict, grid_config_dict)
+
+    # ------------------------------------
     # initialize manager
     manager_network_config = NetworkConfig( scenario_name,
 											manager_address_map = {
@@ -157,6 +163,7 @@ def main(   scenario_name : str,
     manager = SimulationManager(results_path, agent_names, clock_config, manager_network_config, level)
     logger = manager.get_logger()
 
+    # ------------------------------------
     # create results monitor
     monitor_network_config = NetworkConfig( scenario_name,
                                     external_address_map = {zmq.SUB: [f'tcp://localhost:{port+1}'],
@@ -164,86 +171,44 @@ def main(   scenario_name : str,
                                     )
     
     monitor = ResultsMonitor(clock_config, monitor_network_config, logger=logger)
-
-    # # unpack scenario
-    scenario_config_dict : dict = scenario_dict['scenario']
-    events_path = scenario_config_dict.get('eventsPath', None)
     
+    # ------------------------------------
     # Create agents 
     agents = []
     agent_port = port + 6
-    if spacecraft_dict is not None:
-        for d in spacecraft_dict:
-            # Create spacecraft agents
-            agent = agent_factory(  scenario_name, 
-                                    scenario_path, 
-                                    results_path, 
-                                    orbitdata_dir, 
-                                    d,
-                                    spacecraft_dict.index(d), 
-                                    manager_network_config, 
-                                    agent_port, 
-                                    SimulationAgentTypes.SATELLITE, 
-                                    clock_config, 
-                                    logger,
-                                    measurement_reqs,
-                                    events_path,
-                                    delta
-                                )
-            agents.append(agent)
-            agent_port += 6
-
-    if uav_dict is not None:
-        # Create uav agents
-        for d in uav_dict:
-            agent = agent_factory(  scenario_name, 
-                                    scenario_path, 
-                                    results_path, 
-                                    orbitdata_dir, 
-                                    d, 
-                                    uav_dict.index(d),
-                                    manager_network_config, 
-                                    agent_port, 
-                                    SimulationAgentTypes.UAV, 
-                                    clock_config, 
-                                    logger,
-                                    measurement_reqs,
-                                    events_path,
-                                    delta
-                                )
-            agents.append(agent)
-            agent_port += 6
-
-    if gstation_dict is not None:
-        # TODO Create ground station agents
-        raise NotImplementedError('Ground Station agents not yet implemented.')
-        # for d in gstation_dict:
-        #     pass
-    #         d : dict
-    #         agent_name = d['name']
-    #         lat = d['latitude']
-    #         lon = d['longitude']
-    #         alt = d['altitude']
-    #         initial_state = GroundStationAgentState(lat,
-    #                                                 lon,
-    #                                                 alt)
-
-    #         agent = GroundStationAgent( agent_name, 
-    #                                     results_path,
-    #                                     scenario_name,
-    #                                     agent_port,
-    #                                     manager_network_config,
-    #                                     initial_state,
-    #                                     utility_function[env_utility_function],
-    #                                     initial_reqs=measurement_reqs,
-    #                                     logger=logger)
+    # if spacecraft_dict is not None:
+    #     for d in spacecraft_dict:
+    #         # Create spacecraft agents
+    #         agent = agent_factory(  scenario_name, 
+    #                                 scenario_path, 
+    #                                 results_path, 
+    #                                 orbitdata_dir, 
+    #                                 d,
+    #                                 spacecraft_dict.index(d), 
+    #                                 manager_network_config, 
+    #                                 agent_port, 
+    #                                 SimulationAgentTypes.SATELLITE, 
+    #                                 clock_config, 
+    #                                 logger,
+    #                                 measurement_reqs,
+    #                                 events_path,
+    #                                 delta
+    #                             )
     #         agents.append(agent)
     #         agent_port += 6
 
+    if uav_dict is not None:
+        # TODO Implement UAV agents
+        raise NotImplementedError('UAV agents not yet implemented.')
+
+    if gstation_dict is not None:
+        # TODO Implement ground station agents
+        raise NotImplementedError('Ground Station agents not yet implemented.')
+    
+    # ------------------------------------
     # create environment
     ## unpack config
     env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
-    env_connectivity = scenario_config_dict.get('connectivity', 'FULL')
     
     ## subscribe to all elements in the network
     env_subs = []
@@ -271,8 +236,7 @@ def main(   scenario_name : str,
                                         results_path, 
                                         env_network_config, 
                                         manager_network_config,
-                                        utility_function[env_utility_function],
-                                        measurement_reqs, 
+                                        utility_function[env_utility_function], 
                                         events_path,
                                         logger=logger)
             
@@ -343,7 +307,7 @@ def main(   scenario_name : str,
     
     print(f'\nSIMULATION FOR SCENARIO `{scenario_name}` DONE')
 
-def setup_results_directory(scenario_path) -> str:
+def setup_results_directory(scenario_path : list, agent_names : list) -> str:
     """
     Creates an empty results directory within the current working directory
     """
@@ -352,6 +316,7 @@ def setup_results_directory(scenario_path) -> str:
     if not os.path.exists(results_path):
         # create results directory if it doesn't exist
         os.makedirs(results_path)
+
     else:
         # clear results in case it already exists
         results_path
@@ -364,6 +329,12 @@ def setup_results_directory(scenario_path) -> str:
                     shutil.rmtree(file_path)
             except Exception as e:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+    # create a results directory for all agents
+    for agent_name in agent_names:
+        agent_name : str
+        agent_results_path : str = os.path.join(results_path, agent_name.lower())
+        os.makedirs(agent_results_path)
 
     return results_path
 
@@ -544,50 +515,6 @@ def precompute_orbitdata(scenario_name) -> str:
 
     return data_dir
 
-def create_uniform_grid(scenario_dir : str, grid_index : int, lat_spacing : float, lon_spacing : float) -> str:
-    # create uniform grid
-    groundpoints = [(lat, lon) 
-                    for lat in numpy.linspace(-90, 90, int(180/lat_spacing)+1)
-                    for lon in numpy.linspace(-180, 180, int(360/lon_spacing)+1)
-                    if lon < 180
-                    ]
-    
-    # create datagrame
-    df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
-
-    # save to csv
-    grid_path : str = os.path.join(scenario_dir, 'resources', f'uniform_grid{grid_index}.csv')
-    df.to_csv(grid_path,index=False)
-
-    # return address
-    return grid_path
-
-def create_clustered_grid(scenario_dir : str, grid_index : int, n_clusters : int, n_cluster_points : int, variance : float) -> str:
-    # create clustered grid of gound points
-    std = numpy.sqrt(variance)
-    groundpoints = []
-    
-    for _ in range(n_clusters):
-        # find cluster center
-        lat_cluster = (90 - -90) * random.random() -90
-        lon_cluster = (180 - -180) * random.random() -180
-        
-        for _ in range(n_cluster_points):
-            # sample groundpoint
-            lat = random.normalvariate(lat_cluster, std)
-            lon = random.normalvariate(lon_cluster, std)
-            groundpoints.append((lat,lon))
-
-    # create datagrame
-    df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
-
-    # save to csv
-    grid_path : str = os.path.join(scenario_dir, 'resources', f'cluster_grid{grid_index}.csv')
-    df.to_csv(grid_path,index=False)
-
-    # return address
-    return grid_path
-
 def check_changes_to_scenario(scenario_dir : str, orbitdata_dir : str) -> bool:
     """ 
     Checks if the scenario has already been pre-computed 
@@ -667,6 +594,126 @@ def check_changes_to_scenario(scenario_dir : str, orbitdata_dir : str) -> bool:
                         return True
                     
     return False
+
+def create_uniform_grid(scenario_dir : str, grid_index : int, lat_spacing : float, lon_spacing : float) -> str:
+    # create uniform grid
+    groundpoints = [(lat, lon) 
+                    for lat in numpy.linspace(-90, 90, int(180/lat_spacing)+1)
+                    for lon in numpy.linspace(-180, 180, int(360/lon_spacing)+1)
+                    if lon < 180
+                    ]
+    
+    # create datagrame
+    df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
+
+    # save to csv
+    grid_path : str = os.path.join(scenario_dir, 'resources', f'uniform_grid{grid_index}.csv')
+    df.to_csv(grid_path,index=False)
+
+    # return address
+    return grid_path
+
+def create_clustered_grid(scenario_dir : str, grid_index : int, n_clusters : int, n_cluster_points : int, variance : float) -> str:
+    # create clustered grid of gound points
+    std = numpy.sqrt(variance)
+    groundpoints = []
+    
+    for _ in range(n_clusters):
+        # find cluster center
+        lat_cluster = (90 - -90) * random.random() -90
+        lon_cluster = (180 - -180) * random.random() -180
+        
+        for _ in range(n_cluster_points):
+            # sample groundpoint
+            lat = random.normalvariate(lat_cluster, std)
+            lon = random.normalvariate(lon_cluster, std)
+            groundpoints.append((lat,lon))
+
+    # create datagrame
+    df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
+
+    # save to csv
+    grid_path : str = os.path.join(scenario_dir, 'resources', f'cluster_grid{grid_index}.csv')
+    df.to_csv(grid_path,index=False)
+
+    # return address
+    return grid_path
+
+def load_events(scenario_path : str, 
+                clock_config : ClockConfig,
+                scenario_config_dict : dict, 
+                grid_config_dict : list) -> str:
+    events_config_dict : dict = scenario_config_dict.get('events', None)
+
+    if not events_config_dict: raise ValueError('Missing events configuration in Mission Specs input file.')
+
+    events_type : str = events_config_dict.get('@type', None)
+    if events_type is None:
+        raise ValueError('Event type missing in Mission Specs input file.')
+    
+    if events_type.lower() == 'predef':
+        events_path : str = events_config_dict.get('eventsPath', None) 
+        if not events_path: 
+            raise ValueError('Path to predefined events not goind in Mission Specs input file.')
+        else:
+            return events_path
+        
+    if events_type.lower() == 'random':
+        # get path to resources directory
+        resources_path = os.path.join(scenario_path, 'resources')
+        
+        # load coverage grids
+        grids = []
+        for grid_dict in grid_config_dict:
+            grid_dict : dict
+            grid_type : str = grid_dict.get('@type', None)
+
+            if grid_type is None: raise ValueError('Grid type missing from grid specifications in Mission Specs input file.')
+
+            if grid_type.lower() == 'customgrid':
+                # load custom grid
+                grid_path = grid_config_dict['covGridFilePath']
+                grid = pd.read_csv(grid_path)
+            else:
+                # load random grid
+                grid_index = grid_config_dict.index(grid_dict)
+                grid_filename = f'{grid_type}_grid{grid_index}.csv'
+                grid_path = os.path.join(resources_path, grid_filename)
+                grid = pd.read_csv(grid_path)
+
+            grids.append(grid)
+
+        # select ground points for events
+        n_events = int(events_config_dict.get('n_events', None))
+        if not n_events: raise ValueError('Number of random events not specified in Mission Specs input file.')
+        
+        sim_duration = clock_config.get_total_seconds()
+        event_duration = float(events_config_dict.get('duration', None)) * 3600
+        severity = float(events_config_dict.get('severity', None))
+        measurements = events_config_dict.get('measurements', None)
+        n_measurements = int(events_config_dict.get('n_measurements', None))
+
+        events = []
+        for _ in range(n_events):
+            grid : pd.DataFrame = random.choice(grids)
+            gp_index = random.randint(0, len(grid)-1)
+            gp = grid.iloc[gp_index]
+                        
+            event = [
+                gp['lat [deg]'],
+                gp['lon [deg]'],
+                random.random()*sim_duration,
+                event_duration,
+                severity,
+                random.sample(measurements,k=n_measurements)
+            ]
+            events.append(event)
+        
+        events_path = os.path.join(resources_path, 'random_events.csv')
+        events_df = pd.DataFrame(events, columns=['lat [deg]','lon [deg]','start time [s]','duration [s]','severity','measurements'])
+        events_df.to_csv(events_path)
+
+        return events_path
 
 def agent_factory(  scenario_name : str, 
                     scenario_path : str,

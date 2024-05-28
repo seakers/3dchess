@@ -1,11 +1,11 @@
-## Simulation Overview:
+# Simulation Overview:
 ![DMAS network framework diagram](../docs/diagrams/architecture/simulation.png)
 - A Ground Station agent generates and broadcast new tasks to all agents when in range.
 - Sensing agents (Satellites and UAVs) receive task broadcasts and perform a task-assignment procedure using various planning strategies (i.e. MACCBBA)
 - Sensing agents may geenrate new tasks throughout the simulation based on their measurements and announce them toall agents (PENDING)
 
-#
-## Simulation Architecture Description
+
+# Simulation Architecture Description
 ## Manager:
 In charge of keeping time in the simulation. 
 - Listens for all agents to request a time to fast-forward to. 
@@ -29,7 +29,8 @@ The data being sensed by the agents when performing a measurement is precomputed
 
 ## Agent:
 
-![DMAS agent architecture layout](../docs/diagrams/architecture/agent.png) 
+![DMAS agent architecture layout](../docs/diagrams/architecture/agent.png)
+ 
 Agents consist of a main `live()` thread and a three modules. The `Engineering Module` is in charge of keeping track of an agent's components' states, as to simulate the physical aspects of the agent in question. The `Science Module` processes any incoming measurement information and creates new observation requests if it deems it necessary. The `Planning Module` is in charge of receiving said requests and scheduling them in the agent's operations plan. 
 
 At each time-step, the agents' `live()` thread iterates through an internal `sense`->`think`->`do` loop, while the modules are constantly listening for incoming messages.

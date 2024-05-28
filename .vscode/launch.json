@@ -69,6 +69,19 @@
             },
             "args": "toy"
         },
+        {
+            "name": "TOY RANDOM",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/src"
+            },
+            "args": "toy_random"
+        }
     ],
     "compounds": [
         //{

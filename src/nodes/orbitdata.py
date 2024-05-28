@@ -262,6 +262,16 @@ class OrbitData:
         
         return out
     
+    def find_gp_access(self, t : float, look_angle) -> tuple:
+        t = t/self.time_step
+        t_u = t + 1
+        t_l = t - 1
+
+        access_data : pd.DataFrame = self.gp_access_data \
+                                    .query('@t_l < `time index` < @t_u') \
+                                    .sort_values(by=['time index'])
+        x = 1
+    
     def find_gp_index(self, lat: float, lon: float) -> tuple:
         """
         Returns the ground point and grid index to the point closest to the latitude and longitude given.
@@ -504,7 +514,7 @@ class OrbitData:
 
                 return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
 
-    def from_directory(scenario_dir: str) -> dict:
+    def from_directory(scenario_dir: str):
         """
         Loads orbit data from a directory containig a json file specifying the details of the mission being simulated.
         If the data has not been previously propagated, it will do so and store it in the same directory as the json file
@@ -513,7 +523,8 @@ class OrbitData:
         The data gets stored as a dictionary, with each entry containing the orbit data of each agent in the mission 
         indexed by the name of the agent.
         """
-        with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
+        orbitdata_specs : str = os.path.join(scenario_dir, 'MissionSpecs.json')
+        with open(orbitdata_specs, 'r') as scenario_specs:
             
             # load json file as dictionary
             mission_dict : dict = json.load(scenario_specs)
@@ -531,12 +542,10 @@ class OrbitData:
                     data[agent_name] = OrbitData.load(scenario_dir, agent_name)
 
             if uav_list:
-                for uav in uav_list:
-                    raise NotImplementedError('Orbitdata for UAVs not yet supported')
+                raise NotImplementedError('Orbitdata for UAVs not yet supported')
 
             if ground_station_list:
-                for groundstation in ground_station_list:
-                    raise NotImplementedError('Orbitdata for ground stations not yet supported')
+                raise NotImplementedError('Orbitdata for ground stations not yet supported')
 
             return data
         
