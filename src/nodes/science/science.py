@@ -52,7 +52,7 @@ class ScienceModule(InternalModule):
         self.results_path = results_path
         self.scenario_dir = scenario_path
         self.parent_name = parent_name
-        self.events_path = events_path
+        self.events = pd.read_csv(events_path)
     
     async def sim_wait(self, delay: float) -> None:
         return
@@ -65,77 +65,83 @@ class ScienceModule(InternalModule):
             self.onboard_processing_inbox = asyncio.Queue()
             self.processed_items = []
             self.sd = []
-            if "scenario1a" in self.scenario_dir:
-                self.points = self.load_points_scenario1a()
-                self.log(f'Scenario 1a points loaded!',level=logging.INFO)
-            elif "scenario1b" in self.scenario_dir:
-                self.points = self.load_points_scenario1b()
-                self.log(f'Scenario 1b points loaded!',level=logging.INFO)
-            elif "scenario2" in self.scenario_dir:
-                self.points = self.load_events_scenario2()
-                # self.points = self.load_events_scenario2_revised()
-                self.log(f'Scenario 2 points loaded!',level=logging.INFO)
+            self.points = self.load_points()
+
+            # if "scenario1a" in self.scenario_dir:
+            #     self.points = self.load_points_scenario1a()
+            #     self.log(f'Scenario 1a points loaded!',level=logging.INFO)
+            # elif "scenario1b" in self.scenario_dir:
+            #     self.points = self.load_points_scenario1b()
+            #     self.log(f'Scenario 1b points loaded!',level=logging.INFO)
+            # elif "scenario2" in self.scenario_dir:
+            #     self.points = self.load_events_scenario2()
+            #     # self.points = self.load_events_scenario2_revised()
+            #     self.log(f'Scenario 2 points loaded!',level=logging.INFO)
         except Exception as e:
             raise e
     
-    def load_points_scenario1a(self):
-        points = np.zeros(shape=(1000,4))
-        with open(self.scenario_dir+'/resources/riverATLAS.csv') as csvfile:
-            reader = csv.reader(csvfile)
-            count = 0
-            for row in reader:
-                if count == 0:
-                    count = 1
-                    continue
-                points[count-1,:] = [row[0], row[1], row[2], row[3]]
-                count = count + 1
-        return points
-
-    def load_points_scenario1b(self):
-        points = []
-        with open(self.scenario_dir+'/resources/one_year_floods_multiday.csv', 'r') as f:
-            d_reader = csv.DictReader(f)
-            for line in d_reader:
-                if len(points) > 0:
-                    points.append((line["lat"],line["lon"],line["severity"],line["time"],float(line["time"])+60*60,1))
-                else:
-                    points.append((line["lat"],line["lon"],line["severity"],line["time"],float(line["time"])+60*60,1))
-        with open(self.scenario_dir+'resources/flow_events_75_multiday.csv', 'r') as f:
-            d_reader = csv.DictReader(f)
-            for line in d_reader:
-                if len(points) > 0:
-                    points.append((line["lat"],line["lon"],float(line["water_level"])/float(line["flood_level"]),line["time"],float(line["time"])+86400,0))
-                else:
-                    points.append((line["lat"],line["lon"],float(line["water_level"])/float(line["flood_level"]),line["time"],float(line["time"])+86400,0))
-        points = np.asfarray(points)
-        self.log(f'Loaded scenario 1b points',level=logging.INFO)
-        return points
-
-    def load_events_scenario2(self):
-        points_df : pd.DataFrame = pd.read_csv(self.events_path)
-        self.log(f'Loaded scenario 2 points',level=logging.INFO)
-
+    def load_points(self) -> list:
         # return points
-        return points_df.values
+        return self.events.values
+    
+    # def load_points_scenario1a(self):
+    #     points = np.zeros(shape=(1000,4))
+    #     with open(self.scenario_dir+'/resources/riverATLAS.csv') as csvfile:
+    #         reader = csv.reader(csvfile)
+    #         count = 0
+    #         for row in reader:
+    #             if count == 0:
+    #                 count = 1
+    #                 continue
+    #             points[count-1,:] = [row[0], row[1], row[2], row[3]]
+    #             count = count + 1
+    #     return points
 
-    def load_events_scenario2_revised(self): # revised 9/1/23
-        points = []
-        # 0 is bloom, 1 is temperature
-        with open(self.scenario_dir+'/resources/bloom_events.csv', 'r') as f:
-            d_reader = csv.DictReader(f)
-            for line in d_reader:
-                points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],0))
-        with open(self.scenario_dir+'/resources/temperature_events.csv', 'r') as f:
-            d_reader = csv.DictReader(f)
-            for line in d_reader:
-                points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],1))
-        with open(self.scenario_dir+'/resources/level_events.csv', 'r') as f:
-            d_reader = csv.DictReader(f)
-            for line in d_reader:
-                points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],2))
-        points = np.asfarray(points)
-        self.log(f'Loaded scenario 2 points',level=logging.INFO)
-        return points
+    # def load_points_scenario1b(self):
+    #     points = []
+    #     with open(self.scenario_dir+'/resources/one_year_floods_multiday.csv', 'r') as f:
+    #         d_reader = csv.DictReader(f)
+    #         for line in d_reader:
+    #             if len(points) > 0:
+    #                 points.append((line["lat"],line["lon"],line["severity"],line["time"],float(line["time"])+60*60,1))
+    #             else:
+    #                 points.append((line["lat"],line["lon"],line["severity"],line["time"],float(line["time"])+60*60,1))
+    #     with open(self.scenario_dir+'resources/flow_events_75_multiday.csv', 'r') as f:
+    #         d_reader = csv.DictReader(f)
+    #         for line in d_reader:
+    #             if len(points) > 0:
+    #                 points.append((line["lat"],line["lon"],float(line["water_level"])/float(line["flood_level"]),line["time"],float(line["time"])+86400,0))
+    #             else:
+    #                 points.append((line["lat"],line["lon"],float(line["water_level"])/float(line["flood_level"]),line["time"],float(line["time"])+86400,0))
+    #     points = np.asfarray(points)
+    #     self.log(f'Loaded scenario 1b points',level=logging.INFO)
+    #     return points
+
+    # def load_events_scenario2(self):
+    #     points_df : pd.DataFrame = pd.read_csv(self.events_path)
+    #     self.log(f'Loaded scenario 2 points',level=logging.INFO)
+
+    #     # return points
+    #     return points_df.values
+
+    # def load_events_scenario2_revised(self): # revised 9/1/23
+    #     points = []
+    #     # 0 is bloom, 1 is temperature
+    #     with open(self.scenario_dir+'/resources/bloom_events.csv', 'r') as f:
+    #         d_reader = csv.DictReader(f)
+    #         for line in d_reader:
+    #             points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],0))
+    #     with open(self.scenario_dir+'/resources/temperature_events.csv', 'r') as f:
+    #         d_reader = csv.DictReader(f)
+    #         for line in d_reader:
+    #             points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],1))
+    #     with open(self.scenario_dir+'/resources/level_events.csv', 'r') as f:
+    #         d_reader = csv.DictReader(f)
+    #         for line in d_reader:
+    #             points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],2))
+    #     points = np.asfarray(points)
+    #     self.log(f'Loaded scenario 2 points',level=logging.INFO)
+    #     return points
         
     async def live(self) -> None:
         """
@@ -226,24 +232,6 @@ class ScienceModule(InternalModule):
                     msg = MeasurementResultsRequestMessage(**content)
                     await self.science_value_inbox.put(msg)
                     await self.onboard_processing_inbox.put(msg)
-
-
-                    # elif content['msg_type'] == SimulationMessageTypes.SENSES.value:
-                    #     # unpack message
-                    #     msg : SensesMessage = SensesMessage(**content)
-
-                    #     self.log('Received agent state in science module!',level=logging.WARN)
-                    #     await self.science_value_inbox.put(msg)
-
-                    # elif content['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-                    #     # unpack message 
-                    #     msg : AgentStateMessage = AgentStateMessage(**content)
-                        
-                    #     # send to bundle builder 
-                    #     self.log('Received agent state in science module!',level=logging.WARN)
-                    #     await self.science_value_inbox.put(msg)
-
-                    # else, ignore it
         
         except asyncio.CancelledError:
             print("Asyncio cancelled error in science module listener")
@@ -259,7 +247,6 @@ class ScienceModule(InternalModule):
                 
                 # print(msg)
                 measurement_action = MeasurementAction(**msg.measurement_action)
-                agent_state = SimulationAgentState.from_dict(msg.agent_state)
                 measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
                 obs = {}
                 if (    measurement_action.instrument_name == "Imaging SAR"
@@ -270,10 +257,10 @@ class ScienceModule(InternalModule):
                     obs["product_type"] = "visible"
                 else:
                     obs["product_type"] = "thermal"
-                obs["lat"] = measurement_req.lat_lon_pos[0]
-                obs["lon"] = measurement_req.lat_lon_pos[1]
 
                 if isinstance(measurement_req, GroundPointMeasurementRequest):
+                    obs["lat"] = measurement_req.lat_lon_pos[0]
+                    obs["lon"] = measurement_req.lat_lon_pos[1]
                     lat, lon, _ = measurement_req.lat_lon_pos
                     
                     science_value, outlier_data = self.compute_science_value(lat, lon, obs)

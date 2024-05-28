@@ -176,26 +176,25 @@ def main(   scenario_name : str,
     # Create agents 
     agents = []
     agent_port = port + 6
-    # if spacecraft_dict is not None:
-    #     for d in spacecraft_dict:
-    #         # Create spacecraft agents
-    #         agent = agent_factory(  scenario_name, 
-    #                                 scenario_path, 
-    #                                 results_path, 
-    #                                 orbitdata_dir, 
-    #                                 d,
-    #                                 spacecraft_dict.index(d), 
-    #                                 manager_network_config, 
-    #                                 agent_port, 
-    #                                 SimulationAgentTypes.SATELLITE, 
-    #                                 clock_config, 
-    #                                 logger,
-    #                                 measurement_reqs,
-    #                                 events_path,
-    #                                 delta
-    #                             )
-    #         agents.append(agent)
-    #         agent_port += 6
+    if spacecraft_dict is not None:
+        for spacecraft in spacecraft_dict:
+            # Create spacecraft agents
+            agent = agent_factory(  scenario_name, 
+                                    scenario_path, 
+                                    results_path, 
+                                    orbitdata_dir, 
+                                    spacecraft,
+                                    spacecraft_dict.index(spacecraft), 
+                                    manager_network_config, 
+                                    agent_port, 
+                                    SimulationAgentTypes.SATELLITE, 
+                                    clock_config, 
+                                    events_path,
+                                    logger,
+                                    delta
+                                )
+            agents.append(agent)
+            agent_port += 6
 
     if uav_dict is not None:
         # TODO Implement UAV agents
@@ -725,19 +724,22 @@ def agent_factory(  scenario_name : str,
                     port : int, 
                     agent_type : SimulationAgentTypes,
                     clock_config : float,
-                    logger : logging.Logger,
-                    initial_reqs : list,
                     events_path : str,
+                    logger : logging.Logger,
                     delta : timedelta
                 ) -> SimulationAgent:
-    ## unpack mission specs
+
+    # unpack mission specs
     agent_name = agent_dict['name']
     planner_dict = agent_dict.get('planner', None)
     science_dict = agent_dict.get('science', None)
     instruments_dict = agent_dict.get('instrument', None)
     orbit_state_dict = agent_dict.get('orbitState', None)
+    
+    # set results path
+    agent_results_path = os.path.join(results_path, agent_name)
 
-    ## create agent network config
+    # create agent network config
     manager_addresses : dict = manager_network_config.get_manager_addresses()
     req_address : str = manager_addresses.get(zmq.REP)[0]
     req_address = req_address.replace('*', 'localhost')
@@ -776,11 +778,15 @@ def agent_factory(  scenario_name : str,
         payload = []
 
     ## load science module
-    if science_dict is not None and science_dict == "True":
-        science = ScienceModule(results_path,scenario_path,agent_name,agent_network_config,events_path,logger=logger)
+    if science_dict is not None and science_dict.lower() == "true":
+        science = ScienceModule(agent_results_path,
+                                scenario_path,
+                                agent_name,
+                                agent_network_config,
+                                events_path,
+                                logger=logger)
     else:
         science = None
-        # raise NotImplementedError(f"Science module not yet implemented.")
 
     ## load planner module
     if planner_dict is not None:
@@ -832,7 +838,6 @@ def agent_factory(  scenario_name : str,
                                 utility_func, 
                                 preplanner,
                                 replanner,
-                                initial_reqs
                             )    
         
     ## create agent
