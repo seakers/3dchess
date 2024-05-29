@@ -118,7 +118,13 @@ class MeasurementResultsRequestMessage(SimulationMessage):
         - id (`str`) : Universally Unique IDentifier for this message
         - measurement (`dict`) : measurement data being communicated
     """
-    def __init__(self, src: str, dst: str, agent_state : dict, measurement_action : dict, id: str = None, path : list = [], **_):
+    def __init__(self, 
+                 src: str, 
+                 dst: str, 
+                 agent_state : dict, 
+                 measurement_action : dict, 
+                 id: str = None, 
+                 path : list = [], **_):
         super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT.value, id, path)
         
         if not isinstance(measurement_action, dict):

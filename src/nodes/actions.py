@@ -186,10 +186,11 @@ class MeasurementAction(AgentAction):
         - id (`str`) : identifying number for this task in uuid format
     """  
     def __init__(   self,
-                    measurement_req : dict,
-                    subtask_index : int,
+                    # measurement_req : dict,
+                    # subtask_index : int,
                     instrument_name : str,
-                    u_exp : Union[float, int], 
+                    field_of_regard : float,
+                    # u_exp : Union[float, int], 
                     t_start: Union[float, int], 
                     t_end: Union[float, int], 
                     status: str = 'PENDING', 
@@ -207,10 +208,11 @@ class MeasurementAction(AgentAction):
             - id (`str`) : identifying number for this task in uuid format
         """
         super().__init__(ActionTypes.MEASURE.value, t_start, t_end, status, id)
-        self.measurement_req = measurement_req
-        self.subtask_index = subtask_index
+        # self.measurement_req = measurement_req
+        # self.subtask_index = subtask_index
         self.instrument_name = instrument_name
-        self.u_exp = u_exp 
+        self.field_of_regard = field_of_regard
+        # self.u_exp = u_exp 
 
 class WaitForMessages(AgentAction):
     """

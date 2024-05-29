@@ -30,7 +30,7 @@ monitoring system.
         ├───science (science module files)
         └───planning (planning module files)
             ├───.backup (To be determined, temporary folder with old files)
-            └───consensus (consensus planners)
+            └───consensus (consensus-based planners)
 ```
 
 

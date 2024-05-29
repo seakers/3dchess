@@ -1,4 +1,5 @@
 import logging
+import os
 import numpy as np
 from pandas import DataFrame
 
@@ -86,7 +87,7 @@ class SimulationAgent(Agent):
         self.state_history : list = []
         
         # setup results folder:
-        self.results_path = setup_results_directory(results_path + '/' + self.get_element_name())
+        self.results_path = os.path.join(results_path, self.get_element_name())
     
     """
     --------------------

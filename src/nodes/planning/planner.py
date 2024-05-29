@@ -20,7 +20,7 @@ class PlanningModule(InternalModule):
                 utility_func : Callable[[], Any],
                 preplanner : AbstractPreplanner = None,
                 replanner : AbstractReplanner = None,
-                initial_reqs : list = [],
+                orbitdata : OrbitData = None,
                 level: int = logging.INFO, 
                 logger: logging.Logger = None
                 ) -> None:
@@ -69,15 +69,8 @@ class PlanningModule(InternalModule):
                     }
         self.agent_state : SimulationAgentState = None
         self.parent_agent_type = None
-        self.orbitdata : dict = None
+        self.orbitdata : OrbitData = orbitdata
         self.other_modules_exist : bool = False
-
-        self.initial_reqs = []
-        for req in initial_reqs:
-            req : MeasurementRequest
-            if req.t_start > 0:
-                continue
-            self.initial_reqs.append(req)
 
     async def sim_wait(self, delay: float) -> None:
         # does nothing
@@ -95,10 +88,6 @@ class PlanningModule(InternalModule):
         # setup agent state locks
         self.agent_state_lock = asyncio.Lock()
         self.agent_state_updated = asyncio.Event()
-
-        # place all initial requests into requests inbox
-        for req in self.initial_reqs:
-            await self.req_inbox.put(req)
 
     async def live(self) -> None:
         """
@@ -185,10 +174,7 @@ class PlanningModule(InternalModule):
 
                             # update parent agent information if the type of parent agent is unknown
                             if self.parent_agent_type is None:
-                                if isinstance(state, SatelliteAgentState):
-                                    # import orbit data
-                                    self.orbitdata : dict = self._load_orbit_data()
-                                    
+                                if isinstance(state, SatelliteAgentState):                                    
                                     # parent is a satellite-type agent
                                     self.parent_agent_type = SimulationAgentTypes.SATELLITE.value
                                 elif isinstance(state, UAVAgentState):
@@ -243,33 +229,6 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
-        
-    def _load_orbit_data(self) -> dict:
-        """
-        Loads agent orbit data from pre-computed csv files in scenario directory
-        """
-        if self.parent_agent_type != None:
-            raise RuntimeError(f"orbit data already loaded. It can only be assigned once.")            
-
-        results_path_list = self.results_path.split('/')
-        while "" in results_path_list:
-            results_path_list.remove("")
-        if 'results' in results_path_list[-1]:
-            results_path_list.pop()
-        if '.' in results_path_list[0]:
-            results_path_list.pop(0)
-        if 'scenarios' in results_path_list[0]:
-            results_path_list.pop(0)
-
-
-        scenario_name = []
-        for name_element in results_path_list:
-            scenario_name.extend([name_element, '/'])
-        scenario_name = ''.join(scenario_name)
-
-        scenario_dir = f'./scenarios/{scenario_name}'
-        
-        return OrbitData.from_directory(scenario_dir)
         
     """
     -----------------

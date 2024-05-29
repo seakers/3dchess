@@ -77,6 +77,11 @@
                     "angleHeight": 15,
                     "angleWidth": 60
                 },
+                "fieldOfRegardGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5,
+                    "angleWidth": 5
+                },
                 "@id": "bs1",
                 "@type": "Basic Sensor"
             },

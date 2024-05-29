@@ -262,14 +262,17 @@ class OrbitData:
         
         return out
     
-    def find_gp_access(self, t : float, look_angle) -> tuple:
+    def find_gp_access(self, t : float, look_angle : float, field_of_regard : float) -> tuple:
+        raise NotImplementedError('Whoops, need to develop still')
+        
         t = t/self.time_step
         t_u = t + 1
         t_l = t - 1
 
         access_data : pd.DataFrame = self.gp_access_data \
-                                    .query('@t_l < `time index` < @t_u') \
+                                    .query('@t_l < `time index` < @t_u & abs(@look_angle `look angle [deg]`) <= @field_of_regard') \
                                     .sort_values(by=['time index'])
+        
         x = 1
     
     def find_gp_index(self, lat: float, lon: float) -> tuple:
@@ -320,15 +323,15 @@ class OrbitData:
     """
     LOAD FROM PRE-COMPUTED DATA
     """
-    def load(scenario_dir : str, agent_name : str) -> object:
+    def load(scenario_path : str, agent_name : str) -> object:
         """
         Loads agent orbit data from pre-computed csv files in scenario directory
         """
-        data_dir = scenario_dir + '/orbit_data/'
+        orbitdata_path = os.path.join(scenario_path, 'orbit_data')
 
-        with open(scenario_dir + '/MissionSpecs.json', 'r') as scenario_specs:
+        with open(os.path.join(orbitdata_path, 'MissionSpecs.json'), 'r') as mission_specs:
             # load json file as dictionary
-            mission_dict : dict = json.load(scenario_specs)
+            mission_dict : dict = json.load(mission_specs)
             spacecraft_list : list = mission_dict.get('spacecraft', None)
             ground_station_list = mission_dict.get('groundStation', None)
             
@@ -342,11 +345,11 @@ class OrbitData:
                     continue
 
                 # load eclipse data
-                eclipse_file = data_dir + agent_folder + "eclipses.csv"
+                eclipse_file = os.path.join(orbitdata_path, agent_folder, "eclipses.csv")
                 eclipse_data = pd.read_csv(eclipse_file, skiprows=range(3))
                 
                 # load position data
-                position_file = data_dir + agent_folder + "state_cartesian.csv"
+                position_file = os.path.join(orbitdata_path, agent_folder, "state_cartesian.csv")
                 position_data = pd.read_csv(position_file, skiprows=range(4))
 
                 # load propagation time data
@@ -363,12 +366,13 @@ class OrbitData:
 
                 # load inter-satellite link data
                 isl_data = dict()
-                for file in os.listdir(data_dir + '/comm/'):                
+                comms_path = os.path.join(orbitdata_path, 'comm')
+                for file in os.listdir(comms_path):                
                     isl = re.sub(".csv", "", file)
                     sender, _, receiver = isl.split('_')
 
                     if 'sat' + str(index) in sender or 'sat' + str(index) in receiver:
-                        isl_file = data_dir + 'comm/' + file
+                        isl_file = os.path.join(comms_path, file)
                         if 'sat' + str(index) in sender:
                             receiver_index = int(re.sub("[^0-9]", "", receiver))
                             receiver_name = spacecraft_list[receiver_index].get('name')
@@ -404,9 +408,10 @@ class OrbitData:
 
                 # load ground station access data
                 gs_access_data = pd.DataFrame(columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]'])
-                for file in os.listdir(data_dir + agent_folder):
+                agent_orbitdata_path = os.path.join(orbitdata_path, agent_folder)
+                for file in os.listdir(agent_orbitdata_path):
                     if 'gndStn' in file:
-                        gndStn_access_file = data_dir + agent_folder + file
+                        gndStn_access_file = os.path.join(orbitdata_path, agent_folder, file)
                         gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
                         nrows, _ = gndStn_access_data.shape
 
@@ -461,7 +466,7 @@ class OrbitData:
 
                         for grid in mission_dict.get('grid'):
                             i_grid = mission_dict.get('grid').index(grid)
-                            metrics_file = data_dir + agent_folder + f'datametrics_instru{i_ins}_mode{i_mode}_grid{i_grid}.csv'
+                            metrics_file = os.path.join(orbitdata_path, agent_folder, f'datametrics_instru{i_ins}_mode{i_mode}_grid{i_grid}.csv')
                             metrics_data = pd.read_csv(metrics_file, skiprows=range(4))
                             
                             nrows, _ = metrics_data.shape
@@ -497,12 +502,12 @@ class OrbitData:
                 grid_data_compiled = []
                 for grid in mission_dict.get('grid'):
                     grid : dict
-                    if grid.get('@type') == 'customGrid':
+                    if grid.get('@type').lower() == 'customgrid':
                         grid_file = grid.get('covGridFilePath')
                         # grid_data = pd.read_csv(grid_file)
-                    elif grid.get('@type') == 'autogrid':
+                    elif grid.get('@type').lower() == 'autogrid':
                         i_grid = mission_dict.get('grid').index(grid)
-                        grid_file = data_dir + f'grid{i_grid}.csv'
+                        grid_file = os.path.join(orbitdata_path, f'grid{i_grid}.csv')
                     else:
                         raise NotImplementedError(f"Loading of grids of type `{grid.get('@type')} not yet supported.`")
 

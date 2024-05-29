@@ -77,6 +77,11 @@
                     "angleHeight": 15,
                     "angleWidth": 60
                 },
+                "fieldOfRegardGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5,
+                    "angleWidth": 5
+                },
                 "@id": "bs1",
                 "@type": "Basic Sensor"
             },
@@ -99,25 +104,34 @@
                     "aop": 0.0,
                     "ta": 0.0
                 }
-            }
+            },
+            "science": "True"
         }
     ],
     "grid": [
         {
             "@type": "customgrid",
-            "covGridFilePath": "./scenarios/toy/resources/cluster_grid0.csv"
+            "covGridFilePath": "./scenarios/toy_random/resources/cluster_grid0.csv"
         }
     ],
     "scenario": {
-        "@type": "PREDEF",
-        "initialRequestsPath": "./scenarios/toy/resources/initial_requests_merged.csv",
-        "eventsPath": "./scenarios/toy/resources/all_events_formatted.csv",
-        "duration": 30.0,
+        "events": {
+            "@type": "RANDOM",
+            "n_events": 5000,
+            "duration": 0.25,
+            "severity": 10,
+            "measurements": [
+                "visible",
+                "thermal",
+                "sar"
+            ],
+            "n_measurements": 3
+        },
         "connectivity": "FULL",
         "utility": "LINEAR"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/toy/orbit_data/"
+        "outDir": "./scenarios/toy_random/orbit_data/"
     }
 }

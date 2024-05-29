@@ -13,23 +13,23 @@ import concurrent.futures
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
 from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
-from src.nodes.planning.consensus.acbba import ACBBAReplanner
-from src.nodes.planning.preplanners import *
-from src.nodes.planning.replanners import *
-from src.manager import SimulationManager
-from src.monitor import ResultsMonitor
+from nodes.planning.consensus.acbba import ACBBAReplanner
+from nodes.planning.preplanners import *
+from nodes.planning.replanners import *
+from manager import SimulationManager
+from monitor import ResultsMonitor
 
-from src.nodes.states import *
-from src.nodes.uav import UAVAgent
-from src.nodes.agent import SimulationAgent
-from src.nodes.groundstat import GroundStationAgent
-from src.nodes.satellite import SatelliteAgent
-from src.nodes.planning.planner import PlanningModule
-from src.nodes.science.science import ScienceModule
-from src.nodes.science.utility import utility_function
-from src.nodes.science.reqs import GroundPointMeasurementRequest
-from src.nodes.environment import SimulationEnvironment
-from src.utils import *
+from nodes.states import *
+from nodes.uav import UAVAgent
+from nodes.agent import SimulationAgent
+from nodes.groundstat import GroundStationAgent
+from nodes.satellite import SatelliteAgent
+from nodes.planning.planner import PlanningModule
+from nodes.science.science import ScienceModule
+from nodes.science.utility import utility_function
+from nodes.science.reqs import GroundPointMeasurementRequest
+from nodes.environment import SimulationEnvironment
+from utils import *
 
 # from satplan.visualizer import Visualizer
 
@@ -179,22 +179,23 @@ def main(   scenario_name : str,
     if spacecraft_dict is not None:
         for spacecraft in spacecraft_dict:
             # Create spacecraft agents
-            agent = agent_factory(  scenario_name, 
-                                    scenario_path, 
-                                    results_path, 
-                                    orbitdata_dir, 
+            agent = agent_factory(
+                                    scenario_name, 
+                                    scenario_path,
+                                    results_path,
+                                    orbitdata_dir,
                                     spacecraft,
                                     spacecraft_dict.index(spacecraft), 
                                     manager_network_config, 
                                     agent_port, 
                                     SimulationAgentTypes.SATELLITE, 
-                                    clock_config, 
+                                    clock_config,
                                     events_path,
                                     logger,
                                     delta
                                 )
             agents.append(agent)
-            agent_port += 6
+            agent_port += 7
 
     if uav_dict is not None:
         # TODO Implement UAV agents
@@ -249,7 +250,7 @@ def main(   scenario_name : str,
             pool.submit(agent.run, *[])    
 
     # convert outputs for satplan visualizer
-    measurements_path = results_path + '/' + environment.get_element_name().lower() + '/measurements.csv'
+    measurements_path = os.path.join(results_path, environment.get_element_name().lower(), 'measurements.csv')
     performed_measurements : pd.DataFrame = pd.read_csv(measurements_path)
 
     spacecraft_names = [spacecraft['name'] for spacecraft in spacecraft_dict]
@@ -558,7 +559,6 @@ def check_changes_to_scenario(scenario_dir : str, orbitdata_dir : str) -> bool:
                     scenario_gridtype = scenario_grid['@type'].lower()
                     mission_gridtype = mission_grid['@type'].lower()
 
-                    # if  != 'customgrid'
                     if scenario_gridtype != mission_gridtype == 'customgrid':
                         if scenario_gridtype not in mission_grid['covGridFilePath']:
                             return True
@@ -771,66 +771,74 @@ def agent_factory(  scenario_name : str,
                                                             ]
                                         })
 
+    ## load orbitdata
+    if orbitdata_dir is not None:
+        orbitdata : OrbitData= OrbitData.load(scenario_path, agent_name)
+    else:
+        orbitdata = None
+
     ## load payload
     if instruments_dict:
         payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) # list of instruments
     else:
         payload = []
 
-    ## load science module
-    if science_dict is not None and science_dict.lower() == "true":
-        science = ScienceModule(agent_results_path,
-                                scenario_path,
-                                agent_name,
-                                agent_network_config,
-                                events_path,
-                                logger=logger)
-    else:
-        science = None
+    # ## load science module
+    # if science_dict is not None and science_dict.lower() == "true":
+    #     science = ScienceModule(agent_results_path,
+    #                             scenario_path,
+    #                             agent_name,
+    #                             agent_network_config,
+    #                             events_path,
+    #                             logger=logger)
+    # else:
+    #     science = None
+    science = None # TODO remove when updating science module
 
-    ## load planner module
-    if planner_dict is not None:
-        planner_dict : dict
-        utility_func = utility_function[planner_dict.get('utility', 'NONE')]
+    # ## load planner module
+    # if planner_dict is not None:
+    #     planner_dict : dict
+    #     utility_func = utility_function[planner_dict.get('utility', 'NONE')]
         
-        preplanner_dict = planner_dict.get('preplanner', None)
-        if isinstance(preplanner_dict, dict):
-            preplanner_type = preplanner_dict.get('@type', None)
-            period = preplanner_dict.get('period', np.Inf)
-            horizon = preplanner_dict.get('horizon', np.Inf)
+    #     preplanner_dict = planner_dict.get('preplanner', None)
+    #     if isinstance(preplanner_dict, dict):
+    #         preplanner_type = preplanner_dict.get('@type', None)
+    #         period = preplanner_dict.get('period', np.Inf)
+    #         horizon = preplanner_dict.get('horizon', np.Inf)
 
-            if preplanner_type == "FIFO":
-                collaboration = preplanner_dict.get('collaboration', "False") == "True"
-                preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
-            else:
-                raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
-        else:
-            preplanner = None
+    #         if preplanner_type == "FIFO":
+    #             collaboration = preplanner_dict.get('collaboration', "False") == "True"
+    #             preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
+    #         else:
+    #             raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
+    #     else:
+    #         preplanner = None
 
-        replanner_dict = planner_dict.get('replanner', None)
-        if isinstance(replanner_dict, dict):
-            replanner_type = replanner_dict.get('@type', None)
+    #     replanner_dict = planner_dict.get('replanner', None)
+    #     if isinstance(replanner_dict, dict):
+    #         replanner_type = replanner_dict.get('@type', None)
             
-            if replanner_type == 'FIFO':
-                collaboration = replanner_dict.get('collaboration', "False") == "True"
-                replanner = FIFOReplanner(utility_func, collaboration)
+    #         if replanner_type == 'FIFO':
+    #             collaboration = replanner_dict.get('collaboration', "False") == "True"
+    #             replanner = FIFOReplanner(utility_func, collaboration)
 
-            elif replanner_type == 'ACBBA':
-                max_bundle_size = replanner_dict.get('bundle size', 3)
-                dt_converge = replanner_dict.get('dt_convergence', 0.0)
-                period = replanner_dict.get('period', 60.0)
-                threshold = replanner_dict.get('threshold', 1)
-                horizon = replanner_dict.get('horizon', delta.total_seconds())
+    #         elif replanner_type == 'ACBBA':
+    #             max_bundle_size = replanner_dict.get('bundle size', 3)
+    #             dt_converge = replanner_dict.get('dt_convergence', 0.0)
+    #             period = replanner_dict.get('period', 60.0)
+    #             threshold = replanner_dict.get('threshold', 1)
+    #             horizon = replanner_dict.get('horizon', delta.total_seconds())
 
-                replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
+    #             replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
             
-            else:
-                raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
-        else:
-            # replanner = None
-            replanner = RelayReplanner()
-    else:
-        preplanner, replanner, utility_func = None, None, 'NONE'
+    #         else:
+    #             raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
+    #     else:
+    #         # replanner = None
+    #         replanner = RelayReplanner()
+    # else:
+    #     preplanner, replanner, utility_func = None, None, 'NONE'
+    preplanner, replanner, utility_func = None, None, 'NONE' #TODO remove when updating planner modules
 
     planner = PlanningModule(   results_path, 
                                 agent_name, 
@@ -843,35 +851,33 @@ def agent_factory(  scenario_name : str,
     ## create agent
     if agent_type == SimulationAgentTypes.UAV:
         ## load initial state 
-            pos = agent_dict['pos']
-            max_speed = agent_dict['max_speed']
-            if isinstance(clock_config, FixedTimesStepClockConfig):
-                eps = max_speed * clock_config.dt / 2.0
-            else:
-                eps = 1e-6
+        pos = agent_dict['pos']
+        max_speed = agent_dict['max_speed']
+        if isinstance(clock_config, FixedTimesStepClockConfig):
+            eps = max_speed * clock_config.dt / 2.0
+        else:
+            eps = 1e-6
 
-            initial_state = UAVAgentState(  agent_name,
-                                            [instrument.name for instrument in payload], 
-                                            pos, 
-                                            max_speed, 
-                                            eps=eps )
+        initial_state = UAVAgentState(  agent_name,
+                                        [instrument.name for instrument in payload], 
+                                        pos, 
+                                        max_speed, 
+                                        eps=eps )
 
-            ## create agent
-            return UAVAgent(   agent_name, 
-                                results_path,
-                                manager_network_config,
-                                agent_network_config,
-                                initial_state,
-                                payload,
-                                planner,
-                                science,
-                                logger=logger
-                            )
+        ## create agent
+        return UAVAgent(   agent_name, 
+                            results_path,
+                            manager_network_config,
+                            agent_network_config,
+                            initial_state,
+                            payload,
+                            planner,
+                            science,
+                            logger=logger
+                        )
 
     elif agent_type == SimulationAgentTypes.SATELLITE:
-        agent_folder = "sat" + str(agent_index) + '/'
-
-        position_file = orbitdata_dir + agent_folder + 'state_cartesian.csv'
+        position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
         time_data =  pd.read_csv(position_file, nrows=3)
         l : str = time_data.at[1,time_data.axes[1][0]]
         _, _, _, _, dt = l.split(' '); dt = float(dt)

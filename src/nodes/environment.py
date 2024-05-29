@@ -153,7 +153,6 @@ class SimulationEnvironment(EnvironmentNode):
                         # find/generate measurement results
                         measurement_action = MeasurementAction(**msg.measurement_action)
                         agent_state = SimulationAgentState.from_dict(msg.agent_state)
-                        # measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
                         measurement_data = self.query_measurement_data(src, agent_state, measurement_action)
 
                         # repsond to request
@@ -361,7 +360,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         if isinstance(agent_state, SatelliteAgentState):
             orbitdata : OrbitData = self.orbitdata[agent_name]
-            agent_state.attitude = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0])
+            gp_data = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0], measurement_action.field_of_regard)
             x = 1
             raise NotImplementedError('Whoops. Still TODO')
             # lat, lon, _ = measurement_req.lat_lon_pos
