@@ -491,63 +491,67 @@ class SimulationEnvironment(EnvironmentNode):
             received_measurements_df = DataFrame(data, columns=headers)
 
             # count total number of events in the simulation
-            if self.events_path is not None:
-                df = pd.read_csv(self.events_path)
-                n_events, _ = df.shape
+            # if self.events is not None:
+            #     df = pd.read_csv(self.events_path)
+            #     n_events, _ = df.shape
                 
 
-                events_detected = []
-                for _, row in df.iterrows():
-                    for req in self.measurement_reqs:
-                        req : MeasurementRequest
-                        lat,lon,_ = req.lat_lon_pos
+            #     events_detected = []
+            #     for _, row in df.iterrows():
+            #         for req in self.measurement_reqs:
+            #             req : MeasurementRequest
+            #             lat,lon,_ = req.lat_lon_pos
 
-                        if (    
-                                abs(lat - row['lat [deg]']) <= 1e-2 and
-                                abs(lon - row['lon [deg]']) <= 1e-2 and
-                                row['start time [s]'] <= req.t_start and
-                                abs(req.t_end - (row['start time [s]'] + row['duration [s]'])) <= 1e-2 and
-                                abs(req.s_max == row['severity']) <= 1e-2
-                        ):
-                            measurements : str = row['measurements']
-                            measurements : str = measurements.replace('[','')
-                            measurements : str = measurements.replace(']','')
-                            measurements : str = measurements.replace(' ','')
-                            measurements = measurements.split(',')
+            #             if (    
+            #                     abs(lat - row['lat [deg]']) <= 1e-2 and
+            #                     abs(lon - row['lon [deg]']) <= 1e-2 and
+            #                     row['start time [s]'] <= req.t_start and
+            #                     abs(req.t_end - (row['start time [s]'] + row['duration [s]'])) <= 1e-2 and
+            #                     abs(req.s_max == row['severity']) <= 1e-2
+            #             ):
+            #                 measurements : str = row['measurements']
+            #                 measurements : str = measurements.replace('[','')
+            #                 measurements : str = measurements.replace(']','')
+            #                 measurements : str = measurements.replace(' ','')
+            #                 measurements = measurements.split(',')
 
-                            if len(req.measurements) != len(measurements):
-                                continue
+            #                 if len(req.measurements) != len(measurements):
+            #                     continue
 
-                            measurement_not_found = False
-                            for measurement in req.measurements:
-                                if measurement not in measurements:
-                                    measurement_not_found = True
-                                    break
+            #                 measurement_not_found = False
+            #                 for measurement in req.measurements:
+            #                     if measurement not in measurements:
+            #                         measurement_not_found = True
+            #                         break
                                 
-                            if measurement_not_found:
-                                continue
+            #                 if measurement_not_found:
+            #                     continue
 
-                            # n_events_detected += 1 
-                            events_detected.append((req, row))
-                            break
+            #                 # n_events_detected += 1 
+            #                 events_detected.append((req, row))
+            #                 break
 
-                n_events_detected = len(events_detected)
+            #     n_events_detected = len(events_detected)
 
-                n_events_obs = 0
-                for event_req, _ in events_detected:
-                    for msg in self.measurement_history:
-                        msg : MeasurementResultsRequestMessage
-                        measurement_action = MeasurementAction(**msg.measurement_action)
-                        req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
+            #     n_events_obs = 0
+            #     for event_req, _ in events_detected:
+            #         for msg in self.measurement_history:
+            #             msg : MeasurementResultsRequestMessage
+            #             measurement_action = MeasurementAction(**msg.measurement_action)
+            #             req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
                         
-                        if req == event_req:
-                            n_events_obs += 1
-                            break
+            #             if req == event_req:
+            #                 n_events_obs += 1
+            #                 break
 
-            else:
-                n_events = 0
-                n_events_detected = 0
-                n_events_obs = 0
+            # else:
+            #     n_events = 0
+            #     n_events_detected = 0
+            #     n_events_obs = 0
+            # TODO ^^
+            n_events = 0
+            n_events_detected = 0
+            n_events_obs = 0
 
             # calculate utility achieved by measurements
             utility_total = 0.0
