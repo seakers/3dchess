@@ -29,8 +29,9 @@ def plot_bars(name : str, data : dict, show=False, save=True) -> None:
 
 if __name__ == '__main__':
 
-    scenarios = ['fifo_no_colab',
-                 'fifo_colab',
+    scenarios = [
+                'fifo_no_colab',
+                #  'fifo_colab',
                  'cbba_1',
                  'cbba_2',
                  'cbba_3',
