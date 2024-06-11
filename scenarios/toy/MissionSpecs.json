@@ -119,7 +119,10 @@
             "eventsPath" : "./scenarios/toy/resources/all_events_formatted.csv"
         },
         "connectivity" : "FULL", 
-        "utility" : "LINEAR"
+        "utility" : "LINEAR",
+        "clock" : {
+            "@type" : "EVENT"
+        }
     },
     "settings": {
         "coverageType": "GRID COVERAGE"
