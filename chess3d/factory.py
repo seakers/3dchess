@@ -213,6 +213,10 @@ class SimulationFactory:
         """
         Generates a `ClockConfig` object based on the given parameters
         """
+        # unpack clock config information
+        clock_dict : dict = scenario_dict['scenario'].get('clock', None)
+        clock_type : str = clock_dict.get('@type', None)
+        if not clock_type: raise ValueError('Clock type not defined in inpt file.')
 
         # load simulation start and end dates
         epoch_dict : dict = scenario_dict.get("epoch"); epoch_dict.pop('@type')
@@ -220,37 +224,30 @@ class SimulationFactory:
         delta = timedelta(days=scenario_dict.get("duration"))
         end_date = start_date + delta
 
-        ## define simulation clock
-        if spacecraft_dict:
-            if not orbitdata_dir: raise ImportError('Cannot initialize spacecraft agents. Orbit data was not loaded successfully.')
+        # generate simulation clock config 
+        if clock_type.lower() == 'step': # generate fixed time-step clock
+            
+            # check if spacecraft are present in the simulation
+            if spacecraft_dict: # use propagator time-step
+                # check for existance of orbitdata
+                if not orbitdata_dir: raise ImportError('Cannot initialize spacecraft agents. Orbit data was not loaded successfully.')
 
-            for spacecraft in spacecraft_dict:
-                spacecraft : dict
-                index = spacecraft_dict.index(spacecraft)
-                agent_dir = f"sat{index}"
-
-                position_file = os.path.join(orbitdata_dir, agent_dir, 'state_cartesian.csv')
+                # load orbit data info
+                position_file = os.path.join(orbitdata_dir, "sat0", 'state_cartesian.csv')
                 time_data =  pd.read_csv(position_file, nrows=3)
                 l : str = time_data.at[1,time_data.axes[1][0]]
+                
+                # get timestep from propagated orbit data
                 _, _, _, _, dt = l.split(' ')
                 dt = float(dt)
-                break
-        else:
-            dt = None
+            
+            else: # use user-defined time-step
+                dt = float(clock_dict.get('stepSize', None))
+                if dt is None: raise ValueError('`stepSize` not defined in input file.')
 
-        clock_dict : dict = scenario_dict['scenario'].get('clock', None)
-        clock_type : str = clock_dict.get('@type', None)
-
-        if not clock_type: raise ValueError('Clock type not defined in inpt file.')
-
-        if clock_type.lower() == 'step':
-            if dt is None: dt = float(clock_dict.get('stepSize', None))
-            if dt is None: raise ValueError('`stepSize` not defined in input file.')
-
+            # return clock config
             return FixedTimesStepClockConfig(start_date, end_date, dt)
 
-        elif clock_type.lower() == 'event':
-            return EventDrivenClockConfig(start_date, end_date)
-
         else:
+            # return event-driven clock config
             return EventDrivenClockConfig(start_date, end_date)

@@ -192,7 +192,8 @@ def main(   scenario_name : str,
                                         utility_function[env_utility_function], 
                                         events_path,
                                         logger=logger)
-            
+    
+    # ------------------------------------
     # run simulation
     with concurrent.futures.ThreadPoolExecutor(len(agents) + 3) as pool:
         pool.submit(monitor.run, *[])
@@ -202,61 +203,61 @@ def main(   scenario_name : str,
             agent : SimulationAgent
             pool.submit(agent.run, *[])    
 
-    # convert outputs for satplan visualizer
-    measurements_path = os.path.join(results_path, environment.get_element_name().lower(), 'measurements.csv')
-    performed_measurements : pd.DataFrame = pd.read_csv(measurements_path)
+    # TODO convert outputs for satplan visualizer
+    # measurements_path = os.path.join(results_path, environment.get_element_name().lower(), 'measurements.csv')
+    # performed_measurements : pd.DataFrame = pd.read_csv(measurements_path)
 
-    spacecraft_names = [spacecraft['name'] for spacecraft in spacecraft_dict]
-    spacecraft_ids = os.listdir(orbitdata_dir)
+    # spacecraft_names = [spacecraft['name'] for spacecraft in spacecraft_dict]
+    # spacecraft_ids = os.listdir(orbitdata_dir)
 
-    for spacecraft in spacecraft_dict:
-        spacecraft : dict
-        name = spacecraft.get('name')
-        index = spacecraft_dict.index(spacecraft)
-        spacecraft_id =  "sat" + str(index)
-        plan_path = orbitdata_dir+'/'+spacecraft_id+'/plan.csv'
+    # for spacecraft in spacecraft_dict:
+    #     spacecraft : dict
+    #     name = spacecraft.get('name')
+    #     index = spacecraft_dict.index(spacecraft)
+    #     spacecraft_id =  "sat" + str(index)
+    #     plan_path = orbitdata_dir+'/'+spacecraft_id+'/plan.csv'
 
-        with open(plan_path,'w') as csvfile:
-            csvwriter = csv.writer(csvfile, delimiter=',',
-                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
+    #     with open(plan_path,'w') as csvfile:
+    #         csvwriter = csv.writer(csvfile, delimiter=',',
+    #                             quotechar='|', quoting=csv.QUOTE_MINIMAL)
             
-            sat_measurements : pd.DataFrame = performed_measurements.query('`measurer` == @name').sort_values(by=['t_img'])
-            for _, row in sat_measurements.iterrows():
-                lat,lon = None, None
-                for measurement_req in measurement_reqs:
-                    measurement_req : GroundPointMeasurementRequest
-                    if row['req_id'] in measurement_req.id:
-                        lat,lon,_ = measurement_req.lat_lon_pos
+    #         sat_measurements : pd.DataFrame = performed_measurements.query('`measurer` == @name').sort_values(by=['t_img'])
+    #         for _, row in sat_measurements.iterrows():
+    #             lat,lon = None, None
+    #             for measurement_req in measurement_reqs:
+    #                 measurement_req : GroundPointMeasurementRequest
+    #                 if row['req_id'] in measurement_req.id:
+    #                     lat,lon,_ = measurement_req.lat_lon_pos
                 
-                if lat is None and lon is None:
-                    continue
+    #             if lat is None and lon is None:
+    #                 continue
 
-                obs = {
-                    "start" : row['t_img'],
-                    "end" : row['t_img'] + dt,
-                    "location" : {
-                                    "lat" : lat,
-                                    "lon" : lon
-                                    }
-                }
-                row_out = [obs["start"],obs["end"],obs["location"]["lat"],obs["location"]["lon"]]
-                csvwriter.writerow(row_out)
+    #             obs = {
+    #                 "start" : row['t_img'],
+    #                 "end" : row['t_img'] + dt,
+    #                 "location" : {
+    #                                 "lat" : lat,
+    #                                 "lon" : lon
+    #                                 }
+    #             }
+    #             row_out = [obs["start"],obs["end"],obs["location"]["lat"],obs["location"]["lon"]]
+    #             csvwriter.writerow(row_out)
 
-    if plot_results:
-        raise NotImplementedError("Visualization integration with `satplan` not yet supported.")
+    # if plot_results:
+    #     raise NotImplementedError("Visualization integration with `satplan` not yet supported.")
         
-        visualizer = Visualizer(scenario_path+'/',
-                                results_path+'/',
-                                start_date,
-                                dt,
-                                scenario_dict.get("duration"),
-                                orbitdata_dir+'/grid0.csv'
-                                )
-        visualizer.process_mission_data()
-        visualizer.plot_mission()
+    #     visualizer = Visualizer(scenario_path+'/',
+    #                             results_path+'/',
+    #                             start_date,
+    #                             dt,
+    #                             scenario_dict.get("duration"),
+    #                             orbitdata_dir+'/grid0.csv'
+    #                             )
+    #     visualizer.process_mission_data()
+    #     visualizer.plot_mission()
         
-        if save_plot:
-            raise NotImplementedError("Saving of `satplan` animations not yet supported.")
+    #     if save_plot:
+    #         raise NotImplementedError("Saving of `satplan` animations not yet supported.")
     
     print(f'\nSIMULATION FOR SCENARIO `{scenario_name}` DONE')
 
