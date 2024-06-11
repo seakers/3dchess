@@ -19,19 +19,18 @@ from chess3d.nodes.uav import UAVAgent
 
 class SimulationFactory:
     def generate_agent(  scenario_name : str, 
-                        scenario_path : str,
-                        results_path : str,
-                        orbitdata_dir : str,
-                        agent_dict : dict, 
-                        agent_index : int,
-                        manager_network_config : NetworkConfig, 
-                        port : int, 
-                        agent_type : SimulationAgentTypes,
-                        clock_config : float,
-                        events_path : str,
-                        logger : logging.Logger,
-                        delta : timedelta
-                    ) -> SimulationAgent:
+                            scenario_path : str,
+                            results_path : str,
+                            orbitdata_dir : str,
+                            agent_dict : dict, 
+                            agent_index : int,
+                            manager_network_config : NetworkConfig, 
+                            port : int, 
+                            agent_type : SimulationAgentTypes,
+                            clock_config : float,
+                            events_path : str,
+                            logger : logging.Logger
+                        ) -> SimulationAgent:
         """
         Creates an agent from a list of parameters
         """

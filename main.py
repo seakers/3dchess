@@ -145,8 +145,7 @@ def main(   scenario_name : str,
                                                 SimulationAgentTypes.SATELLITE, 
                                                 clock_config,
                                                 events_path,
-                                                logger,
-                                                delta
+                                                logger
                                             )
             agents.append(agent)
             agent_port += 7
