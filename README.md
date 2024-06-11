@@ -23,8 +23,8 @@ monitoring system.
 ```
 ├───docs (sphinx and other documentation)
 ├───scenarios (folder with the input and results files)
-├───viz_examples (To be determined, temporary folder with old files)
-└───src (folder with main source code)
+├───.temp (To be determined, temporary folder with old files)
+└───chess3d (folder with main source code)
     └───nodes (files for all agents)
         ├───engineering (engineering module files)
         ├───science (science module files)
@@ -34,14 +34,20 @@ monitoring system.
 ```
 
 
+## Installation
+> **Requires:** Unix-like operating system (Linux (Ubuntu, CentOS...), Mac, WSL), `python 3.8`, `pip`, `gfortran`, `make`
+
+1. Install the [`dmas`](https://github.com/seakers/DMASpy) library and all of its dependencies is required for running these scenarios.
+
+2. Run `make` from the root repo directory.
+
 ## Running DMAS - 3DCHESS
-> NOTE: Install of [`dmas`](https://github.com/seakers/DMASpy) library and all of its dependencies is required for running these scenarios.
 
 Open a terminal in this directory and run `main.py` by entering the following command:
 
     python main.py <scenario name>
 
-To create a scenario, see `README.md` in the `scenarios` directory.
+To create a scenario, see `scenarios/README.md`.
 
 ## Acknowledgments
 

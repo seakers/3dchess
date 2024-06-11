@@ -19,10 +19,10 @@
             "name": "VISUALIZER TESTER - Plane",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/src/visualizer.py",
+            "program": "${workspaceRoot}/chess3d/visualizer.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/src",
+            "cwd": "${workspaceRoot}/chess3d",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             }
@@ -34,7 +34,7 @@
             "program": "${workspaceRoot}/visualizer.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/src/src",
+            "cwd": "${workspaceRoot}/chess3d",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
@@ -47,10 +47,10 @@
             "name": "VISUALIZER TEST - SAT SIM",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/src/main.py",
+            "program": "${workspaceRoot}/chess3d/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceRoot}/src/",
+            "cwd": "${workspaceRoot}/chess3d/",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
@@ -60,12 +60,12 @@
             "name": "TOY",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/src/main.py",
+            "program": "${workspaceRoot}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/src"
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
             },
             "args": "toy"
         },
@@ -73,12 +73,12 @@
             "name": "TOY RANDOM",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/src/main.py",
+            "program": "${workspaceRoot}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/src"
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
             },
             "args": "toy_random"
         }

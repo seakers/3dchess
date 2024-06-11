@@ -13,23 +13,23 @@ import concurrent.futures
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
 from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
-from nodes.planning.consensus.acbba import ACBBAReplanner
-from nodes.planning.preplanners import *
-from nodes.planning.replanners import *
-from manager import SimulationManager
-from monitor import ResultsMonitor
+from chess3d.nodes.planning.consensus.acbba import ACBBAReplanner
+from chess3d.nodes.planning.preplanners import *
+from chess3d.nodes.planning.replanners import *
+from chess3d.manager import SimulationManager
+from chess3d.monitor import ResultsMonitor
 
-from nodes.states import *
-from nodes.uav import UAVAgent
-from nodes.agent import SimulationAgent
-from nodes.groundstat import GroundStationAgent
-from nodes.satellite import SatelliteAgent
-from nodes.planning.planner import PlanningModule
-from nodes.science.science import ScienceModule
-from nodes.science.utility import utility_function
-from nodes.science.reqs import GroundPointMeasurementRequest
-from nodes.environment import SimulationEnvironment
-from utils import *
+from chess3d.nodes.states import *
+from chess3d.nodes.uav import UAVAgent
+from chess3d.nodes.agent import SimulationAgent
+from chess3d.nodes.groundstat import GroundStationAgent
+from chess3d.nodes.satellite import SatelliteAgent
+from chess3d.nodes.planning.planner import PlanningModule
+from chess3d.nodes.science.science import ScienceModule
+from chess3d.nodes.science.utility import utility_function
+from chess3d.nodes.science.reqs import GroundPointMeasurementRequest
+from chess3d.nodes.environment import SimulationEnvironment
+from chess3d.utils import *
 
 # from satplan.visualizer import Visualizer
 
