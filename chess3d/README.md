@@ -59,11 +59,7 @@ UAV agents can move in any direction and at predefined a maximum speed. They pos
 The Ground Station agent's state is much simpler and has unlimited internal resources. It does not track its posistion and velocity and is unable to perform measurements. It can only communicate with other agents and generate measurement requests.
 
 #
-## Planners
-Different planning strategies are to be tested with this platform along with various utility functions. 
-
-
-### Measurement Task Description:
+## Measurement Task Description:
 Measurement Tasks are defined by a tuple containing their:
 1. Location (lat [°], lon [°], alt [km])
 2. Max Reward (defined by the `Science Module`)
@@ -73,3 +69,9 @@ Measurement Tasks are defined by a tuple containing their:
 7. Task ID
 
 This information will be shared to and amongst agents as `TaskRequest` messages. 
+
+## Planners
+Different planning strategies are to be tested with this platform along with various utility functions. 
+
+### Naive Greedy Planner
+Schedules observations in a greedy fashion by choosing the earliest next possible observation. Does NOT consider the predicted utility of performing said observation.

@@ -54,7 +54,7 @@ class AbstractPreplanner(AbstractPlanner):
     def needs_planning( self, 
                         state : SimulationAgentState,
                         current_plan : Plan, 
-                        *_
+                        **_
                         ) -> bool:
         """ Determines whether a new plan needs to be initalized """    
 
@@ -62,62 +62,10 @@ class AbstractPreplanner(AbstractPlanner):
                 or state.t >= self.plan.t_next)     # periodic planning period has been reached
 
     @runtime_tracker
-    def _update_access_times(self,
-                             state : SimulationAgentState,
-                             agent_orbitdata : OrbitData) -> None:
-        """
-        Calculates and saves the access times of all known requests
-        """
-        if state.t >= self.plan.t_next or self.plan.t < 0:
-            # recalculate access times for all known requests            
-            for req in self.known_reqs:
-                req : MeasurementRequest
-                self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-
-                # check access for each required measurement
-                for instrument in self.access_times[req.id]:
-                    if instrument not in state.payload:
-                        # agent cannot perform this request TODO add KG support
-                        continue
-
-                    if (req, instrument) in self.completed_requests:
-                        # agent has already performed this request
-                        continue
-
-                    if isinstance(req, GroundPointMeasurementRequest):
-                        lat,lon,_ = req.lat_lon_pos 
-                        t_start = state.t
-                        t_end = self.plan.t + self.horizon if self.plan else state.t + self.horizon
-                        if isinstance(state, SatelliteAgentState):
-                            df : pd.DataFrame = agent_orbitdata \
-                                            .get_ground_point_accesses_future(lat, lon, instrument, t_start, t_end)
-                            t_arrivals = [row['time index'] * agent_orbitdata.time_step
-                                        for _, row in df.iterrows()]
-                            self.access_times[req.id][instrument] = t_arrivals
-                        else:
-                            raise NotImplementedError(f"access time estimation for agents of type `{type(state)}` not yet supported.")    
-
-                    else:
-                        raise NotImplementedError(f"access time estimation for measurement requests of type `{type(req)}` not yet supported.")
-        elif any([req.id not in self.access_times for req in self.known_reqs]):
-            for req in self.known_reqs:
-                if req.id not in self.access_times:
-                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
-
-
-    @runtime_tracker
     def generate_plan(  self, 
                         state : SimulationAgentState,
-                        current_plan : Plan,
-                        completed_actions : list,
-                        aborted_actions : list,
-                        pending_actions : list,
-                        incoming_reqs : list,
-                        generated_reqs : list,
-                        relay_messages : list,
-                        misc_messages : list,
                         clock_config : ClockConfig,
-                        orbitdata : dict = None
+                        **_
                     ) -> Plan:
         
         # schedule measurements

@@ -288,8 +288,7 @@ class PlanningModule(InternalModule):
                                                     incoming_reqs,
                                                     generated_reqs,
                                                     relay_messages,
-                                                    misc_messages,
-                                                    self.orbitdata
+                                                    misc_messages
                                                 )
                     
                     # check if there is a need to construct a new plan
@@ -304,8 +303,7 @@ class PlanningModule(InternalModule):
                                                                         generated_reqs,
                                                                         relay_messages,
                                                                         misc_messages,
-                                                                        self._clock_config,
-                                                                        self.orbitdata
+                                                                        self._clock_config
                                                                         )
 
                         # save copy of plan for post-processing
@@ -331,8 +329,7 @@ class PlanningModule(InternalModule):
                                                     incoming_reqs,
                                                     generated_reqs,
                                                     relay_messages,
-                                                    misc_messages,
-                                                    self.orbitdata
+                                                    misc_messages
                                                 )
                     
                     if self.replanner.needs_planning(state, plan):
@@ -351,8 +348,7 @@ class PlanningModule(InternalModule):
                                                                     generated_reqs,
                                                                     relay_messages,
                                                                     misc_messages,
-                                                                    self._clock_config,
-                                                                    self.orbitdata
+                                                                    self._clock_config
                                                                     )
 
                         # update last time plan was updated

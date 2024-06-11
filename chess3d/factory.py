@@ -1,6 +1,7 @@
 from datetime import timedelta
 import logging
 import os
+import numpy as np
 import pandas as pd
 import zmq
 
@@ -16,9 +17,14 @@ from chess3d.nodes.satellite import SatelliteAgent
 from chess3d.nodes.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
 from chess3d.nodes.agent import SimulationAgent
 from chess3d.nodes.uav import UAVAgent
+from chess3d.nodes.science.utility import utility_function
 
 class SimulationFactory:
-    def generate_agent(  scenario_name : str, 
+    """
+    Generates simulation elements according to input file
+    """
+
+    def generate_agent(     scenario_name : str, 
                             scenario_path : str,
                             results_path : str,
                             orbitdata_dir : str,
@@ -36,7 +42,7 @@ class SimulationFactory:
         """
 
         # unpack mission specs
-        agent_name = agent_dict['name']
+        agent_name = agent_dict.get('name', None)
         planner_dict = agent_dict.get('planner', None)
         science_dict = agent_dict.get('science', None)
         instruments_dict = agent_dict.get('instrument', None)
@@ -79,15 +85,12 @@ class SimulationFactory:
 
         ## load orbitdata
         if orbitdata_dir is not None:
-            orbitdata : OrbitData = OrbitData.load(scenario_path, agent_name)
+            agent_orbitdata : OrbitData = OrbitData.load(scenario_path, agent_name)
         else:
-            orbitdata = None
+            agent_orbitdata = None
 
         ## load payload
-        if instruments_dict:
-            payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) # list of instruments
-        else:
-            payload = []
+        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) if instruments_dict else []
 
         # ## load science module
         # if science_dict is not None and science_dict.lower() == "true":
@@ -101,18 +104,18 @@ class SimulationFactory:
         #     science = None
         science = None # TODO remove when updating science module
 
-        # ## load planner module
+        ## load planner module
         # if planner_dict is not None:
         #     planner_dict : dict
         #     utility_func = utility_function[planner_dict.get('utility', 'NONE')]
             
         #     preplanner_dict = planner_dict.get('preplanner', None)
         #     if isinstance(preplanner_dict, dict):
-        #         preplanner_type = preplanner_dict.get('@type', None)
+        #         preplanner_type : str = preplanner_dict.get('@type', None)
         #         period = preplanner_dict.get('period', np.Inf)
         #         horizon = preplanner_dict.get('horizon', np.Inf)
 
-        #         if preplanner_type == "FIFO":
+        #         if preplanner_type.lower() == "FIFO":
         #             collaboration = preplanner_dict.get('collaboration', "False") == "True"
         #             preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
         #         else:
@@ -128,14 +131,14 @@ class SimulationFactory:
         #             collaboration = replanner_dict.get('collaboration', "False") == "True"
         #             replanner = FIFOReplanner(utility_func, collaboration)
 
-        #         elif replanner_type == 'ACBBA':
-        #             max_bundle_size = replanner_dict.get('bundle size', 3)
-        #             dt_converge = replanner_dict.get('dt_convergence', 0.0)
-        #             period = replanner_dict.get('period', 60.0)
-        #             threshold = replanner_dict.get('threshold', 1)
-        #             horizon = replanner_dict.get('horizon', delta.total_seconds())
+        #         # elif replanner_type == 'ACBBA': #TODO
+        #         #     max_bundle_size = replanner_dict.get('bundle size', 3)
+        #         #     dt_converge = replanner_dict.get('dt_convergence', 0.0)
+        #         #     period = replanner_dict.get('period', 60.0)
+        #         #     threshold = replanner_dict.get('threshold', 1)
+        #         #     horizon = replanner_dict.get('horizon', delta.total_seconds())
 
-        #             replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
+        #         #     replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
                 
         #         else:
         #             raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
@@ -144,7 +147,8 @@ class SimulationFactory:
         #         replanner = RelayReplanner()
         # else:
         #     preplanner, replanner, utility_func = None, None, 'NONE'
-        preplanner, replanner, utility_func = None, None, 'NONE' #TODO remove when updating planner modules
+        
+        preplanner, replanner, utility_func = None, None, 'NONE'
 
         planner = PlanningModule(   results_path, 
                                     agent_name, 
@@ -152,6 +156,8 @@ class SimulationFactory:
                                     utility_func, 
                                     preplanner,
                                     replanner,
+                                    agent_orbitdata,
+                                    logger=logger
                                 )    
             
         ## create agent

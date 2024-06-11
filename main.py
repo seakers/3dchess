@@ -127,7 +127,7 @@ def main(   scenario_name : str,
     monitor = ResultsMonitor(clock_config, monitor_network_config, logger=logger)
     
     # ------------------------------------
-    # Create agents 
+    # create agents 
     agents = []
     agent_port = port + 6
     if spacecraft_dict is not None:
