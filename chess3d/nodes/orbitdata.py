@@ -555,7 +555,7 @@ class OrbitData:
 
             return data
         
-    def precompute(scenario_name) -> str:
+    def precompute(scenario_name : str) -> str:
         """
         Pre-calculates coverage and position data for a given scenario
         """
@@ -785,7 +785,9 @@ class OrbitData:
 """
 TESTING
 """
-def main(scenario_dir):
+if __name__ == '__main__':
+    scenario_dir = './scenarios/sim_test/'
+    
     orbit_data_list = OrbitData.from_directory(scenario_dir)
 
     # expected val: (grid, point) = 0, 0
@@ -799,8 +801,3 @@ def main(scenario_dir):
 
         print(orbit_data_list[agent].is_accessing_ground_point(lat, lon, t))
         break
-
-
-if __name__ == '__main__':
-    scenario_dir = './scenarios/sim_test/'
-    main(scenario_dir)

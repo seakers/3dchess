@@ -3,9 +3,6 @@ import csv
 from datetime import datetime, timedelta
 import json
 import logging
-from instrupy.base import Instrument
-import orbitpy.util
-from orbitpy.mission import Mission
 import pandas as pd
 import random
 import zmq
@@ -14,19 +11,14 @@ import concurrent.futures
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
 from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
-from chess3d.nodes.planning.consensus.acbba import ACBBAReplanner
+from chess3d.factory import SimulationFactory
 from chess3d.nodes.planning.preplanners import *
 from chess3d.nodes.planning.replanners import *
 from chess3d.manager import SimulationManager
 from chess3d.monitor import ResultsMonitor
 
 from chess3d.nodes.states import *
-from chess3d.nodes.uav import UAVAgent
 from chess3d.nodes.agent import SimulationAgent
-from chess3d.nodes.groundstat import GroundStationAgent
-from chess3d.nodes.satellite import SatelliteAgent
-from chess3d.nodes.planning.planner import PlanningModule
-from chess3d.nodes.science.science import ScienceModule
 from chess3d.nodes.science.utility import utility_function
 from chess3d.nodes.science.reqs import GroundPointMeasurementRequest
 from chess3d.nodes.environment import SimulationEnvironment
@@ -47,15 +39,6 @@ from chess3d.utils import *
 
 Wrapper for running DMAS simulations for the 3DCHESS project
 """
-def print_welcome(scenario_name) -> None:
-    os.system('cls' if os.name == 'nt' else 'clear')
-    out = "\n======================================================"
-    out += '\n   _____ ____        ________  __________________\n  |__  // __ \      / ____/ / / / ____/ ___/ ___/\n   /_ </ / / /_____/ /   / /_/ / __/  \__ \\__ \ \n ___/ / /_/ /_____/ /___/ __  / /___ ___/ /__/ / \n/____/_____/      \____/_/ /_/_____//____/____/ (v1.0)'
-    out += "\n======================================================"
-    out += '\n\tTexas A&M University - SEAK Lab ©'
-    out += "\n======================================================"
-    out += f"\nSCENARIO: {scenario_name}"
-    print(out)
 
 def main(   scenario_name : str, 
             scenario_path : str,
@@ -79,6 +62,10 @@ def main(   scenario_name : str,
     uav_dict        = scenario_dict.get('uav', None)
     gstation_dict   = scenario_dict.get('groundStation', None)
     settings_dict   = scenario_dict.get('settings', None)
+
+    # unpack scenario info
+    scenario_config_dict : dict = scenario_dict['scenario']
+    grid_config_dict : dict = scenario_dict['grid']
     
     # load agent names
     agent_names = [SimulationElementRoles.ENVIRONMENT.value]
@@ -107,39 +94,11 @@ def main(   scenario_name : str,
     # precompute orbit data
     orbitdata_dir = OrbitData.precompute(scenario_name) if spacecraft_dict is not None else None
 
-    # read clock configuration
-    epoch_dict : dict = scenario_dict.get("epoch"); epoch_dict.pop('@type')
-    start_date = datetime(**epoch_dict)
-    delta = timedelta(days=scenario_dict.get("duration"))
-    end_date = start_date + delta
-
-    ## define simulation clock
-    if spacecraft_dict:
-        if not orbitdata_dir: raise ImportError('Cannot initialize spacecraft agents. Orbit data was not loaded successfully.')
-
-        for spacecraft in spacecraft_dict:
-            spacecraft_dict : list
-            spacecraft : dict
-            index = spacecraft_dict.index(spacecraft)
-            agent_dir = f"sat{index}"
-
-            position_file = os.path.join(orbitdata_dir, agent_dir, 'state_cartesian.csv')
-            time_data =  pd.read_csv(position_file, nrows=3)
-            l : str = time_data.at[1,time_data.axes[1][0]]
-            _, _, _, _, dt = l.split(' ')
-            dt = float(dt)
-            break
-    else:
-        dt = delta.total_seconds()/100
-
-    # clock_config = FixedTimesStepClockConfig(start_date, end_date, dt)
-    clock_config = EventDrivenClockConfig(start_date, end_date)
-
-    # ------------------------------------
-    # unpack scenario
-    scenario_config_dict : dict = scenario_dict['scenario']
-    grid_config_dict : dict = scenario_dict['grid']
-
+    # load simulation clock configuration
+    clock_config : ClockConfig = SimulationFactory.generate_clock(scenario_dict,
+                                                                  spacecraft_dict, 
+                                                                  orbitdata_dir)
+    
     # load events
     events_path = load_events(scenario_path, clock_config, scenario_config_dict, grid_config_dict)
 
@@ -174,21 +133,21 @@ def main(   scenario_name : str,
     if spacecraft_dict is not None:
         for spacecraft in spacecraft_dict:
             # Create spacecraft agents
-            agent = agent_factory(
-                                    scenario_name, 
-                                    scenario_path,
-                                    results_path,
-                                    orbitdata_dir,
-                                    spacecraft,
-                                    spacecraft_dict.index(spacecraft), 
-                                    manager_network_config, 
-                                    agent_port, 
-                                    SimulationAgentTypes.SATELLITE, 
-                                    clock_config,
-                                    events_path,
-                                    logger,
-                                    delta
-                                )
+            agent = SimulationFactory.generate_agent(
+                                                scenario_name, 
+                                                scenario_path,
+                                                results_path,
+                                                orbitdata_dir,
+                                                spacecraft,
+                                                spacecraft_dict.index(spacecraft), 
+                                                manager_network_config, 
+                                                agent_port, 
+                                                SimulationAgentTypes.SATELLITE, 
+                                                clock_config,
+                                                events_path,
+                                                logger,
+                                                delta
+                                            )
             agents.append(agent)
             agent_port += 7
 
@@ -381,22 +340,26 @@ def load_events(scenario_path : str,
                 clock_config : ClockConfig,
                 scenario_config_dict : dict, 
                 grid_config_dict : list) -> str:
+    
+    # get events configuration dictionary
     events_config_dict : dict = scenario_config_dict.get('events', None)
 
+    # check if events configuration exists in input file
     if not events_config_dict: raise ValueError('Missing events configuration in Mission Specs input file.')
 
+    # check events configuration format
     events_type : str = events_config_dict.get('@type', None)
     if events_type is None:
         raise ValueError('Event type missing in Mission Specs input file.')
     
-    if events_type.lower() == 'predef':
+    if events_type.lower() == 'predef': # load predefined events
         events_path : str = events_config_dict.get('eventsPath', None) 
         if not events_path: 
             raise ValueError('Path to predefined events not goind in Mission Specs input file.')
         else:
             return events_path
         
-    if events_type.lower() == 'random':
+    if events_type.lower() == 'random': # generate random events
         # get path to resources directory
         resources_path = os.path.join(scenario_path, 'resources')
         
@@ -421,22 +384,26 @@ def load_events(scenario_path : str,
 
             grids.append(grid)
 
-        # select ground points for events
+        # load number of events to be generated
         n_events = int(events_config_dict.get('n_events', None))
         if not n_events: raise ValueError('Number of random events not specified in Mission Specs input file.')
         
+        # load event parameters
         sim_duration = clock_config.get_total_seconds()
         event_duration = float(events_config_dict.get('duration', None)) * 3600
         severity = float(events_config_dict.get('severity', None))
         measurements = events_config_dict.get('measurements', None)
         n_measurements = int(events_config_dict.get('n_measurements', None))
 
+        # generate random events
         events = []
         for _ in range(n_events):
+            # select ground points for events
             grid : pd.DataFrame = random.choice(grids)
             gp_index = random.randint(0, len(grid)-1)
             gp = grid.iloc[gp_index]
-                        
+            
+            # create event
             event = [
                 gp['lat [deg]'],
                 gp['lon [deg]'],
@@ -445,200 +412,20 @@ def load_events(scenario_path : str,
                 severity,
                 random.sample(measurements,k=n_measurements)
             ]
+
+            # add to list of events
             events.append(event)
         
+        # compile list of events
         events_path = os.path.join(resources_path, 'random_events.csv')
         events_df = pd.DataFrame(events, columns=['lat [deg]','lon [deg]','start time [s]','duration [s]','severity','measurements'])
+        
+        # save list of events to events path 
         events_df.to_csv(events_path)
 
+        # return path address
         return events_path
 
-def agent_factory(  scenario_name : str, 
-                    scenario_path : str,
-                    results_path : str,
-                    orbitdata_dir : str,
-                    agent_dict : dict, 
-                    agent_index : int,
-                    manager_network_config : NetworkConfig, 
-                    port : int, 
-                    agent_type : SimulationAgentTypes,
-                    clock_config : float,
-                    events_path : str,
-                    logger : logging.Logger,
-                    delta : timedelta
-                ) -> SimulationAgent:
-
-    # unpack mission specs
-    agent_name = agent_dict['name']
-    planner_dict = agent_dict.get('planner', None)
-    science_dict = agent_dict.get('science', None)
-    instruments_dict = agent_dict.get('instrument', None)
-    orbit_state_dict = agent_dict.get('orbitState', None)
-    
-    # set results path
-    agent_results_path = os.path.join(results_path, agent_name)
-
-    # create agent network config
-    manager_addresses : dict = manager_network_config.get_manager_addresses()
-    req_address : str = manager_addresses.get(zmq.REP)[0]
-    req_address = req_address.replace('*', 'localhost')
-
-    sub_address : str = manager_addresses.get(zmq.PUB)[0]
-    sub_address = sub_address.replace('*', 'localhost')
-
-    pub_address : str = manager_addresses.get(zmq.SUB)[0]
-    pub_address = pub_address.replace('*', 'localhost')
-
-    push_address : str = manager_addresses.get(zmq.PUSH)[0]
-
-    agent_network_config = NetworkConfig( 	scenario_name,
-                                            manager_address_map = {
-                                                    zmq.REQ: [req_address],
-                                                    zmq.SUB: [sub_address],
-                                                    zmq.PUB: [pub_address],
-                                                    zmq.PUSH: [push_address]},
-                                            external_address_map = {
-                                                    zmq.REQ: [],
-                                                    zmq.SUB: [f'tcp://localhost:{port+1}'],
-                                                    zmq.PUB: [f'tcp://*:{port+2}']},
-                                            internal_address_map = {
-                                                    zmq.REP: [f'tcp://*:{port+3}'],
-                                                    zmq.PUB: [f'tcp://*:{port+4}'],
-                                                    zmq.SUB: [  
-                                                                f'tcp://localhost:{port+5}',
-                                                                f'tcp://localhost:{port+6}'
-                                                            ]
-                                        })
-
-    ## load orbitdata
-    if orbitdata_dir is not None:
-        orbitdata : OrbitData= OrbitData.load(scenario_path, agent_name)
-    else:
-        orbitdata = None
-
-    ## load payload
-    if instruments_dict:
-        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) # list of instruments
-    else:
-        payload = []
-
-    # ## load science module
-    # if science_dict is not None and science_dict.lower() == "true":
-    #     science = ScienceModule(agent_results_path,
-    #                             scenario_path,
-    #                             agent_name,
-    #                             agent_network_config,
-    #                             events_path,
-    #                             logger=logger)
-    # else:
-    #     science = None
-    science = None # TODO remove when updating science module
-
-    # ## load planner module
-    # if planner_dict is not None:
-    #     planner_dict : dict
-    #     utility_func = utility_function[planner_dict.get('utility', 'NONE')]
-        
-    #     preplanner_dict = planner_dict.get('preplanner', None)
-    #     if isinstance(preplanner_dict, dict):
-    #         preplanner_type = preplanner_dict.get('@type', None)
-    #         period = preplanner_dict.get('period', np.Inf)
-    #         horizon = preplanner_dict.get('horizon', np.Inf)
-
-    #         if preplanner_type == "FIFO":
-    #             collaboration = preplanner_dict.get('collaboration', "False") == "True"
-    #             preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
-    #         else:
-    #             raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
-    #     else:
-    #         preplanner = None
-
-    #     replanner_dict = planner_dict.get('replanner', None)
-    #     if isinstance(replanner_dict, dict):
-    #         replanner_type = replanner_dict.get('@type', None)
-            
-    #         if replanner_type == 'FIFO':
-    #             collaboration = replanner_dict.get('collaboration', "False") == "True"
-    #             replanner = FIFOReplanner(utility_func, collaboration)
-
-    #         elif replanner_type == 'ACBBA':
-    #             max_bundle_size = replanner_dict.get('bundle size', 3)
-    #             dt_converge = replanner_dict.get('dt_convergence', 0.0)
-    #             period = replanner_dict.get('period', 60.0)
-    #             threshold = replanner_dict.get('threshold', 1)
-    #             horizon = replanner_dict.get('horizon', delta.total_seconds())
-
-    #             replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
-            
-    #         else:
-    #             raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
-    #     else:
-    #         # replanner = None
-    #         replanner = RelayReplanner()
-    # else:
-    #     preplanner, replanner, utility_func = None, None, 'NONE'
-    preplanner, replanner, utility_func = None, None, 'NONE' #TODO remove when updating planner modules
-
-    planner = PlanningModule(   results_path, 
-                                agent_name, 
-                                agent_network_config, 
-                                utility_func, 
-                                preplanner,
-                                replanner,
-                            )    
-        
-    ## create agent
-    if agent_type == SimulationAgentTypes.UAV:
-        ## load initial state 
-        pos = agent_dict['pos']
-        max_speed = agent_dict['max_speed']
-        if isinstance(clock_config, FixedTimesStepClockConfig):
-            eps = max_speed * clock_config.dt / 2.0
-        else:
-            eps = 1e-6
-
-        initial_state = UAVAgentState(  agent_name,
-                                        [instrument.name for instrument in payload], 
-                                        pos, 
-                                        max_speed, 
-                                        eps=eps )
-
-        ## create agent
-        return UAVAgent(   agent_name, 
-                            results_path,
-                            manager_network_config,
-                            agent_network_config,
-                            initial_state,
-                            payload,
-                            planner,
-                            science,
-                            logger=logger
-                        )
-
-    elif agent_type == SimulationAgentTypes.SATELLITE:
-        position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
-        time_data =  pd.read_csv(position_file, nrows=3)
-        l : str = time_data.at[1,time_data.axes[1][0]]
-        _, _, _, _, dt = l.split(' '); dt = float(dt)
-
-        initial_state = SatelliteAgentState(agent_name,
-                                            orbit_state_dict, 
-                                            [instrument.name for instrument in payload], 
-                                            time_step=dt) 
-        
-        return SatelliteAgent(
-                                agent_name,
-                                results_path,
-                                manager_network_config,
-                                agent_network_config,
-                                initial_state, 
-                                planner,
-                                payload,
-                                science,
-                                logger=logger
-                            )
-    else:
-        raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")
 
 if __name__ == "__main__":
     
