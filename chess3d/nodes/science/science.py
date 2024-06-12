@@ -2,7 +2,7 @@ import csv
 import numpy as np
 import pandas as pd
 import datetime as dt
-from nodes.actions import MeasurementAction
+from nodes.actions import ObservationAction
 from nodes.states import SimulationAgentState
 from messages import *
 from nodes.science.reqs import *
@@ -246,7 +246,7 @@ class ScienceModule(InternalModule):
                 self.log(f'Got message in science_value!',level=logging.INFO)
                 
                 # print(msg)
-                measurement_action = MeasurementAction(**msg.measurement_action)
+                measurement_action = ObservationAction(**msg.measurement_action)
                 measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
                 obs = {}
                 if (    measurement_action.instrument_name == "Imaging SAR"
@@ -389,7 +389,7 @@ class ScienceModule(InternalModule):
         try:
             while True:
                 msg : MeasurementResultsRequestMessage = await self.onboard_processing_inbox.get()
-                measurement_action = MeasurementAction(**msg.measurement_action)
+                measurement_action = ObservationAction(**msg.measurement_action)
                 agent_state = SimulationAgentState.from_dict(msg.agent_state)
                 measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
                 obs = {}

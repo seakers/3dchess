@@ -508,7 +508,7 @@ class PlanningModule(InternalModule):
             t_plan : float; plan : list
 
             for action in plan:
-                if not isinstance(action, MeasurementAction):
+                if not isinstance(action, ObservationAction):
                     continue
 
                 req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)

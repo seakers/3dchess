@@ -63,7 +63,7 @@ class Plan(ABC):
             if interrupted_actions:
                 interrupted_action : AgentAction = interrupted_actions.pop(0)
                 if (    
-                        isinstance(interrupted_action, MeasurementAction) 
+                        isinstance(interrupted_action, ObservationAction) 
                     or  isinstance(interrupted_action, BroadcastMessageAction)
                     ):
                     # interrupted action has no duration, schedule broadcast for right after
@@ -232,7 +232,7 @@ class Plan(ABC):
                 if isinstance(action, AgentAction):
                     out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}\n"
         out += f'\nn actions in plan: {len(self)}'
-        out += f'\nn measurements in plan: {len([action for action in self if isinstance(action, MeasurementAction)])}'
+        out += f'\nn measurements in plan: {len([action for action in self if isinstance(action, ObservationAction)])}'
         out += f'\nn bradcasts in plan: {len([action for action in self if isinstance(action, BroadcastMessageAction)])}'
         out += f'\nn maneuvers in plan: {len([action for action in self if isinstance(action, ManeuverAction)])}'
         out += f'\nn travel actions in plan: {len([action for action in self if isinstance(action, TravelAction)])}\n'

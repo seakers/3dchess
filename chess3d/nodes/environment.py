@@ -12,7 +12,7 @@ from nodes.science.utility import synergy_factor
 from nodes.science.reqs import *
 from nodes.orbitdata import OrbitData
 from nodes.states import GroundStationAgentState, UAVAgentState, SatelliteAgentState
-from nodes.actions import MeasurementAction
+from nodes.actions import ObservationAction
 from nodes.agent import SimulationAgentState
 from messages import *
 
@@ -151,7 +151,7 @@ class SimulationEnvironment(EnvironmentNode):
                         self.log(f'received masurement data request from {msg.src}. quering measurement results...')
 
                         # find/generate measurement results
-                        measurement_action = MeasurementAction(**msg.measurement_action)
+                        measurement_action = ObservationAction(**msg.measurement_action)
                         agent_state = SimulationAgentState.from_dict(msg.agent_state)
                         measurement_data = self.query_measurement_data(src, agent_state, measurement_action)
 
@@ -352,7 +352,7 @@ class SimulationEnvironment(EnvironmentNode):
     def query_measurement_data( self,
                                 agent_name : str, 
                                 agent_state : SimulationAgentState, 
-                                measurement_action : MeasurementAction
+                                measurement_action : ObservationAction
                                 ) -> dict:
         """
         Queries internal models or data and returns observation information being sensed by the agent
@@ -468,7 +468,7 @@ class SimulationEnvironment(EnvironmentNode):
             data = []
             for msg in self.measurement_history:
                 msg : MeasurementResultsRequestMessage
-                measurement_action = MeasurementAction(**msg.measurement_action)
+                measurement_action = ObservationAction(**msg.measurement_action)
                 req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
                 measurement_data : dict = msg.measurement
                 measurer = msg.dst

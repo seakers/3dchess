@@ -240,7 +240,7 @@ class FIFOReplanner(ReactivePlanner):
                                                              action.subtask_index, 
                                                              action.t_start)
                                 for action in current_plan
-                                if isinstance(action, MeasurementAction)]
+                                if isinstance(action, ObservationAction)]
             
             for my_req, my_subtaskt_index, my_t_img in my_measurements:
                 for _, their_plan in self.other_plans.items():                
@@ -249,7 +249,7 @@ class FIFOReplanner(ReactivePlanner):
                                            action.t_start)
                                            
                                            for action in their_plan
-                                           if isinstance(action, MeasurementAction)
+                                           if isinstance(action, ObservationAction)
                                            and action.t_start < my_t_img]
                 
                     for their_req, their_subtaskt_index, their_t_img in their_measurements:
@@ -264,7 +264,7 @@ class FIFOReplanner(ReactivePlanner):
         # compile requests that have not been considered by the current plan
         considered_reqs = [MeasurementRequest.from_dict(action.measurement_req)
                            for action in current_plan
-                           if isinstance(action, MeasurementAction)]
+                           if isinstance(action, ObservationAction)]
         considered_reqs.extend([req 
                                 for req, _ in self.completed_requests
                                 if req not in considered_reqs])
@@ -321,7 +321,7 @@ class FIFOReplanner(ReactivePlanner):
         
         my_measurements = [ action
                             for action in current_plan
-                            if isinstance(action, MeasurementAction)]
+                            if isinstance(action, ObservationAction)]
 
         if self.collaboration:
             # check if other agents have plans with tasks considered by the current plan
@@ -339,7 +339,7 @@ class FIFOReplanner(ReactivePlanner):
                                            action.subtask_index, 
                                            action.t_start)
                                         for action in their_plan
-                                        if isinstance(action, MeasurementAction)
+                                        if isinstance(action, ObservationAction)
                                         and action.t_start < my_t_img]
                 
                     for their_req, their_subtaskt_index, their_t_img in their_measurements:
@@ -355,7 +355,7 @@ class FIFOReplanner(ReactivePlanner):
                         break
 
             for conflict in conflicts:
-                conflict : MeasurementAction
+                conflict : ObservationAction
                 conflict_req = MeasurementRequest.from_dict(conflict.measurement_req)
 
                 # remove conflict from measurement plan
@@ -367,7 +367,7 @@ class FIFOReplanner(ReactivePlanner):
         # add any new requrests to the plan
         considered_reqs = [MeasurementRequest.from_dict(action.measurement_req)
                            for action in my_measurements
-                           if isinstance(action, MeasurementAction)]
+                           if isinstance(action, ObservationAction)]
         considered_reqs.extend([req 
                                 for req, _ in self.completed_requests
                                 if req not in considered_reqs])
@@ -415,7 +415,7 @@ class FIFOReplanner(ReactivePlanner):
 
                 # remove access times that overlap with existing measurements
                 for action in my_measurements:
-                    action : MeasurementAction
+                    action : ObservationAction
                     access_times = [t_img 
                                     for t_img in access_times
                                     if not (action.t_start < t_img < action.t_end)]
@@ -427,12 +427,12 @@ class FIFOReplanner(ReactivePlanner):
                     t_img = access_times.pop(0)
                     u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
-                    proposed_measurement = MeasurementAction(req.to_dict(), subtask_index, main_measurement, u_exp, t_img, t_img+req.duration)
+                    proposed_measurement = ObservationAction(req.to_dict(), subtask_index, main_measurement, u_exp, t_img, t_img+req.duration)
                     
                     # see if it fits between measurements 
                     i = -1
                     for measurement in my_measurements:
-                        measurement : MeasurementAction
+                        measurement : ObservationAction
                         if measurement.t_start > proposed_measurement.t_end:
                             i = my_measurements.index(measurement)
                             break
@@ -482,7 +482,7 @@ class FIFOReplanner(ReactivePlanner):
 
             # schedule the broadcast of each scheduled measurement's completion after it's been performed
             for measurement in measurements:
-                measurement : MeasurementAction
+                measurement : ObservationAction
                 path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, measurement.t_end)
 
                 msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, measurement.to_dict(), path=path)
@@ -500,12 +500,12 @@ class FIFOReplanner(ReactivePlanner):
 
             # search for measurements that have been performed but not yet been broadcasted
             measurements_to_broadcast = [action for action in self.completed_actions 
-                                        if isinstance(action, MeasurementAction)
+                                        if isinstance(action, ObservationAction)
                                         and action not in measurements_broadcasted]
             
             # create a broadcast action for all unbroadcasted measurements
             for completed_measurement in measurements_to_broadcast:       
-                completed_measurement : MeasurementAction
+                completed_measurement : ObservationAction
                 t_end = max(completed_measurement.t_end, state.t)
                 path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, t_end)
                 

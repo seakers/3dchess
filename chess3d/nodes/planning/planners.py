@@ -219,7 +219,7 @@ class AbstractPlanner(ABC):
         for i in range(len(observations)):
             action_sequence_i = []
 
-            measurement_action : MeasurementAction = observations[i]
+            measurement_action : ObservationAction = observations[i]
             measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
             t_img = measurement_action.t_start
             
@@ -239,7 +239,7 @@ class AbstractPlanner(ABC):
                 else:
                     raise NotImplemented(f"maneuver scheduling for states of type `{type(state)}` not yet supported")
             else:
-                prev_measurement : MeasurementAction = observations[i-1]
+                prev_measurement : ObservationAction = observations[i-1]
                 prev_req = MeasurementRequest.from_dict(prev_measurement.measurement_req)
                 t_prev = prev_measurement.t_end if prev_measurement is not None else state.t
 
@@ -347,7 +347,7 @@ class AbstractPlanner(ABC):
 
         for i in range(len(path)):
             if i > 0:
-                measurement_prev : MeasurementAction = path[i-1]
+                measurement_prev : ObservationAction = path[i-1]
                 t_prev = measurement_prev.t_end
                 req_prev : MeasurementRequest = MeasurementRequest.from_dict(measurement_prev.measurement_req)
                 state_prev : SatelliteAgentState = state.propagate(t_prev)
@@ -357,7 +357,7 @@ class AbstractPlanner(ABC):
                 state_prev : SatelliteAgentState = state
                 th_prev = state.attitude[0]
 
-            measurement_i : MeasurementAction = path[i]
+            measurement_i : ObservationAction = path[i]
             t_i = measurement_i.t_start
             req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
             state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
@@ -382,49 +382,57 @@ class AbstractPlanner(ABC):
         print(out)
 
     @runtime_tracker
-    def is_observation_path_valid(self, state : SimulationAgentState, measurements : list) -> bool:
-        """ 
-        Checks if a given measurement or observation plan is valid given the type of agent performing them 
-        """
+    def is_observation_path_valid(self, 
+                                  state : SimulationAgentState, 
+                                  observations : list) -> bool:
+        """ Checks if a given sequence of observations can be performed by a given agent """
         
         if isinstance(state, SatelliteAgentState):
 
-            # check for 
-            for j in range(len(measurements)):
+            # check if every observation can be reached from the prior measurement
+            for j in range(len(observations)):
                 i = j - 1
 
-                # estimate maneuver time 
-                if i >= 0:
-                    measurement_i : MeasurementAction = measurements[i]
-                    req_i : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-                    main_instrument_i = measurement_i.instrument_name
-                    lat,lon,_ =  req_i.lat_lon_pos
+                # check if there was an observation performed previously
+                if i >= 0: # there was a prior observation performed
 
-                    obs_prev = self.orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_i, measurement_i.t_end)
-                    th_i = obs_prev['look angle [deg]']
-                    t_i = measurement_i.t_end
+                    # estimate the state of the agent at the prior mesurement
+                    observation_i : ObservationAction = observations[i]
+                    lat_i,lon_i,_ =  observation_i.target
+                    obs_i : dict = self.orbitdata.get_groundpoint_access_data(lat_i, lon_i, observation_i.instrument_name, observation_i.t_end)
 
-                else:
+                    th_i = obs_i.get('look angle [deg]', np.NAN)
+                    t_i = observation_i.t_end
+
+                else: # there was prior measurement
+
+                    # use agent's current state as previous state
                     th_i = state.attitude[0]
                     t_i = state.t
 
-                measurement_j : MeasurementAction = measurements[j]
-                req_j : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
-                main_instrument_j = measurement_j.instrument_name
-                lat,lon,_ =  req_j.lat_lon_pos
+                # estimate the state of the agent at the given measurement
+                observation_j : ObservationAction = observations[j]
+                lat_j,lon_j,_ =  observation_j.target
+                obs_j : dict = self.orbitdata.get_groundpoint_access_data(lat_j, lon_j, observation_j.instrument_name, observation_i.t_end)
 
-                obs_prev = self.orbitdata.get_groundpoint_access_data(lat, lon, main_instrument_j, measurement_j.t_end)
-                th_j = obs_prev['look angle [deg]']
-                t_j = measurement_j.t_start
+                th_j = obs_j.get('look angle [deg]', np.NAN)
+                t_j = observation_j.t_start
 
+                assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
+
+                # estimate maneuver time betweem states
                 dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
                 dt_measurements = t_j - t_i
+
+                assert dt_measurements >= 0.0 and dt_maneuver >= 0.0
 
                 # check if there's enough time to maneuver from one observation to another
                 if dt_maneuver - dt_measurements >= 1e-9:
                     # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
                     return False
+            
+            # if all measurements passed the check; measurement path
+            return True
         else:
             raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
-
-        return True
+        

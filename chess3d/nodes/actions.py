@@ -11,7 +11,7 @@ class ActionTypes(Enum):
     MANEUVER = 'MANEUVER'
     BROADCAST_MSG = 'BROADCAST_MSG'
     WAIT_FOR_MSG = 'WAIT_FOR_MSG'
-    MEASURE = 'MESAURE'
+    OBSERVE = 'OBSERVE'
 
 def action_from_dict(action_type : str, **kwargs) -> AgentAction:
     if action_type == ActionTypes.IDLE.value:
@@ -24,8 +24,8 @@ def action_from_dict(action_type : str, **kwargs) -> AgentAction:
         return BroadcastMessageAction(**kwargs)
     elif action_type == ActionTypes.WAIT_FOR_MSG.value:
         return WaitForMessages(**kwargs)
-    elif action_type == ActionTypes.MEASURE.value:
-        return MeasurementAction(**kwargs)
+    elif action_type == ActionTypes.OBSERVE.value:
+        return ObservationAction(**kwargs)
     else:
         raise NotImplementedError(f'Action of type {action_type} not yet implemented.')
     
@@ -136,9 +136,12 @@ class ManeuverAction(AgentAction):
                 **_) -> None:
         super().__init__(ActionTypes.MANEUVER.value, t_start, t_end, status=status, id=id)
         
-        if not isinstance(final_attitude, list):
-            raise AttributeError(f'`final_attitude` must be of type `list`. is of type {type(final_attitude)}.')
-        self.final_attitude = final_attitude
+        # check values
+        if not isinstance(final_attitude, list): raise ValueError(f'`final_attitude` must be of type `list`. Is of type {type(final_attitude)}.')
+        if len(final_attitude) != 3: raise ValueError(f'`final_attitude` must be of type `list` of length 3. Is of length {len(final_attitude)}.')
+
+        # set parameters
+        self.final_attitude = [th for th in final_attitude]
 
 class BroadcastMessageAction(AgentAction):
     """
@@ -172,9 +175,9 @@ class BroadcastMessageAction(AgentAction):
         super().__init__(ActionTypes.BROADCAST_MSG.value, t_start, t_start, status=status, id=id)
         self.msg = msg
 
-class MeasurementAction(AgentAction):
+class ObservationAction(AgentAction):
     """
-    Describes a measurement to be performed by agents in the simulation
+    Describes an observation to be performed by agents in the simulation
 
     ### Attributes:
         - measurement_req (`dict`): dictionary containing the measurement request being met by this measurement 
@@ -186,11 +189,8 @@ class MeasurementAction(AgentAction):
         - id (`str`) : identifying number for this task in uuid format
     """  
     def __init__(   self,
-                    # measurement_req : dict,
-                    # subtask_index : int,
                     instrument_name : str,
-                    field_of_regard : float,
-                    # u_exp : Union[float, int], 
+                    target : list, 
                     t_start: Union[float, int], 
                     t_end: Union[float, int], 
                     status: str = 'PENDING', 
@@ -199,20 +199,22 @@ class MeasurementAction(AgentAction):
         """
         Creates an instance of a 
         ### Arguments:
-            - measurement_req (`dict`): dictionary containing the measurement request being met by this measurement 
-            - subtask_index (`int`): index of the subtask being performed by this measurement
             - instrument_name (`str`): name of the instrument_name that will perform this action
-            - u_exp (`int` or `float`): expected utility from this measurement
+            - target (`list`): coordinates for the intended observation target in (lat [deg], lon [deg], alt [km]) 
             - t_start (`float`): start time of the measurement of this action in [s] from the beginning of the simulation
             - t_end (`float`): end time of the measurment of this action in [s] from the beginning of the simulation
             - id (`str`) : identifying number for this task in uuid format
         """
-        super().__init__(ActionTypes.MEASURE.value, t_start, t_end, status, id)
-        # self.measurement_req = measurement_req
-        # self.subtask_index = subtask_index
+        super().__init__(ActionTypes.OBSERVE.value, t_start, t_end, status, id)
+        
+        # check parameters
+        if not isinstance(instrument_name,str): raise ValueError(f'`instrument_name` must be of type `str`. Is of type `{type(instrument_name)}`.')
+        if not isinstance(target, list): raise ValueError(f'`target` must be of type `list`. Is of type `{type(target)}`.')
+        if len(target) != 3: raise ValueError(f'`target` must be a `list` of length 3 (lat, lon, alt). Is of length {len(target)}.')
+                
+        # set parameters
         self.instrument_name = instrument_name
-        self.field_of_regard = field_of_regard
-        # self.u_exp = u_exp 
+        self.target = [coordinate for coordinate in target]
 
 class WaitForMessages(AgentAction):
     """

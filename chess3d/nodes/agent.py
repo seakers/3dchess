@@ -285,7 +285,7 @@ class SimulationAgent(Agent):
                 # set action complation status
                 action.status = await self.perform_wait_for_messages(action)
 
-            elif action.action_type == ActionTypes.MEASURE.value:                              
+            elif action.action_type == ActionTypes.OBSERVE.value:                              
                 # update action completion status
                 action.status = await self.perform_measurement(action)
                 
@@ -386,7 +386,7 @@ class SimulationAgent(Agent):
                         return AgentAction.COMPLETED
                     
     @runtime_tracker
-    async def perform_measurement(self, action : MeasurementAction) -> str:
+    async def perform_measurement(self, action : ObservationAction) -> str:
         self.state : SimulationAgentState
         measurement_req = MeasurementRequest(**action.measurement_req)
         

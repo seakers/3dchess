@@ -84,7 +84,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                          action.t_start, 
                          action.u_exp) 
                          for action in current_plan
-                         if isinstance(action, MeasurementAction)]
+                         if isinstance(action, ObservationAction)]
             
             #TODO reset bundle and results
             self.bundle = []
@@ -129,7 +129,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """ Reads incoming precepts and compiles all measurement actions performed by the parent agent or other agents """
         # checks measurements performed by the parent agent
         completed_measurements = [action for action in completed_actions
-                                  if isinstance(action, MeasurementAction)
+                                  if isinstance(action, ObservationAction)
                                   and action not in self.completed_measurements]
         
         # checks measuremetns performed by other agents
@@ -215,11 +215,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
             # extract measurements from other agent's plan
             other_measurements = [action for action in their_plan 
-                                    if isinstance(action, MeasurementAction)]
+                                    if isinstance(action, ObservationAction)]
             
             # create a bid for every planned measurement
             for other_measurement in other_measurements:
-                other_measurement : MeasurementAction
+                other_measurement : ObservationAction
                 req = MeasurementRequest.from_dict(other_measurement.measurement_req)
                 bids : list[Bid] = self._generate_bids_from_request(req, state)
 
@@ -245,7 +245,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # compile list of tasks currently planned to be performed 
         planned_reqs = [(action.measurement_req, action.subtask_index)
                         for action in plan 
-                        if isinstance(action,MeasurementAction)]
+                        if isinstance(action,ObservationAction)]
         
         # compile list of new bids
         new_request_bids : list[Bid] = []
@@ -259,10 +259,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
             for bid in bids:
                 if (req.to_dict(), bid.subtask_index) in planned_reqs:
                     action = [action for action in plan 
-                              if isinstance(action, MeasurementAction)
+                              if isinstance(action, ObservationAction)
                               and action.measurement_req == req.to_dict()
                               and action.subtask_index == bid.subtask_index]
-                    action : MeasurementAction = action[0]
+                    action : ObservationAction = action[0]
                     bid.set(action.u_exp, action.t_start, state.t)
 
             # add to list of new bids
@@ -363,7 +363,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
             bid : Bid = results[req.id][subtask_index]
             instrument_name = bid.main_measurement
-            measurements.append(MeasurementAction(req.to_dict(), 
+            measurements.append(ObservationAction(req.to_dict(), 
                                                       subtask_index, 
                                                       instrument_name, 
                                                       u_exp, 
@@ -548,7 +548,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # update results using incoming messages
         for action in completed_measurements:
-            action : MeasurementAction
+            action : ObservationAction
 
             # set bid as completed           
             completed_req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)

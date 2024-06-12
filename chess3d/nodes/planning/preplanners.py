@@ -293,7 +293,7 @@ class FIFOPreplanner(AbstractPreplanner):
                     u_exp = self.utility_func(req.to_dict(), t_img) * synergy_factor(req.to_dict(), subtask_index)
 
                     # perform measurement
-                    measurements.append(MeasurementAction( req.to_dict(),
+                    measurements.append(ObservationAction( req.to_dict(),
                                                    subtask_index, 
                                                    main_measurement,
                                                    u_exp,
@@ -317,7 +317,7 @@ class FIFOPreplanner(AbstractPreplanner):
                     i = j - 1
 
                     if i >= 0:
-                        measurement_i : MeasurementAction = measurements[i]
+                        measurement_i : ObservationAction = measurements[i]
                         req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
 
                         lat, lon, _ = req_i.lat_lon_pos
@@ -333,7 +333,7 @@ class FIFOPreplanner(AbstractPreplanner):
                         th_i = state.attitude[0]
                         t_i = state.t
 
-                    measurement_j : MeasurementAction = measurements[j]
+                    measurement_j : ObservationAction = measurements[j]
                     req_j : GroundPointMeasurementRequest = MeasurementRequest.from_dict(measurement_j.measurement_req)
                     
                     lat, lon, _ = req_j.lat_lon_pos
@@ -423,7 +423,7 @@ class FIFOPreplanner(AbstractPreplanner):
 
             # schedule the broadcast of each scheduled measurement's completion after it's been performed
             for measurement in measurements:
-                measurement : MeasurementAction
+                measurement : ObservationAction
                 path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, measurement.t_end)
 
                 msg = MeasurementPerformedMessage(state.agent_name, state.agent_name, measurement.to_dict(), path=path)
@@ -442,12 +442,12 @@ class FIFOPreplanner(AbstractPreplanner):
 
             # search for measurements that have been performed but not yet been broadcasted
             measurements_to_broadcast = [action for action in self.completed_actions 
-                                        if isinstance(action, MeasurementAction)
+                                        if isinstance(action, ObservationAction)
                                         and action not in measurements_broadcasted]
             
             # create a broadcast action for all unbroadcasted measurements
             for completed_measurement in measurements_to_broadcast:       
-                completed_measurement : MeasurementAction
+                completed_measurement : ObservationAction
                 t_end = max(completed_measurement.t_end, state.t)
                 path, t_start = self._create_broadcast_path(state.agent_name, orbitdata, t_end)
                 
