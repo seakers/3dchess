@@ -74,13 +74,13 @@ class SimulationFactory:
                                                         zmq.REQ: [],
                                                             zmq.SUB: [f'tcp://localhost:{port+1}'],
                                                             zmq.PUB: [f'tcp://*:{port+2}']},
-                                                    internal_address_map = {
-                                                            zmq.REP: [f'tcp://*:{port+3}'],
-                                                            zmq.PUB: [f'tcp://*:{port+4}'],
-                                                            zmq.SUB: [  
-                                                                        f'tcp://localhost:{port+5}',
-                                                                        f'tcp://localhost:{port+6}'
-                                                                    ]
+                                                internal_address_map = {
+                                                        zmq.REP: [f'tcp://*:{port+3}'],
+                                                        zmq.PUB: [f'tcp://*:{port+4}'],
+                                                        zmq.SUB: [  
+                                                                    f'tcp://localhost:{port+5}',
+                                                                    f'tcp://localhost:{port+6}'
+                                                                ]
                                                 })
 
         ## load orbitdata

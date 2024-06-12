@@ -246,62 +246,64 @@ class SimulationAgent(Agent):
     """
     @runtime_tracker
     async def do(self, actions: list) -> dict:
-        statuses = []
         self.log(f'performing {len(actions)} actions', level=logging.DEBUG)
 
+        # perform each action and record action status
+        statuses = []
         for action in [action_from_dict(**action_dict) for action_dict in actions]:
             action : AgentAction
 
+            # check action start time
             if (action.t_start - self.get_current_time()) > np.finfo(np.float32).eps:
                 self.log(f"action of type {action.action_type} has NOT started yet (start time {action.t_start}[s]). waiting for start time...", level=logging.ERROR)
                 action.status = AgentAction.PENDING
                 statuses.append((action, action.status))
 
                 raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action.action_type} before it started (start time {action.t_start}[s]) at time {self.get_current_time()}[s]")
-                # continue
             
+            # check action end time
             if (self.get_current_time() - action.t_end) > np.finfo(np.float32).eps:
                 self.log(f"action of type {action.action_type} has already occureed (start/end times {action.t_start}[s], {action.t_end}[s]). could not perform task before...", level=logging.ERROR)
                 action.status = AgentAction.ABORTED
                 statuses.append((action, action.status))
 
                 raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action.action_type} after it ended (start/end times {action.t_start}[s], {action.t_end}[s]) at time {self.get_current_time()}[s]")
-                continue
 
+            # perform each action depending on 
             self.log(f"performing action of type {action.action_type}...", level=logging.INFO)    
-            if (action.action_type == ActionTypes.IDLE.value 
+            if (action.action_type == ActionTypes.IDLE.value         
                 or action.action_type == ActionTypes.TRAVEL.value
-                or action.action_type == ActionTypes.MANEUVER.value):                
-                # this action affects the agent's state
-
-                # update action completion status
+                or action.action_type == ActionTypes.MANEUVER.value): 
+                # update agent state
                 action.status = await self.perform_state_change(action)
 
             elif action.action_type == ActionTypes.BROADCAST_MSG.value:
-                # set action complation status
+                # perform message broadcast
                 action.status = await self.perform_broadcast(action)
             
             elif action.action_type == ActionTypes.WAIT_FOR_MSG.value:
-                # set action complation status
+                # wait for incoming messages
                 action.status = await self.perform_wait_for_messages(action)
 
             elif action.action_type == ActionTypes.OBSERVE.value:                              
-                # update action completion status
+                # perform observation
                 action.status = await self.perform_measurement(action)
                 
-            else:
-                # ignore action
+            else: # unknown action type; ignore action
                 self.log(f"action of type {action.action_type} not yet supported. ignoring...", level=logging.INFO)
                 action.status = AgentAction.ABORTED  
                 
+            # record action completion status 
             self.log(f"finished performing action of type {action.action_type}! action completion status: {action.status}", level=logging.INFO)
             statuses.append((action, action.status))
 
+        # return list of statuses
         self.log(f'returning {len(statuses)} statuses', level=logging.DEBUG)
         return statuses
 
     @runtime_tracker
     async def perform_state_change(self, action : AgentAction) -> str:
+        """ Performs actions that have an effect on the agent's state """
         t = self.get_current_time()
 
         # modify the agent's state
@@ -316,6 +318,7 @@ class SimulationAgent(Agent):
             status, _ = self.state.perform_action(action, self.get_current_time())
             self.state_history.append(self.state.to_dict())
 
+        # return completion status
         return status
     
     @runtime_tracker
@@ -338,29 +341,40 @@ class SimulationAgent(Agent):
     
     @runtime_tracker
     async def perform_wait_for_messages(self, action : WaitForMessages) -> str:
+        """ Waits for a message from another agent to be received. """
+        
+        # get current start time
         t_curr = self.get_current_time()
         self.state.update_state(t_curr, status=SimulationAgentState.LISTENING)
         self.state_history.append(self.state.to_dict())
 
-        if not self.external_inbox.empty():
+        # check if messages have already been received
+        if not self.external_inbox.empty(): # messages in inbox; end wait
             return AgentAction.COMPLETED
         
-        else:
+        else: # no messages in inbox; wait for incoming messages
+
+            # check type of simulation clock
             if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
-                    or isinstance(self._clock_config, EventDrivenClockConfig)) 
-                and self.external_inbox.empty()):
+                or isinstance(self._clock_config, EventDrivenClockConfig)) 
+                and self.external_inbox.empty()
+                ):
                 # give the agent time to finish processing messages before submitting a tic-request
                 t_wait = 1e-2 if t_curr < 1e-3 or action.t_end == np.Inf else 1e-3
                 await asyncio.sleep(t_wait)
 
+            # initiate broadcast wait and timeout tasks
             receive_broadcast = asyncio.create_task(self.external_inbox.get())
             timeout = asyncio.create_task(self.sim_wait(action.t_end - t_curr))
 
+            # wait for first task to be completed
             done, _ = await asyncio.wait([timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
 
+            # check which task was finished first 
             if receive_broadcast in done:
-                # a mesasge was received before the timer ran out; cancel timer
+                # messages were received before timeout
                 try:
+                    # cancel timeout timer and end wait
                     timeout.cancel()
                     await timeout
 
@@ -372,9 +386,9 @@ class SimulationAgent(Agent):
                     return AgentAction.COMPLETED                
 
             else:
-                # timer ran out or time advanced
+                # timouet ended
                 try:
-                    # cancel listen to broadcast
+                    # cancel message wait
                     receive_broadcast.cancel()
                     await receive_broadcast
 
@@ -387,35 +401,40 @@ class SimulationAgent(Agent):
                     
     @runtime_tracker
     async def perform_measurement(self, action : ObservationAction) -> str:
+        # update agent state and state history
         self.state : SimulationAgentState
-        measurement_req = MeasurementRequest(**action.measurement_req)
-        
         self.state.update_state(self.get_current_time(), 
                                 status=SimulationAgentState.MEASURING)
         self.state_history.append(self.state.to_dict())
         
         try:
-            # send a measurement data request to the environment
-            measurement = MeasurementResultsRequestMessage(self.get_element_name(),
-                                                    SimulationElementRoles.ENVIRONMENT.value, 
-                                                    self.state.to_dict(), 
+            # create observation data request
+            observation_req = ObservationResultsMessage(self.get_element_name(),
+                                                    SimulationElementRoles.ENVIRONMENT.value,
+                                                    self.state.to_dict(),
                                                     action.to_dict()
                                                     )
 
-            dst,src,measurement_dict = await self.send_peer_message(measurement)
-            result : dict = measurement_dict
-            msg_sci = MeasurementResultsRequestMessage(**result)
-            await self._send_manager_msg(msg_sci, zmq.PUB)
+            # request measurement data from the environment
+            dst,src,observation_results = await self.send_peer_message(observation_req)
+            msg_sci = ObservationResultsMessage(**observation_results)
+            
+            # send measurement data to results logger
+            # await self._send_manager_msg(msg_sci, zmq.PUB)
+            await self._send_manager_msg(msg_sci, zmq.PUSH)
 
-            # add measurement to environment inbox to be processed during `sensing()`
-            await self.environment_inbox.put((dst, src, measurement_dict))
+            # send measurement to environment inbox to be processed during `sensing()`
+            await self.environment_inbox.put((dst, src, observation_results))
 
             # wait for the designated duration of the measurmeent 
-            await self.sim_wait(measurement_req.duration)  # TODO only compensate for the time lost between queries
-            
+            dt = action.t_end - self.get_current_time()
+            if dt > 0: await self.sim_wait(dt) 
+
+            # return action completion            
             return AgentAction.COMPLETED
 
         except asyncio.CancelledError:
+            # action was aborted 
             return AgentAction.ABORTED
 
     """

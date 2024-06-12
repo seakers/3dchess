@@ -145,9 +145,9 @@ class SimulationEnvironment(EnvironmentNode):
 
                     t_0 = time.perf_counter()
                     
-                    if content['msg_type'] == SimulationMessageTypes.MEASUREMENT.value:
+                    if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
                         # unpack message
-                        msg = MeasurementResultsRequestMessage(**content)
+                        msg = ObservationResultsMessage(**content)
                         self.log(f'received masurement data request from {msg.src}. quering measurement results...')
 
                         # find/generate measurement results
@@ -467,7 +467,7 @@ class SimulationEnvironment(EnvironmentNode):
             headers = ['req_id','measurer','measurement','pos','t_start','t_end','t_corr','t_img','u_max','u_exp','u']
             data = []
             for msg in self.measurement_history:
-                msg : MeasurementResultsRequestMessage
+                msg : ObservationResultsMessage
                 measurement_action = ObservationAction(**msg.measurement_action)
                 req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
                 measurement_data : dict = msg.measurement

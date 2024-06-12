@@ -9,7 +9,7 @@ class SimulationMessageTypes(Enum):
     MEASUREMENT_BID = 'MEASUREMENT_BID'
     PLAN = 'PLAN'
     SENSES = 'SENSES'
-    MEASUREMENT = 'MEASUREMENT'
+    OBSERVATION = 'OBSERVATION'
     MEASUREMENT_PERFORMED = 'MEASUREMENT_PERFORMED'
     BUS = 'BUS'
 
@@ -31,8 +31,8 @@ def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
         return PlanMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.SENSES.value:
         return SensesMessage(**kwargs)
-    elif msg_type == SimulationMessageTypes.MEASUREMENT.value:
-        return MeasurementResultsRequestMessage(**kwargs)
+    elif msg_type == SimulationMessageTypes.OBSERVATION.value:
+        return ObservationResultsMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.MEASUREMENT_PERFORMED.value:
         return MeasurementPerformedMessage(**kwargs)
     else:
@@ -94,9 +94,10 @@ class MeasurementRequestMessage(SimulationMessage):
     ### Attributes:
         - src (`str`): name of the simulation element sending this message
         - dst (`str`): name of the intended simulation element to receive this message
-        - msg_type (`str`): type of message being sent
-        - id (`str`) : Universally Unique IDentifier for this message
         - req (`dict`) : dictionary describing measurement request to be performed
+        - id (`str`) : Universally Unique IDentifier for this message
+        - path (`list`): sequence of agents meant to relay this mesasge
+        - msg_type (`str`): type of message being sent
     """
     def __init__(self, src: str, dst: str, req : dict, id: str = None, path : list = [], **_):
         super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_REQ.value, id, path)
@@ -105,36 +106,37 @@ class MeasurementRequestMessage(SimulationMessage):
             raise AttributeError(f'`req` must be of type `dict`; is of type {type(req)}.')
         self.req = req
 
-class MeasurementResultsRequestMessage(SimulationMessage):
+class ObservationResultsMessage(SimulationMessage):
     """
-    ## Measurement Results Request Message 
+    ## Observation Results Request Message 
 
-    Carries information regarding a measurement performed on the environment
+    Carries information regarding a observation performed on the environment
 
     ### Attributes:
         - src (`str`): name of the simulation element sending this message
         - dst (`str`): name of the intended simulation element to receive this message
+        - observation_data (`dict`) : observation data being communicated
         - msg_type (`str`): type of message being sent
         - id (`str`) : Universally Unique IDentifier for this message
-        - measurement (`dict`) : measurement data being communicated
     """
     def __init__(self, 
                  src: str, 
                  dst: str, 
                  agent_state : dict, 
-                 measurement_action : dict, 
+                 observation_action : dict, 
+                 observation_data : dict = {},
                  id: str = None, 
                  path : list = [], **_):
-        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT.value, id, path)
+        super().__init__(src, dst, SimulationMessageTypes.OBSERVATION.value, id, path)
         
-        if not isinstance(measurement_action, dict):
-            raise AttributeError(f'`measurement_req` must be of type `dict`; is of type {type(measurement_action)}.')
+        if not isinstance(observation_action, dict):
+            raise AttributeError(f'`measurement_req` must be of type `dict`; is of type {type(observation_action)}.')
         if not isinstance(agent_state, dict):
             raise AttributeError(f'`agent_state` must be of type `dict`; is of type {type(agent_state)}.')
 
-        self.measurement_action = measurement_action
+        self.observation_action = observation_action
         self.agent_state = agent_state
-        self.measurement = {}
+        self.observation_data = observation_data
 
 class MeasurementPerformedMessage(SimulationMessage):
     def __init__(self, 

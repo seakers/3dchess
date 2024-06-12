@@ -212,12 +212,12 @@ class ScienceModule(InternalModule):
                             state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
                             await self.update_current_time(state.t)
 
-                        if sense['msg_type'] == SimulationMessageTypes.MEASUREMENT.value:
+                        if sense['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
                             # unpack message
                             if('agent_state' not in sense):
                                 continue
                             self.log(f"received manager broadcast of type {sense['msg_type']}!",level=logging.DEBUG)
-                            msg = MeasurementResultsRequestMessage(**sense)
+                            msg = ObservationResultsMessage(**sense)
                             await self.science_value_inbox.put(msg)
                             await self.onboard_processing_inbox.put(msg)
 
@@ -226,10 +226,10 @@ class ScienceModule(InternalModule):
                     self.log(f"received manager broadcast of type {content['msg_type']}! terminating `live()`...",level=logging.INFO)
                     return
 
-                elif content['msg_type'] == SimulationMessageTypes.MEASUREMENT.value:
+                elif content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
                     # unpack message
                     self.log(f"received manager broadcast of type {content['msg_type']}!",level=logging.WARN)
-                    msg = MeasurementResultsRequestMessage(**content)
+                    msg = ObservationResultsMessage(**content)
                     await self.science_value_inbox.put(msg)
                     await self.onboard_processing_inbox.put(msg)
         
@@ -242,7 +242,7 @@ class ScienceModule(InternalModule):
             detected_events = []
 
             while True:
-                msg : MeasurementResultsRequestMessage = await self.science_value_inbox.get()
+                msg : ObservationResultsMessage = await self.science_value_inbox.get()
                 self.log(f'Got message in science_value!',level=logging.INFO)
                 
                 # print(msg)
@@ -388,7 +388,7 @@ class ScienceModule(InternalModule):
     async def onboard_processing(self):
         try:
             while True:
-                msg : MeasurementResultsRequestMessage = await self.onboard_processing_inbox.get()
+                msg : ObservationResultsMessage = await self.onboard_processing_inbox.get()
                 measurement_action = ObservationAction(**msg.measurement_action)
                 agent_state = SimulationAgentState.from_dict(msg.agent_state)
                 measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)

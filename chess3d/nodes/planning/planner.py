@@ -199,7 +199,7 @@ class PlanningModule(InternalModule):
                             # send to planner
                             await self.req_inbox.put(req)
 
-                        elif isinstance(msg, MeasurementResultsRequestMessage):
+                        elif isinstance(msg, ObservationResultsMessage):
                             # measurement was just performed by agent
                             self.log(f"received measurement data from agent!")
 
