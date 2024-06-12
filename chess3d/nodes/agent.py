@@ -445,12 +445,11 @@ class SimulationAgent(Agent):
     async def teardown(self) -> None:
         # TODO log agent capabilities
 
-        # log state 
+        # log states
         n_decimals = 3
         headers = ['t', 'x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'attitude', 'status']
         data = []
 
-        # out += '\nt, pos, vel, status\n'
         for state_dict in self.state_history:
             line_data = [
                             np.round(state_dict['t'],3),
@@ -470,7 +469,6 @@ class SimulationAgent(Agent):
             data.append(line_data)
         
         state_df = DataFrame(data,columns=headers)
-        # state_df = state_df.drop_duplicates()
         self.log(f'\nPayload: {self.state.payload}\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
         state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 

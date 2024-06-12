@@ -264,8 +264,7 @@ class PlanningModule(InternalModule):
                     = await self.__check_action_completion(level)
 
                 # remove aborted or completed actions from plan
-                plan.update_action_completion(  
-                                                completed_actions, 
+                plan.update_action_completion(  completed_actions, 
                                                 aborted_actions, 
                                                 pending_actions, 
                                                 self.get_current_time()
@@ -396,31 +395,27 @@ class PlanningModule(InternalModule):
         ### Returns:
             - `tuple` of action lists `completed_actions, aborted_actions, pending_actions`
         """
-        completed_actions = []
-        aborted_actions = []
-        pending_actions = []
 
+        # collect all action statuses from inbox
+        actions = []
         while not self.action_status_inbox.empty():
             action_msg : AgentActionMessage = await self.action_status_inbox.get()
-            action : AgentAction = action_from_dict(**action_msg.action)
+            actions.append(action_from_dict(**action_msg.action))
 
-            if action_msg.status == AgentAction.COMPLETED:
-                # planned action completed! 
-                self.log(f'action of type `{action.action_type}` completed!', level)
-                completed_actions.append(action)
-            elif action_msg.status == AgentAction.ABORTED:
-                # planned action aborted! 
-                self.log(f'action of type `{action.action_type}` aborted!', level)
-                aborted_actions.append(action)
-                pass
-            elif action_msg.status == AgentAction.PENDING:
-                # planned action wasn't completed
-                self.log(f"action {action.id.split('-')[0]} not completed yet! trying again...", level)
-                pending_actions.append(action)
-            else: 
-                # unknowhn action status; ignore
-                continue
-        
+        # classify by action completion
+        completed_actions = [action for action in actions
+                            if isinstance(action, AgentAction)
+                            and action.status == AgentAction.COMPLETED] # planned action completed
+                
+        aborted_actions = [action for action in actions 
+                           if isinstance(action, AgentAction)
+                           and action.status == AgentAction.ABORTED]    # planned action aborted
+                
+        pending_actions = [action for action in actions
+                           if isinstance(action, AgentAction)
+                           and action_msg.status == AgentAction.PENDING] # planned action wasn't completed
+
+        # return classified lists
         return completed_actions, aborted_actions, pending_actions
     
     @runtime_tracker

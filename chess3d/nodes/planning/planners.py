@@ -35,8 +35,6 @@ class AbstractPlanner(ABC):
         self.plan : Plan = None
 
         # set attribute parameters
-        self.utility_func = utility_func    # utility function
-        self.orbitdata = orbitdata          # parent agent orbitdata
         self._logger = logger               # logger for debugging
 
     @abstractmethod
@@ -53,6 +51,7 @@ class AbstractPlanner(ABC):
 
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
+                             orbitdata : OrbitData,
                              **_
                             ) -> list:
         """ 
@@ -91,13 +90,13 @@ class AbstractPlanner(ABC):
         # return scheduled broadcasts
         return broadcasts   
     
-    def _create_broadcast_path(self, state : SimulationAgentState) -> tuple:
+    def _create_broadcast_path(self, state : SimulationAgentState, orbitdata : OrbitData) -> tuple:
         """ 
         Finds the best path for broadcasting a message to all agents using depth-first-search
         """
         # populate list of agents
         target_agents = [target_agent 
-                         for target_agent in self.orbitdata.isl_data 
+                         for target_agent in orbitdata.isl_data 
                          if target_agent != state.agent_name]
         
         # check if other agents exist in the simulation
@@ -105,7 +104,7 @@ class AbstractPlanner(ABC):
             # no other agents in the simulation; no need for relays
             return ([], state.t)
         
-        earliest_accesses = [self.orbitdata.get_next_agent_access(target_agent, state.t) 
+        earliest_accesses = [orbitdata.get_next_agent_access(target_agent, state.t) 
                                 for target_agent in target_agents]           
         same_access_start = [access.start == earliest_accesses[0].start 
                                 for access in earliest_accesses 
@@ -151,8 +150,7 @@ class AbstractPlanner(ABC):
                 # query next access interval to children nodes
                 t_access : float = state.t + path_cost
 
-                sender_orbitdata : OrbitData = self.orbitdata
-                access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(receiver_agent, t_access)
+                access_interval : TimeInterval = orbitdata.get_next_agent_access(receiver_agent, t_access)
                 
                 if access_interval.start < np.Inf:
                     new_path = [path_element for path_element in current_path]
@@ -199,7 +197,8 @@ class AbstractPlanner(ABC):
     def _schedule_maneuvers(    self, 
                                 state : SimulationAgentState, 
                                 observations : list,
-                                clock_config : ClockConfig
+                                clock_config : ClockConfig,
+                                orbitdata : OrbitData = None
                             ) -> list:
         """
         Generates a list of AgentActions from the current path.
@@ -213,60 +212,39 @@ class AbstractPlanner(ABC):
             - clock_config (:obj:`ClockConfig`): clock being used for this simulation
         """
 
+        if not isinstance(state, SatelliteAgentState):
+            raise NotImplementedError(f'Maneuver scheduling for agents of type `{type(state)}` not yet implemented.')
+        elif orbitdata is None:
+            raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+
         # initialize maneuver list
         maneuvers = []
 
         for i in range(len(observations)):
             action_sequence_i = []
 
-            measurement_action : ObservationAction = observations[i]
-            measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
-            t_img = measurement_action.t_start
-            
-            if not isinstance(measurement_req, GroundPointMeasurementRequest):
-                raise NotImplementedError(f"Cannot create plan for requests of type {type(measurement_req)}")
-            
-            # Estimate previous state
+            curr_observation : ObservationAction = observations[i]
+            t_img = curr_observation.t_start
+                        
+            # estimate previous state
             if i == 0:
-                if isinstance(state, SatelliteAgentState):
-                    t_prev = state.t
-                    prev_state : SatelliteAgentState = state.copy()
-
-                # elif isinstance(state, UAVAgentState):
-                #     t_prev = state.t # TODO consider wait time for convergence
-                #     prev_state : UAVAgentState = state.copy()
-
-                else:
-                    raise NotImplemented(f"maneuver scheduling for states of type `{type(state)}` not yet supported")
-            else:
-                prev_measurement : ObservationAction = observations[i-1]
-                prev_req = MeasurementRequest.from_dict(prev_measurement.measurement_req)
-                t_prev = prev_measurement.t_end if prev_measurement is not None else state.t
-
-                if isinstance(state, SatelliteAgentState):
-                    prev_state : SatelliteAgentState = state.propagate(t_prev)
-
-                    prev_req : GroundPointMeasurementRequest
-                    lat,lon,_ =  prev_req.lat_lon_pos
-                    main_instrument = prev_measurement.instrument_name
-
-                    obs_prev = self.orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_prev)
-                    th_f = obs_prev['look angle [deg]']
-                    
-                    prev_state.attitude = [th_f, 0.0, 0.0]
-
-                elif isinstance(state, UAVAgentState):
-                    prev_state : UAVAgentState = state.copy()
-                    prev_state.t = t_prev
-
-                    if isinstance(prev_req, GroundPointMeasurementRequest):
-                        prev_state.pos = prev_req.pos
-                    else:
-                        raise NotImplementedError(f"cannot calculate travel time start for requests of type {type(prev_req)} for uav agents")
-
-                else:
-                    raise NotImplementedError(f"cannot calculate travel time start for agent states of type {type(state)}")
+                t_prev = state.t
+                prev_state : SatelliteAgentState = state.copy()
                 
+            else:
+                prev_observation : ObservationAction = observations[i-1]
+                t_prev = prev_observation.t_end if prev_observation is not None else state.t
+
+                prev_state : SatelliteAgentState = state.propagate(t_prev)
+
+                lat,lon,_ =  prev_observation.target
+                main_instrument = prev_observation.instrument_name
+
+                obs_prev = orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_prev)
+                th_f = obs_prev['look angle [deg]']
+                
+                prev_state.attitude = [th_f, 0.0, 0.0]
+
             # maneuver to point to target
             t_maneuver_end = None
             if isinstance(state, SatelliteAgentState):
@@ -274,11 +252,11 @@ class AbstractPlanner(ABC):
 
                 t_maneuver_start = prev_state.t
                 
-                lat,lon, _ =  measurement_req.lat_lon_pos
-                main_instrument = measurement_action.instrument_name
+                lat,lon, _ =  curr_observation.target
+                main_instrument = curr_observation.instrument_name
 
-                obs_j = self.orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_img)
-                th_f = obs_j['look angle [deg]']
+                obs_curr = orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_img)
+                th_f = obs_curr['look angle [deg]']
 
                 dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
                 t_maneuver_end = t_maneuver_start + dt
@@ -292,20 +270,9 @@ class AbstractPlanner(ABC):
 
             # move to target
             t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
-            if isinstance(state, SatelliteAgentState):
-                t_move_end = t_img
-                future_state : SatelliteAgentState = state.propagate(t_move_end)
-                final_pos = future_state.pos
-
-            elif isinstance(state, UAVAgentState):
-                final_pos = measurement_req.pos
-                dr = np.array(final_pos) - np.array(prev_state.pos)
-                norm = np.sqrt( dr.dot(dr) )
-                
-                t_move_end = t_move_start + norm / state.max_speed
-
-            else:
-                raise NotImplementedError(f"cannot calculate travel time end for agent states of type {type(state)}")
+            t_move_end = t_img
+            future_state : SatelliteAgentState = state.propagate(t_move_end)
+            final_pos = future_state.pos
             
             # quantize travel maneuver times if needed
             if isinstance(clock_config, FixedTimesStepClockConfig):
@@ -384,7 +351,9 @@ class AbstractPlanner(ABC):
     @runtime_tracker
     def is_observation_path_valid(self, 
                                   state : SimulationAgentState, 
-                                  observations : list) -> bool:
+                                  observations : list,
+                                  orbitdata : OrbitData = None
+                                  ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
         
         if isinstance(state, SatelliteAgentState):
@@ -399,7 +368,7 @@ class AbstractPlanner(ABC):
                     # estimate the state of the agent at the prior mesurement
                     observation_i : ObservationAction = observations[i]
                     lat_i,lon_i,_ =  observation_i.target
-                    obs_i : dict = self.orbitdata.get_groundpoint_access_data(lat_i, lon_i, observation_i.instrument_name, observation_i.t_end)
+                    obs_i : dict = orbitdata.get_groundpoint_access_data(lat_i, lon_i, observation_i.instrument_name, observation_i.t_end)
 
                     th_i = obs_i.get('look angle [deg]', np.NAN)
                     t_i = observation_i.t_end
@@ -413,7 +382,7 @@ class AbstractPlanner(ABC):
                 # estimate the state of the agent at the given measurement
                 observation_j : ObservationAction = observations[j]
                 lat_j,lon_j,_ =  observation_j.target
-                obs_j : dict = self.orbitdata.get_groundpoint_access_data(lat_j, lon_j, observation_j.instrument_name, observation_i.t_end)
+                obs_j : dict = orbitdata.get_groundpoint_access_data(lat_j, lon_j, observation_j.instrument_name, observation_i.t_end)
 
                 th_j = obs_j.get('look angle [deg]', np.NAN)
                 t_j = observation_j.t_start
