@@ -60,6 +60,11 @@ class AbstractPlanner(ABC):
         By default it schedules the broadcast of any newly generated requests
         and the relay of any incoming relay messages
         """
+        if not isinstance(state, SatelliteAgentState):
+            raise NotImplementedError(f'Broadcast scheduling for agents of type `{type(state)}` not yet implemented.')
+        elif orbitdata is None:
+            raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+
         # initialize list of broadcasts to be done
         broadcasts = []       
 
@@ -72,7 +77,7 @@ class AbstractPlanner(ABC):
                                  and req.id not in requests_broadcasted]
 
         # Find best path for broadcasts
-        path, t_start = self._create_broadcast_path(state)
+        path, t_start = self._create_broadcast_path(state, orbitdata)
 
         ## create a broadcast action for all unbroadcasted measurement requests
         for req in requests_to_broadcast:        
@@ -90,7 +95,9 @@ class AbstractPlanner(ABC):
         # return scheduled broadcasts
         return broadcasts   
     
-    def _create_broadcast_path(self, state : SimulationAgentState, orbitdata : OrbitData) -> tuple:
+    def _create_broadcast_path(self, 
+                               state : SimulationAgentState, 
+                               orbitdata : OrbitData) -> tuple:
         """ 
         Finds the best path for broadcasting a message to all agents using depth-first-search
         """
@@ -295,10 +302,19 @@ class AbstractPlanner(ABC):
 
         return maneuvers
         
-    def _print_observation_path(self, state : SatelliteAgentState, path : list) -> None :
-        """ Debugging tool. Prints current observations plan being considered. """
+    def _print_observation_sequence(self, 
+                                    state : SatelliteAgentState, 
+                                    path : list, 
+                                    orbitdata : OrbitData = None
+                                    ) -> None :
+        """ Debugging tool. Prints current observation sequence being considered. """
 
-        out = f'\n{state.agent_name}:\n\n\nID\t  j\tt_img\tth\tdt_mmt\tdt_mvr\tValid\tu_exp\n'
+        if not isinstance(state, SatelliteAgentState):
+            raise NotImplementedError('Observation sequence printouts for non-satellite agents not yet supported.')
+        elif orbitdata is None:
+            raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+
+        out = f'\n{state.agent_name}:\n\n\ntarget\tinstr\tt_img\tth\tdt_mmt\tdt_mvr\tValid?\n'
 
         out_temp = [f"N\A       ",
                     f"N\A",
@@ -306,8 +322,7 @@ class AbstractPlanner(ABC):
                     f"\t{np.round(state.attitude[0],3)}",
                     f"\t-",
                     f"\t-",
-                    f"\t-"
-                    f"\t{0.0}",
+                    f"\t-",
                     f"\n"
                     ]
         out += ''.join(out_temp)
@@ -315,32 +330,30 @@ class AbstractPlanner(ABC):
         for i in range(len(path)):
             if i > 0:
                 measurement_prev : ObservationAction = path[i-1]
-                t_prev = measurement_prev.t_end
-                req_prev : MeasurementRequest = MeasurementRequest.from_dict(measurement_prev.measurement_req)
-                state_prev : SatelliteAgentState = state.propagate(t_prev)
-                th_prev = state_prev.calc_off_nadir_agle(req_prev)
+                t_prev = measurement_i.t_end
+                lat,lon,_ = measurement_prev.target
+                obs_prev = orbitdata.get_groundpoint_access_data(lat, lon, measurement_prev.instrument_name, t_prev)
+                th_prev = obs_prev['look angle [deg]']
             else:
                 t_prev = state.t
-                state_prev : SatelliteAgentState = state
                 th_prev = state.attitude[0]
 
             measurement_i : ObservationAction = path[i]
             t_i = measurement_i.t_start
-            req_i : MeasurementRequest = MeasurementRequest.from_dict(measurement_i.measurement_req)
-            state_i : SatelliteAgentState = state.propagate(measurement_i.t_start)
-            th_i = state_i.calc_off_nadir_agle(req_i)
+            lat,lon,alt = measurement_i.target
+            obs_i = orbitdata.get_groundpoint_access_data(lat, lon, measurement_i.instrument_name, t_i)
+            th_i = obs_i['look angle [deg]']
 
             dt_maneuver = abs(th_i - th_prev) / state.max_slew_rate
             dt_measurements = t_i - t_prev
 
-            out_temp = [f"{req_i.id.split('-')[0]}",
-                            f"  {measurement_i.subtask_index}",
+            out_temp = [f"({round(lat,3)}, {round(lon,3)}, {round(alt,3)})",
+                            f"  {measurement_i.instrument_name}",
                             f"\t{np.round(measurement_i.t_start,3)}",
                             f"\t{np.round(th_i,3)}",
                             f"\t{np.round(dt_measurements,3)}",
                             f"\t{np.round(dt_maneuver,3)}",
-                            f"\t{dt_maneuver <= dt_measurements}"
-                            f"\t{np.round(measurement_i.u_exp,3)}",
+                            f"\t{dt_maneuver <= dt_measurements}",
                             f"\n"
                             ]
             out += ''.join(out_temp)
