@@ -111,7 +111,7 @@ class PlanningModule(InternalModule):
         self.states_inbox = asyncio.Queue()
         self.action_status_inbox = asyncio.Queue()
         self.req_inbox = asyncio.Queue()
-        self.measurement_inbox = asyncio.Queue()
+        self.observations_inbox = asyncio.Queue()
         self.relay_inbox = asyncio.Queue()
         self.misc_inbox = asyncio.Queue()
 
@@ -224,7 +224,7 @@ class PlanningModule(InternalModule):
                             self.log(f"received observation data from agent!")
 
                             # send to planner
-                            await self.measurement_inbox.put(msg)
+                            await self.observations_inbox.put(msg)
 
                         # TODO support down-linked information processing
                         ## elif isinstance(msg, DOWNLINKED MESSAGE CONFIRMATION):
@@ -277,7 +277,7 @@ class PlanningModule(InternalModule):
 
                 # --- Check incoming information ---
                 # Read incoming messages
-                incoming_reqs, generated_reqs, relay_messages, misc_messages \
+                incoming_reqs, relay_messages, misc_messages \
                     = await self._read_incoming_messages()
 
                 # check action completion
@@ -302,13 +302,12 @@ class PlanningModule(InternalModule):
                     # update preplanner precepts
                     self.preplanner.update_percepts(state,
                                                     plan, 
+                                                    incoming_reqs,
+                                                    relay_messages,
+                                                    misc_messages,
                                                     completed_actions,
                                                     aborted_actions,
-                                                    pending_actions,
-                                                    incoming_reqs,
-                                                    generated_reqs,
-                                                    relay_messages,
-                                                    misc_messages
+                                                    pending_actions
                                                 )
                     
                     # check if there is a need to construct a new plan
@@ -320,7 +319,6 @@ class PlanningModule(InternalModule):
                                                                         aborted_actions,
                                                                         pending_actions,
                                                                         incoming_reqs,
-                                                                        generated_reqs,
                                                                         relay_messages,
                                                                         misc_messages,
                                                                         self._clock_config
@@ -347,7 +345,6 @@ class PlanningModule(InternalModule):
                                                     aborted_actions,
                                                     pending_actions,
                                                     incoming_reqs,
-                                                    generated_reqs,
                                                     relay_messages,
                                                     misc_messages
                                                 )
@@ -365,7 +362,6 @@ class PlanningModule(InternalModule):
                                                                     aborted_actions,
                                                                     pending_actions,
                                                                     incoming_reqs,
-                                                                    generated_reqs,
                                                                     relay_messages,
                                                                     misc_messages,
                                                                     self._clock_config
@@ -450,41 +446,44 @@ class PlanningModule(InternalModule):
             generated_reqs 
             misc_messages
         """
-        incoming_reqs = []
+        requests = []
         while not self.req_inbox.empty():
-            req : MeasurementRequest = await self.req_inbox.get()
-            incoming_reqs.append(req)
+            requests.append(await self.req_inbox.get())
 
-        incoming_measurements = []
-        while not self.measurement_inbox.empty():
-            incoming_measurements.append(await self.measurement_inbox.get())
+        incoming_obsevations = []
+        while not self.observations_inbox.empty():
+            incoming_obsevations.append(await self.observations_inbox.get())
 
-        generated_reqs = []
-        misc_messages = []
-        if (self.other_modules_exist                # other modules exist within the parent agent
-            and len(incoming_measurements) > 0      # some agent just performed a measurement
+        if (self.other_modules_exist                # science module exists within the parent agent
+            and len(incoming_obsevations) > 0       # some agent just performed an observation
             ):
 
-            # wait for science module to send their assesment of the measurement 
             while True:
+                # wait for science module to send their assesment of the observation 
                 internal_msg = await self.internal_inbox.get()
 
-                if not isinstance(internal_msg, MeasurementRequestMessage):
-                    await self.misc_inbox.put(internal_msg)
+                # check the type of response from the science module
+                if isinstance(internal_msg, MeasurementRequestMessage):
+                    # the science module generated a measurement request; add to list of generated reqs
+                    requests.append( MeasurementRequest.from_dict(internal_msg.req) )
                 else:
-                    generated_reqs.append( MeasurementRequest.from_dict(internal_msg.req) )
+                    # the science module generated a different response; process later
+                    await self.misc_inbox.put(internal_msg)
 
+                # check for if there are more responses from the science module
                 if self.internal_inbox.empty():
+                    # no more messages from the science module; stop wait
                     break
-
-        while not self.misc_inbox.empty():
-            misc_messages.append(await self.misc_inbox.get())
 
         relay_messages= []
         while not self.relay_inbox.empty():
             relay_messages.append(await self.relay_inbox.get())
 
-        return incoming_reqs, generated_reqs, relay_messages, misc_messages
+        misc_messages = []
+        while not self.misc_inbox.empty():
+            misc_messages.append(await self.misc_inbox.get())
+
+        return requests, relay_messages, misc_messages
     
     def __log_actions(self, completed_actions : list, aborted_actions : list, pending_actions : list) -> None:
         all_actions = [action for action in completed_actions]

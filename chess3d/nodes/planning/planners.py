@@ -20,22 +20,27 @@ class AbstractPlanner(ABC):
         super().__init__()
 
         # initialize attributes
-        # self.generated_reqs = []
-        # self.completed_requests = []
-        # self.completed_broadcasts = []
-        # self.completed_actions = []
-        # self.pending_relays = []
-        # self.access_times = {}
-        # self.known_reqs = []
-        
+        self.generated_reqs = set()
+        self.completed_broadcasts = set()
+        self.completed_actions = set()
+        self.pending_relays = set()
+        self.known_reqs = set()
         self.stats = {}
-        self.plan : Plan = None
-
+        
         # set attribute parameters
         self._logger = logger               # logger for debugging
 
     @abstractmethod
-    def update_percepts(self, **kwargs) -> None:
+    def update_percepts( self,
+                         incoming_reqs : list,
+                         generated_reqs : list,
+                         relay_messages : list,
+                         misc_messages : list,
+                         completed_actions : list,
+                         aborted_actions : list,
+                         pending_actions : list,
+                         **kwargs
+                        ) -> None:
         """ Updates internal knowledge based on incoming percepts """
 
     @abstractmethod
@@ -67,9 +72,11 @@ class AbstractPlanner(ABC):
 
         # schedule generated measurement request broadcasts
         ## check which requests have not been broadcasted yet
-        requests_broadcasted = [msg.req['id'] for msg in self.completed_broadcasts 
+        requests_broadcasted = [msg.req['id'] 
+                                for msg in self.completed_broadcasts 
                                 if isinstance(msg, MeasurementRequestMessage)]
-        requests_to_broadcast = [req for req in self.generated_reqs
+        requests_to_broadcast = [req 
+                                 for req in self.generated_reqs
                                  if isinstance(req, MeasurementRequest)
                                  and req.id not in requests_broadcasted]
 
