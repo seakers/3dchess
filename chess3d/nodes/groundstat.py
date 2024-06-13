@@ -3,7 +3,7 @@ import logging
 from typing import Any, Callable
 from nodes.planning.preplanners import FIFOPreplanner, IdlePlanner
 from nodes.planning.planner import PlanningModule
-from nodes.science.reqs import *
+from chess3d.nodes.science.requests import *
 from dmas.network import NetworkConfig
 from nodes.science.science import ScienceModule
 from nodes.agent import SimulationAgentState, SimulationAgent
@@ -93,17 +93,16 @@ class GroundStationAgent(SimulationAgent):
         await super().teardown()
 
         # print measurement requests from the ground
-        headers = ['id', 'type', 'x_pos','y_pos','z_pos','s_max','measurements','t_start','t_end','t_corr']
+        headers = ['id', 'lat','lon','alt','severity','obs_types','t_start','t_end','t_corr']
         data = []
         for req in self.measurement_reqs:
-            req : GroundPointMeasurementRequest
+            req : MeasurementRequest
             line = [    
                         req.id.split('-')[0],
-                        req.request_type,
-                        req.pos[0],
-                        req.pos[1],
-                        req.pos[2],
-                        req.s_max,
+                        req.target[0],
+                        req.target[1],
+                        req.target[2],
+                        req.severity,
                         f"{req.observations_types}",
                         req.t_start,
                         req.t_end,

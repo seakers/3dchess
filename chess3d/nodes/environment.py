@@ -9,7 +9,7 @@ from zmq import asyncio as azmq
 
 from pandas import DataFrame
 from nodes.science.utility import synergy_factor
-from nodes.science.reqs import *
+from chess3d.nodes.science.requests import *
 from nodes.orbitdata import OrbitData
 from nodes.states import GroundStationAgentState, UAVAgentState, SatelliteAgentState
 from nodes.actions import ObservationAction
@@ -627,12 +627,9 @@ class SimulationEnvironment(EnvironmentNode):
             # calculate possible number of measurements given coverage metrics
             n_obervations_pos = 0
             for req in measurement_reqs:
-                if not isinstance(req, GroundPointMeasurementRequest):
-                    self.log(f"WARNING cannot process results for requests of type {type(req)}", logging.WARNING)
-                    continue
 
-                req : GroundPointMeasurementRequest
-                lat,lon,_ = req.lat_lon_pos
+                req : MeasurementRequest
+                lat,lon,_ = req.target
 
                 observable_measurements = []
                 for _, coverage_data in self.orbitdata.items():
