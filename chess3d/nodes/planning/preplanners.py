@@ -46,9 +46,9 @@ class AbstractPreplanner(AbstractPlanner):
         super().__init__(utility_func, logger)    
 
         # set parameters
-        self.horizon = horizon              # planning horizon
-        self.period = period                # replanning period         
-        self.plan = Preplan(t=-1,horizon=horizon,t_next=0.0)
+        self.horizon = horizon                               # planning horizon
+        self.period = period                                 # replanning period         
+        self.plan = Preplan(t=-1,horizon=horizon,t_next=0.0) # initialized empty plan
         
     @runtime_tracker
     def needs_planning( self, 
@@ -65,6 +65,7 @@ class AbstractPreplanner(AbstractPlanner):
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         clock_config : ClockConfig,
+                        orbitdata : OrbitData,
                         **_
                     ) -> Plan:
         
@@ -90,51 +91,12 @@ class AbstractPreplanner(AbstractPlanner):
     @abstractmethod
     def _schedule_measurements(self, state : SimulationAgentState, clock_config : ClockConfig, orbitdata : dict = None) -> list:
         """ Creates a list of measurement actions to be performed by the agent """
-
-    
-
-    @runtime_tracker
-    def _generate_broadcasts(self, 
-                             state : SimulationAgentState, 
-                             measurements : list, 
-                             generated_reqs : list, 
-                             orbitdata : OrbitData
-                             ) -> list:
-        """ Creates broadcast actions """
-        # initialize list of broadcasts to be done
-        broadcasts = []
-
-        # schedule generated measurement request broadcasts
-        for req in generated_reqs:
-            req : MeasurementRequest
-            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
-            
-            # place broadcasts in plan
-            if isinstance(state, SatelliteAgentState):
-                if not orbitdata:
-                    raise ValueError('orbitdata required for satellite agents')
-                
-                # get next access windows to all agents
-                isl_accesses = [orbitdata.get_next_agent_access(target, state.t) for target in orbitdata.isl_data]
-
-                # TODO merge accesses to find overlaps
-                isl_accesses_merged = isl_accesses
-
-                # place requests in pending broadcasts list
-                for interval in isl_accesses_merged:
-                    interval : TimeInterval
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), max(interval.start, state.t))
-
-                    broadcasts.append(broadcast_action)
-                    
-            else:
-                raise NotImplementedError(f"Scheduling of broadcasts for agents with state of type {type(state)} not yet implemented.")
-        
-        return broadcasts   
+        pass    
 
     @runtime_tracker
     def __schedule_periodic_replan(self, state : SimulationAgentState, measurement_actions : list, maneuver_actions : list) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
+        
         # calculate next period for planning
         t_next = state.t + self.period
 
@@ -146,7 +108,8 @@ class AbstractPreplanner(AbstractPlanner):
             prelim_plan = Preplan(measurement_actions, maneuver_actions, t=state.t)
 
             actions_in_period = [action for action in prelim_plan.actions 
-                                 if action.t_start < t_next]
+                                 if  isinstance(action, AgentAction)
+                                 and action.t_start < t_next]
 
             if actions_in_period:
                 last_action : AgentAction = actions_in_period.pop()
@@ -157,27 +120,6 @@ class AbstractPreplanner(AbstractPlanner):
 
         # create wait action
         return [WaitForMessages(t_wait_start, t_next)]
-        
-    @runtime_tracker
-    def _get_available_requests(self) -> list:
-        """ Returns a list of known requests that can be performed within the current planning horizon """
-
-        reqs = {req.id : req for req in self.known_reqs}
-        available_reqs = []
-
-        for req_id in self.access_times:
-            req : MeasurementRequest = reqs[req_id]
-            for instrument in self.access_times[req_id]:
-                t_arrivals : list = self.access_times[req_id][instrument]
-
-                if len(t_arrivals) > 0:
-                    for subtask_index in range(len(req.measurement_groups)):
-                        main_instrument, _ = req.measurement_groups[subtask_index]
-                        if main_instrument == instrument:
-                            available_reqs.append((reqs[req_id], subtask_index))
-                            break
-
-        return available_reqs
 
 class IdlePlanner(AbstractPreplanner):
     @runtime_tracker

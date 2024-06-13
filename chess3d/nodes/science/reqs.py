@@ -17,10 +17,10 @@ class MeasurementRequest(object):
         - request_type (`str`): type of measurement request
         - s_max (`float`): maximum score attained from performing this task
         - measurements (`list`): measurement types required to perform this task
-        - duration (`float`): duration of the measurement being performed
         - t_start (`float`): start time of the availability of this task in [s] from the beginning of the simulation
         - t_end (`float`): end time of the availability of this task in [s] from the beginning of the simulation
         - t_corr (`float`): maximum decorralation time between measurements of different measurements
+        - duration (`float`): duration of the measurement being performed
         - id (`str`) : identifying number for this task in uuid format
     """        
     def __init__(self, 

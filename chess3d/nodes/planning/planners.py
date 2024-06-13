@@ -14,28 +14,24 @@ import pandas as pd
 
 
 class AbstractPlanner(ABC):
-    def __init__(self, 
-                 utility_func : Callable[[], Any], 
-                 orbitdata : OrbitData,
-                 logger : logging.Logger = None
-                 ) -> None:
+    def __init__(self, logger : logging.Logger = None) -> None:
         
         # initialize object
         super().__init__()
 
         # initialize attributes
-        self.generated_reqs = []
-        self.completed_requests = []
-        self.completed_broadcasts = []
-        self.completed_actions = []
-        self.pending_relays = []
-        self.access_times = {}
-        self.known_reqs = []
+        # self.generated_reqs = []
+        # self.completed_requests = []
+        # self.completed_broadcasts = []
+        # self.completed_actions = []
+        # self.pending_relays = []
+        # self.access_times = {}
+        # self.known_reqs = []
+        
         self.stats = {}
         self.plan : Plan = None
 
         # set attribute parameters
-        self.utility_func = utility_func
         self._logger = logger               # logger for debugging
 
     @abstractmethod
@@ -185,7 +181,7 @@ class AbstractPlanner(ABC):
         assert relay.path
 
         # find next destination and access time
-        next_dst = relay.path[0]
+        next_dst = relay.path.pop(0)
         
         # query next access interval to children nodes
         sender_orbitdata : OrbitData = orbitdata[state.agent_name]
@@ -303,6 +299,64 @@ class AbstractPlanner(ABC):
 
         return maneuvers
         
+    @runtime_tracker
+    def is_observation_path_valid(self, 
+                                  state : SimulationAgentState, 
+                                  observations : list,
+                                  orbitdata : OrbitData = None
+                                  ) -> bool:
+        """ Checks if a given sequence of observations can be performed by a given agent """
+        
+        if isinstance(state, SatelliteAgentState):
+
+            # check if every observation can be reached from the prior measurement
+            for j in range(len(observations)):
+                i = j - 1
+
+                # check if there was an observation performed previously
+                if i >= 0: # there was a prior observation performed
+
+                    # estimate the state of the agent at the prior mesurement
+                    observation_i : ObservationAction = observations[i]
+                    lat_i,lon_i,_ =  observation_i.target
+                    obs_i : dict = orbitdata.get_groundpoint_access_data(lat_i, lon_i, observation_i.instrument_name, observation_i.t_end)
+
+                    th_i = obs_i.get('look angle [deg]', np.NAN)
+                    t_i = observation_i.t_end
+
+                else: # there was prior measurement
+
+                    # use agent's current state as previous state
+                    th_i = state.attitude[0]
+                    t_i = state.t
+
+                # estimate the state of the agent at the given measurement
+                observation_j : ObservationAction = observations[j]
+                lat_j,lon_j,_ =  observation_j.target
+                obs_j : dict = orbitdata.get_groundpoint_access_data(lat_j, lon_j, observation_j.instrument_name, observation_i.t_end)
+
+                th_j = obs_j.get('look angle [deg]', np.NAN)
+                t_j = observation_j.t_start
+
+                assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
+
+                # estimate maneuver time betweem states
+                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
+                dt_measurements = t_j - t_i
+
+                assert dt_measurements >= 0.0 and dt_maneuver >= 0.0
+
+                # check if there's enough time to maneuver from one observation to another
+                if dt_maneuver - dt_measurements >= 1e-9:
+                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
+                    return False
+            
+            # if all measurements passed the check; measurement path
+            return True
+        else:
+            raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
+        
+
     def _print_observation_sequence(self, 
                                     state : SatelliteAgentState, 
                                     path : list, 
@@ -361,61 +415,3 @@ class AbstractPlanner(ABC):
         out += f'\nn measurements: {len(path)}\n'
 
         print(out)
-
-    @runtime_tracker
-    def is_observation_path_valid(self, 
-                                  state : SimulationAgentState, 
-                                  observations : list,
-                                  orbitdata : OrbitData = None
-                                  ) -> bool:
-        """ Checks if a given sequence of observations can be performed by a given agent """
-        
-        if isinstance(state, SatelliteAgentState):
-
-            # check if every observation can be reached from the prior measurement
-            for j in range(len(observations)):
-                i = j - 1
-
-                # check if there was an observation performed previously
-                if i >= 0: # there was a prior observation performed
-
-                    # estimate the state of the agent at the prior mesurement
-                    observation_i : ObservationAction = observations[i]
-                    lat_i,lon_i,_ =  observation_i.target
-                    obs_i : dict = orbitdata.get_groundpoint_access_data(lat_i, lon_i, observation_i.instrument_name, observation_i.t_end)
-
-                    th_i = obs_i.get('look angle [deg]', np.NAN)
-                    t_i = observation_i.t_end
-
-                else: # there was prior measurement
-
-                    # use agent's current state as previous state
-                    th_i = state.attitude[0]
-                    t_i = state.t
-
-                # estimate the state of the agent at the given measurement
-                observation_j : ObservationAction = observations[j]
-                lat_j,lon_j,_ =  observation_j.target
-                obs_j : dict = orbitdata.get_groundpoint_access_data(lat_j, lon_j, observation_j.instrument_name, observation_i.t_end)
-
-                th_j = obs_j.get('look angle [deg]', np.NAN)
-                t_j = observation_j.t_start
-
-                assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
-
-                # estimate maneuver time betweem states
-                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                dt_measurements = t_j - t_i
-
-                assert dt_measurements >= 0.0 and dt_maneuver >= 0.0
-
-                # check if there's enough time to maneuver from one observation to another
-                if dt_maneuver - dt_measurements >= 1e-9:
-                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
-                    return False
-            
-            # if all measurements passed the check; measurement path
-            return True
-        else:
-            raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
-        

@@ -185,10 +185,12 @@ class Plan(ABC):
 
     def __is_feasible(self, plan : list) -> bool:
         """ Checks if the current plan can be performed by the agent """
-
-        # check if actions dont overlap
+        
+        # initialize previous action's start and end times
         t_start_prev, t_end_prev = None, None
+
         for action in plan:
+            # get action's start and end times 
             if isinstance(action, AgentAction):
                 t_start = action.t_start
                 t_end = action.t_end
@@ -200,12 +202,14 @@ class Plan(ABC):
             else:
                 raise ValueError(f"Cannot check plan of actions of type {type(action)}")
 
+            # check if there is no overlap between tasks
             if t_start_prev is not None and t_end_prev is not None:
                 if t_start_prev > t_start:
-                    raise ValueError(f"Plan contains action with start time prior to its previous action's start time.")
+                    return
                 elif t_end_prev > t_start:
                     raise ValueError(f"Plan contains action with start time prior to its previous action's end time.")
 
+            # save current action start and endtimes for comparison with the following action
             t_start_prev = t_start
             t_end_prev = t_end
 

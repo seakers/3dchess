@@ -36,19 +36,19 @@ class PlanningModule(InternalModule):
                         logger)
         
         # initialize default attributes
-        self.results_path = results_path
-        self.parent_name = parent_name
-
-        self.preplanner : AbstractPreplanner = preplanner
-        self.replanner : AbstractReplanner = replanner
-        
         self.plan_history = []
         self.stats = {
                     }
         self.agent_state : SimulationAgentState = None
-        self.parent_agent_type = None
-        self.orbitdata : OrbitData = orbitdata
         self.other_modules_exist : bool = False
+        
+        # set parameters
+        self.results_path = results_path
+        self.parent_name = parent_name
+        self.preplanner : AbstractPreplanner = preplanner
+        self.replanner : AbstractReplanner = replanner
+        self.orbitdata : OrbitData = orbitdata
+
 
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
         """ Sets up network configuration for intra-agent module communication """
@@ -106,12 +106,6 @@ class PlanningModule(InternalModule):
                                 }
                             )
 
-
-
-    async def sim_wait(self, delay: float) -> None:
-        # does nothing
-        return
-
     async def setup(self) -> None:
         # initialize internal messaging queues
         self.states_inbox = asyncio.Queue()
@@ -125,17 +119,21 @@ class PlanningModule(InternalModule):
         self.agent_state_lock = asyncio.Lock()
         self.agent_state_updated = asyncio.Event()
 
+    async def sim_wait(self, delay: float) -> None:
+        # does nothing; planner module is designed to be event-driven, not time-driven
+        return
+
     async def live(self) -> None:
         """
         Performs two concurrent tasks:
         - Listener: receives messages from the parent agent and checks results
-        - Bundle-builder: plans and bids according to local information
+        - Planner: plans and bids according to local information
         """
         try:
             listener_task = asyncio.create_task(self.listener(), name='listener()')
-            bundle_builder_task = asyncio.create_task(self.planner(), name='planner()')
+            planner_task = asyncio.create_task(self.planner(), name='planner()')
             
-            tasks = [listener_task, bundle_builder_task]
+            tasks = [listener_task, planner_task]
 
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
@@ -162,16 +160,18 @@ class PlanningModule(InternalModule):
         try:
             # listen for broadcasts and place in the appropriate inboxes
             while True:
+                # wait for next message from the parent agent
                 self.log('listening to manager broadcast!')
                 _, _, content = await self.listen_manager_broadcast()
 
-                # if sim-end message, end agent `live()`
+                # classify mesasge content based of type of message
                 if content['msg_type'] == ManagerMessageTypes.SIM_END.value:
+                    # sim-end message; end agent `live()`
                     self.log(f"received manager broadcast or type {content['msg_type']}! terminating `live()`...")
                     return
 
                 elif content['msg_type'] == SimulationMessageTypes.SENSES.value:
-                    # received agent sense message from parent
+                    # received agent sense message
                     self.log(f"received senses from parent agent!", level=logging.DEBUG)
 
                     # unpack message 
@@ -186,12 +186,10 @@ class PlanningModule(InternalModule):
                         # unpack message
                         msg : SimulationMessage = message_from_dict(**sense)
 
-                        # check if message needs to be relayed
+                        # check relay path
                         if msg.path:
-                            msg.path.pop(0)
-                            if msg.path:
-                                msg_copy : SimulationMessage = message_from_dict(**msg.to_dict())
-                                await self.relay_inbox.put(msg_copy)
+                            # message contains relay path; forward message copy
+                            await self.relay_inbox.put(message_from_dict(**sense))
 
                         # check type of message being received
                         if isinstance(msg, AgentActionMessage):
@@ -206,44 +204,31 @@ class PlanningModule(InternalModule):
                             self.log(f"received agent state message!")
                             
                             # unpack state
-                            state : SimulationAgentState = SimulationAgentState.from_dict(msg.state)
-
-                            # update parent agent information if the type of parent agent is unknown
-                            if self.parent_agent_type is None:
-                                if isinstance(state, SatelliteAgentState):                                    
-                                    # parent is a satellite-type agent
-                                    self.parent_agent_type = SimulationAgentTypes.SATELLITE.value
-                                elif isinstance(state, UAVAgentState):
-                                    # parent is a uav-type agent
-                                    self.parent_agent_type = SimulationAgentTypes.UAV.value
-
-                                elif isinstance(state, GroundStationAgentState):
-                                    # parent is a ground station-type agent
-                                    self.parent_agent_type = SimulationAgentTypes.GROUND_STATION.value
-
-                                else:
-                                    # parent is an agent of an unknown type; raise exception
-                                    raise NotImplementedError(f"states of type {msg.state['state_type']} not supported for planners.")
+                            state : SimulationAgentState = SimulationAgentState.from_dict(msg.state)                                                          
                             
+                            # send to planner
                             await self.states_inbox.put(state)
 
                         elif isinstance(msg, MeasurementRequestMessage):
-                            # request received directly from another agent
-                            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
+                            # measurement request message received
                             self.log(f"received measurement request message!")
+
+                            # unapack measurement request
+                            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
                             
                             # send to planner
                             await self.req_inbox.put(req)
 
                         elif isinstance(msg, ObservationResultsMessage):
-                            # measurement was just performed by agent
-                            self.log(f"received measurement data from agent!")
+                            # observation data from another agent was received
+                            self.log(f"received observation data from agent!")
 
-                            # senf to planner
+                            # send to planner
                             await self.measurement_inbox.put(msg)
 
                         # TODO support down-linked information processing
-                        # elif isisntance(msg, DOWNLINKED MESSAGE CONFIRMATION):
+                        ## elif isinstance(msg, DOWNLINKED MESSAGE CONFIRMATION):
+                        ##     pass
 
                         else:
                             # other type of message was received
