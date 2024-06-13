@@ -20,7 +20,7 @@ from chess3d.monitor import ResultsMonitor
 from chess3d.nodes.states import *
 from chess3d.nodes.agent import SimulationAgent
 from chess3d.nodes.science.utility import utility_function
-from chess3d.nodes.science.reqs import GroundPointMeasurementRequest
+from chess3d.nodes.science.requests import GroundPointMeasurementRequest
 from chess3d.nodes.environment import SimulationEnvironment
 from chess3d.utils import *
 

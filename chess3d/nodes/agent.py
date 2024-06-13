@@ -5,7 +5,7 @@ from pandas import DataFrame
 
 from instrupy.base import Instrument
 from chess3d.nodes.states import SimulationAgentState
-from chess3d.nodes.science.reqs import MeasurementRequest
+from chess3d.nodes.science.requests import MeasurementRequest
 from chess3d.nodes.planning.planner import PlanningModule
 from chess3d.nodes.science.science import ScienceModule
 from chess3d.nodes.actions import *

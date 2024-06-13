@@ -6,7 +6,7 @@ from typing import Callable, Any
 from nodes.planning.plan import Plan, Preplan
 from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
-from nodes.science.reqs import *
+from chess3d.nodes.science.requests import *
 from messages import *
 from dmas.modules import *
 from dmas.utils import runtime_tracker
@@ -20,11 +20,10 @@ class AbstractPlanner(ABC):
         super().__init__()
 
         # initialize attributes
-        self.generated_reqs = set()
-        self.completed_broadcasts = set()
-        self.completed_actions = set()
-        self.pending_relays = set()
         self.known_reqs = set()
+        self.pending_relays = set()
+        self.completed_actions = set()
+        self.completed_broadcasts = set()
         self.stats = {}
         
         # set attribute parameters
@@ -33,15 +32,37 @@ class AbstractPlanner(ABC):
     @abstractmethod
     def update_percepts( self,
                          incoming_reqs : list,
-                         generated_reqs : list,
                          relay_messages : list,
-                         misc_messages : list,
                          completed_actions : list,
-                         aborted_actions : list,
-                         pending_actions : list,
                          **kwargs
                         ) -> None:
         """ Updates internal knowledge based on incoming percepts """
+        
+        # check parameters
+        for req in incoming_reqs:
+            assert isinstance(req, MeasurementRequest)
+        for relay_message in relay_messages:
+            assert isinstance(relay_message, SimulationMessage)
+        for completed_action in completed_actions:
+            assert isinstance(completed_action, AgentAction)
+
+        # update list of known requests
+        self.known_reqs.update(incoming_reqs)
+
+        # update list of completed actions
+        self.completed_actions.update(completed_actions)
+
+        # update list of completed broadcasts
+        completed_broadcasts = [message_from_dict(action.msg) 
+                                for action in completed_actions
+                                if isinstance(action, BroadcastMessageAction)]
+        self.completed_broadcasts.update(completed_broadcasts)
+        
+        # update list of pending relays 
+        self.pending_relays.update(relay_messages)
+        for completed_broadcast in completed_broadcasts:
+            if completed_broadcast in self.pending_relays:
+                self.pending_relays.remove(completed_broadcast)
 
     @abstractmethod
     def needs_planning(self, **kwargs) -> bool:
@@ -76,58 +97,63 @@ class AbstractPlanner(ABC):
                                 for msg in self.completed_broadcasts 
                                 if isinstance(msg, MeasurementRequestMessage)]
         requests_to_broadcast = [req 
-                                 for req in self.generated_reqs
+                                 for req in self.known_reqs
                                  if isinstance(req, MeasurementRequest)
+                                 and req.rqst == state.agent_name
                                  and req.id not in requests_broadcasted]
 
-        # Find best path for broadcasts
-        path, t_start = self._create_broadcast_path(state, orbitdata)
+        if requests_to_broadcast:
+            # find best path for broadcasts
+            path, t_start = self._create_broadcast_path(state, orbitdata)
 
-        ## create a broadcast action for all unbroadcasted measurement requests
-        for req in requests_to_broadcast:        
-            # if found, create broadcast action
+            # check feasibility of path found
             if t_start >= 0:
-                msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-                
-                broadcasts.append(broadcast_action)
+                # create a broadcast action for all unbroadcasted measurement requests
+                for req in requests_to_broadcast:        
+                    # if found, create broadcast action
+                    msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                    
+                    broadcasts.append(broadcast_action)
 
         # schedule message relay
         relay_broadcasts = [self._schedule_relay(relay) for relay in self.pending_relays]
         broadcasts.extend(relay_broadcasts)    
                         
         # return scheduled broadcasts
-        return broadcasts   
+        return broadcasts 
     
     def _create_broadcast_path(self, 
                                state : SimulationAgentState, 
-                               orbitdata : OrbitData) -> tuple:
-        """ 
-        Finds the best path for broadcasting a message to all agents using depth-first-search
-        """
-        # populate list of agents
+                               orbitdata : OrbitData
+                               ) -> tuple:
+        """ Finds the best path for broadcasting a message to all agents using depth-first-search """
+
+        # populate list of all agents except the parent agent
         target_agents = [target_agent 
                          for target_agent in orbitdata.isl_data 
                          if target_agent != state.agent_name]
         
-        # check if other agents exist in the simulation
         if not target_agents: 
             # no other agents in the simulation; no need for relays
             return ([], state.t)
         
-        earliest_accesses = [orbitdata.get_next_agent_access(target_agent, state.t) 
+        # check if broadcast needs to be routed
+        earliest_accesses = [   orbitdata.get_next_agent_access(target_agent, state.t) 
                                 for target_agent in target_agents]           
-        same_access_start = [access.start == earliest_accesses[0].start 
+        
+        same_access_start = [   access.start == earliest_accesses[0].start 
                                 for access in earliest_accesses 
                                 if isinstance(access, TimeInterval)]
-        same_access_end = [access.end == earliest_accesses[0].end 
-                            for access in earliest_accesses 
-                            if isinstance(access, TimeInterval)]
+        same_access_end = [     access.end == earliest_accesses[0].end 
+                                for access in earliest_accesses 
+                                if isinstance(access, TimeInterval)]
 
-        # check if broadcast needs to be routed
         if all(same_access_start) and all(same_access_end):
             # all agents are accessing eachother at the same time; no need for mesasge relays
             return ([], state.t)   
+
+        # look for relay path using depth-first search
 
         # initialize queue
         q = queue.Queue()
@@ -140,7 +166,6 @@ class AbstractPlanner(ABC):
         # add parent agent as the root node
         q.put((state.agent_name, [], [], 0.0))
 
-        # iterate through depth-first search
         while not q.empty():
             # get next node in the search
             _, current_path, current_times, path_cost = q.get()
