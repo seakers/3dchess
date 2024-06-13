@@ -35,6 +35,7 @@ class AbstractPlanner(ABC):
         self.plan : Plan = None
 
         # set attribute parameters
+        self.utility_func = utility_func
         self._logger = logger               # logger for debugging
 
     @abstractmethod

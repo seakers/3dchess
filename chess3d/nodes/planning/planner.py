@@ -17,7 +17,6 @@ class PlanningModule(InternalModule):
                 results_path : str, 
                 parent_name : str,
                 parent_network_config: NetworkConfig, 
-                utility_func : Callable[[], Any],
                 preplanner : AbstractPreplanner = None,
                 replanner : AbstractReplanner = None,
                 orbitdata : OrbitData = None,
@@ -27,27 +26,7 @@ class PlanningModule(InternalModule):
         """ Internal Agent Module in charge of planning an scheduling. """
                        
         # setup network settings
-        addresses = parent_network_config.get_internal_addresses()        
-        sub_addesses = []
-        sub_address : str = addresses.get(zmq.PUB)[0]
-        sub_addesses.append( sub_address.replace('*', 'localhost') )
-
-        if len(addresses.get(zmq.SUB)) > 1:
-            sub_address : str = addresses.get(zmq.SUB)[1]
-            sub_addesses.append( sub_address.replace('*', 'localhost') )
-
-        pub_address : str = addresses.get(zmq.SUB)[0]
-        pub_address = pub_address.replace('localhost', '*')
-
-        addresses = parent_network_config.get_manager_addresses()
-        push_address : str = addresses.get(zmq.PUSH)[0]
-
-        planner_network_config =  NetworkConfig(parent_name,
-                                        manager_address_map = {
-                                        zmq.REQ: [],
-                                        zmq.SUB: sub_addesses,
-                                        zmq.PUB: [pub_address],
-                                        zmq.PUSH: [push_address]})
+        planner_network_config : NetworkConfig = self._setup_planner_network_config(parent_name, parent_network_config)
 
         # intialize module
         super().__init__(f'{parent_name}-PLANNING_MODULE', 
@@ -59,7 +38,6 @@ class PlanningModule(InternalModule):
         # initialize default attributes
         self.results_path = results_path
         self.parent_name = parent_name
-        self.utility_func = utility_func
 
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
@@ -71,6 +49,64 @@ class PlanningModule(InternalModule):
         self.parent_agent_type = None
         self.orbitdata : OrbitData = orbitdata
         self.other_modules_exist : bool = False
+
+    def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
+        """ Sets up network configuration for intra-agent module communication """
+        # addresses : dict = parent_network_config.get_internal_addresses()        
+        # sub_addesses = []
+        # sub_address : str = addresses.get(zmq.PUB)[0]
+        # sub_addesses.append( sub_address.replace('*', 'localhost') )
+
+        # if len(addresses.get(zmq.SUB)) > 1:
+        #     sub_address : str = addresses.get(zmq.SUB)[1]
+        #     sub_addesses.append( sub_address.replace('*', 'localhost') )
+
+        # pub_address : str = addresses.get(zmq.SUB)[0]
+        # pub_address = pub_address.replace('localhost', '*')
+
+        # addresses = parent_network_config.get_manager_addresses()
+        # push_address : str = addresses.get(zmq.PUSH)[0]
+
+        # return  NetworkConfig(  parent_name,
+        #                         manager_address_map = {
+        #                             zmq.REQ: [],
+        #                             zmq.SUB: sub_addesses,
+        #                             zmq.PUB: [pub_address],
+        #                             zmq.PUSH: [push_address]
+        #                         }
+        #                     )
+
+        # get full list of addresses from parent agent
+        addresses : dict = parent_network_config.get_internal_addresses()        
+        
+        # subscribe to parent agent's bradcasts
+        sub_address : str = addresses.get(zmq.PUB)[0]
+        sub_addesses = [ sub_address.replace('*', 'localhost') ]
+
+        # subscribe to science module's broadcasts
+        if len(addresses.get(zmq.SUB)) > 1:
+            sub_address : str = addresses.get(zmq.SUB)[1]
+            sub_addesses.append( sub_address.replace('*', 'localhost') )
+
+        # obtain address for intra-agent broadcasts
+        pub_address : str = addresses.get(zmq.SUB)[0]
+        pub_address = pub_address.replace('localhost', '*')
+
+        # obtain results logger address
+        addresses = parent_network_config.get_manager_addresses()
+        push_address : str = addresses.get(zmq.PUSH)[0]
+
+        # return network configuration
+        return  NetworkConfig(  parent_name,
+                                manager_address_map = {
+                                    zmq.REQ: [],
+                                    zmq.SUB: sub_addesses,
+                                    zmq.PUB: [pub_address],
+                                    zmq.PUSH: [push_address]
+                                }
+                            )
+
+
 
     async def sim_wait(self, delay: float) -> None:
         # does nothing
