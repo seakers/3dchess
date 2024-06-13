@@ -5,7 +5,7 @@ import datetime as dt
 from nodes.actions import ObservationAction
 from nodes.states import SimulationAgentState
 from messages import *
-from nodes.science.reqs import *
+from chess3d.nodes.science.requests import *
 from zmq import asyncio as azmq
 from dmas.modules import *
 

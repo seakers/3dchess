@@ -12,7 +12,7 @@ from nodes.science.utility import synergy_factor
 from nodes.states import *
 from nodes.planning.consensus.bids import Bid, UnconstrainedBid
 from nodes.planning.consensus.consensus import AbstractConsensusReplanner
-from nodes.science.reqs import MeasurementRequest
+from chess3d.nodes.science.requests import MeasurementRequest
 
 
 

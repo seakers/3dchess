@@ -9,7 +9,7 @@ from nodes.planning.preplanners import AbstractPreplanner
 from nodes.planning.replanners import AbstractReplanner
 from nodes.orbitdata import OrbitData
 from nodes.states import *
-from nodes.science.reqs import *
+from chess3d.nodes.science.requests import *
 from messages import *
 
 class PlanningModule(InternalModule):
@@ -314,14 +314,8 @@ class PlanningModule(InternalModule):
                     if self.preplanner.needs_planning(state, plan):     
                         # initialize plan      
                         plan : Plan = self.preplanner.generate_plan(    state, 
-                                                                        plan,
-                                                                        completed_actions,
-                                                                        aborted_actions,
-                                                                        pending_actions,
-                                                                        incoming_reqs,
-                                                                        relay_messages,
-                                                                        misc_messages,
-                                                                        self._clock_config
+                                                                        self._clock_config,
+                                                                        self.orbitdata
                                                                         )
 
                         # save copy of plan for post-processing

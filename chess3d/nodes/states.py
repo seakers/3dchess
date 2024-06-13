@@ -2,7 +2,7 @@
 from abc import abstractmethod
 import numpy as np
 from typing import Union
-from nodes.science.reqs import MeasurementRequest, GroundPointMeasurementRequest
+from chess3d.nodes.science.requests import MeasurementRequest
 from nodes.actions import *
 from nodes.engineering.engineering import EngineeringModule
 from dmas.agents import AbstractAgentState, AgentAction
@@ -507,55 +507,55 @@ class SatelliteAgentState(SimulationAgentState):
 
         return dv < eps
 
-    def calc_off_nadir_agle(self, req : MeasurementRequest) -> float:
-        """
-        Calculates the off-nadir angle between a satellite and a target
-        """
-        if isinstance(req, GroundPointMeasurementRequest):
-            lat,lon,alt = req.lat_lon_pos
-            R = 6.3781363e+003 + alt
-            target_pos = [
-                    R * np.cos( lat * np.pi / 180.0) * np.cos( lon * np.pi / 180.0),
-                    R * np.cos( lat * np.pi / 180.0) * np.sin( lon * np.pi / 180.0),
-                    R * np.sin( lat * np.pi / 180.0)
-            ]
+    # def calc_off_nadir_agle(self, req : MeasurementRequest) -> float:
+    #     """
+    #     Calculates the off-nadir angle between a satellite and a target
+    #     """
+    #     if isinstance(req, GroundPointMeasurementRequest):
+    #         lat,lon,alt = req.lat_lon_pos
+    #         R = 6.3781363e+003 + alt
+    #         target_pos = [
+    #                 R * np.cos( lat * np.pi / 180.0) * np.cos( lon * np.pi / 180.0),
+    #                 R * np.cos( lat * np.pi / 180.0) * np.sin( lon * np.pi / 180.0),
+    #                 R * np.sin( lat * np.pi / 180.0)
+    #         ]
 
-            # compute body-fixed frame
-            pos_norm = np.sqrt(np.dot(self.pos, self.pos))
-            nadir_dir = np.array([
-                            -self.pos[0]/pos_norm,
-                            -self.pos[1]/pos_norm,
-                            -self.pos[2]/pos_norm
-                        ])
+    #         # compute body-fixed frame
+    #         pos_norm = np.sqrt(np.dot(self.pos, self.pos))
+    #         nadir_dir = np.array([
+    #                         -self.pos[0]/pos_norm,
+    #                         -self.pos[1]/pos_norm,
+    #                         -self.pos[2]/pos_norm
+    #                     ])
 
-            vel_norm = np.sqrt(np.dot(self.vel, self.vel))
-            vel_dir = np.array([
-                            self.vel[0]/vel_norm,
-                            self.vel[1]/vel_norm,
-                            self.vel[2]/vel_norm
-                        ])
-            perp_dir = np.cross(nadir_dir, vel_dir)
+    #         vel_norm = np.sqrt(np.dot(self.vel, self.vel))
+    #         vel_dir = np.array([
+    #                         self.vel[0]/vel_norm,
+    #                         self.vel[1]/vel_norm,
+    #                         self.vel[2]/vel_norm
+    #                     ])
+    #         perp_dir = np.cross(nadir_dir, vel_dir)
 
-            # calculate projection to nadir x perp plane
-            sat_to_gp = np.array([
-                            target_pos[0]-self.pos[0],
-                            target_pos[1]-self.pos[1],
-                            target_pos[2]-self.pos[2]
-                        ])
-            sat_to_gp_norm = np.sqrt(np.dot(sat_to_gp, sat_to_gp))
-            sat_to_gp = np.array([
-                            sat_to_gp[0]/sat_to_gp_norm,
-                            sat_to_gp[1]/sat_to_gp_norm,
-                            sat_to_gp[2]/sat_to_gp_norm
-                        ])
+    #         # calculate projection to nadir x perp plane
+    #         sat_to_gp = np.array([
+    #                         target_pos[0]-self.pos[0],
+    #                         target_pos[1]-self.pos[1],
+    #                         target_pos[2]-self.pos[2]
+    #                     ])
+    #         sat_to_gp_norm = np.sqrt(np.dot(sat_to_gp, sat_to_gp))
+    #         sat_to_gp = np.array([
+    #                         sat_to_gp[0]/sat_to_gp_norm,
+    #                         sat_to_gp[1]/sat_to_gp_norm,
+    #                         sat_to_gp[2]/sat_to_gp_norm
+    #                     ])
             
-            R_inert_2_rot = np.matrix([nadir_dir, vel_dir, perp_dir])
-            sat_to_gp_rot = np.matmul(R_inert_2_rot, sat_to_gp).A[0]
+    #         R_inert_2_rot = np.matrix([nadir_dir, vel_dir, perp_dir])
+    #         sat_to_gp_rot = np.matmul(R_inert_2_rot, sat_to_gp).A[0]
 
-            return np.arctan2(sat_to_gp_rot[2], sat_to_gp_rot[0]) * 180 / np.pi
+    #         return np.arctan2(sat_to_gp_rot[2], sat_to_gp_rot[0]) * 180 / np.pi
         
-        else:
-            raise NotImplementedError(f"cannot calculate off-nadir angle for measurement requests of type {type(req)}")
+    #     else:
+    #         raise NotImplementedError(f"cannot calculate off-nadir angle for measurement requests of type {type(req)}")
 
     def calc_maneuver_duration(self, final_state : AbstractAgentState) -> float:
         """ 

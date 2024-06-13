@@ -16,7 +16,7 @@ from nodes.planning.consensus.bids import Bid, BidComparisonResults, Rebroadcast
 from nodes.planning.replanners import AbstractReplanner
 from nodes.science.utility import *
 from nodes.orbitdata import OrbitData
-from nodes.science.reqs import *
+from chess3d.nodes.science.requests import *
 from nodes.states import *
 from messages import *
 

@@ -104,6 +104,12 @@
                     "aop": 0.0,
                     "ta": 0.0
                 }
+            },
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "naive",
+                    "collaboration" : "False"
+                }
             }
         }
     ],

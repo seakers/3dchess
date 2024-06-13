@@ -1,6 +1,6 @@
 import random
 import numpy as np
-from nodes.science.reqs import MeasurementRequest
+from chess3d.nodes.science.requests import MeasurementRequest
 
 """
 List of utility functions used to evalute the value of observations

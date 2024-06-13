@@ -50,13 +50,14 @@ class OrbitData:
     TODO: add support to load ground station agents' data
     """
     def __init__(self, agent_name : str, 
-                    time_data : pd.DataFrame, 
-                    eclipse_data : pd.DataFrame, 
-                    position_data : pd.DataFrame, 
-                    isl_data : dict,
-                    gs_access_data : pd.DataFrame, 
-                    gp_access_data : pd.DataFrame, 
-                    grid_data : pd.DataFrame):
+                 time_data : pd.DataFrame, 
+                 eclipse_data : pd.DataFrame, 
+                 position_data : pd.DataFrame, 
+                 isl_data : dict,
+                 gs_access_data : pd.DataFrame, 
+                 gp_access_data : pd.DataFrame, 
+                 grid_data : list
+                ):
         # name of agent being represented by this object
         self.agent_name = agent_name
 
@@ -505,7 +506,7 @@ class OrbitData:
                     grid : dict
                     if grid.get('@type').lower() == 'customgrid':
                         grid_file = grid.get('covGridFilePath')
-                        # grid_data = pd.read_csv(grid_file)
+                        
                     elif grid.get('@type').lower() == 'autogrid':
                         i_grid = mission_dict.get('grid').index(grid)
                         grid_file = os.path.join(orbitdata_path, f'grid{i_grid}.csv')

@@ -12,7 +12,7 @@ from nodes.science.utility import synergy_factor
 from nodes.states import SimulationAgentState
 
 from nodes.orbitdata import OrbitData
-from nodes.science.reqs import *
+from chess3d.nodes.science.requests import *
 from nodes.planning.plan import Plan, Preplan, Replan
 from nodes.planning.planners import AbstractPlanner
 from nodes.states import *

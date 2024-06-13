@@ -10,7 +10,6 @@ import concurrent.futures
 
 from dmas.messages import SimulationElementRoles
 from dmas.network import NetworkConfig
-from dmas.clocks import FixedTimesStepClockConfig, EventDrivenClockConfig
 from chess3d.factory import SimulationFactory
 from chess3d.nodes.planning.preplanners import *
 from chess3d.nodes.planning.replanners import *
@@ -20,7 +19,6 @@ from chess3d.monitor import ResultsMonitor
 from chess3d.nodes.states import *
 from chess3d.nodes.agent import SimulationAgent
 from chess3d.nodes.science.utility import utility_function
-from chess3d.nodes.science.requests import GroundPointMeasurementRequest
 from chess3d.nodes.environment import SimulationEnvironment
 from chess3d.utils import *
 
@@ -142,8 +140,7 @@ def main(   scenario_name : str,
                                                 manager_network_config, 
                                                 agent_port, 
                                                 SimulationAgentTypes.SATELLITE, 
-                                                clock_config,
-                                                events_path,
+                                                level,
                                                 logger
                                             )
             agents.append(agent)
@@ -488,5 +485,5 @@ if __name__ == "__main__":
     scenario_dict : dict = json.load(scenario_file)
     scenario_file.close()
 
-    main(scenario_name, scenario_path, plot_results, save_plot, levels)
+    main(scenario_name, scenario_path, plot_results, save_plot, level)
     

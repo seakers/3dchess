@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 
-from nodes.science.reqs import GroundPointMeasurementRequest
+from chess3d.nodes.science.requests import MeasurementRequest
 
 def plot_plane(scenario_path : str, results_path : str, show_plot : bool = False) -> animation.FuncAnimation:
     # load scenario json file
@@ -64,7 +64,7 @@ def plot_plane(scenario_path : str, results_path : str, show_plot : bool = False
             pos = None
 
         lan_lon_pos = [lat, lon, alt]
-        req = GroundPointMeasurementRequest(lan_lon_pos, s_max, measurements, t_start, t_end, t_corr, pos=pos)
+        req = MeasurementRequest(lan_lon_pos, s_max, measurements, t_start, t_end, t_corr, pos=pos)
         measurement_reqs.append(req)
 
     # initialize plot
@@ -107,8 +107,8 @@ def plot_plane(scenario_path : str, results_path : str, show_plot : bool = False
     x_tasks = []
     y_tasks = []
     for req in measurement_reqs:
-        req : GroundPointMeasurementRequest
-        x_i, y_i, _ = req.pos
+        req : MeasurementRequest
+        x_i, y_i, _ = req.target
         x_tasks.append(x_i)
         y_tasks.append(y_i)
         task_id = req.id.split('-')[0]
@@ -155,8 +155,8 @@ def plot_plane(scenario_path : str, results_path : str, show_plot : bool = False
             task_scat = ax.scatter(x_reqs, y_reqs, color='g', marker='*')
         else:
             for req in measurement_reqs:
-                req : GroundPointMeasurementRequest
-                x_i, y_i, _ = req.pos
+                req : MeasurementRequest
+                x_i, y_i, _ = req.target
                 x_reqs.append(x_i)
                 y_reqs.append(y_i)
             task_scat = ax.scatter(x_reqs, y_reqs, color='r', marker='*')

@@ -77,6 +77,11 @@
                     "angleHeight": 15,
                     "angleWidth": 60
                 },
+                "fieldOfRegardGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5,
+                    "angleWidth": 5
+                },
                 "@id": "bs1",
                 "@type": "Basic Sensor"
             },
@@ -99,22 +104,30 @@
                     "aop": 0.0,
                     "ta": 0.0
                 }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naive"
+                }
             }
         }
     ],
     "grid": [
         {
-            "@type": "customgrid",
-            "covGridFilePath": "./scenarios/toy/resources/cluster_grid0.csv"
+            "@type": "customGrid",
+            "covGridFilePath": "./scenarios/toy/resources/lake_event_points.csv"
         }
     ],
     "scenario": {
-        "@type": "PREDEF",
-        "initialRequestsPath": "./scenarios/toy/resources/initial_requests_merged.csv",
-        "eventsPath": "./scenarios/toy/resources/all_events_formatted.csv",
-        "duration": 30.0,
+        "events": {
+            "@type": "PREDEF",
+            "eventsPath": "./scenarios/toy/resources/all_events_formatted.csv"
+        },
         "connectivity": "FULL",
-        "utility": "LINEAR"
+        "utility": "LINEAR",
+        "clock": {
+            "@type": "EVENT"
+        }
     },
     "settings": {
         "coverageType": "GRID COVERAGE",

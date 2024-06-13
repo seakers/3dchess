@@ -1,7 +1,7 @@
 from logging import DEBUG
 import logging
 from nodes.planning.consensus.bids import Bid
-from nodes.science.reqs import MeasurementRequest
+from chess3d.nodes.science.requests import MeasurementRequest
 from nodes.states import SimulationAgentState
 from nodes.planning.consensus.consensus import AbstractConsensusReplanner
 from nodes.planning.consensus.bids import Bid, BidComparisonResults

@@ -13,6 +13,7 @@ from dmas.clocks import *
 
 from chess3d.nodes.orbitdata import OrbitData
 from chess3d.nodes.planning.planner import PlanningModule
+from chess3d.nodes.planning.preplanners import NaivePlanner
 from chess3d.nodes.satellite import SatelliteAgent
 from chess3d.nodes.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
 from chess3d.nodes.agent import SimulationAgent
@@ -33,8 +34,7 @@ class SimulationFactory:
                             manager_network_config : NetworkConfig, 
                             port : int, 
                             agent_type : SimulationAgentTypes,
-                            clock_config : float,
-                            events_path : str,
+                            level : int,
                             logger : logging.Logger
                         ) -> SimulationAgent:
         """
@@ -102,26 +102,28 @@ class SimulationFactory:
         science = None # TODO remove when updating science module
 
         ## load planner module
-        # if planner_dict is not None:
-        #     planner_dict : dict
+        if planner_dict is not None:
+            planner_dict : dict
         #     utility_func = utility_function[planner_dict.get('utility', 'NONE')]
             
-        #     preplanner_dict = planner_dict.get('preplanner', None)
-        #     if isinstance(preplanner_dict, dict):
-        #         preplanner_type : str = preplanner_dict.get('@type', None)
-        #         period = preplanner_dict.get('period', np.Inf)
-        #         horizon = preplanner_dict.get('horizon', np.Inf)
+            preplanner_dict = planner_dict.get('preplanner', None)
+            if isinstance(preplanner_dict, dict):
+                preplanner_type : str = preplanner_dict.get('@type', None)
+                period = preplanner_dict.get('period', np.Inf)
+                horizon = preplanner_dict.get('horizon', np.Inf)
 
-        #         if preplanner_type.lower() == "FIFO":
-        #             collaboration = preplanner_dict.get('collaboration', "False") == "True"
-        #             preplanner = FIFOPreplanner(utility_func, period, horizon, collaboration)
-        #         else:
-        #             raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
-        #     else:
-        #         preplanner = None
+                if preplanner_type.lower() == "naive":
+                    collaboration : str = preplanner_dict.get('collaboration', "false")
+                    preplanner = NaivePlanner(period, horizon, collaboration.lower() == "true")
+                else:
+                    raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
+            else:
+                preplanner = None
 
-        #     replanner_dict = planner_dict.get('replanner', None)
-        #     if isinstance(replanner_dict, dict):
+            replanner = None
+
+            # replanner_dict = planner_dict.get('replanner', None)
+            # if isinstance(replanner_dict, dict):
         #         replanner_type = replanner_dict.get('@type', None)
                 
         #         if replanner_type == 'FIFO':
@@ -145,16 +147,15 @@ class SimulationFactory:
         # else:
         #     preplanner, replanner, utility_func = None, None, 'NONE'
         
-        preplanner, replanner, utility_func = None, None, 'NONE'
 
         planner = PlanningModule(   results_path, 
                                     agent_name, 
                                     agent_network_config, 
-                                    utility_func, 
                                     preplanner,
                                     replanner,
                                     agent_orbitdata,
-                                    logger=logger
+                                    level,
+                                    logger
                                 )    
             
         ## create agent
