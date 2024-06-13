@@ -130,9 +130,8 @@ def main(   scenario_name : str,
     # create agents 
     agents = []
     agent_port = port + 6
-    if spacecraft_dict is not None:
+    if isinstance(spacecraft_dict, list):
         for spacecraft in spacecraft_dict:
-            # Create spacecraft agents
             agent = SimulationFactory.generate_agent(
                                                 scenario_name, 
                                                 scenario_path,
