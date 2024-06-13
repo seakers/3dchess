@@ -180,7 +180,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                 if bid.winner == bid.NONE: continue
 
                 req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
-                ins, deps = req.measurement_groups[bid.subtask_index]
+                ins, deps = req.observation_groups[bid.subtask_index]
                 line = f'{req_id_short}  {bid.subtask_index}\t{ins}\t{deps}\t{bid.winner}\t{np.round(bid.winning_bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\t  {int(bid.performed)}\n'
                 out += line
                 i +=1
@@ -226,7 +226,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
         ### Returns
             - t_img (`float`): earliest available imaging time
         """
-        main_measurement = req.measurements[subtask_index]
+        main_measurement = req.observations_types[subtask_index]
         proposed_path = [path_element for path_element in path]
         proposed_path_tasks = [(path_req, path_j) for path_req, path_j,_,_ in path]
         j = proposed_path_tasks.index((req,subtask_index))  
@@ -266,7 +266,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                     req_i, subtask_i, t_i, _ = path[i]
                     req_i : GroundPointMeasurementRequest
                     lat_i,lon_i,_ =  req_i.lat_lon_pos
-                    main_instrument_i = req_i.measurements[subtask_i]
+                    main_instrument_i = req_i.observations_types[subtask_i]
 
                     obs_i = self.agent_orbitdata.get_groundpoint_access_data(lat_i, lon_i, main_instrument_i, t_i)
                     th_i = obs_i['look angle [deg]']
@@ -282,7 +282,7 @@ class ACBBAReplanner(AbstractConsensusReplanner):
                 req_j, subtask_j, t_j, _ = path[j]
                 req_j : GroundPointMeasurementRequest
                 lat_j,lon_j,_ =  req_j.lat_lon_pos
-                main_instrument_j = req_j.measurements[subtask_j]
+                main_instrument_j = req_j.observations_types[subtask_j]
 
                 obs_j = self.agent_orbitdata.get_groundpoint_access_data(lat_j, lon_j, main_instrument_j, t_j)
                 th_j = obs_j['look angle [deg]']

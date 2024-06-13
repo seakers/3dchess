@@ -631,8 +631,8 @@ class UnconstrainedBid(Bid):
         Generates subtask bids from a measurement request
         """
         subtasks = []        
-        for main_measurement, dependent_measurements in req.measurement_groups:
-            subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
+        for main_measurement, dependent_measurements in req.observation_groups:
+            subtask_index = req.observation_groups.index((main_measurement, dependent_measurements))
             
             if len(dependent_measurements) > 0: 
                 break

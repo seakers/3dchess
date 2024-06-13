@@ -10,10 +10,10 @@ def synergy_factor(req : dict, subtask_index : int, **_) -> float:
     # unpack request
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
     
-    _, dependent_measurements = req.measurement_groups[subtask_index]
+    _, dependent_measurements = req.observation_groups[subtask_index]
     k = len(dependent_measurements) + 1
 
-    if k / len(req.measurements) == 1.0:
+    if k / len(req.observations_types) == 1.0:
         return 1.0
     else:
         return 1.0/3.0
@@ -25,13 +25,13 @@ def fixed_utility(req : dict, **_) -> float:
     # unpack request
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
-    return req.s_max / len(req.measurements)
+    return req.s_max / len(req.observations_types)
 
 def random_utility(req : dict, **_) -> float:    
     # unpack request
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
-    return req.s_max * random.random() / len(req.measurements)
+    return req.s_max * random.random() / len(req.observations_types)
 
 def linear_utility(   
                     req : dict, 
@@ -57,7 +57,7 @@ def linear_utility(
     # calculate urgency factor from task
     utility = req.s_max * (t_img - req.t_end) / (req.t_start - req.t_end)
 
-    return utility / len(req.measurements)
+    return utility / len(req.observations_types)
 
 def exp_utility(   
                     req : dict, 
@@ -87,7 +87,7 @@ def exp_utility(
     # calculate urgency factor from task
     utility = req.s_max * np.exp( - req.urgency * (t_img - req.t_start) )
 
-    return utility / len(req.measurements)
+    return utility / len(req.observations_types)
 
 utility_function = {
     "NONE" : no_utility,

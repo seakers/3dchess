@@ -227,7 +227,7 @@ class FIFOPreplanner(AbstractPreplanner):
             # create first assignment of observations
             for req, subtask_index in available_reqs:
                 req : MeasurementRequest
-                main_measurement, _ = req.measurement_groups[subtask_index]  
+                main_measurement, _ = req.observation_groups[subtask_index]  
                 t_arrivals : list = self.access_times[req.id][main_measurement]
 
                 if len(t_arrivals) > 0:

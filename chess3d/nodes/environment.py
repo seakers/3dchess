@@ -622,7 +622,7 @@ class SimulationEnvironment(EnvironmentNode):
 
                 utility_total += req_utility
                 max_utility += req.s_max
-                n_obervations_max += len(req.measurements)
+                n_obervations_max += len(req.observations_types)
 
             # calculate possible number of measurements given coverage metrics
             n_obervations_pos = 0
@@ -648,14 +648,14 @@ class SimulationEnvironment(EnvironmentNode):
 
                     for _, row in df.iterrows():
                         instrument : str = row['instrument']
-                        if (instrument in req.measurements 
+                        if (instrument in req.observations_types 
                             and instrument not in observable_measurements):
                             observable_measurements.append(instrument)
 
-                        if len(observable_measurements) == len(req.measurements):
+                        if len(observable_measurements) == len(req.observations_types):
                             break
 
-                    if len(observable_measurements) == len(req.measurements):
+                    if len(observable_measurements) == len(req.observations_types):
                         break
 
                 n_obervations_pos += len(observable_measurements)

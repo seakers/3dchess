@@ -78,7 +78,7 @@ class AbstractReplanner(AbstractPlanner):
                 req : MeasurementRequest
 
                 if state.t == self.preplan.t or req.id not in self.access_times:
-                    self.access_times[req.id] = {instrument : [] for instrument in req.measurements}
+                    self.access_times[req.id] = {instrument : [] for instrument in req.observations_types}
 
                 # check access for each required measurement
                 for instrument in self.access_times[req.id]:
@@ -302,8 +302,8 @@ class FIFOReplanner(ReactivePlanner):
                 t_arrivals : list = self.access_times[req_id][instrument]
 
                 if len(t_arrivals) > 0:
-                    for subtask_index in range(len(req.measurement_groups)):
-                        main_instrument, _ = req.measurement_groups[subtask_index]
+                    for subtask_index in range(len(req.observation_groups)):
+                        main_instrument, _ = req.observation_groups[subtask_index]
                         if main_instrument == instrument:
                             available_reqs.append((req, subtask_index))
                             break
@@ -383,8 +383,8 @@ class FIFOReplanner(ReactivePlanner):
                 if self.access_times[req.id][instrument]:
                     # measurement request is accessible and hasent been considered yet
                     accessible = False
-                    for subtask_index in range(len(req.measurement_groups)):                        
-                        main_instrument, _ = req.measurement_groups[subtask_index]
+                    for subtask_index in range(len(req.observation_groups)):                        
+                        main_instrument, _ = req.observation_groups[subtask_index]
                         if main_instrument == instrument:
                             available_reqs.append((req, subtask_index))
                             accessible = True
@@ -410,7 +410,7 @@ class FIFOReplanner(ReactivePlanner):
                     continue
                 
                 # get access times for all available measurements
-                main_measurement, _ = req.measurement_groups[subtask_index]  
+                main_measurement, _ = req.observation_groups[subtask_index]  
                 access_times = [t_img for t_img in self.access_times[req.id][main_measurement]]
 
                 # remove access times that overlap with existing measurements

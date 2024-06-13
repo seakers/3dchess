@@ -104,7 +104,7 @@ class GroundStationAgent(SimulationAgent):
                         req.pos[1],
                         req.pos[2],
                         req.s_max,
-                        f"{req.measurements}",
+                        f"{req.observations_types}",
                         req.t_start,
                         req.t_end,
                         req.t_corr
