@@ -47,9 +47,6 @@ class SimulationFactory:
         science_dict = agent_dict.get('science', None)
         instruments_dict = agent_dict.get('instrument', None)
         orbit_state_dict = agent_dict.get('orbitState', None)
-        
-        # set results path
-        agent_results_path = os.path.join(results_path, agent_name)
 
         # create agent network config
         manager_addresses : dict = manager_network_config.get_manager_addresses()
@@ -161,34 +158,7 @@ class SimulationFactory:
                                 )    
             
         ## create agent
-        if agent_type == SimulationAgentTypes.UAV:
-            ## load initial state 
-            pos = agent_dict['pos']
-            max_speed = agent_dict['max_speed']
-            if isinstance(clock_config, FixedTimesStepClockConfig):
-                eps = max_speed * clock_config.dt / 2.0
-            else:
-                eps = 1e-6
-
-            initial_state = UAVAgentState(  agent_name,
-                                            [instrument.name for instrument in payload], 
-                                            pos, 
-                                            max_speed, 
-                                            eps=eps )
-
-            ## create agent
-            return UAVAgent(   agent_name, 
-                                results_path,
-                                manager_network_config,
-                                agent_network_config,
-                                initial_state,
-                                payload,
-                                planner,
-                                science,
-                                logger=logger
-                            )
-
-        elif agent_type == SimulationAgentTypes.SATELLITE:
+        if agent_type == SimulationAgentTypes.SATELLITE:
             position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
             time_data =  pd.read_csv(position_file, nrows=3)
             l : str = time_data.at[1,time_data.axes[1][0]]
