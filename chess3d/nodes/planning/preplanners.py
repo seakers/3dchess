@@ -131,6 +131,7 @@ class NaivePlanner(AbstractPreplanner):
         """ Schedules observations based on the earliest feasible access point """
         super().__init__(horizon, period, logger)
 
+    @runtime_tracker
     def update_percepts(self, 
                         state : SimulationAgentState,
                         current_plan : Plan,
@@ -143,8 +144,8 @@ class NaivePlanner(AbstractPreplanner):
                         ) -> None:
         
         super().update_percepts(incoming_reqs, relay_messages, completed_actions)
-        x = 1
-
+    
+    @runtime_tracker
     def _schedule_measurements(self, 
                                state: SimulationAgentState, 
                                clock_config: ClockConfig, 
@@ -153,10 +154,69 @@ class NaivePlanner(AbstractPreplanner):
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
         
-        t_curr : float = state.t
-        x = orbitdata.grid_data
+        # compile list of all ground points
+        grid_data = {
+                        (row[0], row[1], int(row[2]), int(row[3]))
+                        for grid in orbitdata.grid_data
+                        for row in grid.values
+                    }
+        
+        # calculate accesstimes to all groundpoints
+        t_start = state.t
+        t_end = self.plan.t_next+self.horizon
+        
+        access_times = {}
+        ground_points = {}
+        for lat,lon,grid_index,gp_index in grid_data:
+            for instrument in state.payload:
+                accesses = orbitdata.get_ground_point_accesses_future(lat,lon,instrument,t_start,t_end,grid_index,gp_index)
+                    
+                for t_index,_,_,lat_access,lon_access,_,th,*_ in accesses.values:
+                    # make sure that the right ground pount data was queried
+                    assert abs(round(lat,3) - lat_access) < 1e-9
+                    assert abs(round(lon,3) - lon_access) < 1e-9
+                    
+                    # calculate observation time
+                    t_img = t_index * orbitdata.time_step
 
+                    # initialize dictionaries if needed
+                    if grid_index not in access_times:
+                        access_times[grid_index] = {}
+                        ground_points[grid_index] = {}
+                    if gp_index not in access_times[grid_index]:
+                        access_times[grid_index][gp_index] = {instrument : [] 
+                                                              for instrument in state.payload}
+                        ground_points[grid_index][gp_index] = (lat_access, lon_access)
+
+                    # add to obsevation time to `access_times`
+                    access_times[grid_index][gp_index][instrument].append((t_img, th))
+
+        lat_min,lon_min,grid_index_min,gp_index_min,instrument_min,t_img_min,th_min = \
+            self.find_earliest_gp_access(access_times, ground_points)
         y = 1
+    
+    def find_earliest_gp_access(self, access_times : dict, ground_points : dict) -> tuple:
+        lat_min = None
+        lon_min = None
+        grid_index_min = None
+        gp_index_min = None
+        instrument_min = None
+        t_img_min = np.Inf 
+        th_min = None
+
+        for grid_index in access_times:
+            for gp_index in access_times[grid_index]:
+                for instrument in access_times[grid_index][gp_index]:
+                    for t_img, th in access_times[grid_index][gp_index][instrument]:
+                        if t_img < t_img_min:
+                            lat_min, lon_min = ground_points[grid_index][gp_index]
+                            grid_index_min = grid_index
+                            gp_index_min = gp_index
+                            instrument_min = instrument
+                            t_img_min = t_img
+                            th_min = th
+
+        return lat_min,lon_min,grid_index_min,gp_index_min,instrument_min,t_img_min,th_min
 
 # class FIFOPreplanner(AbstractPreplanner):
 #     def __init__(self, 

@@ -228,24 +228,53 @@ class OrbitData:
         else:
             return touple_min
 
-    def get_ground_point_accesses_future(self, lat: float, lon: float, instrument : str, t: float, t_end : float = np.Inf):
+    def get_ground_point_accesses_future(self, 
+                                         lat: float, 
+                                         lon: float, 
+                                         instrument : str, 
+                                         t: float, 
+                                         t_end : float = np.Inf,
+                                         grid_index = None,
+                                         gp_index = None
+                                        ) -> pd.DataFrame:
         t = t/self.time_step
         t_end = t_end/self.time_step
 
-        grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
+        if grid_index is None or gp_index is None:
+            grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
 
         access_data = self.gp_access_data \
                             .query('@t < `time index` & `time index` <= @t_end & `grid index` == @grid_index & `GP index` == @gp_index & `instrument` == @instrument') \
                             .sort_values(by=['time index'])
 
         return access_data
+    
+    def can_acess_ground_point(self, 
+                               lat: float, 
+                               lon: float, 
+                               instrument : str, 
+                               t: float, 
+                               t_end : float = np.Inf,
+                               grid_index = None, 
+                               gp_index = None
+                               ) -> bool:
+        access_data : pd.DataFrame = self.get_ground_point_accesses_future(lat, lon, instrument, t, t_end, grid_index, gp_index)
+        return not access_data.empty
 
-    def get_groundpoint_access_data(self, lat : float, lon : float, instrument : str, t : float) -> dict:
+    def get_groundpoint_access_data(self, 
+                                    lat : float, 
+                                    lon : float, 
+                                    instrument : str, 
+                                    t : float,
+                                    grid_index = None,
+                                    gp_index = None
+                                    ) -> dict:
         t = t/self.time_step
         t_u = t + 1
         t_l = t - 1
 
-        grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
+        if grid_index is None or gp_index is None:
+            grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
 
         access_data : pd.DataFrame = self.gp_access_data \
                                     .query('@t_l < `time index` < @t_u & `grid index` == @grid_index & `GP index` == @gp_index') \
@@ -515,8 +544,8 @@ class OrbitData:
 
                     grid_data = pd.read_csv(grid_file)
                     nrows, _ = grid_data.shape
-                    grid_data['GP index'] = [i for i in range(nrows)]
                     grid_data['grid index'] = [i_grid] * nrows
+                    grid_data['GP index'] = [i for i in range(nrows)]
                     grid_data_compiled.append(grid_data)
 
                 return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
