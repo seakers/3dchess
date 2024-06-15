@@ -89,69 +89,51 @@ class NaivePlanner(AbstractPreplanner):
     
     @runtime_tracker
     def calculate_access_times(self, state : SimulationAgentState, orbitdata : OrbitData) -> dict:
-        # compile list of all ground points
-        grid_data = {
-                        (row[0], row[1], int(row[2]), int(row[3]))
-                        for grid in orbitdata.grid_data
-                        for row in grid.values
-                    }
-        
         # define planning horizon
         t_start = state.t
         t_end = self.plan.t_next+self.horizon
+        t_index_start = t_start / orbitdata.time_step
+        t_index_end = t_end / orbitdata.time_step
 
+        # compile coverage data
+        raw_coverage_data = [(t_index*orbitdata.time_step, *_)
+                             for t_index, *_ in orbitdata.gp_access_data.values
+                             if t_index_start <= t_index <= t_index_end]
+                
         # initiate accestimes 
         access_times = {}
         ground_points = {}
-
-        # calculate accesstimes to all groundpoints
-        for lat,lon,grid_index,gp_index in grid_data:
-            for instrument in state.payload:
-
-                accesses : pd.DataFrame \
-                    = orbitdata.get_ground_point_accesses_future(lat,
-                                                                 lon,
-                                                                 instrument,
-                                                                 t_start,
-                                                                 t_end,
-                                                                 grid_index,
-                                                                 gp_index)
-                    
-                for t_index,_,_,lat_access,lon_access,_,th_img,*_ in accesses.values:
-                    # make sure that the right ground pount data was queried
-                    assert abs(round(lat,3) - lat_access) < 1e-9
-                    assert abs(round(lon,3) - lon_access) < 1e-9
-                    
-                    # calculate observation time
-                    t_img = t_index * orbitdata.time_step
-
-                    # initialize dictionaries if needed
-                    if grid_index not in access_times:
-                        access_times[grid_index] = {}
-                        ground_points[grid_index] = {}
-                    if gp_index not in access_times[grid_index]:
-                        access_times[grid_index][gp_index] = {instrument : [] 
-                                                              for instrument in state.payload}
-                        ground_points[grid_index][gp_index] = (lat_access, lon_access)
-
-                    # compile time interval information 
-                    found = False
-                    for interval, t, th in access_times[grid_index][gp_index][instrument]:
-                        interval : TimeInterval
-                        t : list
-                        th : list
-
-                        if (interval.is_during(t_img - orbitdata.time_step) 
-                            or interval.is_during(t_img + orbitdata.time_step)):
-                            interval.extend(t_img)
-                            t.append(t_img)
-                            th.append(th_img)
-                            found = True
-                            break                        
-
-                    if not found:
-                        access_times[grid_index][gp_index][instrument].append([TimeInterval(t_img, t_img), [t_img], [th_img]])
         
+        for t_img, gp_index, _, lat, lon, _, look_angle, _, _, grid_index, instrument, _ in raw_coverage_data:
+        # for t_index,_,_,lat_access,lon_access,_,th_img,*_ in accesses.values:
+            
+            # initialize dictionaries if needed
+            if grid_index not in access_times:
+                access_times[grid_index] = {}
+                ground_points[grid_index] = {}
+            if gp_index not in access_times[grid_index]:
+                access_times[grid_index][gp_index] = {instrument : [] 
+                                                        for instrument in state.payload}
+                ground_points[grid_index][gp_index] = (lat, lon)
+
+            # compile time interval information 
+            found = False
+            for interval, t, th in access_times[grid_index][gp_index][instrument]:
+                interval : TimeInterval
+                t : list
+                th : list
+
+                if (interval.is_during(t_img - orbitdata.time_step) 
+                    or interval.is_during(t_img + orbitdata.time_step)):
+                    interval.extend(t_img)
+                    t.append(t_img)
+                    th.append(look_angle)
+                    found = True
+                    break                        
+
+            if not found:
+                access_times[grid_index][gp_index][instrument].append([TimeInterval(t_img, t_img), [t_img], [look_angle]])
+
         # convert to `list`
         access_times = [    (grid_index, gp_index, instrument, interval, t, th)
                             for grid_index in access_times

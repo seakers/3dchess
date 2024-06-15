@@ -366,8 +366,8 @@ class SimulationEnvironment(EnvironmentNode):
         """
 
         if isinstance(agent_state, SatelliteAgentState):
-            orbitdata : OrbitData = self.orbitdata[agent_name]
-            observation_action.instrument_name
+            agent_orbitdata : OrbitData = self.orbitdata[agent_name]
+            
             # gp_data = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0], field_of_view)
             x = 1
             raise NotImplementedError('Whoops. Still TODO')
