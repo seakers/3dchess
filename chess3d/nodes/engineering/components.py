@@ -3,6 +3,7 @@ from typing import Union
 import uuid
 
 from nodes.engineering.actions import ComponentAction
+from instrupy.base import Instrument
 
 
 class Component(ABC):
@@ -101,9 +102,3 @@ class Component(ABC):
         Crates a dictionary containing all information contained in this component object
         """
         return dict(self.__dict__)
-
-class Instrument(Component):
-    def __init__(   self, 
-                    name: str, 
-                    id: str = None) -> None:
-        super().__init__(name, id=id)

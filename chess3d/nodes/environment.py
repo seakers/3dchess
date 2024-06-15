@@ -376,7 +376,9 @@ class SimulationEnvironment(EnvironmentNode):
                                  for t_index, *_, instrument_name, __ in agent_orbitdata.gp_access_data.values
                                  if t_l <= t_index <= t_u
                                  and instrument_name == instrument.name]
-            
+
+            # TODO implement discretized pointing options for instruments so that accesses can be looked up on the database
+
             # for t_index, gp_index, pnt_opt_index, lat, lon, obs_range, look_angle, incidence, zenith, grid_index in agent_orbitdata.gp_access_data.values
 
 
