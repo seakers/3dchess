@@ -112,8 +112,7 @@ class SimulationFactory:
                 horizon = preplanner_dict.get('horizon', np.Inf)
 
                 if preplanner_type.lower() == "naive":
-                    collaboration : str = preplanner_dict.get('collaboration', "false")
-                    preplanner = NaivePlanner(period, horizon, collaboration.lower() == "true")
+                    preplanner = NaivePlanner(period, horizon, logger)
                 else:
                     raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
             else:

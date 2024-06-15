@@ -53,7 +53,7 @@ class AbstractPlanner(ABC):
         self.completed_actions.update(completed_actions)
 
         # update list of completed broadcasts
-        completed_broadcasts = [message_from_dict(action.msg) 
+        completed_broadcasts = [message_from_dict(**action.msg) 
                                 for action in completed_actions
                                 if isinstance(action, BroadcastMessageAction)]
         self.completed_broadcasts.update(completed_broadcasts)

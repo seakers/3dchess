@@ -333,7 +333,7 @@ class OrbitData:
         
         return out
     
-    def find_gp_access(self, t : float, look_angle : float, field_of_regard : float) -> tuple:
+    def find_gp_access(self, t : float, look_angle : float, field_of_view : float) -> tuple:
         raise NotImplementedError('Whoops, need to develop still')
         
         t = t/self.time_step

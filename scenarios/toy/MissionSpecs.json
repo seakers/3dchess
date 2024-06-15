@@ -108,7 +108,8 @@
             "planner" : {
                 "preplanner" : {
                     "@type" : "naive",
-                    "collaboration" : "False"
+                    "horizon" : 3600,
+                    "period" : 3600
                 }
             }
         }

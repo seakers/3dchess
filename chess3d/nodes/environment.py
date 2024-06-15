@@ -8,13 +8,13 @@ import pandas as pd
 from zmq import asyncio as azmq
 
 from pandas import DataFrame
-from nodes.science.utility import synergy_factor
+from chess3d.nodes.science.utility import synergy_factor
 from chess3d.nodes.science.requests import *
-from nodes.orbitdata import OrbitData
-from nodes.states import GroundStationAgentState, UAVAgentState, SatelliteAgentState
-from nodes.actions import ObservationAction
-from nodes.agent import SimulationAgentState
-from messages import *
+from chess3d.nodes.orbitdata import OrbitData
+from chess3d.nodes.states import GroundStationAgentState, UAVAgentState, SatelliteAgentState
+from chess3d.nodes.actions import ObservationAction
+from chess3d.nodes.agent import SimulationAgentState
+from chess3d.messages import *
 
 from dmas.environments import *
 from dmas.messages import *
@@ -94,7 +94,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         # initialize parameters
         self.utility_func = utility_func
-        self.measurement_history = []
+        self.observation_history = []
         self.agent_connectivity = {}
         for src in agent_names:
             for target in agent_names:
@@ -151,7 +151,7 @@ class SimulationEnvironment(EnvironmentNode):
                         self.log(f'received masurement data request from {msg.src}. quering measurement results...')
 
                         # find/generate measurement results
-                        measurement_action = ObservationAction(**msg.measurement_action)
+                        measurement_action = ObservationAction(**msg.observation_action)
                         agent_state = SimulationAgentState.from_dict(msg.agent_state)
                         measurement_data = self.query_measurement_data(src, agent_state, measurement_action)
 
@@ -160,8 +160,8 @@ class SimulationEnvironment(EnvironmentNode):
                         resp = copy.deepcopy(msg)
                         resp.dst = resp.src
                         resp.src = self.get_element_name()
-                        resp.measurement = measurement_data
-                        self.measurement_history.append(resp)
+                        resp.observation_data = measurement_data
+                        self.observation_history.append(resp)
 
                         await self.respond_peer_message(resp) 
 
@@ -352,7 +352,7 @@ class SimulationEnvironment(EnvironmentNode):
     def query_measurement_data( self,
                                 agent_name : str, 
                                 agent_state : SimulationAgentState, 
-                                measurement_action : ObservationAction
+                                observation_action : ObservationAction
                                 ) -> dict:
         """
         Queries internal models or data and returns observation information being sensed by the agent
@@ -360,7 +360,8 @@ class SimulationEnvironment(EnvironmentNode):
 
         if isinstance(agent_state, SatelliteAgentState):
             orbitdata : OrbitData = self.orbitdata[agent_name]
-            gp_data = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0], measurement_action.field_of_regard)
+            observation_action.instrument_name
+            gp_data = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0], field_of_view)
             x = 1
             raise NotImplementedError('Whoops. Still TODO')
             # lat, lon, _ = measurement_req.lat_lon_pos
@@ -466,7 +467,7 @@ class SimulationEnvironment(EnvironmentNode):
             # print received measurements
             headers = ['req_id','measurer','measurement','pos','t_start','t_end','t_corr','t_img','u_max','u_exp','u']
             data = []
-            for msg in self.measurement_history:
+            for msg in self.observation_history:
                 msg : ObservationResultsMessage
                 measurement_action = ObservationAction(**msg.measurement_action)
                 req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
@@ -672,7 +673,7 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_obs_unique_pos', n_obervations_pos],
                         ['n_obs_unique', len(unique_observations)],
                         ['n_obs_co', len(co_observations)],
-                        ['n_obs', len(self.measurement_history)],
+                        ['n_obs', len(self.observation_history)],
                         ['u_max', max_utility], 
                         ['u_total', utility_total],
                         ['u_norm', utility_total/max_utility],
