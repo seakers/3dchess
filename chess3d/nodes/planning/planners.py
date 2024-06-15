@@ -270,29 +270,18 @@ class AbstractPlanner(ABC):
             else:
                 prev_observation : ObservationAction = observations[i-1]
                 t_prev = prev_observation.t_end if prev_observation is not None else state.t
-
                 prev_state : SatelliteAgentState = state.propagate(t_prev)
 
-                lat,lon,_ =  prev_observation.target
-                main_instrument = prev_observation.instrument_name
-
-                obs_prev = orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_prev)
-                th_f = obs_prev['look angle [deg]']
-                
+                th_f = prev_observation.look_angle                
                 prev_state.attitude = [th_f, 0.0, 0.0]
 
             # maneuver to point to target
             t_maneuver_end = None
             if isinstance(state, SatelliteAgentState):
                 prev_state : SatelliteAgentState
-
                 t_maneuver_start = prev_state.t
                 
-                lat,lon, _ =  curr_observation.target
-                main_instrument = curr_observation.instrument_name
-
-                obs_curr = orbitdata.get_groundpoint_access_data(lat, lon, main_instrument, t_img)
-                th_f = obs_curr['look angle [deg]']
+                th_f = curr_observation.look_angle
 
                 dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
                 t_maneuver_end = t_maneuver_start + dt
@@ -334,8 +323,7 @@ class AbstractPlanner(ABC):
     @runtime_tracker
     def is_observation_path_valid(self, 
                                   state : SimulationAgentState, 
-                                  observations : list,
-                                  orbitdata : OrbitData = None
+                                  observations : list
                                   ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
         
@@ -350,10 +338,7 @@ class AbstractPlanner(ABC):
 
                     # estimate the state of the agent at the prior mesurement
                     observation_i : ObservationAction = observations[i]
-                    lat_i,lon_i,_ =  observation_i.target
-                    obs_i : dict = orbitdata.get_groundpoint_access_data(lat_i, lon_i, observation_i.instrument_name, observation_i.t_end)
-
-                    th_i = obs_i.get('look angle [deg]', np.NAN)
+                    th_i = observation_i.look_angle
                     t_i = observation_i.t_end
 
                 else: # there was prior measurement
@@ -364,10 +349,7 @@ class AbstractPlanner(ABC):
 
                 # estimate the state of the agent at the given measurement
                 observation_j : ObservationAction = observations[j]
-                lat_j,lon_j,_ =  observation_j.target
-                obs_j : dict = orbitdata.get_groundpoint_access_data(lat_j, lon_j, observation_j.instrument_name, observation_i.t_end)
-
-                th_j = obs_j.get('look angle [deg]', np.NAN)
+                th_j = observation_j.look_angle
                 t_j = observation_j.t_start
 
                 assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata

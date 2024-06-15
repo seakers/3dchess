@@ -13,11 +13,10 @@ from dmas.clocks import *
 
 from chess3d.nodes.orbitdata import OrbitData
 from chess3d.nodes.planning.planner import PlanningModule
-from chess3d.nodes.planning.preplanners import NaivePlanner
+from chess3d.nodes.planning.naive.preplanner import NaivePlanner
 from chess3d.nodes.satellite import SatelliteAgent
 from chess3d.nodes.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
 from chess3d.nodes.agent import SimulationAgent
-from chess3d.nodes.uav import UAVAgent
 from chess3d.nodes.science.utility import utility_function
 
 class SimulationFactory:

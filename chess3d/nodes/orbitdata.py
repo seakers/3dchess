@@ -37,11 +37,51 @@ class TimeInterval:
         if not self.has_overlap(__other):
             raise ValueError("cannot merge two time intervals with no overlap")
 
-        start = max(self.start, __other.start)
-        end = min(self.min, __other.min)
+        self.start = max(self.start, __other.start)
+        self.end = min(self.min, __other.min)
+
+    def extend(self, t: float) -> None:
+        """ extends time interval """
+
+        if t < self.start:
+            self.start = t
+        elif t > self.end:
+            self.end = t
+
+    def duration(self) -> int:
+        return self.end - self.start
 
     def __eq__(self, __value: object) -> bool:
         return self.start == __value.start and self.end == __value.end
+
+    def __gt__(self, __value: object) -> bool:
+        if self.start == __value.start:
+            return self.duration() > __value.duration()
+        
+        return self.start > __value.start
+
+    def __ge__(self, __value: object) -> bool:
+        if self.start == __value.start:
+            return self.duration() >= __value.duration()
+        
+        return self.start >= __value.start
+    
+    def __lt__(self, __value: object) -> bool:
+        if self.start == __value.start:
+            return self.duration() < __value.duration()
+        
+        return self.start < __value.start
+
+    def __le__(self, __value: object) -> bool:
+        if self.start == __value.start:
+            return self.duration() <= __value.duration()
+        
+        return self.start <= __value.start
+    
+    def __repr__(self) -> str:
+        return f'TimeInterval({self.start},{self.end})'
+
+
 
 class OrbitData:
     """

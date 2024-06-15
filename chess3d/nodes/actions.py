@@ -180,10 +180,9 @@ class ObservationAction(AgentAction):
     Describes an observation to be performed by agents in the simulation
 
     ### Attributes:
-        - measurement_req (`dict`): dictionary containing the measurement request being met by this measurement 
-        - subtask_index (`int`): index of the subtask being performed by this measurement
         - instrument_name (`str`): name of the instrument_name that will perform this action
-        - u_exp (`int` or `float`): expected utility from this measurement
+        - target (`list`): coordinates for the intended observation target in (lat [deg], lon [deg], alt [km]) 
+        - look_angle (`float`): look angle of the observation in [deg]
         - t_start (`float`): start time of the measurement of this action in [s] from the beginning of the simulation
         - t_end (`float`): end time of the measurment of this action in [s] from the beginning of the simulation
         - id (`str`) : identifying number for this task in uuid format
@@ -191,30 +190,35 @@ class ObservationAction(AgentAction):
     def __init__(   self,
                     instrument_name : str,
                     target : list, 
+                    look_angle : float, 
                     t_start: Union[float, int], 
-                    t_end: Union[float, int], 
+                    duration: Union[float, int] = 0.0, 
                     status: str = 'PENDING', 
                     id: str = None, 
                     **_) -> None:
         """
-        Creates an instance of a 
+        Creates an instance of an Observation Action
         ### Arguments:
             - instrument_name (`str`): name of the instrument_name that will perform this action
             - target (`list`): coordinates for the intended observation target in (lat [deg], lon [deg], alt [km]) 
+            - look_angle (`float`): look angle of the observation in [deg]
             - t_start (`float`): start time of the measurement of this action in [s] from the beginning of the simulation
             - t_end (`float`): end time of the measurment of this action in [s] from the beginning of the simulation
             - id (`str`) : identifying number for this task in uuid format
         """
+        t_end = t_start + duration
         super().__init__(ActionTypes.OBSERVE.value, t_start, t_end, status, id)
         
         # check parameters
         if not isinstance(instrument_name,str): raise ValueError(f'`instrument_name` must be of type `str`. Is of type `{type(instrument_name)}`.')
         if not isinstance(target, list): raise ValueError(f'`target` must be of type `list`. Is of type `{type(target)}`.')
         if len(target) != 3: raise ValueError(f'`target` must be a `list` of length 3 (lat, lon, alt). Is of length {len(target)}.')
-                
+        if not isinstance(look_angle,float) and not isinstance(look_angle,int): raise ValueError(f'`look_angle` must be a numerical value of type `float`. Is of type `{type(look_angle)}`')
+
         # set parameters
         self.instrument_name = instrument_name
         self.target = [coordinate for coordinate in target]
+        self.look_angle = look_angle
 
 class WaitForMessages(AgentAction):
     """
