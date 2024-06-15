@@ -368,6 +368,18 @@ class SimulationEnvironment(EnvironmentNode):
         if isinstance(agent_state, SatelliteAgentState):
             agent_orbitdata : OrbitData = self.orbitdata[agent_name]
             
+            t = agent_state.t/agent_orbitdata.time_step
+            t_u = t + 1
+            t_l = t - 1
+            
+            raw_coverage_data = [(t_index*agent_orbitdata.time_step, *_)
+                                 for t_index, *_, instrument_name, __ in agent_orbitdata.gp_access_data.values
+                                 if t_l <= t_index <= t_u
+                                 and instrument_name == instrument.name]
+            
+            # for t_index, gp_index, pnt_opt_index, lat, lon, obs_range, look_angle, incidence, zenith, grid_index in agent_orbitdata.gp_access_data.values
+
+
             # gp_data = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0], field_of_view)
             x = 1
             raise NotImplementedError('Whoops. Still TODO')

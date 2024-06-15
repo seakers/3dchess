@@ -163,6 +163,8 @@ class OrbitData:
 
         # find next access
         # TODO
+        raise NotImplementedError('TODO: need to implement.')
+
         interval = TimeInterval(-np.Inf, np.Inf)
         instruments = []
         modes = dict()
