@@ -8,6 +8,8 @@ import pandas as pd
 from zmq import asyncio as azmq
 
 from pandas import DataFrame
+from instrupy.base import Instrument
+
 from chess3d.nodes.science.utility import synergy_factor
 from chess3d.nodes.science.requests import *
 from chess3d.nodes.orbitdata import OrbitData
@@ -151,9 +153,13 @@ class SimulationEnvironment(EnvironmentNode):
                         self.log(f'received masurement data request from {msg.src}. quering measurement results...')
 
                         # find/generate measurement results
-                        measurement_action = ObservationAction(**msg.observation_action)
                         agent_state = SimulationAgentState.from_dict(msg.agent_state)
-                        measurement_data = self.query_measurement_data(src, agent_state, measurement_action)
+                        instrument = Instrument.from_dict(msg.instrument)
+                        observation_action = ObservationAction(**msg.observation_action)
+                        measurement_data = self.query_measurement_data(src, 
+                                                                       agent_state, 
+                                                                       instrument,
+                                                                       observation_action)
 
                         # repsond to request
                         self.log(f'measurement results obtained! responding to request')
@@ -352,6 +358,7 @@ class SimulationEnvironment(EnvironmentNode):
     def query_measurement_data( self,
                                 agent_name : str, 
                                 agent_state : SimulationAgentState, 
+                                instrument : Instrument,
                                 observation_action : ObservationAction
                                 ) -> dict:
         """
@@ -361,7 +368,7 @@ class SimulationEnvironment(EnvironmentNode):
         if isinstance(agent_state, SatelliteAgentState):
             orbitdata : OrbitData = self.orbitdata[agent_name]
             observation_action.instrument_name
-            gp_data = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0], field_of_view)
+            # gp_data = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0], field_of_view)
             x = 1
             raise NotImplementedError('Whoops. Still TODO')
             # lat, lon, _ = measurement_req.lat_lon_pos

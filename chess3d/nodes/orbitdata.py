@@ -333,15 +333,17 @@ class OrbitData:
         
         return out
     
-    def find_gp_access(self, t : float, look_angle : float, field_of_view : float) -> tuple:
-        raise NotImplementedError('Whoops, need to develop still')
+    def find_gp_access(self, instrument : str, look_angle : float, field_of_view : float, t : float) -> tuple:
+        """ returns the information of the ground point(s) being observed by an instrument at a given time """
+
+        raise NotImplementedError('Whoops, still need to develop this')
         
         t = t/self.time_step
         t_u = t + 1
         t_l = t - 1
 
         access_data : pd.DataFrame = self.gp_access_data \
-                                    .query('@t_l < `time index` < @t_u & abs(@look_angle `look angle [deg]`) <= @field_of_regard') \
+                                    .query('@t_l < `time index` < @t_u & abs(@look_angle `look angle [deg]`) <= @field_of_regard & `instrument` == @instrument') \
                                     .sort_values(by=['time index'])
         
         x = 1

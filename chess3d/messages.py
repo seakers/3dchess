@@ -124,7 +124,8 @@ class ObservationResultsMessage(SimulationMessage):
                  dst: str, 
                  agent_state : dict, 
                  observation_action : dict, 
-                 observation_data : dict = {},
+                 instrument : dict,
+                 observation_data : list = [],
                  id: str = None, 
                  path : list = [], **_):
         super().__init__(src, dst, SimulationMessageTypes.OBSERVATION.value, id, path)
@@ -134,8 +135,9 @@ class ObservationResultsMessage(SimulationMessage):
         if not isinstance(agent_state, dict):
             raise AttributeError(f'`agent_state` must be of type `dict`; is of type {type(agent_state)}.')
 
-        self.observation_action = observation_action
         self.agent_state = agent_state
+        self.observation_action = observation_action
+        self.instrument = instrument
         self.observation_data = observation_data
 
 class MeasurementPerformedMessage(SimulationMessage):

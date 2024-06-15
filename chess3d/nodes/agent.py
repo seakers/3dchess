@@ -408,11 +408,19 @@ class SimulationAgent(Agent):
         self.state_history.append(self.state.to_dict())
         
         try:
+            # find relevant instrument information 
+            instrument = [instrument for instrument in self.payload 
+                          if isinstance(instrument, Instrument)
+                          and instrument.name == action.instrument_name]
+            instrument : Instrument = instrument[0]
+
             # create observation data request
-            observation_req = ObservationResultsMessage(self.get_element_name(),
+            observation_req = ObservationResultsMessage(
+                                                    self.get_element_name(),
                                                     SimulationElementRoles.ENVIRONMENT.value,
                                                     self.state.to_dict(),
-                                                    action.to_dict()
+                                                    action.to_dict(),
+                                                    instrument.to_dict()
                                                     )
 
             # request measurement data from the environment
