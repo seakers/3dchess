@@ -107,9 +107,7 @@
             },
             "planner" : {
                 "preplanner" : {
-                    "@type" : "naive",
-                    "horizon" : 3600,
-                    "period" : 3600
+                    "@type" : "naive"
                 }
             }
         }

@@ -53,9 +53,6 @@ class NaivePlanner(AbstractPreplanner):
         access_times, ground_points = self.calculate_access_times(state, orbitdata)
         access_times : list; ground_points : dict
         
-        if state.t == 7200.0: 
-            x = 1
-
         # generate plan
         observations = []
         while access_times:

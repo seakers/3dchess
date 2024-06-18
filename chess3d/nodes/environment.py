@@ -430,198 +430,155 @@ class SimulationEnvironment(EnvironmentNode):
             self.log(f'Environment shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
             
             # print received measurements
-            headers = ['req_id','measurer','measurement','pos','t_start','t_end','t_corr','t_img','u_max','u_exp','u']
+            headers = None
             data = []
             for msg in self.observation_history:
                 msg : ObservationResultsMessage
-                measurement_action = ObservationAction(**msg.measurement_action)
-                req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
-                measurement_data : dict = msg.measurement
-                measurer = msg.dst
-                t_img = msg.measurement['t_img']           
+                observation_data : list = msg.observation_data
+                observer = msg.dst
 
-                line_data = [req.id.split('-')[0],
-                                measurer,
-                                measurement_action.instrument_name,
-                                msg.measurement_action["measurement_req"]["pos"],
-                                req.t_start,
-                                req.t_end,
-                                req.t_corr,
-                                t_img,
-                                measurement_data['u_max'],
-                                measurement_data['u_exp'],
-                                measurement_data['u']
-                            ]
-                data.append(line_data)
+                for obs in observation_data:
+                
+                    if headers is None:
+                        headers = [key for key in obs]
+                        headers.insert(0, 'observer')
+                        
+                    obs['observer'] = observer
+                    line_data = [obs[key] for key in headers]
 
-            received_measurements_df = DataFrame(data, columns=headers)
+                    data.append(line_data)
+
+            observations_performed_df = DataFrame(data, columns=headers)
 
             # count total number of events in the simulation
-            # if self.events is not None:
-            #     df = pd.read_csv(self.events_path)
-            #     n_events, _ = df.shape
+            if self.events is not None:
+                n_events = len(self.events.values)
                 
 
-            #     events_detected = []
-            #     for _, row in df.iterrows():
-            #         for req in self.measurement_reqs:
-            #             req : MeasurementRequest
-            #             lat,lon,_ = req.lat_lon_pos
+                events_observed = []
+                for lat,lon,t_start,duration,severity,measurements in self.events.values:
+                    
+                    matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument)
+                                             for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed_df.values
+                                             if abs(lat - lat_img) < 1e-3 
+                                            and abs(lon - lon_img) < 1e-3
+                                            and t_start <= t_img <= t_start+duration
+                                            and instrument in measurements  #TODO include better reasoning!
+                                             ]
+                    
 
-            #             if (    
-            #                     abs(lat - row['lat [deg]']) <= 1e-2 and
-            #                     abs(lon - row['lon [deg]']) <= 1e-2 and
-            #                     row['start time [s]'] <= req.t_start and
-            #                     abs(req.t_end - (row['start time [s]'] + row['duration [s]'])) <= 1e-2 and
-            #                     abs(req.s_max == row['severity']) <= 1e-2
-            #             ):
-            #                 measurements : str = row['measurements']
-            #                 measurements : str = measurements.replace('[','')
-            #                 measurements : str = measurements.replace(']','')
-            #                 measurements : str = measurements.replace(' ','')
-            #                 measurements = measurements.split(',')
+                    if matching_observations:
+                        events_observed.append(matching_observations)
 
-            #                 if len(req.measurements) != len(measurements):
-            #                     continue
+                n_events_obs = len(events_observed)
 
-            #                 measurement_not_found = False
-            #                 for measurement in req.measurements:
-            #                     if measurement not in measurements:
-            #                         measurement_not_found = True
-            #                         break
-                                
-            #                 if measurement_not_found:
-            #                     continue
+            n_events_detected = 0 # TODO :counts number of measurement requests triggered
 
-            #                 # n_events_detected += 1 
-            #                 events_detected.append((req, row))
-            #                 break
+            # # calculate utility achieved by measurements
+            # utility_total = 0.0
+            # max_utility = 0.0
+            # n_obervations_max = 0
+            # co_observations = []
+            # unique_observations = []
 
-            #     n_events_detected = len(events_detected)
-
-            #     n_events_obs = 0
-            #     for event_req, _ in events_detected:
-            #         for msg in self.measurement_history:
-            #             msg : MeasurementResultsRequestMessage
-            #             measurement_action = MeasurementAction(**msg.measurement_action)
-            #             req : MeasurementRequest = MeasurementRequest.from_dict(measurement_action.measurement_req)
-                        
-            #             if req == event_req:
-            #                 n_events_obs += 1
-            #                 break
-
-            # else:
-            #     n_events = 0
-            #     n_events_detected = 0
-            #     n_events_obs = 0
-            # TODO ^^
-            n_events = 0
-            n_events_detected = 0
-            n_events_obs = 0
-
-            # calculate utility achieved by measurements
-            utility_total = 0.0
-            max_utility = 0.0
-            n_obervations_max = 0
-            co_observations = []
-            unique_observations = []
-
-            measurement_reqs = [req.copy() for req in self.measurement_reqs]
-            measurement_reqs.extend([req.copy() for req in self.initial_reqs])
-
+            # measurement_reqs = [req.copy() for req in self.measurement_reqs]
+            # measurement_reqs.extend([req.copy() for req in self.initial_reqs])
         
-            for req in measurement_reqs:
-                req_id : str = req.id
-                req_id_short = req_id.split('-')[0]
-                req_measurements = received_measurements_df \
-                                    .query('@req_id_short == `req_id`')
+            # for req in measurement_reqs:
+            #     req_id : str = req.id
+            #     req_id_short = req_id.split('-')[0]
+            #     req_measurements = observations_performed_df \
+            #                         .query('@req_id_short == `req_id`')
 
                 
-                req_utility = 0
-                for idx, row_i in req_measurements.iterrows():
-                    t_img_i = row_i['t_img']
-                    measurement_i = row_i['measurement']                   
+            #     req_utility = 0
+            #     for idx, row_i in req_measurements.iterrows():
+            #         t_img_i = row_i['t_img']
+            #         measurement_i = row_i['measurement']                   
 
-                    correlated_measurements = []
-                    for _, row_j in req_measurements.iterrows():
-                        measurement_j = row_j['measurement']
-                        t_img_j = row_j['t_img']
+            #         correlated_measurements = []
+            #         for _, row_j in req_measurements.iterrows():
+            #             measurement_j = row_j['measurement']
+            #             t_img_j = row_j['t_img']
 
-                        if measurement_i == measurement_j:
-                            continue
+            #             if measurement_i == measurement_j:
+            #                 continue
 
-                        if abs(t_img_i - t_img_j) <= req.t_corr:
-                            correlated_measurements.append( measurement_j )
+            #             if abs(t_img_i - t_img_j) <= req.t_corr:
+            #                 correlated_measurements.append( measurement_j )
 
-                    subtask_index = None
-                    while subtask_index == None:
-                        for main_measurement, dependent_measurements in req.measurement_groups:
-                            if (main_measurement == measurement_i 
-                                and len(np.setdiff1d(correlated_measurements, dependent_measurements)) == 0):
-                                subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
-                                break
+            #         subtask_index = None
+            #         while subtask_index == None:
+            #             for main_measurement, dependent_measurements in req.measurement_groups:
+            #                 if (main_measurement == measurement_i 
+            #                     and len(np.setdiff1d(correlated_measurements, dependent_measurements)) == 0):
+            #                     subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
+            #                     break
                         
-                        if subtask_index == None:
-                            correlated_measurements == []
+            #             if subtask_index == None:
+            #                 correlated_measurements == []
 
-                    if len(correlated_measurements) > 0:
-                        co_observation : list = copy.copy(dependent_measurements)
-                        co_observation.append(main_measurement)
-                        co_observation.append(req_id)
-                        co_observation = set(co_observation) 
+            #         if len(correlated_measurements) > 0:
+            #             co_observation : list = copy.copy(dependent_measurements)
+            #             co_observation.append(main_measurement)
+            #             co_observation.append(req_id)
+            #             co_observation = set(co_observation) 
 
-                        if co_observation not in co_observations:
-                            co_observations.append(co_observation)
+            #             if co_observation not in co_observations:
+            #                 co_observations.append(co_observation)
                                     
-                    params = {
-                                "req" : req.to_dict(), 
-                                "subtask_index" : subtask_index,
-                                "t_img" : t_img_i
-                            }
-                    utility = self.utility_func(**params) * synergy_factor(**params)
+            #         params = {
+            #                     "req" : req.to_dict(), 
+            #                     "subtask_index" : subtask_index,
+            #                     "t_img" : t_img_i
+            #                 }
+            #         utility = self.utility_func(**params) * synergy_factor(**params)
 
-                    if (req_id_short, measurement_i) not in unique_observations:
-                        unique_observations.append( (req_id_short, measurement_i) )
-                        req_utility += utility
+            #         if (req_id_short, measurement_i) not in unique_observations:
+            #             unique_observations.append( (req_id_short, measurement_i) )
+            #             req_utility += utility
 
-                    received_measurements_df.loc[idx,'u']=utility
+            #         observations_performed_df.loc[idx,'u']=utility
 
-                utility_total += req_utility
-                max_utility += req.s_max
-                n_obervations_max += len(req.observations_types)
+            #     utility_total += req_utility
+            #     max_utility += req.s_max
+            #     n_obervations_max += len(req.observations_types)
 
-            # calculate possible number of measurements given coverage metrics
-            n_obervations_pos = 0
-            for req in measurement_reqs:
+            # # calculate possible number of measurements given coverage metrics
+            # n_obervations_pos = 0
+            # for req in measurement_reqs:
 
-                req : MeasurementRequest
-                lat,lon,_ = req.target
+            #     req : MeasurementRequest
+            #     lat,lon,_ = req.target
 
-                observable_measurements = []
-                for _, coverage_data in self.orbitdata.items():
-                    coverage_data : OrbitData
-                    req_start = req.t_start/coverage_data.time_step
-                    req_end = req.t_end/coverage_data.time_step
-                    grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
+            #     observable_measurements = []
+            #     for _, coverage_data in self.orbitdata.items():
+            #         coverage_data : OrbitData
+            #         req_start = req.t_start/coverage_data.time_step
+            #         req_end = req.t_end/coverage_data.time_step
+            #         grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
 
-                    df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index & `grid index` == @grid_index')
+            #         df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index & `grid index` == @grid_index')
 
-                    # if not df.empty:
-                    #     print(df['time index'] * coverage_data.time_step)
+            #         # if not df.empty:
+            #         #     print(df['time index'] * coverage_data.time_step)
 
-                    for _, row in df.iterrows():
-                        instrument : str = row['instrument']
-                        if (instrument in req.observations_types 
-                            and instrument not in observable_measurements):
-                            observable_measurements.append(instrument)
+            #         for _, row in df.iterrows():
+            #             instrument : str = row['instrument']
+            #             if (instrument in req.observations_types 
+            #                 and instrument not in observable_measurements):
+            #                 observable_measurements.append(instrument)
 
-                        if len(observable_measurements) == len(req.observations_types):
-                            break
+            #             if len(observable_measurements) == len(req.observations_types):
+            #                 break
 
-                    if len(observable_measurements) == len(req.observations_types):
-                        break
+            #         if len(observable_measurements) == len(req.observations_types):
+            #             break
 
-                n_obervations_pos += len(observable_measurements)
+            #     n_obervations_pos += len(observable_measurements)
+
+            # TODO calculate coverage metrics
+            
 
             # Generate summary
             summary_headers = ['stat_name', 'val']
@@ -631,23 +588,20 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_events', n_events],
                         ['n_events_detected', n_events_detected],
                         ['n_events_obs', n_events_obs],
-                        ['n_reqs_total', len(self.measurement_reqs) + len(self.initial_reqs)],
-                        ['n_reqs_init', len(self.initial_reqs)],
-                        ['n_reqs_gen', len(self.measurement_reqs)],
-                        ['n_obs_unique_max', n_obervations_max],
-                        ['n_obs_unique_pos', n_obervations_pos],
-                        ['n_obs_unique', len(unique_observations)],
-                        ['n_obs_co', len(co_observations)],
+                        # ['n_obs_unique_max', n_obervations_max],
+                        # ['n_obs_unique_pos', n_obervations_pos],
+                        # ['n_obs_unique', len(unique_observations)],
+                        # ['n_obs_co', len(co_observations)],
                         ['n_obs', len(self.observation_history)],
-                        ['u_max', max_utility], 
-                        ['u_total', utility_total],
-                        ['u_norm', utility_total/max_utility],
+                        # ['u_max', max_utility], 
+                        # ['u_total', utility_total],
+                        # ['u_norm', utility_total/max_utility],
                         ['t_runtime', self.t_f - self.t_0]
                     ]
 
             # log and save results
-            self.log(f"MEASUREMENTS RECEIVED:\n{str(received_measurements_df)}\n\n", level=logging.WARNING)
-            received_measurements_df.to_csv(f"{self.results_path}/measurements.csv", index=False)
+            self.log(f"MEASUREMENTS RECEIVED:\n{str(observations_performed_df)}\n\n", level=logging.WARNING)
+            observations_performed_df.to_csv(f"{self.results_path}/measurements.csv", index=False)
 
             summary_df = DataFrame(summary_data, columns=summary_headers)
             self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)

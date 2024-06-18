@@ -22,7 +22,6 @@ class AbstractPlanner(ABC):
         # initialize attributes
         self.known_reqs = set()
         self.pending_relays = set()
-        self.completed_actions = set()
         self.completed_broadcasts = set()
         self.stats = {}
         
@@ -48,9 +47,6 @@ class AbstractPlanner(ABC):
 
         # update list of known requests
         self.known_reqs.update(incoming_reqs)
-
-        # update list of completed actions
-        self.completed_actions.update(completed_actions)
 
         # update list of completed broadcasts
         completed_broadcasts = [message_from_dict(**action.msg) 
