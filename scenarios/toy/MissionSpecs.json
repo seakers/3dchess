@@ -69,18 +69,18 @@
                 "spatial_res": 50,
                 "spectral_res": 7e-09,
                 "orientation": {
-                    "referenceFrame": "SC_BODY_FIXED",
+                    "referenceFrame": "NADIR_POINTING",
                     "convention": "REF_FRAME_ALIGNED"
                 },
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
-                    "angleHeight": 15,
-                    "angleWidth": 60
-                },
-                "fieldOfRegardGeometry": {
-                    "shape": "RECTANGULAR",
                     "angleHeight": 5,
-                    "angleWidth": 5
+                    "angleWidth": 10
+                },
+                "maneuver" : {
+                    "maneuverType":"SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
                 },
                 "@id": "bs1",
                 "@type": "Basic Sensor"

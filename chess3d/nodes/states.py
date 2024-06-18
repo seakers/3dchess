@@ -3,8 +3,8 @@ from abc import abstractmethod
 import numpy as np
 from typing import Union
 from chess3d.nodes.science.requests import MeasurementRequest
-from nodes.actions import *
-from nodes.engineering.engineering import EngineeringModule
+from chess3d.nodes.actions import *
+from chess3d.nodes.engineering.engineering import EngineeringModule
 from dmas.agents import AbstractAgentState, AgentAction
 from orbitpy.util import OrbitState
 import propcov

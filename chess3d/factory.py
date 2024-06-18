@@ -79,14 +79,11 @@ class SimulationFactory:
                                                                 ]
                                                 })
 
-        ## load orbitdata
+        # load orbitdata
         if orbitdata_dir is not None:
             agent_orbitdata : OrbitData = OrbitData.load(scenario_path, agent_name)
         else:
             agent_orbitdata = None
-
-        ## load payload
-        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) if instruments_dict else []
 
         # ## load science module
         # if science_dict is not None and science_dict.lower() == "true":
@@ -156,7 +153,10 @@ class SimulationFactory:
                                     logger
                                 )    
             
-        ## create agent
+        # load payload
+        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) if instruments_dict else []
+
+        # create agent
         if agent_type == SimulationAgentTypes.SATELLITE:
             position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
             time_data =  pd.read_csv(position_file, nrows=3)

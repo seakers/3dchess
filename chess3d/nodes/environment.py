@@ -9,6 +9,8 @@ from zmq import asyncio as azmq
 
 from pandas import DataFrame
 from instrupy.base import Instrument
+from instrupy.base import BasicSensorModel
+from instrupy.util import SphericalGeometry, ViewGeometry
 
 from chess3d.nodes.science.utility import synergy_factor
 from chess3d.nodes.science.requests import *
@@ -151,19 +153,16 @@ class SimulationEnvironment(EnvironmentNode):
                         # unpack message
                         msg = ObservationResultsMessage(**content)
                         self.log(f'received masurement data request from {msg.src}. quering measurement results...')
-
-                        # find/generate measurement results
                         agent_state = SimulationAgentState.from_dict(msg.agent_state)
                         instrument = Instrument.from_dict(msg.instrument)
-                        observation_action = ObservationAction(**msg.observation_action)
-                        measurement_data = self.query_measurement_data(src, 
-                                                                       agent_state, 
-                                                                       instrument,
-                                                                       observation_action)
+
+                        # find/generate measurement results
+                        measurement_data = self.query_measurement_data(agent_state, 
+                                                                       instrument)
 
                         # repsond to request
                         self.log(f'measurement results obtained! responding to request')
-                        resp = copy.deepcopy(msg)
+                        resp : ObservationResultsMessage = copy.deepcopy(msg)
                         resp.dst = resp.src
                         resp.src = self.get_element_name()
                         resp.observation_data = measurement_data
@@ -356,128 +355,73 @@ class SimulationEnvironment(EnvironmentNode):
 
     @runtime_tracker
     def query_measurement_data( self,
-                                agent_name : str, 
                                 agent_state : SimulationAgentState, 
-                                instrument : Instrument,
-                                observation_action : ObservationAction
+                                instrument : Instrument
                                 ) -> dict:
         """
         Queries internal models or data and returns observation information being sensed by the agent
         """
 
         if isinstance(agent_state, SatelliteAgentState):
-            agent_orbitdata : OrbitData = self.orbitdata[agent_name]
+            agent_orbitdata : OrbitData = self.orbitdata[agent_state.agent_name]
             
+            # get time indexes and bounds
             t = agent_state.t/agent_orbitdata.time_step
             t_u = t + 1
             t_l = t - 1
             
-            raw_coverage_data = [(t_index*agent_orbitdata.time_step, *_)
-                                 for t_index, *_, instrument_name, __ in agent_orbitdata.gp_access_data.values
-                                 if t_l <= t_index <= t_u
-                                 and instrument_name == instrument.name]
-
-            # TODO implement discretized pointing options for instruments so that accesses can be looked up on the database
-
-            # for t_index, gp_index, pnt_opt_index, lat, lon, obs_range, look_angle, incidence, zenith, grid_index in agent_orbitdata.gp_access_data.values
-
-
-            # gp_data = orbitdata.find_gp_access(agent_state.t, agent_state.attitude[0], field_of_view)
-            x = 1
-            raise NotImplementedError('Whoops. Still TODO')
-            # lat, lon, _ = measurement_req.lat_lon_pos
+            # get names of the columns of the available coverage data
+            orbitdata_columns : list = list(agent_orbitdata.gp_access_data.columns.values)
             
-            # # query ground point access data
-            # observation_data : dict = orbitdata.get_groundpoint_access_data(lat, 
-            #                                                                 lon, 
-            #                                                                 measurement_action.instrument_name, 
-            #                                                                 agent_state.t)
+            # get satellite's off-axis angle
+            instrument_off_axis_angle = agent_state.attitude[0]
             
-            # # include measurement request info
-            # observation_data['t'] = agent_state.t
-            # observation_data['state'] = agent_state.to_dict()
-            # observation_data['req'] = measurement_req.to_dict()
-            # observation_data['subtask_index'] = measurement_action.subtask_index
-            # observation_data['t_img'] = agent_state.t
-            
-            # # calculate measurement utility
-            # observation_data['u_max'] = measurement_req.s_max
-            # observation_data['u_exp'] = measurement_action.u_exp
+            # collect data for every instrument model onboard
+            obs_data = []
+            for instrument_model in instrument.mode:
+                # get observation FOV from instrument model
+                if isinstance(instrument_model, BasicSensorModel):
+                    instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
+                    instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
+                    instrument_off_axis_fov = instrument_fov_geometry.angle_width
+                else:
+                    raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
 
-            # ## check time constraints
-            # if (agent_state.t < measurement_req.t_start
-            #     or measurement_req.t_end < agent_state.t
-            #     ):
-            #     observation_data['u'] = 0.0
-            # ## check observation metrics
-            # elif (  observation_data['observation range [km]'] is None
-            #         or observation_data['look angle [deg]'] is None
-            #         or observation_data['incidence angle [deg]'] is None
-            #     ):
-            #     observation_data['u'] = 0.0
-            # # TODO check attitude pointing
-            # # elif
-
-            # ## calculate utility
-            # else:
-            #     observation_data['u'] = self.utility_func(**observation_data) * synergy_factor(**observation_data)
-
-            # return observation_data
+                # query coverage data 
+                raw_coverage_data = [list(data)
+                                    for data in agent_orbitdata.gp_access_data.values
+                                    if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
+                                    and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
+                                    and abs(instrument_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
+                                    ]
+                
+                for data in raw_coverage_data:                    
+                    obs_data.append({
+                        "t_img"     : data[orbitdata_columns.index('time index')]*agent_orbitdata.time_step,
+                        "lat"       : data[orbitdata_columns.index('lat [deg]')],
+                        "lon"       : data[orbitdata_columns.index('lon [deg]')],
+                        "range"     : data[orbitdata_columns.index('observation range [km]')],
+                        "look"      : data[orbitdata_columns.index('look angle [deg]')],
+                        "incidence" : data[orbitdata_columns.index('incidence angle [deg]')],
+                        "zenith"    : data[orbitdata_columns.index('solar zenith [deg]')],
+                        "instrument": data[orbitdata_columns.index('instrument')]
+                    })
+            return obs_data
 
         else:
             raise NotImplementedError(f"Measurement results query not yet supported for agents with state of type {type(agent_state)}")
 
-        # if measurement_req.id not in self.measurement_reqs:
-        #     self.measurement_reqs[measurement_req.id] = measurement_req
+    def query_event_data(self, lat_img, lon_img, t_img, instrument_name) -> list:
+        """ Checks any of the events in its database is being observed and return its severity and required measurements """
 
-        # if isinstance(measurement_req, GroundPointMeasurementRequest):
-            # if isinstance(agent_state, SatelliteAgentState):
-            #     orbitdata : OrbitData = self.orbitdata[agent_name]
-            #     lat, lon, _ = measurement_req.lat_lon_pos
-                
-            #     # query ground point access data
-            #     observation_data : dict = orbitdata.get_groundpoint_access_data(lat, 
-            #                                                                     lon, 
-            #                                                                     measurement_action.instrument_name, 
-            #                                                                     agent_state.t)
-                
-            #     # include measurement request info
-            #     observation_data['t'] = agent_state.t
-            #     observation_data['state'] = agent_state.to_dict()
-            #     observation_data['req'] = measurement_req.to_dict()
-            #     observation_data['subtask_index'] = measurement_action.subtask_index
-            #     observation_data['t_img'] = agent_state.t
-                
-            #     # calculate measurement utility
-            #     observation_data['u_max'] = measurement_req.s_max
-            #     observation_data['u_exp'] = measurement_action.u_exp
-
-            #     ## check time constraints
-            #     if (agent_state.t < measurement_req.t_start
-            #         or measurement_req.t_end < agent_state.t
-            #         ):
-            #         observation_data['u'] = 0.0
-            #     ## check observation metrics
-            #     elif (  observation_data['observation range [km]'] is None
-            #             or observation_data['look angle [deg]'] is None
-            #             or observation_data['incidence angle [deg]'] is None
-            #         ):
-            #         observation_data['u'] = 0.0
-            #     # TODO check attitude pointing
-            #     # elif
-
-            #     ## calculate utility
-            #     else:
-            #         observation_data['u'] = self.utility_func(**observation_data) * synergy_factor(**observation_data)
-
-            #     return observation_data
-
-            # else:
-            #     raise NotImplementedError(f"Measurement results query not yet supported for agents with state of type {type(agent_state)}")
-
-        # else:
-        #     raise NotImplementedError(f"Measurement results query not yet supported for measurment requests of type {type(measurement_req)}.")
-
+        return [{"severity" : severity, "measurements" : measurements }
+                for lat,lon,t_start,duration,severity,measurements in self.events.values
+                if lat==lat_img 
+                and lon==lon_img
+                and t_start<= t_img <=t_start+duration
+                and instrument_name in measurements  #TODO include better reasoning]
+                ]
+    
     async def teardown(self) -> None:
         try:
             self.t_f = time.perf_counter()

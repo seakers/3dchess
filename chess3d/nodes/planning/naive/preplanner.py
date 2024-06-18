@@ -53,6 +53,9 @@ class NaivePlanner(AbstractPreplanner):
         access_times, ground_points = self.calculate_access_times(state, orbitdata)
         access_times : list; ground_points : dict
         
+        if state.t == 7200.0: 
+            x = 1
+
         # generate plan
         observations = []
         while access_times:
@@ -69,16 +72,18 @@ class NaivePlanner(AbstractPreplanner):
 
                 # check feasibility given the prior obvservation
                 if not observations:
-                    # no prior observation exists, is feasible
-                    observations.append(action)
-                    break                
-                
-                # get the previous scheduled observation
-                action_prev : ObservationAction = observations[-1]
+                    # no prior observation exists, check with current state
+                    t_prev = state.t
+                    th_prev = state.attitude[0]
+                else:
+                    # get the previous scheduled observation
+                    action_prev : ObservationAction = observations[-1]
+                    t_prev = action_prev.t_end
+                    th_prev = action_prev.look_angle
 
                 # estimate maneuver time
-                dt_obs = action.t_start - action_prev.t_end
-                dt_maneuver = abs(action.look_angle - action_prev.look_angle)/state.max_slew_rate
+                dt_obs = action.t_start - t_prev
+                dt_maneuver = abs(action.look_angle - th_prev)
 
                 # check feasibility
                 if dt_maneuver <= dt_obs:

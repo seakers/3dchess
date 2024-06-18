@@ -57,7 +57,7 @@
                         }
                     }
                 }
-            },            
+            },
             "instrument": {
                 "name": "visible",
                 "mass": 10,
@@ -77,10 +77,10 @@
                     "angleHeight": 5,
                     "angleWidth": 10
                 },
-                "maneuver" : {
-                    "maneuverType":"SINGLE_ROLL_ONLY",
-                    "A_rollMin": -50,
-                    "A_rollMax": 50
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -15,
+                    "A_rollMax": 15
                 },
                 "@id": "bs1",
                 "@type": "Basic Sensor"
@@ -99,36 +99,43 @@
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                     "sma": 7078,
                     "ecc": 0.01,
-                    "inc": 67,
+                    "inc": 0.0,
                     "raan": 0.0,
                     "aop": 0.0,
                     "ta": 0.0
                 }
             },
-            "science" : "True"
+            "planner": {
+                "preplanner": {
+                    "@type": "naive",
+                    "horizon": 3600,
+                    "period": 3600
+                }
+            }
         }
     ],
     "grid": [
         {
-            "@type": "cluster"
+            "@type": "customgrid",
+            "@id": 1,
+            "lat_spacing": 2.5,
+            "lon_spacing": 2.5,
+            "covGridFilePath": "./scenarios/coverage_test/resources/uniform_grid0.csv"
         }
     ],
-    "scenario": {   
-        "events" : {
-            "@type": "RANDOM", 
-            "n_events" : 5000,
-            "duration" : 0.25,
-            "severity" : 10,
-            "measurements" : ["visible","thermal","sar"],
-            "n_measurements" : 3
+    "scenario": {
+        "events": {
+            "@type": "PREDEF",
+            "eventsPath": "./scenarios/toy/resources/all_events_formatted.csv"
         },
-        "connectivity" : "FULL", 
-        "utility" : "LINEAR",
-        "clock" : {
-            "@type" : "EVENT"
+        "connectivity": "FULL",
+        "utility": "LINEAR",
+        "clock": {
+            "@type": "EVENT"
         }
     },
     "settings": {
-        "coverageType": "GRID COVERAGE"
+        "coverageType": "GRID COVERAGE",
+        "outDir": "./scenarios/coverage_test/orbit_data/"
     }
 }

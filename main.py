@@ -465,7 +465,7 @@ if __name__ == "__main__":
     scenario_name = args.scenario_name
     plot_results = args.plot_result
     save_plot = args.save_plot
-    no_grapgic = args.no_graphic
+    no_graphic = args.no_graphic
 
     levels = {  'DEBUG' : logging.DEBUG, 
                 'INFO' : logging.INFO, 
@@ -476,7 +476,7 @@ if __name__ == "__main__":
     level = levels.get(args.level)
 
     # terminal welcome message
-    if not no_grapgic:
+    if not no_graphic:
         print_welcome(scenario_name)
     
     # load scenario json file

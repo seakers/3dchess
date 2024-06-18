@@ -81,6 +81,19 @@
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             },
             "args": "toy_random"
+        },
+        {
+            "name": "COVERAGE TEST",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/coverage.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            },
+            "args": "coverage_test"
         }
     ],
     "compounds": [
