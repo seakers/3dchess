@@ -904,7 +904,6 @@ class OrbitData:
         
         return n_points, n_observed, float(n_observed) / float(n_points)
 
-
 """
 TESTING
 """

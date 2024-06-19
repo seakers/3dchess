@@ -1,16 +1,14 @@
-from logging import Logger
+import csv
+import numpy as np
 import pandas as pd
+import datetime as dt
+from nodes.actions import ObservationAction
+from nodes.states import SimulationAgentState
+from messages import *
+from chess3d.nodes.science.requests import *
 from zmq import asyncio as azmq
-
-from dmas.modules import NetworkConfig
 from dmas.modules import *
 
-from chess3d.nodes.actions import ObservationAction
-from chess3d.nodes.states import SimulationAgentState
-from chess3d.nodes.science.requests import *
-from chess3d.messages import *
-
-from instrupy.base import Instrument
 
 class ScienceModuleTypes(Enum):
     LOOKUP = 'LOOKUP'
@@ -58,212 +56,189 @@ class ScienceModule(InternalModule):
         # is event-driven; no need to support timed delays
         return
 
-    async def setup(self) -> None:
-        try:
-            # setup internal inboxes
-            self.onboard_processing_inbox = asyncio.Queue()
+class LookupScienceModule(InternalModule):
 
-        except Exception as e:
-            raise e
+    # async def setup(self) -> None:
+    #     try:
+    #         # setup internal inboxes
+    #         self.science_value_inbox = asyncio.Queue()
+    #         self.science_reasoning_inbox = asyncio.Queue()
+    #         self.onboard_processing_inbox = asyncio.Queue()
+    #         self.processed_items = []
+    #         self.sd = []
+    #         self.points = self.load_points()
 
-    async def live(self) -> None:
-        """
-        Performs concurrent tasks:
-        - Listener: receives messages from the parent agent and checks results
-        - Science valuer: determines value of a given measurement
-        - Science reasoning: checks data for outliers
-        - Onboard processing: converts data of one type into data of another type (e.g. level 0 to level 1)
-        """
-        # announce existance to other modules 
-        announcement_msg = SimulationMessage(self.get_element_name(), self.get_parent_name(), 'HANDSHAKE')
-        await self._send_manager_msg(announcement_msg, zmq.PUB)
+    #         # if "scenario1a" in self.scenario_dir:
+    #         #     self.points = self.load_points_scenario1a()
+    #         #     self.log(f'Scenario 1a points loaded!',level=logging.INFO)
+    #         # elif "scenario1b" in self.scenario_dir:
+    #         #     self.points = self.load_points_scenario1b()
+    #         #     self.log(f'Scenario 1b points loaded!',level=logging.INFO)
+    #         # elif "scenario2" in self.scenario_dir:
+    #         #     self.points = self.load_events_scenario2()
+    #         #     # self.points = self.load_events_scenario2_revised()
+    #         #     self.log(f'Scenario 2 points loaded!',level=logging.INFO)
+    #     except Exception as e:
+    #         raise e
 
-        # initialize concurrent tasks
-        listener_task = asyncio.create_task(self.listener(), name='listener()')
-        onboard_processing_task = asyncio.create_task(self.onboard_processing(), name='onboard_processing()')
+    
+    # def load_points(self) -> list:
+    #     # return points
+    #     return self.events.values
+    
+    # # def load_points_scenario1a(self):
+    # #     points = np.zeros(shape=(1000,4))
+    # #     with open(self.scenario_dir+'/resources/riverATLAS.csv') as csvfile:
+    # #         reader = csv.reader(csvfile)
+    # #         count = 0
+    # #         for row in reader:
+    # #             if count == 0:
+    # #                 count = 1
+    # #                 continue
+    # #             points[count-1,:] = [row[0], row[1], row[2], row[3]]
+    # #             count = count + 1
+    # #     return points
+
+    # # def load_points_scenario1b(self):
+    # #     points = []
+    # #     with open(self.scenario_dir+'/resources/one_year_floods_multiday.csv', 'r') as f:
+    # #         d_reader = csv.DictReader(f)
+    # #         for line in d_reader:
+    # #             if len(points) > 0:
+    # #                 points.append((line["lat"],line["lon"],line["severity"],line["time"],float(line["time"])+60*60,1))
+    # #             else:
+    # #                 points.append((line["lat"],line["lon"],line["severity"],line["time"],float(line["time"])+60*60,1))
+    # #     with open(self.scenario_dir+'resources/flow_events_75_multiday.csv', 'r') as f:
+    # #         d_reader = csv.DictReader(f)
+    # #         for line in d_reader:
+    # #             if len(points) > 0:
+    # #                 points.append((line["lat"],line["lon"],float(line["water_level"])/float(line["flood_level"]),line["time"],float(line["time"])+86400,0))
+    # #             else:
+    # #                 points.append((line["lat"],line["lon"],float(line["water_level"])/float(line["flood_level"]),line["time"],float(line["time"])+86400,0))
+    # #     points = np.asfarray(points)
+    # #     self.log(f'Loaded scenario 1b points',level=logging.INFO)
+    # #     return points
+
+    # # def load_events_scenario2(self):
+    # #     points_df : pd.DataFrame = pd.read_csv(self.events_path)
+    # #     self.log(f'Loaded scenario 2 points',level=logging.INFO)
+
+    # #     # return points
+    # #     return points_df.values
+
+    # # def load_events_scenario2_revised(self): # revised 9/1/23
+    # #     points = []
+    # #     # 0 is bloom, 1 is temperature
+    # #     with open(self.scenario_dir+'/resources/bloom_events.csv', 'r') as f:
+    # #         d_reader = csv.DictReader(f)
+    # #         for line in d_reader:
+    # #             points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],0))
+    # #     with open(self.scenario_dir+'/resources/temperature_events.csv', 'r') as f:
+    # #         d_reader = csv.DictReader(f)
+    # #         for line in d_reader:
+    # #             points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],1))
+    # #     with open(self.scenario_dir+'/resources/level_events.csv', 'r') as f:
+    # #         d_reader = csv.DictReader(f)
+    # #         for line in d_reader:
+    # #             points.append((line["lat [deg]"],line["lon [deg]"],line["start time [s]"],line["duration [s]"],line["severity"],2))
+    # #     points = np.asfarray(points)
+    # #     self.log(f'Loaded scenario 2 points',level=logging.INFO)
+    # #     return points
         
-        tasks = [   
-                    listener_task,
-                    onboard_processing_task
-                ]
+    # async def live(self) -> None:
+    #     """
+    #     Performs concurrent tasks:
+    #     - Listener: receives messages from the parent agent and checks results
+    #     - Science valuer: determines value of a given measurement
+    #     - Science reasoning: checks data for outliers
+    #     - Onboard processing: converts data of one type into data of another type (e.g. level 0 to level 1)
+    #     """
+    #     listener_task = asyncio.create_task(self.listener(), name='listener()')
+    #     science_value_task = asyncio.create_task(self.science_value(), name='science_value()')
+    #     #science_reasoning_task = asyncio.create_task(self.science_reasoning(), name='science_reasoning()')
+    #     # onboard_processing_task = asyncio.create_task(self.onboard_processing(), name='onboard_processing()')
         
-        # wait for a task to terminate
-        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    #     tasks = [   
+    #                 listener_task,
+    #                 science_value_task
+    #                 # science_reasoning_task,
+    #                 # onboard_processing_task
+    #             ]
+        
+    #     _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
-        # cancel the remaning tasks
-        for task in pending:
-            task : asyncio.Task
-            task.cancel()
-            await task
+    #     for task in pending:
+    #         task : asyncio.Task
+    #         task.cancel()
+    #         await task
 
+    # async def listener(self):
+    #     """
+    #     ## Listener 
 
-    async def listener(self):
-        """ Unpacks and classifies any incoming messages """
-        # 
-        try:
-            # initiate results tracker
-            results = {}
+    #     Listen for any messages from the parent agent and adjust its results ledger.
+    #     Any relevant bids that may affect the bundle, along with any changes in state or 
+    #     task completion status are forwarded to the bundle builder.
+    #     """
+    #     # 
+    #     try:
+    #         # initiate results tracker
+    #         results = {}
 
-            # create poller for all broadcast sockets
-            poller = azmq.Poller()
-            manager_socket, _ = self._manager_socket_map.get(zmq.SUB)
-            poller.register(manager_socket, zmq.POLLIN)
+    #         # create poller for all broadcast sockets
+    #         poller = azmq.Poller()
+    #         manager_socket, _ = self._manager_socket_map.get(zmq.SUB)
+    #         poller.register(manager_socket, zmq.POLLIN)
 
-            # listen for broadcasts and place in the appropriate inboxes
-            while True:
-                self.log('listening to manager broadcast!')
-                _, _, content = await self.listen_manager_broadcast()
-                if content['msg_type'] == SimulationMessageTypes.SENSES.value:
-                    self.log(f"received senses from parent agent!", level=logging.DEBUG)
+    #         # listen for broadcasts and place in the appropriate inboxes
+    #         while True:
+    #             self.log('listening to manager broadcast!')
+    #             _, _, content = await self.listen_manager_broadcast()
+    #             if content['msg_type'] == SimulationMessageTypes.SENSES.value:
+    #                 self.log(f"received senses from parent agent!", level=logging.DEBUG)
 
-                    # unpack message 
-                    senses_msg : SensesMessage = SensesMessage(**content)
+    #                 # unpack message 
+    #                 senses_msg : SensesMessage = SensesMessage(**content)
 
-                    senses = []
-                    senses.append(senses_msg.state)
-                    senses.extend(senses_msg.senses)     
+    #                 senses = []
+    #                 senses.append(senses_msg.state)
+    #                 senses.extend(senses_msg.senses)     
 
-                    for sense in senses:
-                        if sense['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-                            # unpack message 
-                            state_msg : AgentStateMessage = AgentStateMessage(**sense)
-                            self.log(f"received agent state message!")
+    #                 for sense in senses:
+    #                     if sense['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
+    #                         # unpack message 
+    #                         state_msg : AgentStateMessage = AgentStateMessage(**sense)
+    #                         self.log(f"received agent state message!")
                                                         
-                            # update current state
-                            state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
-                            await self.update_current_time(state.t)
+    #                         # update current state
+    #                         state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
+    #                         await self.update_current_time(state.t)
 
-                        if sense['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
-                            # unpack message
-                            if('agent_state' not in sense):
-                                continue
-                            self.log(f"received manager broadcast of type {sense['msg_type']}!",level=logging.DEBUG)
-                            msg = ObservationResultsMessage(**sense)
-                            await self.onboard_processing_inbox.put(msg)
+    #                     if sense['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
+    #                         # unpack message
+    #                         if('agent_state' not in sense):
+    #                             continue
+    #                         self.log(f"received manager broadcast of type {sense['msg_type']}!",level=logging.DEBUG)
+    #                         msg = ObservationResultsMessage(**sense)
+    #                         await self.science_value_inbox.put(msg)
+    #                         await self.onboard_processing_inbox.put(msg)
 
-                # if sim-end message, end agent `live()`
-                elif content['msg_type'] == ManagerMessageTypes.SIM_END.value:
-                    self.log(f"received manager broadcast of type {content['msg_type']}! terminating `live()`...",level=logging.INFO)
-                    return
+    #             # if sim-end message, end agent `live()`
+    #             elif content['msg_type'] == ManagerMessageTypes.SIM_END.value:
+    #                 self.log(f"received manager broadcast of type {content['msg_type']}! terminating `live()`...",level=logging.INFO)
+    #                 return
 
-                elif content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
-                    # unpack message
-                    self.log(f"received manager broadcast of type {content['msg_type']}!",level=logging.WARN)
-                    msg = ObservationResultsMessage(**content)
-                    await self.onboard_processing_inbox.put(msg)
+    #             elif content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
+    #                 # unpack message
+    #                 self.log(f"received manager broadcast of type {content['msg_type']}!",level=logging.WARN)
+    #                 msg = ObservationResultsMessage(**content)
+    #                 await self.science_value_inbox.put(msg)
+    #                 await self.onboard_processing_inbox.put(msg)
         
-        except asyncio.CancelledError:
-            print("Asyncio cancelled error in science module listener")
-            return
+    #     except asyncio.CancelledError:
+    #         print("Asyncio cancelled error in science module listener")
+    #         return
         
-    # @abstractmethod
-    # async def onboard_processing(self) -> None:
-
-    async def onboard_processing(self) -> None:
-        """ processes incoming observation data and generates measurement requests if an event is detected """
-        try:
-            while True:
-                # wait for next observation to be performed by parent agent
-                msg : ObservationResultsMessage = await self.onboard_processing_inbox.get()
-                
-                # unpack information from observation message
-                observation_data = msg.observation_data
-                instrument = Instrument.from_dict(msg.instrument)
-                
-                # process each observation
-                for obs in observation_data:
-                    # process observation
-                    lat_event,lon_event,t_start,t_end,t_corr,severity,observations_required \
-                        = self.process_observation(instrument, **obs)
-
-                    # generate measurement request 
-                    measurement_req = MeasurementRequest(self.get_parent_name(),
-                                                         [lat_event,lon_event,0.0],
-                                                         severity,
-                                                         observations_required,
-                                                         t_start,
-                                                         t_end,
-                                                         t_corr)
-                    
-                    # send message to internal modules
-                    req_msg = MeasurementRequestMessage(self.get_module_name(), 
-                                                        self.get_parent_name(), 
-                                                        measurement_req.to_dict())
-                    await self._send_manager_msg(req_msg, zmq.PUB)
-
-        except asyncio.CancelledError:
-            return
-        
-    @abstractmethod
-    def process_observation(self, 
-                            instrument : Instrument,
-                            **kwargs
-                            ) -> tuple:
-        """ Processes incoming observation data and returns the characteristics of the event being detected if this exists"""
-
-    async def teardown(self) -> None:
-        # nothing to tear-down
-        return
-
-class OracleScienceModule(ScienceModule):
-    def __init__(self, 
-                 results_path: str, 
-                 events_path : str,
-                 parent_name: str, 
-                 parent_network_config: NetworkConfig, 
-                 logger: Logger = None
-                 ) -> None:
-        """ 
-        Has prior knowledge of the events that will occurr during the simulation.
-        Compares incomin observations to known events database to determine whether 
-        an event has been detected
-        """
-        super().__init__(results_path, parent_name, parent_network_config, logger)
-
-        # load predefined events
-        self.events = pd.read_csv(events_path)
-                
-    def process_observation(self, 
-                            instrument : Instrument,
-                            t_img : float,
-                            lat : float,
-                            lon : float,
-                            **_
-                            ) -> tuple:
-        
-        # query known events
-        observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
-                            for lat_event,lon_event,t_start,duration,severity,measurements 
-                            in self.events.values
-                            if abs(lat - lat_event) <= 1e-3
-                            and abs(lon - lon_event) <= 1e-3
-                            and t_start <= t_img <= t_start+duration
-                            and instrument.name in measurements
-                            ]
-
-        if observed_events:
-            # sort by severity
-            observed_events.sort(key= lambda a: a[4])
-
-            # get highest severity event
-            lat_event,lon_event,t_start,duration,severity,observations_str = observed_events[-1]
-
-            # get list of required observations
-            observations_str : str = observations_str.replace('[','')
-            observations_str : str = observations_str.replace(']','')
-            observations_required : list = observations_str.split(',')
-            observations_required.remove(instrument.name)
-
-            # calculate end of event
-            t_end = t_start+duration
-
-            # estimate decorrelation time:
-            t_corr = t_start+duration-t_img
-
-            return lat_event,lon_event,t_img,t_end,t_corr,severity,observations_required
-
-        return np.NaN,np.NaN,-1,-1,0.0,0.0,[]
-
     # async def science_value(self):
     #     try:
     #         detected_events = []
@@ -350,8 +325,8 @@ class OracleScienceModule(ScienceModule):
     #                         detected_events.append(measurement_req)
 
     #                 self.log(f'sending measurement req to agent...')
-                    # req_msg = MeasurementRequestMessage(self.get_parent_name(), self.get_parent_name(), measurement_req.to_dict())
-                    # await self._send_manager_msg(req_msg, zmq.PUB)
+    #                 req_msg = MeasurementRequestMessage(self.get_parent_name(), self.get_parent_name(), measurement_req.to_dict())
+    #                 await self._send_manager_msg(req_msg, zmq.PUB)
 
     #             else:
     #                 # ignore
@@ -412,7 +387,55 @@ class OracleScienceModule(ScienceModule):
     #     except asyncio.CancelledError:
     #         return
         
-       
+    # async def onboard_processing(self):
+    #     try:
+    #         while True:
+    #             msg : ObservationResultsMessage = await self.onboard_processing_inbox.get()
+    #             measurement_action = ObservationAction(**msg.measurement_action)
+    #             agent_state = SimulationAgentState.from_dict(msg.agent_state)
+    #             measurement_req = MeasurementRequest.from_dict(measurement_action.measurement_req)
+    #             obs = {}
+    #             if(measurement_action.instrument_name == "Imaging SAR"):
+    #                 obs["product_type"] = "sar"
+    #             elif(measurement_action.instrument_name == "OLI"):
+    #                 obs["product_type"] = "visible"
+    #             else:
+    #                 obs["product_type"] = "thermal"
+    #             obs["lat"] = measurement_req.lat_lon_pos[0]
+    #             obs["lon"] = measurement_req.lat_lon_pos[1]
+    #             obs_str = ""
+    #             obs_datatype = obs["product_type"]
+    #             obs_process_time = measurement_action.t_start
+    #             #data,raw_data_filename = self.store_raw_measurement(obs_str,obs["lat"],obs["lon"],obs_process_time)
+    #             # if obs_datatype == "tss":
+    #             #     processed_data = self.compute_tss_obs_value(data)
+    #             # elif obs_datatype == "altimetry":
+    #             #     processed_data = self.generate_altimetry()
+    #             # elif obs_datatype == "thermal":
+    #             #     processed_data = self.compute_thermal_obs(data)
+    #             # else:
+    #             #     self.log('Unsupported data type for onboard processing.')
+    #             #     continue
+    #             self.sd, new_data_product = self.add_data_product(self.sd,obs["lat"],obs["lon"],obs_process_time,obs_datatype,"",None)
+    #             self.log(f'{obs_datatype} measurement data successfully saved in on-board data-base.', level=logging.INFO)
+    #             updated_msg = "SD has been updated."
+    #             #await self.science_reasoning_inbox.put(updated_msg)
+    #             #await self.science_value_inbox.put(new_data_product)
+    #             processed_item = {
+    #                     "lat": obs["lat"],
+    #                     "lon": obs["lon"],
+    #                     "time": obs_process_time,
+    #                     #"product_type": metadata["measuring_instrument"] TODO add back for ground station
+    #             }
+    #             self.processed_items.append(processed_item)
+    #             await self.save_observations(obs_datatype)
+    #     except asyncio.CancelledError:
+    #         return
+
+    # async def teardown(self) -> None:
+    #     # nothing to tear-down
+    #     return
+    
     # # FUNCTIONS FOR ONBOARD PROCESSING
 
     # def store_raw_measurement(self,dataprod,lat,lon,obs_process_time):

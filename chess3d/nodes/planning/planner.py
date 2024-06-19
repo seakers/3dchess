@@ -241,6 +241,7 @@ class PlanningModule(InternalModule):
                     if not self.other_modules_exist:
                         # another type of message was received from another module 
                         self.other_modules_exist = True
+                        continue
 
                     # unpack message
                     msg : SimulationMessage = message_from_dict(**content)
@@ -458,8 +459,13 @@ class PlanningModule(InternalModule):
 
                 # check the type of response from the science module
                 if isinstance(internal_msg, MeasurementRequestMessage):
-                    # the science module generated a measurement request; add to list of generated reqs
-                    requests.append( MeasurementRequest.from_dict(internal_msg.req) )
+                    # the science module analized out latest observation(s)
+                    request : MeasurementRequest = MeasurementRequest.from_dict(internal_msg.req)
+                    
+                    # check if outlier was deteced
+                    if request.severity > 0.0:
+                        # event was detected and an observation was requested
+                        requests.append(request)
                 else:
                     # the science module generated a different response; process later
                     await self.misc_inbox.put(internal_msg)

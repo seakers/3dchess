@@ -15,6 +15,7 @@ from chess3d.nodes.orbitdata import OrbitData
 from chess3d.nodes.planning.planner import PlanningModule
 from chess3d.nodes.planning.naive.preplanner import NaivePlanner
 from chess3d.nodes.satellite import SatelliteAgent
+from chess3d.nodes.science.science import OracleScienceModule
 from chess3d.nodes.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
 from chess3d.nodes.agent import SimulationAgent
 from chess3d.nodes.science.utility import utility_function
@@ -85,17 +86,29 @@ class SimulationFactory:
         else:
             agent_orbitdata = None
 
-        # ## load science module
-        # if science_dict is not None and science_dict.lower() == "true":
-        #     science = ScienceModule(agent_results_path,
-        #                             scenario_path,
-        #                             agent_name,
-        #                             agent_network_config,
-        #                             events_path,
-        #                             logger=logger)
-        # else:
-        #     science = None
-        science = None # TODO remove when updating science module
+        # load science module
+        if science_dict is not None:
+            science_dict : dict
+
+            # load science module type
+            science_module_type : str = science_dict.get('@type', None)
+            if science_module_type is None: raise ValueError(f'science module type not specified in input file.')
+
+            # create an instance of the science module based on the specified science module type
+            if science_module_type.lower() == "oracle":
+                events_path : str = science_dict.get('eventsPath', None)
+
+                if events_path is None: raise ValueError(f'predefined events path not specified in input file.')
+
+                science = OracleScienceModule(results_path, 
+                                              events_path, 
+                                              agent_name, 
+                                              agent_network_config, 
+                                              logger)
+            else:
+                raise NotImplementedError(f'science module of type `{science_module_type}` not yet supported.')
+        else:
+            science = None
 
         ## load planner module
         if planner_dict is not None:

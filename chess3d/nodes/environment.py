@@ -406,8 +406,8 @@ class SimulationEnvironment(EnvironmentNode):
                         "range"     : data[orbitdata_columns.index('observation range [km]')],
                         "look"      : data[orbitdata_columns.index('look angle [deg]')],
                         "incidence" : data[orbitdata_columns.index('incidence angle [deg]')],
-                        "zenith"    : data[orbitdata_columns.index('solar zenith [deg]')],
-                        "instrument": data[orbitdata_columns.index('instrument')]
+                        "zenith"         : data[orbitdata_columns.index('solar zenith [deg]')],
+                        "instrument_name": data[orbitdata_columns.index('instrument')]
                     })
 
             # return processed observation data
@@ -509,7 +509,7 @@ class SimulationEnvironment(EnvironmentNode):
             n_events_detected = 0 
 
             # TODO improve performance or load precomputed vals
-            n_gps, n_gps_accessible, n_gps_visible_ptg = 0.0, 0.0, np.NAN
+            n_gps, n_gps_accessible, n_gps_access_ptg = np.NAN, np.NAN, np.NAN
             # # compile coverage calcs 
             # consolidated_orbitdata = None
 
@@ -541,7 +541,7 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_events', n_events],
                         ['n_gps', n_gps],
                         ['n_gps_accessible', n_gps_accessible],
-                        ['n_gps_visible_ptg', n_gps_visible_ptg],
+                        ['n_gps_access_ptg', n_gps_access_ptg],
                         ['n_gps_obs', n_gps_observed],
                         ['n_events_obs', n_events_obs],
                         ['n_event_partially_co_obs', n_events_partially_co_obs],
