@@ -87,8 +87,36 @@ class NaivePlanner(AbstractPreplanner):
                     observations.append(action)
                     break
 
+        assert self.no_redundant_observations(state, observations, orbitdata)
+
         return observations
     
+    def no_redundant_observations(self, 
+                                 state : SimulationAgentState, 
+                                 observations : list,
+                                 orbitdata : OrbitData
+                                 ) -> bool:
+        if isinstance(state, SatelliteAgentState):
+            for j in range(len(observations)):
+                i = j - 1
+
+                if i < 0: # there was no prior observation performed
+                    continue                
+
+                observation_prev : ObservationAction = observations[i]
+                observation_curr : ObservationAction = observations[j]
+
+                if (
+                    abs(observation_curr.target[0] - observation_prev.target[0]) <= 1e-3
+                    and abs(observation_curr.target[1] - observation_prev.target[1]) <= 1e-3
+                    and (observation_curr.t_start - observation_prev.t_end) <= orbitdata.time_step):
+                    return False
+            
+            return True
+
+        else:
+            raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
+            
     @runtime_tracker
     def calculate_access_times(self, state : SimulationAgentState, orbitdata : OrbitData) -> dict:
         # define planning horizon

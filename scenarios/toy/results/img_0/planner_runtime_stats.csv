@@ -3,10 +3,10 @@ _read_incoming_messages,0.0,0.0,0.0,1250
 __check_action_completion,0.0,0.0,0.0,1250
 preplanner/update_percepts,0.0,0.0,0.0,1250
 preplanner/needs_planning,0.0,0.0,0.0,1250
-preplanner/calculate_access_times,0.136,0.0,0.136,1
-preplanner/_schedule_observations,0.361,0.0,0.361,1
+preplanner/calculate_access_times,0.133,0.0,0.133,1
+preplanner/_schedule_observations,0.312,0.0,0.312,1
 preplanner/is_observation_path_valid,0.005,0.0,0.005,1
-preplanner/_schedule_broadcasts,0.017,0.0,0.017,1
-preplanner/_schedule_maneuvers,0.059,0.0,0.059,1
-preplanner/__schedule_periodic_replan,2.045,0.0,2.045,1
-preplanner/generate_plan,6.493,0.0,6.493,1
+preplanner/_schedule_broadcasts,0.023,0.0,0.023,1
+preplanner/_schedule_maneuvers,0.058,0.0,0.058,1
+preplanner/__schedule_periodic_replan,2.073,0.0,2.073,1
+preplanner/generate_plan,6.542,0.0,6.542,1

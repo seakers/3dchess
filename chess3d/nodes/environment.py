@@ -157,7 +157,7 @@ class SimulationEnvironment(EnvironmentNode):
                         instrument = Instrument.from_dict(msg.instrument)
 
                         # find/generate measurement results
-                        measurement_data = self.query_measurement_data(agent_state, 
+                        observation_data = self.query_measurement_data(agent_state, 
                                                                        instrument)
 
                         # repsond to request
@@ -165,7 +165,9 @@ class SimulationEnvironment(EnvironmentNode):
                         resp : ObservationResultsMessage = copy.deepcopy(msg)
                         resp.dst = resp.src
                         resp.src = self.get_element_name()
-                        resp.observation_data = measurement_data
+                        resp.observation_data = observation_data
+
+                        # save observation
                         self.observation_history.append(resp)
 
                         await self.respond_peer_message(resp) 
@@ -364,7 +366,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         if isinstance(agent_state, SatelliteAgentState):
             agent_orbitdata : OrbitData = self.orbitdata[agent_state.agent_name]
-            
+
             # get time indexes and bounds
             t = agent_state.t/agent_orbitdata.time_step
             t_u = t + 1
@@ -387,7 +389,7 @@ class SimulationEnvironment(EnvironmentNode):
                 else:
                     raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
 
-                # query coverage data 
+                # query coverage data of everything that is within the field of view of the agent
                 raw_coverage_data = [list(data)
                                     for data in agent_orbitdata.gp_access_data.values
                                     if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
@@ -395,6 +397,7 @@ class SimulationEnvironment(EnvironmentNode):
                                     and abs(instrument_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
                                     ]
                 
+                # compile data
                 for data in raw_coverage_data:                    
                     obs_data.append({
                         "t_img"     : data[orbitdata_columns.index('time index')]*agent_orbitdata.time_step,
@@ -406,6 +409,8 @@ class SimulationEnvironment(EnvironmentNode):
                         "zenith"    : data[orbitdata_columns.index('solar zenith [deg]')],
                         "instrument": data[orbitdata_columns.index('instrument')]
                     })
+
+            # return processed observation data
             return obs_data
 
         else:

@@ -366,7 +366,6 @@ class AbstractPlanner(ABC):
         else:
             raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
         
-
     def _print_observation_sequence(self, 
                                     state : SatelliteAgentState, 
                                     path : list, 
