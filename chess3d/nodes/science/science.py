@@ -49,6 +49,7 @@ class ScienceModule(InternalModule):
         
         # initialize attributes
         self.events = None
+        self.events_detected = []
 
         # assign parameters
         self.results_path = results_path
@@ -156,9 +157,6 @@ class ScienceModule(InternalModule):
             print("Asyncio cancelled error in science module listener")
             return
         
-    # @abstractmethod
-    # async def onboard_processing(self) -> None:
-
     async def onboard_processing(self) -> None:
         """ processes incoming observation data and generates measurement requests if an event is detected """
         try:
@@ -214,9 +212,10 @@ class OracleScienceModule(ScienceModule):
                  logger: Logger = None
                  ) -> None:
         """ 
-        Has prior knowledge of the events that will occurr during the simulation.
-        Compares incomin observations to known events database to determine whether 
-        an event has been detected
+        ## Oracle Science Module
+
+        Has prior knowledge of the events that will occur during the simulation.
+        Compares incoming observations to a predefined list of events to determine whether an event has been observed.
         """
         super().__init__(results_path, parent_name, parent_network_config, logger)
 
@@ -240,13 +239,24 @@ class OracleScienceModule(ScienceModule):
                             and t_start <= t_img <= t_start+duration
                             and instrument.name in measurements
                             ]
+        
+        # sort by severity  
+        observed_events.sort(key= lambda a: a[4])
 
-        if observed_events:
-            # sort by severity
-            observed_events.sort(key= lambda a: a[4])
+        while observed_events:
+            # get next highest severity event
+            event = observed_events.pop()
 
-            # get highest severity event
-            lat_event,lon_event,t_start,duration,severity,observations_str = observed_events[-1]
+            # check if event has already been detected before
+            if event in self.events_detected:
+                # already been detected, skip
+                continue
+            
+            # add event to list of detected events
+            self.events_detected.append(event)
+
+            # unpackage event info
+            lat_event,lon_event,t_start,duration,severity,observations_str = event 
 
             # get list of required observations
             observations_str : str = observations_str.replace('[','')

@@ -107,12 +107,7 @@ class SimulationEnvironment(EnvironmentNode):
                 
                 self.agent_connectivity[src][target] = -1
 
-        # self.measurement_reqs = []
-        # self.initial_reqs = []
-        # for req in measurement_reqs:
-        #     req : MeasurementRequest
-        #     self.initial_reqs.append(req.copy())
-        #     # self.measurement_reqs.append(req.copy())
+        self.measurement_reqs = []
 
         self.stats = {}
         self.events : pd.DataFrame = pd.read_csv(events_path) if events_path is not None else None
@@ -245,19 +240,16 @@ class SimulationEnvironment(EnvironmentNode):
                     self.stats[src].append(dt)
 
                 elif agent_broadcasts in socks:
+                    # check if agents broadcast any information
                     dst, src, content = await self.listen_peer_broadcast()
 
                     if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
+                        # some agent broadcasted a measurement request
                         req_msg = MeasurementRequestMessage(**content)
-                        measurement_req = MeasurementRequest.from_dict(req_msg.req)
+                        measurement_req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
 
-                        if measurement_req.s_max <= 0.0:
-                            continue
-
-                        initial_req_ids = [req.id for req in self.initial_reqs]
-                        gen_req_ids = [req.id for req in self.measurement_reqs]
-                        if (measurement_req.id not in gen_req_ids and measurement_req.id not in initial_req_ids):
-                            self.measurement_reqs.append(measurement_req)
+                        # add to list of received measurement requests 
+                        self.measurement_reqs.append(measurement_req)
 
                 elif manager_socket in socks:
                     # check if manager message is received:
