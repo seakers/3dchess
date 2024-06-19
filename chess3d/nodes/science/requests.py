@@ -8,7 +8,7 @@ class MeasurementRequest(object):
     and requests agents to perform an observatrion with a given set of instruments
 
     ### Attributes:
-        - rqst (`str`): name of agent requesting the observations
+        - requester (`str`): name of agent requesting the observations
         - target (`list`): location of the target area of interest expressed in [lat[deg], lon[deg], alt[km]]
         - severity (`float`): severity of the event being measured
         - observation_types (`list`): measurement types required to perform this task
@@ -18,7 +18,7 @@ class MeasurementRequest(object):
         - id (`str`) : identifying number for this task in uuid format
     """        
     def __init__(self, 
-                 rqst : str,
+                 requester : str,
                  target : list,
                  severity : float,
                  observations_types : list,
@@ -32,17 +32,18 @@ class MeasurementRequest(object):
         Creates an instance of a measurement request 
 
         ### Arguments:
+            - requester (`str`): name of agent requesting the observations
             - target (`list`): location of the target area of interest expressed in [lat[deg], lon[deg], alt[km]]
-            - severity (`float`): maximum score attained from performing this task
-            - observations_types (`list`): measurement types required to perform this task
+            - severity (`float`): severity of the event being measured
+            - observation_types (`list`): measurement types of observations required to perform this task
             - t_start (`float`): start time of the availability of this task in [s] from the beginning of the simulation
             - t_end (`float`): end time of the availability of this task in [s] from the beginning of the simulation
-            - t_corr (`float`): maximum decorralation time between measurements of different measurements
+            - t_corr (`float`): maximum decorralation time between different observations
             - id (`str`) : identifying number for this task in uuid format
         """
         # check arguments 
-        if not isinstance(rqst, str):
-            raise ValueError(f'`rqst` must be of type `str`. Is of type {type(rqst)}.')
+        if not isinstance(requester, str):
+            raise ValueError(f'`rqst` must be of type `str`. Is of type {type(requester)}.')
         if not isinstance(target, list):
             raise ValueError(f'`target` must be of type `list`. is of type {type(target)}.')
         if any([not isinstance(target_val, float) and not isinstance(target_val, int) for target_val in target]):
@@ -64,7 +65,7 @@ class MeasurementRequest(object):
         if t_corr < 0:      raise ValueError(f"`t_corr` must have a non-negative value.")
         
         # initialize attributes
-        self.rqst = rqst
+        self.requester = requester
         self.target = [target_val for target_val in target]
         self.severity = severity
         self.observations_types = [obs_type for obs_type in observations_types]    

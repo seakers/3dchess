@@ -3,19 +3,17 @@ import logging
 from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
-import pandas as pd
 
 from chess3d.messages import ClockConfig
 from messages import *
 
-from nodes.planning.plan import Plan
 from nodes.orbitdata import OrbitData, TimeInterval
 from nodes.states import *
 from nodes.actions import *
 from chess3d.nodes.science.requests import *
 from nodes.states import SimulationAgentState
 from nodes.orbitdata import OrbitData
-from nodes.planning.preplanners import AbstractPreplanner
+from nodes.planning.planners import AbstractPreplanner
 
 class NaivePlanner(AbstractPreplanner):
     def __init__(self, 
@@ -26,20 +24,6 @@ class NaivePlanner(AbstractPreplanner):
         """ Schedules observations based on the earliest feasible access point and broadcasts plan to all agents in the network """
         super().__init__(horizon, period, logger)
 
-    @runtime_tracker
-    def update_percepts(self, 
-                        state : SimulationAgentState,
-                        current_plan : Plan,
-                        incoming_reqs: list, 
-                        relay_messages: list, 
-                        misc_messages : list,
-                        completed_actions: list,
-                        aborted_actions : list,
-                        pending_actions : list
-                        ) -> None:
-        
-        super().update_percepts(incoming_reqs, relay_messages, completed_actions)
-    
     @runtime_tracker
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
