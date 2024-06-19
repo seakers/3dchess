@@ -53,7 +53,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.results_path : str = os.path.join(results_path, self.get_element_name().lower())
 
         # load observation data
-        self.orbitdata = OrbitData.from_directory(scenario_path)
+        self.orbitdata : dict = OrbitData.from_directory(scenario_path)
 
         # load agent names and classify by type of agent
         self.agents = {}
@@ -115,7 +115,7 @@ class SimulationEnvironment(EnvironmentNode):
         #     # self.measurement_reqs.append(req.copy())
 
         self.stats = {}
-        self.events = pd.read_csv(events_path)
+        self.events : pd.DataFrame = pd.read_csv(events_path) if events_path is not None else None
 
         self.t_0 = None
         self.t_f = None
@@ -429,8 +429,8 @@ class SimulationEnvironment(EnvironmentNode):
             # print final time
             self.log(f'Environment shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
             
-            # print received measurements
-            headers = None
+            # count observations performed
+            columns = None
             data = []
             for msg in self.observation_history:
                 msg : ObservationResultsMessage
@@ -438,41 +438,69 @@ class SimulationEnvironment(EnvironmentNode):
                 observer = msg.dst
 
                 for obs in observation_data:
-                
-                    if headers is None:
-                        headers = [key for key in obs]
-                        headers.insert(0, 'observer')
-                        
-                    obs['observer'] = observer
-                    line_data = [obs[key] for key in headers]
-
-                    data.append(line_data)
-
-            observations_performed_df = DataFrame(data, columns=headers)
-
-            # count total number of events in the simulation
-            if self.events is not None:
-                n_events = len(self.events.values)
-                
-
-                events_observed = []
-                for lat,lon,t_start,duration,severity,measurements in self.events.values:
                     
-                    matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument)
-                                             for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed_df.values
+                    # find column names 
+                    if columns is None:
+                        columns = [key for key in obs]
+                        columns.insert(0, 'observer')
+                        
+                    # add observation to data list
+                    obs['observer'] = observer
+                    data.append([obs[key] for key in columns])
+
+            observations_performed = DataFrame(data, columns=columns)
+
+            if self.events is not None: # events present in the simulation
+                # initalize list of events observed
+                events_observed = []
+                
+                # count total number of events in the simulation
+                for lat,lon,t_start,duration,severity,observations_req in self.events.values:
+                    
+                    # find observations that overlooked a given event's location
+                    matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
+                                             for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
                                              if abs(lat - lat_img) < 1e-3 
                                             and abs(lon - lon_img) < 1e-3
                                             and t_start <= t_img <= t_start+duration
-                                            and instrument in measurements  #TODO include better reasoning!
-                                             ]
-                    
+                                            and instrument in observations_req  #TODO include better reasoning!
+                                             ]                    
 
+                    # check if observations were found
                     if matching_observations:
+                        # add to list of observed events
                         events_observed.append(matching_observations)
 
+                # count number of events
+                n_events = len(self.events.values)                
+
+                # count number of observed events
                 n_events_obs = len(events_observed)
 
-            n_events_detected = 0 # TODO :counts number of measurement requests triggered
+                # count number of co-observed events 
+                n_events_partially_co_obs = 0
+                n_events_fully_co_obs = 0
+                for matching_observations in events_observed:
+                    # ge required measurements for a given event
+                    *_,observations_req = matching_observations[-1]
+                    observations_req : str 
+                    observations_req = observations_req.replace('[','')
+                    observations_req = observations_req.replace(']','')
+                    observations_req = observations_req.split(',')
+
+                    observations = {instrument for *_, instrument, _ in matching_observations}
+                    if all([obs in observations_req for obs in observations]) and len(observations) == len(observations_req):
+                        n_events_fully_co_obs += 1
+                    else:
+                        n_events_partially_co_obs += 1
+
+            else: # no events present in the simulation
+                n_events = 0
+                n_events_obs = 0
+                n_events_partially_co_obs = 0
+                n_events_fully_co_obs = 0
+
+            n_events_detected = 0 # TODO: counts number of measurement requests triggered
 
             # # calculate utility achieved by measurements
             # utility_total = 0.0
@@ -577,8 +605,26 @@ class SimulationEnvironment(EnvironmentNode):
 
             #     n_obervations_pos += len(observable_measurements)
 
-            # TODO calculate coverage metrics
-            
+            # calculate coverage metrics          
+
+            # join all coverage metrics 
+            consolidated_orbitdata = None
+
+            for _,agent_orbitdata in self.orbitdata.items():
+                agent_orbitdata : OrbitData
+                if consolidated_orbitdata is None:
+                    consolidated_orbitdata : OrbitData = agent_orbitdata.copy()
+                    consolidated_orbitdata.agent_name = 'all'
+                    continue
+
+                consolidated_orbitdata.gp_access_data = pd.concat([consolidated_orbitdata.gp_access_data, agent_orbitdata.gp_access_data],
+                                                                   axis=0)
+                x = 1
+
+            if consolidated_orbitdata is not None:
+                x = 1
+            else: 
+                x = 1
 
             # Generate summary
             summary_headers = ['stat_name', 'val']
@@ -591,17 +637,16 @@ class SimulationEnvironment(EnvironmentNode):
                         # ['n_obs_unique_max', n_obervations_max],
                         # ['n_obs_unique_pos', n_obervations_pos],
                         # ['n_obs_unique', len(unique_observations)],
-                        # ['n_obs_co', len(co_observations)],
+                        ['n_obs_fully_co', n_events_fully_co_obs],
+                        ['n_obs_partially_co', n_events_partially_co_obs],
+                        ['n_obs_co', n_events_fully_co_obs + n_events_partially_co_obs],
                         ['n_obs', len(self.observation_history)],
-                        # ['u_max', max_utility], 
-                        # ['u_total', utility_total],
-                        # ['u_norm', utility_total/max_utility],
                         ['t_runtime', self.t_f - self.t_0]
                     ]
 
             # log and save results
-            self.log(f"MEASUREMENTS RECEIVED:\n{str(observations_performed_df)}\n\n", level=logging.WARNING)
-            observations_performed_df.to_csv(f"{self.results_path}/measurements.csv", index=False)
+            self.log(f"MEASUREMENTS RECEIVED:\n{str(observations_performed)}\n\n", level=logging.WARNING)
+            observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
 
             summary_df = DataFrame(summary_data, columns=summary_headers)
             self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)
@@ -609,7 +654,7 @@ class SimulationEnvironment(EnvironmentNode):
 
             # log performance stats
             n_decimals = 3
-            headers = ['routine','t_avg','t_std','t_med','n']
+            columns = ['routine','t_avg','t_std','t_med','n']
             data = []
 
             for routine in self.stats:
@@ -627,14 +672,14 @@ class SimulationEnvironment(EnvironmentNode):
                                 ]
                 data.append(line_data)
 
-            stats_df = pd.DataFrame(data, columns=headers)
+            stats_df = pd.DataFrame(data, columns=columns)
             self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
             stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
         
         except asyncio.CancelledError as e:
             raise e
         except Exception as e:
-            print(e.with_traceback())
+            print(e)
             raise e
 
     async def sim_wait(self, delay: float) -> None:

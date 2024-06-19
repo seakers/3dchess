@@ -1,8 +1,0 @@
-stat_name,val
-t_start,2020-01-01 00:00:00+00:00
-t_end,2020-01-01 02:24:00+00:00
-n_events,790
-n_events_detected,0
-n_events_obs,1
-n_obs,269
-t_runtime,18.038998292999167

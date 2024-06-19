@@ -123,6 +123,17 @@ class OrbitData:
         # grid information
         self.grid_data = grid_data
     
+    def copy(self) -> object:
+        return OrbitData(self.agent_name, 
+                         {'time step': self.time_step, 'epoc type' : self.epoc_type, 'epoc' : self.epoc},
+                         self.eclipse_data,
+                         self.position_data,
+                         self.isl_data,
+                         self.gs_access_data,
+                         self.gp_access_data,
+                         self.grid_data
+                         )
+    
     """
     GET NEXT methods
     """
