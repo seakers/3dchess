@@ -360,7 +360,7 @@ class AbstractPlanner(ABC):
                 if dt_maneuver - dt_measurements >= 1e-9:
                     # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
                     return False
-            
+                            
             # if all measurements passed the check; measurement path
             return True
         else:

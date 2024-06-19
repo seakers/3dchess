@@ -505,8 +505,92 @@ class SimulationEnvironment(EnvironmentNode):
                 n_events_partially_co_obs = 0
                 n_events_fully_co_obs = 0
 
-            n_events_detected = 0 # TODO: counts number of measurement requests triggered
+            # TODO count number of measurement requests triggered
+            n_events_detected = 0 
 
+            # TODO improve performance or load precomputed vals
+            n_gps, n_gps_accessible, n_gps_visible_ptg = 0.0, 0.0, np.NAN
+            # # compile coverage calcs 
+            # consolidated_orbitdata = None
+
+            # for _,agent_orbitdata in self.orbitdata.items():
+            #     agent_orbitdata : OrbitData
+            #     if consolidated_orbitdata is None:
+            #         consolidated_orbitdata : OrbitData = agent_orbitdata.copy()
+            #         consolidated_orbitdata.agent_name = 'all'
+            #         continue
+
+            #     consolidated_orbitdata.gp_access_data = pd.concat([consolidated_orbitdata.gp_access_data, agent_orbitdata.gp_access_data],
+            #                                                        axis=0)
+
+            # calculate coverage metrics          
+            # if consolidated_orbitdata is not None:
+            #     n_gps, n_gps_accessible, n_gps_visible_ptg = consolidated_orbitdata.calculate_percent_coverage() 
+            # else: 
+            #     n_gps, n_gps_accessible, n_gps_visible_ptg = 0.0, 0.0, np.NAN
+
+            # count number of GPs observed
+            gps_observed : set = {(lat,lon) for _,_,lat,lon,*_ in observations_performed.values}
+            n_gps_observed = len(gps_observed)
+
+            # Generate summary
+            summary_headers = ['stat_name', 'val']
+            summary_data = [
+                        ['t_start', self._clock_config.start_date], 
+                        ['t_end', self._clock_config.end_date], 
+                        ['n_events', n_events],
+                        ['n_gps', n_gps],
+                        ['n_gps_accessible', n_gps_accessible],
+                        ['n_gps_visible_ptg', n_gps_visible_ptg],
+                        ['n_gps_obs', n_gps_observed],
+                        ['n_events_obs', n_events_obs],
+                        ['n_event_partially_co_obs', n_events_partially_co_obs],
+                        ['n_events_fully_co_obs', n_events_fully_co_obs],
+                        ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
+                        ['n_events_detected', n_events_detected],
+                        ['t_runtime', self.t_f - self.t_0]
+                    ]
+
+            # log and save results
+            self.log(f"MEASUREMENTS RECEIVED:\n{str(observations_performed)}\n\n", level=logging.WARNING)
+            observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
+
+            summary_df = DataFrame(summary_data, columns=summary_headers)
+            self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)
+            summary_df.to_csv(f"{self.results_path}/../summary.csv", index=False)
+
+            # log performance stats
+            n_decimals = 3
+            columns = ['routine','t_avg','t_std','t_med','n']
+            data = []
+
+            for routine in self.stats:
+                n = len(self.stats[routine])
+                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+
+                line_data = [ 
+                                routine,
+                                t_avg,
+                                t_std,
+                                t_median,
+                                n
+                                ]
+                data.append(line_data)
+
+            stats_df = pd.DataFrame(data, columns=columns)
+            self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+            stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
+        
+        except asyncio.CancelledError as e:
+            raise e
+        except Exception as e:
+            print('\n','\n','\n')
+            print(e.with_traceback())
+            raise e
+        
+    
             # # calculate utility achieved by measurements
             # utility_total = 0.0
             # max_utility = 0.0
@@ -609,83 +693,6 @@ class SimulationEnvironment(EnvironmentNode):
             #             break
 
             #     n_obervations_pos += len(observable_measurements)
-
-            # calculate coverage metrics          
-
-            # join all coverage metrics 
-            consolidated_orbitdata = None
-
-            for _,agent_orbitdata in self.orbitdata.items():
-                agent_orbitdata : OrbitData
-                if consolidated_orbitdata is None:
-                    consolidated_orbitdata : OrbitData = agent_orbitdata.copy()
-                    consolidated_orbitdata.agent_name = 'all'
-                    continue
-
-                consolidated_orbitdata.gp_access_data = pd.concat([consolidated_orbitdata.gp_access_data, agent_orbitdata.gp_access_data],
-                                                                   axis=0)
-                x = 1
-
-            if consolidated_orbitdata is not None:
-                x = 1
-            else: 
-                x = 1
-
-            # Generate summary
-            summary_headers = ['stat_name', 'val']
-            summary_data = [
-                        ['t_start', self._clock_config.start_date], 
-                        ['t_end', self._clock_config.end_date], 
-                        ['n_events', n_events],
-                        ['n_events_detected', n_events_detected],
-                        ['n_events_obs', n_events_obs],
-                        # ['n_obs_unique_max', n_obervations_max],
-                        # ['n_obs_unique_pos', n_obervations_pos],
-                        # ['n_obs_unique', len(unique_observations)],
-                        ['n_obs_fully_co', n_events_fully_co_obs],
-                        ['n_obs_partially_co', n_events_partially_co_obs],
-                        ['n_obs_co', n_events_fully_co_obs + n_events_partially_co_obs],
-                        ['n_obs', len(self.observation_history)],
-                        ['t_runtime', self.t_f - self.t_0]
-                    ]
-
-            # log and save results
-            self.log(f"MEASUREMENTS RECEIVED:\n{str(observations_performed)}\n\n", level=logging.WARNING)
-            observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
-
-            summary_df = DataFrame(summary_data, columns=summary_headers)
-            self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)
-            summary_df.to_csv(f"{self.results_path}/../summary.csv", index=False)
-
-            # log performance stats
-            n_decimals = 3
-            columns = ['routine','t_avg','t_std','t_med','n']
-            data = []
-
-            for routine in self.stats:
-                n = len(self.stats[routine])
-                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
-                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
-                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
-
-                line_data = [ 
-                                routine,
-                                t_avg,
-                                t_std,
-                                t_median,
-                                n
-                                ]
-                data.append(line_data)
-
-            stats_df = pd.DataFrame(data, columns=columns)
-            self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-            stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
-        
-        except asyncio.CancelledError as e:
-            raise e
-        except Exception as e:
-            print(e)
-            raise e
 
     async def sim_wait(self, delay: float) -> None:
         try:

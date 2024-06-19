@@ -4,6 +4,7 @@ import json
 import os
 import random
 import re
+import time
 from orbitpy.mission import Mission
 import pandas as pd
 import numpy as np
@@ -866,6 +867,43 @@ class OrbitData:
 
         # return address
         return grid_path
+    
+    """
+    COVERAGE Metrics
+    """
+    def calculate_percent_coverage(self) -> float:
+        n_observed = 0
+        n_points = sum([len(grid) for grid in self.grid_data])
+        t_0 = time.perf_counter()
+
+        # for grid in self.grid_data:
+        #     grid : pd.DataFrame
+
+        #     for lat,lon,grid_index,gp_index in grid.values:
+
+        #         accesses = [(t_img,lat,lon,lat_img,lon_img)
+        #                     for t_img, gp_index_img, _, lat_img, lon_img, _, _, _, _, grid_index_img, *_ 
+        #                     in self.gp_access_data.values
+        #                     if abs(lat - lat_img) < 1e-3
+        #                     and abs(lon - lon_img) < 1e-3
+        #                     and gp_index == gp_index_img 
+        #                     and grid_index == grid_index_img]
+                
+        #         if accesses:
+        #             n_observed += 1
+
+        gp_observed = { (lat,lon) 
+                        for grid in self.grid_data
+                        for lat,lon,grid_index,gp_index in grid.values
+                        for _, gp_index_img, _, _, _, _, _, _, _, grid_index_img, *_ in self.gp_access_data.values
+                        if gp_index == gp_index_img 
+                        and grid_index == grid_index_img}
+        n_observed = len(gp_observed)
+        
+        dt = time.perf_counter() - t_0        
+        
+        return n_points, n_observed, float(n_observed) / float(n_points)
+
 
 """
 TESTING
