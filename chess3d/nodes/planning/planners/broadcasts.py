@@ -4,7 +4,7 @@ from dmas.utils import runtime_tracker
 
 from chess3d.messages import MeasurementRequestMessage
 from chess3d.nodes.planning.plan import Plan
-from chess3d.nodes.planning.planners import AbstractReplanner
+from chess3d.nodes.planning.planner import AbstractReplanner
 from chess3d.nodes.science.requests import MeasurementRequest
 from chess3d.nodes.states import SimulationAgentState
 

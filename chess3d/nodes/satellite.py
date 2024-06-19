@@ -1,6 +1,6 @@
 import logging
 from nodes.science.science import ScienceModule
-from nodes.planning.planner import PlanningModule
+from chess3d.nodes.planning.module import PlanningModule
 from nodes.agent import SimulationAgentState
 from dmas.network import NetworkConfig
 from nodes.agent import SimulationAgent

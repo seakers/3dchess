@@ -5,8 +5,8 @@ from dmas.modules import *
 from dmas.utils import runtime_tracker
 
 from nodes.planning.plan import Plan, Preplan
-from nodes.planning.preplanners import AbstractPreplanner
-from nodes.planning.replanners import AbstractReplanner
+from nodes.planning.planner import AbstractPreplanner
+from nodes.planning.planner import AbstractReplanner
 from nodes.orbitdata import OrbitData
 from nodes.states import *
 from chess3d.nodes.science.requests import *

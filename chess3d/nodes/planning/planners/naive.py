@@ -13,7 +13,7 @@ from nodes.actions import *
 from chess3d.nodes.science.requests import *
 from nodes.states import SimulationAgentState
 from nodes.orbitdata import OrbitData
-from nodes.planning.planners import AbstractPreplanner
+from chess3d.nodes.planning.planner import AbstractPreplanner
 
 class NaivePlanner(AbstractPreplanner):
     def __init__(self, 

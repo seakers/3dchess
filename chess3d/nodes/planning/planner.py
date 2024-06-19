@@ -1,7 +1,6 @@
 
 import math
 import queue
-from typing import Callable, Any
 
 from nodes.planning.plan import Plan, Preplan
 from nodes.orbitdata import OrbitData, TimeInterval
@@ -10,12 +9,12 @@ from chess3d.nodes.science.requests import *
 from messages import *
 from dmas.modules import *
 from dmas.utils import runtime_tracker
-import pandas as pd
-
 
 class AbstractPlanner(ABC):
+    """ 
+    Describes a generic planner that, given a new set of percepts, decides whether to generate a new plan
+    """
     def __init__(self, logger : logging.Logger = None) -> None:
-        
         # initialize object
         super().__init__()
 
@@ -439,7 +438,6 @@ class AbstractPreplanner(AbstractPlanner):
         Creates an instance of a preplanner class object.
 
         #### Arguments:
-            - utility_func (`Callable`): desired utility function for evaluating observations
             - horizon (`float`) : planning horizon in seconds [s]
             - period (`float`) : period of replanning in seconds [s]
             - logger (`logging.Logger`) : debugging logger

@@ -12,8 +12,8 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.nodes.orbitdata import OrbitData
-from chess3d.nodes.planning.planner import PlanningModule
-from chess3d.nodes.planning.naive.preplanner import NaivePlanner
+from chess3d.nodes.planning.module import PlanningModule
+from chess3d.nodes.planning.planners.naive import NaivePlanner
 from chess3d.nodes.satellite import SatelliteAgent
 from chess3d.nodes.science.science import OracleScienceModule
 from chess3d.nodes.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
