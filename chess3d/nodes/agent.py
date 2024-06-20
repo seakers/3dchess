@@ -4,16 +4,17 @@ import numpy as np
 from pandas import DataFrame
 
 from instrupy.base import Instrument
+
+from dmas.agents import *
+from dmas.network import NetworkConfig
+from dmas.utils import runtime_tracker
+
 from chess3d.nodes.states import SimulationAgentState
 from chess3d.nodes.science.requests import MeasurementRequest
 from chess3d.nodes.planning.module import PlanningModule
 from chess3d.nodes.science.science import ScienceModule
 from chess3d.nodes.actions import *
-from dmas.agents import *
-from dmas.network import NetworkConfig
-from dmas.utils import runtime_tracker
-
-from messages import *
+from chess3d.messages import *
 
 class SimulationAgent(Agent):
     """

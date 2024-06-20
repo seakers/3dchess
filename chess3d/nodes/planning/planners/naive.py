@@ -4,16 +4,14 @@ from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from chess3d.messages import ClockConfig
-from messages import *
-
-from nodes.orbitdata import OrbitData, TimeInterval
-from nodes.states import *
-from nodes.actions import *
+from chess3d.nodes.orbitdata import OrbitData, TimeInterval
+from chess3d.nodes.states import *
+from chess3d.nodes.actions import *
 from chess3d.nodes.science.requests import *
-from nodes.states import SimulationAgentState
-from nodes.orbitdata import OrbitData
+from chess3d.nodes.states import SimulationAgentState
+from chess3d.nodes.orbitdata import OrbitData
 from chess3d.nodes.planning.planner import AbstractPreplanner
+from chess3d.messages import *
 
 class NaivePlanner(AbstractPreplanner):
     def __init__(self, 

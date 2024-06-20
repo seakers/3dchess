@@ -1,12 +1,14 @@
 import logging
 import math
 import os
+import numpy as np
+import pandas as pd
+
 from dmas.clocks import ClockConfig
 from dmas.elements import ClockConfig, NetworkConfig, logging
 from dmas.managers import *
-import numpy as np
-import pandas as pd
-from messages import *
+
+from chess3d.messages import *
 
 class SimulationManager(AbstractManager):
     """

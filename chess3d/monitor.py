@@ -1,12 +1,10 @@
 import asyncio
 import logging
-import random
-
 import zmq
+
 from dmas.clocks import ClockConfig
 from dmas.elements import SimulationElement
 from dmas.messages import ManagerMessageTypes, SimulationElementRoles
-from dmas.network import NetworkConfig
 
 class ResultsMonitor(SimulationElement):
     def __init__(self, clock_config : ClockConfig, monitor_network_config : int, level: int = logging.INFO, logger: logging.Logger = None) -> None:

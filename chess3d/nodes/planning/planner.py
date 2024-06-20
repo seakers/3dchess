@@ -2,13 +2,14 @@
 import math
 import queue
 
-from nodes.planning.plan import Plan, Preplan
-from nodes.orbitdata import OrbitData, TimeInterval
-from nodes.states import *
-from chess3d.nodes.science.requests import *
-from messages import *
 from dmas.modules import *
 from dmas.utils import runtime_tracker
+
+from chess3d.nodes.planning.plan import Plan, Preplan
+from chess3d.nodes.orbitdata import OrbitData, TimeInterval
+from chess3d.nodes.states import *
+from chess3d.nodes.science.requests import *
+from chess3d.messages import *
 
 class AbstractPlanner(ABC):
     """ 
@@ -19,10 +20,10 @@ class AbstractPlanner(ABC):
         super().__init__()
 
         # initialize attributes
-        self.known_reqs = set()
-        self.pending_relays = set()
-        self.completed_broadcasts = set()
-        self.stats = {}
+        self.known_reqs = set()             # set of known measurement requests
+        self.pending_relays = set()         # set of relay messages to be broadcasted
+        self.completed_broadcasts = set()   # set of completed broadcasts
+        self.stats = {}                     # collector for runtime performance statistics
         
         # set attribute parameters
         self._logger = logger               # logger for debugging
@@ -72,8 +73,7 @@ class AbstractPlanner(ABC):
         """ 
         Schedules any broadcasts to be done. 
         
-        By default it schedules the broadcast of any newly generated requests
-        and the relay of any incoming relay messages
+        By default it schedules the relaying of any incoming relay messages
         """
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Broadcast scheduling for agents of type `{type(state)}` not yet implemented.')
@@ -82,31 +82,6 @@ class AbstractPlanner(ABC):
 
         # initialize list of broadcasts to be done
         broadcasts = []       
-
-        # schedule generated measurement request broadcasts
-        ## check which requests have not been broadcasted yet
-        requests_broadcasted = [msg.req['id'] 
-                                for msg in self.completed_broadcasts 
-                                if isinstance(msg, MeasurementRequestMessage)]
-        requests_to_broadcast = [req 
-                                 for req in self.known_reqs
-                                 if isinstance(req, MeasurementRequest)
-                                 and req.requester == state.agent_name
-                                 and req.id not in requests_broadcasted]
-
-        if requests_to_broadcast:
-            # find best path for broadcasts
-            path, t_start = self._create_broadcast_path(state, orbitdata)
-
-            # check feasibility of path found
-            if t_start >= 0:
-                # create a broadcast action for all unbroadcasted measurement requests
-                for req in requests_to_broadcast:        
-                    # if found, create broadcast action
-                    msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-                    
-                    broadcasts.append(broadcast_action)
 
         # schedule message relay
         relay_broadcasts = [self._schedule_relay(relay) for relay in self.pending_relays]

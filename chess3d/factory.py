@@ -13,6 +13,7 @@ from dmas.clocks import *
 
 from chess3d.nodes.orbitdata import OrbitData
 from chess3d.nodes.planning.module import PlanningModule
+from chess3d.nodes.planning.planners.broadcaster import Broadcaster
 from chess3d.nodes.planning.planners.naive import NaivePlanner
 from chess3d.nodes.satellite import SatelliteAgent
 from chess3d.nodes.science.science import OracleScienceModule
@@ -113,11 +114,12 @@ class SimulationFactory:
         ## load planner module
         if planner_dict is not None:
             planner_dict : dict
-        #     utility_func = utility_function[planner_dict.get('utility', 'NONE')]
             
             preplanner_dict = planner_dict.get('preplanner', None)
             if isinstance(preplanner_dict, dict):
                 preplanner_type : str = preplanner_dict.get('@type', None)
+                if preplanner_type is None: raise ValueError(f'preplanner type within planner module not specified in input file.')
+
                 period = preplanner_dict.get('period', np.Inf)
                 horizon = preplanner_dict.get('horizon', np.Inf)
 
@@ -128,15 +130,13 @@ class SimulationFactory:
             else:
                 preplanner = None
 
-            replanner = None
+            replanner_dict = planner_dict.get('replanner', None)
+            if isinstance(replanner_dict, dict):
+                replanner_type : str = replanner_dict.get('@type', None)
+                if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
 
-            # replanner_dict = planner_dict.get('replanner', None)
-            # if isinstance(replanner_dict, dict):
-        #         replanner_type = replanner_dict.get('@type', None)
-                
-        #         if replanner_type == 'FIFO':
-        #             collaboration = replanner_dict.get('collaboration', "False") == "True"
-        #             replanner = FIFOReplanner(utility_func, collaboration)
+                if replanner_type.lower() == 'broadcaster':
+                    replanner = Broadcaster(logger)
 
         #         # elif replanner_type == 'ACBBA': #TODO
         #         #     max_bundle_size = replanner_dict.get('bundle size', 3)
@@ -147,15 +147,15 @@ class SimulationFactory:
 
         #         #     replanner = ACBBAReplanner(utility_func, max_bundle_size, dt_converge, period, threshold, horizon)
                 
-        #         else:
-        #             raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
-        #     else:
-        #         # replanner = None
-        #         replanner = RelayReplanner()
-        # else:
-        #     preplanner, replanner, utility_func = None, None, 'NONE'
+                else:
+                    raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
+            else:
+                # replanner = None
+                replanner = None
+        else:
+            preplanner, replanner, = None, None
         
-
+        # create planning module
         planner = PlanningModule(   results_path, 
                                     agent_name, 
                                     agent_network_config, 

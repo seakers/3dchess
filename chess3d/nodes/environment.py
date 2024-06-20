@@ -5,9 +5,9 @@ import time
 from typing import Any, Callable
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
 from zmq import asyncio as azmq
 
-from pandas import DataFrame
 from instrupy.base import Instrument
 from instrupy.base import BasicSensorModel
 from instrupy.util import SphericalGeometry, ViewGeometry
@@ -450,6 +450,7 @@ class SimulationEnvironment(EnvironmentNode):
             if self.events is not None: # events present in the simulation
                 # initalize list of events observed
                 events_observed = []
+                events_detected = []
                 
                 # count total number of events in the simulation
                 for lat,lon,t_start,duration,severity,observations_req in self.events.values:
@@ -467,6 +468,19 @@ class SimulationEnvironment(EnvironmentNode):
                     if matching_observations:
                         # add to list of observed events
                         events_observed.append(matching_observations)
+
+                    # find measurement requests that match the event bieng
+                    matching_requests = [req
+                                         for req in self.measurement_reqs
+                                         if isinstance(req, MeasurementRequest)
+                                         and abs(lat - req.target[0]) < 1e-3 
+                                         and abs(lon - req.target[1]) < 1e-3
+                                         and t_start <= req.t_start <= req.t_end <= t_start+duration
+                                         and all([instrument in observations_req for instrument in req.observations_types])
+                                        ]
+
+                    if matching_requests:
+                        events_detected.append(matching_requests)
 
                 # count number of events
                 n_events = len(self.events.values)                
@@ -491,17 +505,22 @@ class SimulationEnvironment(EnvironmentNode):
                     else:
                         n_events_partially_co_obs += 1
 
+                # count number of events detected
+                n_events_detected = len(events_detected)
+
             else: # no events present in the simulation
                 n_events = 0
                 n_events_obs = 0
                 n_events_partially_co_obs = 0
                 n_events_fully_co_obs = 0
+                n_events_detected = 0   
 
             # TODO count number of measurement requests triggered
-            n_events_detected = 0 
+
 
             # TODO improve performance or load precomputed vals
             n_gps, n_gps_accessible, n_gps_access_ptg = np.NAN, np.NAN, np.NAN
+            
             # # compile coverage calcs 
             # consolidated_orbitdata = None
 

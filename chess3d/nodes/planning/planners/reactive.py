@@ -1,25 +1,5 @@
     
 
-
-#     def generate_plan(  self, 
-#                         state : SimulationAgentState,
-#                         current_plan : Plan,
-#                         completed_actions : list,
-#                         aborted_actions : list,
-#                         pending_actions : list,
-#                         incoming_reqs : list,
-#                         generated_reqs : list,
-#                         relay_messages : list,
-#                         misc_messages : list,
-#                         clock_config : ClockConfig,
-#                         orbitdata : dict = None
-#                     ) -> Plan:
-        
-#         # initialize list of broadcasts to be done
-#         broadcasts = self._schedule_broadcasts(state, None, orbitdata)
-                                                
-#         # update and return plan with new broadcasts
-#         return Replan.from_preplan(current_plan, broadcasts, t=state.t)
         
 # class ReactivePlanner(AbstractReplanner):    
 #     def generate_plan(self, 

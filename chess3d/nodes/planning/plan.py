@@ -1,8 +1,9 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 import uuid
 import numpy as np
-from nodes.actions import AgentAction
-from nodes.actions import *
+
+from chess3d.nodes.actions import AgentAction
+from chess3d.nodes.actions import *
 
 
 class Plan(ABC):

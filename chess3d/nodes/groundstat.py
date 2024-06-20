@@ -1,14 +1,15 @@
 import asyncio
 import logging
 from typing import Any, Callable
-from nodes.planning.preplanners import FIFOPreplanner, IdlePlanner
-from chess3d.nodes.planning.module import PlanningModule
-from chess3d.nodes.science.requests import *
-from dmas.network import NetworkConfig
-from nodes.science.science import ScienceModule
-from nodes.agent import SimulationAgentState, SimulationAgent
 import pandas as pd
 import zmq
+
+from dmas.network import NetworkConfig
+
+from chess3d.nodes.planning.module import PlanningModule
+from chess3d.nodes.science.requests import *
+from chess3d.nodes.science.science import ScienceModule
+from chess3d.nodes.agent import SimulationAgentState, SimulationAgent
 
 class GroundStationAgent(SimulationAgent):
     def __init__(self, 
@@ -55,8 +56,7 @@ class GroundStationAgent(SimulationAgent):
 											})
 
         
-        # preplanner = None # TODO implement request broadcast planner
-        preplanner = IdlePlanner()
+        preplanner = None # TODO implement request broadcast planner
         
         planning_module = PlanningModule(results_path, 
                                         agent_name,

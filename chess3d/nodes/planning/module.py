@@ -1,16 +1,15 @@
-from typing import Any, Callable
 import pandas as pd
 
 from dmas.modules import *
 from dmas.utils import runtime_tracker
 
-from nodes.planning.plan import Plan, Preplan
-from nodes.planning.planner import AbstractPreplanner
-from nodes.planning.planner import AbstractReplanner
-from nodes.orbitdata import OrbitData
-from nodes.states import *
+from chess3d.nodes.planning.plan import Plan, Preplan
+from chess3d.nodes.planning.planner import AbstractPreplanner
+from chess3d.nodes.planning.planner import AbstractReplanner
+from chess3d.nodes.orbitdata import OrbitData
+from chess3d.nodes.states import *
 from chess3d.nodes.science.requests import *
-from messages import *
+from chess3d.messages import *
 
 class PlanningModule(InternalModule):
     def __init__(self, 
@@ -49,33 +48,8 @@ class PlanningModule(InternalModule):
         self.replanner : AbstractReplanner = replanner
         self.orbitdata : OrbitData = orbitdata
 
-
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
         """ Sets up network configuration for intra-agent module communication """
-        # addresses : dict = parent_network_config.get_internal_addresses()        
-        # sub_addesses = []
-        # sub_address : str = addresses.get(zmq.PUB)[0]
-        # sub_addesses.append( sub_address.replace('*', 'localhost') )
-
-        # if len(addresses.get(zmq.SUB)) > 1:
-        #     sub_address : str = addresses.get(zmq.SUB)[1]
-        #     sub_addesses.append( sub_address.replace('*', 'localhost') )
-
-        # pub_address : str = addresses.get(zmq.SUB)[0]
-        # pub_address = pub_address.replace('localhost', '*')
-
-        # addresses = parent_network_config.get_manager_addresses()
-        # push_address : str = addresses.get(zmq.PUSH)[0]
-
-        # return  NetworkConfig(  parent_name,
-        #                         manager_address_map = {
-        #                             zmq.REQ: [],
-        #                             zmq.SUB: sub_addesses,
-        #                             zmq.PUB: [pub_address],
-        #                             zmq.PUSH: [push_address]
-        #                         }
-        #                     )
-
         # get full list of addresses from parent agent
         addresses : dict = parent_network_config.get_internal_addresses()        
         
@@ -351,16 +325,11 @@ class PlanningModule(InternalModule):
                         # -------------------------------------
 
                         # Modify current Plan      
-                        plan : Plan = self.replanner.generate_plan( state, 
-                                                                    plan,
-                                                                    completed_actions,
-                                                                    aborted_actions,
-                                                                    pending_actions,
-                                                                    incoming_reqs,
-                                                                    relay_messages,
-                                                                    misc_messages,
-                                                                    self._clock_config
-                                                                    )
+                        plan : Plan = self.replanner.generate_plan(state, 
+                                                                   plan,
+                                                                   self._clock_config,
+                                                                   self.orbitdata
+                                                                   )
 
                         # update last time plan was updated
                         self.t_plan = self.get_current_time()
@@ -373,7 +342,7 @@ class PlanningModule(InternalModule):
                         pending_actions = []
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        # self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        self.__log_plan(plan, "REPLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
