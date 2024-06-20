@@ -426,120 +426,17 @@ class SimulationEnvironment(EnvironmentNode):
             # print final time
             self.log(f'Environment shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
             
+            # compile observations performed
+            observations_performed : pd.DataFrame = self.compile_observations()
+
             # count observations performed
-            columns = None
-            data = []
-            for msg in self.observation_history:
-                msg : ObservationResultsMessage
-                observation_data : list = msg.observation_data
-                observer = msg.dst
+            n_events, n_events_obs, n_events_partially_co_obs, \
+                n_events_fully_co_obs, n_events_detected \
+                    = self.count_observations(observations_performed)
 
-                for obs in observation_data:
-                    
-                    # find column names 
-                    if columns is None:
-                        columns = [key for key in obs]
-                        columns.insert(0, 'observer')
-                        
-                    # add observation to data list
-                    obs['observer'] = observer
-                    data.append([obs[key] for key in columns])
-
-            observations_performed = DataFrame(data, columns=columns)
-
-            if self.events is not None: # events present in the simulation
-                # initalize list of events observed
-                events_observed = []
-                events_detected = []
-                
-                # count total number of events in the simulation
-                for lat,lon,t_start,duration,severity,observations_req in self.events.values:
-                    
-                    # find observations that overlooked a given event's location
-                    matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
-                                             for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
-                                             if abs(lat - lat_img) < 1e-3 
-                                            and abs(lon - lon_img) < 1e-3
-                                            and t_start <= t_img <= t_start+duration
-                                            and instrument in observations_req  #TODO include better reasoning!
-                                             ]                    
-
-                    # check if observations were found
-                    if matching_observations:
-                        # add to list of observed events
-                        events_observed.append(matching_observations)
-
-                    # find measurement requests that match the event bieng
-                    matching_requests = [req
-                                         for req in self.measurement_reqs
-                                         if isinstance(req, MeasurementRequest)
-                                         and abs(lat - req.target[0]) < 1e-3 
-                                         and abs(lon - req.target[1]) < 1e-3
-                                         and t_start <= req.t_start <= req.t_end <= t_start+duration
-                                         and all([instrument in observations_req for instrument in req.observations_types])
-                                        ]
-
-                    if matching_requests:
-                        events_detected.append(matching_requests)
-
-                # count number of events
-                n_events = len(self.events.values)                
-
-                # count number of observed events
-                n_events_obs = len(events_observed)
-
-                # count number of co-observed events 
-                n_events_partially_co_obs = 0
-                n_events_fully_co_obs = 0
-                for matching_observations in events_observed:
-                    # ge required measurements for a given event
-                    *_,observations_req = matching_observations[-1]
-                    observations_req : str 
-                    observations_req = observations_req.replace('[','')
-                    observations_req = observations_req.replace(']','')
-                    observations_req = observations_req.split(',')
-
-                    observations = {instrument for *_, instrument, _ in matching_observations}
-                    if all([obs in observations_req for obs in observations]) and len(observations) == len(observations_req):
-                        n_events_fully_co_obs += 1
-                    else:
-                        n_events_partially_co_obs += 1
-
-                # count number of events detected
-                n_events_detected = len(events_detected)
-
-            else: # no events present in the simulation
-                n_events = 0
-                n_events_obs = 0
-                n_events_partially_co_obs = 0
-                n_events_fully_co_obs = 0
-                n_events_detected = 0   
-
-            # TODO count number of measurement requests triggered
-
-
-            # TODO improve performance or load precomputed vals
-            n_gps, n_gps_accessible, n_gps_access_ptg = np.NAN, np.NAN, np.NAN
+            # calculate coverage
+            n_gps, n_gps_accessible, n_gps_access_ptg = self.calc_coverage_metrics()
             
-            # # compile coverage calcs 
-            # consolidated_orbitdata = None
-
-            # for _,agent_orbitdata in self.orbitdata.items():
-            #     agent_orbitdata : OrbitData
-            #     if consolidated_orbitdata is None:
-            #         consolidated_orbitdata : OrbitData = agent_orbitdata.copy()
-            #         consolidated_orbitdata.agent_name = 'all'
-            #         continue
-
-            #     consolidated_orbitdata.gp_access_data = pd.concat([consolidated_orbitdata.gp_access_data, agent_orbitdata.gp_access_data],
-            #                                                        axis=0)
-
-            # calculate coverage metrics          
-            # if consolidated_orbitdata is not None:
-            #     n_gps, n_gps_accessible, n_gps_visible_ptg = consolidated_orbitdata.calculate_percent_coverage() 
-            # else: 
-            #     n_gps, n_gps_accessible, n_gps_visible_ptg = 0.0, 0.0, np.NAN
-
             # count number of GPs observed
             gps_observed : set = {(lat,lon) for _,_,lat,lon,*_ in observations_performed.values}
             n_gps_observed = len(gps_observed)
@@ -601,109 +498,156 @@ class SimulationEnvironment(EnvironmentNode):
             print(e.with_traceback())
             raise e
         
-    
-            # # calculate utility achieved by measurements
-            # utility_total = 0.0
-            # max_utility = 0.0
-            # n_obervations_max = 0
-            # co_observations = []
-            # unique_observations = []
+            
 
-            # measurement_reqs = [req.copy() for req in self.measurement_reqs]
-            # measurement_reqs.extend([req.copy() for req in self.initial_reqs])
-        
-            # for req in measurement_reqs:
-            #     req_id : str = req.id
-            #     req_id_short = req_id.split('-')[0]
-            #     req_measurements = observations_performed_df \
-            #                         .query('@req_id_short == `req_id`')
+    def compile_observations(self) -> pd.DataFrame:
+        columns = None
+        data = []
+        for msg in self.observation_history:
+            msg : ObservationResultsMessage
+            observation_data : list = msg.observation_data
+            observer = msg.dst
 
+            for obs in observation_data:
                 
-            #     req_utility = 0
-            #     for idx, row_i in req_measurements.iterrows():
-            #         t_img_i = row_i['t_img']
-            #         measurement_i = row_i['measurement']                   
+                # find column names 
+                if columns is None:
+                    columns = [key for key in obs]
+                    columns.insert(0, 'observer')
+                    
+                # add observation to data list
+                obs['observer'] = observer
+                data.append([obs[key] for key in columns])
 
-            #         correlated_measurements = []
-            #         for _, row_j in req_measurements.iterrows():
-            #             measurement_j = row_j['measurement']
-            #             t_img_j = row_j['t_img']
+        return DataFrame(data, columns=columns)
 
-            #             if measurement_i == measurement_j:
-            #                 continue
+    def count_observations(self, observations_performed : pd.DataFrame) -> tuple:
+        if self.events is not None: # events present in the simulation
+            # initalize list of events observed
+            events_observed = []
+            events_detected = []
+            
+            # count total number of events in the simulation
+            for lat,lon,t_start,duration,severity,observations_req in self.events.values:
+                
+                # find observations that overlooked a given event's location
+                matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
+                                            for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
+                                            if abs(lat - lat_img) < 1e-3 
+                                        and abs(lon - lon_img) < 1e-3
+                                        and t_start <= t_img <= t_start+duration
+                                        and instrument in observations_req  #TODO include better reasoning!
+                                            ]                    
 
-            #             if abs(t_img_i - t_img_j) <= req.t_corr:
-            #                 correlated_measurements.append( measurement_j )
+                # check if observations were found
+                if matching_observations:
+                    # add to list of observed events
+                    events_observed.append(matching_observations)
 
-            #         subtask_index = None
-            #         while subtask_index == None:
-            #             for main_measurement, dependent_measurements in req.measurement_groups:
-            #                 if (main_measurement == measurement_i 
-            #                     and len(np.setdiff1d(correlated_measurements, dependent_measurements)) == 0):
-            #                     subtask_index = req.measurement_groups.index((main_measurement, dependent_measurements))
-            #                     break
-                        
-            #             if subtask_index == None:
-            #                 correlated_measurements == []
+                # find measurement requests that match the event bieng
+                matching_requests = [req
+                                        for req in self.measurement_reqs
+                                        if isinstance(req, MeasurementRequest)
+                                        and abs(lat - req.target[0]) < 1e-3 
+                                        and abs(lon - req.target[1]) < 1e-3
+                                        and t_start <= req.t_start <= req.t_end <= t_start+duration
+                                        and all([instrument in observations_req for instrument in req.observations_types])
+                                    ]
 
-            #         if len(correlated_measurements) > 0:
-            #             co_observation : list = copy.copy(dependent_measurements)
-            #             co_observation.append(main_measurement)
-            #             co_observation.append(req_id)
-            #             co_observation = set(co_observation) 
+                if matching_requests:
+                    events_detected.append(matching_requests)
 
-            #             if co_observation not in co_observations:
-            #                 co_observations.append(co_observation)
-                                    
-            #         params = {
-            #                     "req" : req.to_dict(), 
-            #                     "subtask_index" : subtask_index,
-            #                     "t_img" : t_img_i
-            #                 }
-            #         utility = self.utility_func(**params) * synergy_factor(**params)
+            # count number of events
+            n_events = len(self.events.values)                
 
-            #         if (req_id_short, measurement_i) not in unique_observations:
-            #             unique_observations.append( (req_id_short, measurement_i) )
-            #             req_utility += utility
+            # count number of observed events
+            n_events_obs = len(events_observed)
 
-            #         observations_performed_df.loc[idx,'u']=utility
+            # count number of co-observed events 
+            n_events_partially_co_obs = 0
+            n_events_fully_co_obs = 0
+            for matching_observations in events_observed:
+                # ge required measurements for a given event
+                *_,observations_req = matching_observations[-1]
+                observations_req : str 
+                observations_req = observations_req.replace('[','')
+                observations_req = observations_req.replace(']','')
+                observations_req = observations_req.split(',')
 
-            #     utility_total += req_utility
-            #     max_utility += req.s_max
-            #     n_obervations_max += len(req.observations_types)
+                observations = {instrument for *_, instrument, _ in matching_observations}
+                if all([obs in observations_req for obs in observations]):
+                    if len(observations) == len(observations_req):
+                        n_events_fully_co_obs += 1
+                    elif len(observations) > 2:
+                        n_events_partially_co_obs += 1
 
-            # # calculate possible number of measurements given coverage metrics
-            # n_obervations_pos = 0
-            # for req in measurement_reqs:
+            # count number of events detected
+            n_events_detected = len(events_detected)
 
-            #     req : MeasurementRequest
-            #     lat,lon,_ = req.target
+        else: # no events present in the simulation
+            n_events = 0
+            n_events_obs = 0
+            n_events_partially_co_obs = 0
+            n_events_fully_co_obs = 0
+            n_events_detected = 0   
 
-            #     observable_measurements = []
-            #     for _, coverage_data in self.orbitdata.items():
-            #         coverage_data : OrbitData
-            #         req_start = req.t_start/coverage_data.time_step
-            #         req_end = req.t_end/coverage_data.time_step
-            #         grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
+        return n_events, n_events_obs, n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected
 
-            #         df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index & `grid index` == @grid_index')
+    def calc_coverage_metrics() -> tuple:
+        # TODO improve performance or load precomputed vals
+        return np.NAN, np.NAN, np.NAN
+            
+        # compile coverage calcs 
+        consolidated_orbitdata = None
 
-            #         # if not df.empty:
-            #         #     print(df['time index'] * coverage_data.time_step)
+        for _,agent_orbitdata in self.orbitdata.items():
+            agent_orbitdata : OrbitData
+            if consolidated_orbitdata is None:
+                consolidated_orbitdata : OrbitData = agent_orbitdata.copy()
+                consolidated_orbitdata.agent_name = 'all'
+                continue
 
-            #         for _, row in df.iterrows():
-            #             instrument : str = row['instrument']
-            #             if (instrument in req.observations_types 
-            #                 and instrument not in observable_measurements):
-            #                 observable_measurements.append(instrument)
+            consolidated_orbitdata.gp_access_data = pd.concat([consolidated_orbitdata.gp_access_data, agent_orbitdata.gp_access_data],
+                                                               axis=0)
 
-            #             if len(observable_measurements) == len(req.observations_types):
-            #                 break
+        # calculate coverage metrics          
+        if consolidated_orbitdata is not None:
+            return consolidated_orbitdata.calculate_percent_coverage() 
+        else: 
+            return np.NAN, np.NAN, np.NAN
+       
+        # # calculate possible number of measurements given coverage metrics
+        # n_obervations_pos = 0
+        # for req in measurement_reqs:
 
-            #         if len(observable_measurements) == len(req.observations_types):
-            #             break
+        #     req : MeasurementRequest
+        #     lat,lon,_ = req.target
 
-            #     n_obervations_pos += len(observable_measurements)
+        #     observable_measurements = []
+        #     for _, coverage_data in self.orbitdata.items():
+        #         coverage_data : OrbitData
+        #         req_start = req.t_start/coverage_data.time_step
+        #         req_end = req.t_end/coverage_data.time_step
+        #         grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
+
+        #         df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index & `grid index` == @grid_index')
+
+        #         # if not df.empty:
+        #         #     print(df['time index'] * coverage_data.time_step)
+
+        #         for _, row in df.iterrows():
+        #             instrument : str = row['instrument']
+        #             if (instrument in req.observations_types 
+        #                 and instrument not in observable_measurements):
+        #                 observable_measurements.append(instrument)
+
+        #             if len(observable_measurements) == len(req.observations_types):
+        #                 break
+
+        #         if len(observable_measurements) == len(req.observations_types):
+        #             break
+
+        #     n_obervations_pos += len(observable_measurements)
 
     async def sim_wait(self, delay: float) -> None:
         try:

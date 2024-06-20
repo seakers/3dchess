@@ -49,7 +49,7 @@ class ScienceModule(InternalModule):
         
         # initialize attributes
         self.events = None
-        self.events_detected = []
+        self.known_reqs = set()
 
         # assign parameters
         self.results_path = results_path
@@ -60,12 +60,8 @@ class ScienceModule(InternalModule):
         return
 
     async def setup(self) -> None:
-        try:
-            # setup internal inboxes
-            self.onboard_processing_inbox = asyncio.Queue()
-
-        except Exception as e:
-            raise e
+        # setup internal inboxes
+        self.onboard_processing_inbox = asyncio.Queue()
 
     async def live(self) -> None:
         """
@@ -83,20 +79,15 @@ class ScienceModule(InternalModule):
         listener_task = asyncio.create_task(self.listener(), name='listener()')
         onboard_processing_task = asyncio.create_task(self.onboard_processing(), name='onboard_processing()')
         
-        tasks = [   
-                    listener_task,
-                    onboard_processing_task
-                ]
-        
         # wait for a task to terminate
-        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        _, pending = await asyncio.wait([listener_task, onboard_processing_task], 
+                                        return_when=asyncio.FIRST_COMPLETED)
 
         # cancel the remaning tasks
         for task in pending:
             task : asyncio.Task
             task.cancel()
             await task
-
 
     async def listener(self):
         """ Unpacks and classifies any incoming messages """
@@ -125,22 +116,33 @@ class ScienceModule(InternalModule):
                     senses.extend(senses_msg.senses)     
 
                     for sense in senses:
-                        if sense['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-                            # unpack message 
-                            state_msg : AgentStateMessage = AgentStateMessage(**sense)
+                        # unpack message
+                        msg : SimulationMessage = message_from_dict(**sense)
+
+                        # check type of message being received
+                        if isinstance(msg, AgentActionMessage):
                             self.log(f"received agent state message!")
                                                         
                             # update current state
-                            state : SimulationAgentState = SimulationAgentState.from_dict(state_msg.state)
+                            state : SimulationAgentState = SimulationAgentState.from_dict(msg.state)
                             await self.update_current_time(state.t)
 
-                        if sense['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
-                            # unpack message
-                            if('agent_state' not in sense):
-                                continue
-                            self.log(f"received manager broadcast of type {sense['msg_type']}!",level=logging.DEBUG)
-                            msg = ObservationResultsMessage(**sense)
+                        elif isinstance(msg, ObservationResultsMessage):
+                            # observation data from another agent was received
+                            self.log(f"received observation data from agent!")
+
+                            # send to onboard processor
                             await self.onboard_processing_inbox.put(msg)
+
+                        elif isinstance(msg, MeasurementRequestMessage):
+                            # measurement request message received
+                            self.log(f"received measurement request message!")
+
+                            # unapack measurement request
+                            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
+                            
+                            # update list of known measurement requests
+                            if req.severity > 0.0: self.known_reqs.update(req)
 
                 # if sim-end message, end agent `live()`
                 elif content['msg_type'] == ManagerMessageTypes.SIM_END.value:
@@ -156,9 +158,16 @@ class ScienceModule(InternalModule):
         except asyncio.CancelledError:
             print("Asyncio cancelled error in science module listener")
             return
-        
+                
     async def onboard_processing(self) -> None:
-        """ processes incoming observation data and generates measurement requests if an event is detected """
+        """ 
+        Processes incoming observation data and generates measurement requests if an event is detected.
+        
+        Always returns a measurement request regardless of the presense of an event following an observation.
+        The severity is set depending on the whether there was an event detected or not.
+        The planner module will only consider and broadcast measurement requests with a non-zero severity.
+        
+        """
         try:
             while True:
                 # wait for next observation to be performed by parent agent
@@ -182,6 +191,10 @@ class ScienceModule(InternalModule):
                                                          t_start,
                                                          t_end,
                                                          t_corr)
+                    
+                    if measurement_req in self.known_reqs:
+                        # if another request has been made for this same event, ignore
+                        measurement_req.severity = 0.0
                     
                     # send message to internal modules
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 
@@ -221,6 +234,9 @@ class OracleScienceModule(ScienceModule):
 
         # load predefined events
         self.events = pd.read_csv(events_path)
+
+        # initialize empty list of detected events
+        self.events_detected = set()
                 
     def process_observation(self, 
                             instrument : Instrument,
@@ -253,7 +269,7 @@ class OracleScienceModule(ScienceModule):
                 continue
             
             # add event to list of detected events
-            self.events_detected.append(event)
+            self.events_detected.update(event)
 
             # unpackage event info
             lat_event,lon_event,t_start,duration,severity,observations_str = event 
@@ -268,7 +284,7 @@ class OracleScienceModule(ScienceModule):
             t_end = t_start+duration
 
             # estimate decorrelation time:
-            t_corr = t_start+duration-t_img
+            t_corr = t_start+duration-t_img # TODO add scientific reason for this
 
             return lat_event,lon_event,t_img,t_end,t_corr,severity,observations_required
 

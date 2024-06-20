@@ -10,7 +10,7 @@ class SimulationMessageTypes(Enum):
     PLAN = 'PLAN'
     SENSES = 'SENSES'
     OBSERVATION = 'OBSERVATION'
-    MEASUREMENT_PERFORMED = 'MEASUREMENT_PERFORMED'
+    OBSERVATION_PERFORMED = 'OBSERVATION_PERFORMED'
     BUS = 'BUS'
 
 def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
@@ -33,8 +33,8 @@ def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
         return SensesMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.OBSERVATION.value:
         return ObservationResultsMessage(**kwargs)
-    elif msg_type == SimulationMessageTypes.MEASUREMENT_PERFORMED.value:
-        return MeasurementPerformedMessage(**kwargs)
+    elif msg_type == SimulationMessageTypes.OBSERVATION_PERFORMED.value:
+        return ObservationPerformedMessage(**kwargs)
     else:
         raise NotImplementedError(f'Action of type {msg_type} not yet implemented.')
 
@@ -140,7 +140,7 @@ class ObservationResultsMessage(SimulationMessage):
         self.instrument = instrument
         self.observation_data = observation_data
 
-class MeasurementPerformedMessage(SimulationMessage):
+class ObservationPerformedMessage(SimulationMessage):
     def __init__(self, 
                  src: str, 
                  dst: str, 
@@ -150,11 +150,11 @@ class MeasurementPerformedMessage(SimulationMessage):
                  **_
                  ):
         """
-        ## Measurement Perfromed Message
+        ## Observation Perfromed Message
 
         Informs other agents that a measurement action was performed to satisfy a measurement request
         """
-        super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_PERFORMED.value, id, path)
+        super().__init__(src, dst, SimulationMessageTypes.OBSERVATION_PERFORMED.value, id, path)
         self.measurement_action = measurement_action
 
 class MeasurementBidMessage(SimulationMessage):

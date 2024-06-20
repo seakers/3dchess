@@ -278,11 +278,11 @@ class SimulationAgent(Agent):
                 # update agent state
                 action.status = await self.perform_state_change(action)
 
-            elif action.action_type == ActionTypes.BROADCAST_MSG.value:
+            elif action.action_type == ActionTypes.BROADCAST.value:
                 # perform message broadcast
                 action.status = await self.perform_broadcast(action)
             
-            elif action.action_type == ActionTypes.WAIT_FOR_MSG.value:
+            elif action.action_type == ActionTypes.WAIT.value:
                 # wait for incoming messages
                 action.status = await self.perform_wait_for_messages(action)
 

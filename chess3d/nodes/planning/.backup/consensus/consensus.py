@@ -135,7 +135,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # checks measuremetns performed by other agents
         completed_measurements.extend([action_from_dict(**msg.measurement_action) 
                                        for msg in misc_messages
-                                       if isinstance(msg, MeasurementPerformedMessage)])
+                                       if isinstance(msg, ObservationPerformedMessage)])
 
         return completed_measurements
 

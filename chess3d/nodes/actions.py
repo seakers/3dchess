@@ -9,8 +9,8 @@ class ActionTypes(Enum):
     IDLE = 'IDLE'
     TRAVEL = 'TRAVEL'
     MANEUVER = 'MANEUVER'
-    BROADCAST_MSG = 'BROADCAST_MSG'
-    WAIT_FOR_MSG = 'WAIT_FOR_MSG'
+    BROADCAST = 'BROADCAST'
+    WAIT = 'WAIT'
     OBSERVE = 'OBSERVE'
 
 def action_from_dict(action_type : str, **kwargs) -> AgentAction:
@@ -20,9 +20,9 @@ def action_from_dict(action_type : str, **kwargs) -> AgentAction:
         return TravelAction(**kwargs)
     elif action_type == ActionTypes.MANEUVER.value:
         return ManeuverAction(**kwargs)
-    elif action_type == ActionTypes.BROADCAST_MSG.value:
+    elif action_type == ActionTypes.BROADCAST.value:
         return BroadcastMessageAction(**kwargs)
-    elif action_type == ActionTypes.WAIT_FOR_MSG.value:
+    elif action_type == ActionTypes.WAIT.value:
         return WaitForMessages(**kwargs)
     elif action_type == ActionTypes.OBSERVE.value:
         return ObservationAction(**kwargs)
@@ -172,7 +172,7 @@ class BroadcastMessageAction(AgentAction):
             - status (`str`): completion status of the task
             - id (`str`) : identifying number for this task in uuid format
         """
-        super().__init__(ActionTypes.BROADCAST_MSG.value, t_start, t_start, status=status, id=id)
+        super().__init__(ActionTypes.BROADCAST.value, t_start, t_start, status=status, id=id)
         self.msg = msg
 
 class ObservationAction(AgentAction):
@@ -249,4 +249,4 @@ class WaitForMessages(AgentAction):
             - status (`str`): completion status of the task
             - id (`str`) : identifying number for this task in uuid format
         """
-        super().__init__(ActionTypes.WAIT_FOR_MSG.value, t_start, t_end, status, id)
+        super().__init__(ActionTypes.WAIT.value, t_start, t_end, status, id)

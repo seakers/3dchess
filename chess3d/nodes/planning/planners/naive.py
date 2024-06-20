@@ -182,8 +182,13 @@ class NaivePlanner(AbstractPreplanner):
                 # create plan message
                 msg = PlanMessage(state.agent_name, state.agent_name, plan_out, state.t, path=path)
                 
-                # add to broadcast plan
+                # add plan broadcast to list of broadcasts
                 broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
-        
+                
+                # add action performance broadcast to plan
+                for action_dict in plan_out:
+                    msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
+                    broadcasts.append(BroadcastMessageAction(msg.to_dict(),action_dict['t_end']))
+
         # return broadcast plan
         return broadcasts

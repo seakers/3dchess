@@ -94,7 +94,21 @@ class MeasurementRequest(object):
         my_dict.pop('id')
         other_dict.pop('id')
 
-        return my_dict == other_dict
+        if my_dict == other_dict:
+            return True
+        
+        same_target = all([abs(self.target[i]-other.target[i]) <= 1e-3 for i in range(len(self.target))])
+        same_severity = abs(self.severity - other.severity) <= 1e-3
+        same_observations = (len(self.observations_types) == len(other.observation_types)
+                             and all([observation in other.observation_types for observation in self.observations_types]))
+        same_time = abs(self.t_end - other.t_end) <= 1e-3
+        same_decorrelation = abs(self.t_corr - other.t_corr) <= 1e-3
+        return (same_target
+                and same_severity
+                # and same_observations
+                and same_time
+                and same_decorrelation
+                )
 
     def __hash__(self) -> int:
         return hash(repr(self))

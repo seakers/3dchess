@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Union
 import numpy as np
 
-from chess3d.nodes.science.requests import MeasurementRequest
+from chess3d.nodes.science.requests import GroundPointMeasurementRequest, MeasurementRequest
 
 class BidTypes(Enum):
     UNCONSTRAINED_BID = 'UNCONSTRAINED_BID'
@@ -45,7 +45,7 @@ class Bid(ABC):
         - performed (`bool`): indicates if the winner of this bid has performed the measurement request at hand
     """
 
-    NONE = 'none'
+    NONE = 'None'
     
     def __init__(   self, 
                     bid_type : str,
