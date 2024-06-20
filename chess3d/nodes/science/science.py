@@ -192,11 +192,14 @@ class ScienceModule(InternalModule):
                                                          t_end,
                                                          t_corr)
                     
-                    if measurement_req in self.known_reqs:
-                        # if another request has been made for this same event, ignore
+                    # check if another request has already been made for this event
+                    redundant_reqs = [req for req in self.known_reqs
+                                      if measurement_req.same_event(req)]
+                    if redundant_reqs:
+                        # another request has been made for this same event; ignore
                         measurement_req.severity = 0.0
                     
-                    # send message to internal modules
+                    # send request to all internal agent modules
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 
                                                         self.get_parent_name(), 
                                                         measurement_req.to_dict())

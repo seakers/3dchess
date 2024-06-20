@@ -88,15 +88,23 @@ class MeasurementRequest(object):
         return MeasurementRequest(**d)
     
     def __eq__(self, other : object) -> bool:
+        if not isinstance(other, MeasurementRequest):
+            raise ValueError(f'cannot compare `MeasurementRequest` object to an object of type {type(other)}.')
+        
         my_dict : dict = self.to_dict()
         other_dict : dict = other.to_dict()
 
         my_dict.pop('id')
         other_dict.pop('id')
 
-        if my_dict == other_dict:
-            return True
-        
+        return my_dict == other_dict
+            
+    def same_event(self, other : object) -> bool:
+        """ compares the events being requested for observation between two measurement requests """
+
+        if not isinstance(other, MeasurementRequest):
+            raise ValueError(f'cannot compare `MeasurementRequest` object to an object of type {type(other)}.')
+
         same_target = all([abs(self.target[i]-other.target[i]) <= 1e-3 for i in range(len(self.target))])
         same_severity = abs(self.severity - other.severity) <= 1e-3
         same_observations = (len(self.observations_types) == len(other.observation_types)
