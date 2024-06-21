@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 
-from chess3d.nodes.science.requests import MeasurementRequest
+from chess3d.agents.science.requests import MeasurementRequest
 
 def plot_plane(scenario_path : str, results_path : str, show_plot : bool = False) -> animation.FuncAnimation:
     # load scenario json file

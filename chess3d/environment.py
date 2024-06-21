@@ -12,12 +12,10 @@ from instrupy.base import Instrument
 from instrupy.base import BasicSensorModel
 from instrupy.util import SphericalGeometry, ViewGeometry
 
-from chess3d.nodes.science.utility import synergy_factor
-from chess3d.nodes.science.requests import *
-from chess3d.nodes.orbitdata import OrbitData
-from chess3d.nodes.states import GroundStationAgentState, UAVAgentState, SatelliteAgentState
-from chess3d.nodes.actions import ObservationAction
-from chess3d.nodes.agent import SimulationAgentState
+from chess3d.agents.science.requests import *
+from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.states import GroundStationAgentState, UAVAgentState, SatelliteAgentState
+from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import *
 
 from dmas.environments import *

@@ -7,7 +7,7 @@ import os
 from dmas.messages import SimulationElementRoles
 import pandas as pd
 import tqdm
-from chess3d.nodes.orbitdata import OrbitData, TimeInterval
+from chess3d.agents.orbitdata import OrbitData, TimeInterval
 from chess3d.utils import print_welcome, setup_results_directory
 
 def main(   scenario_name : str, 
