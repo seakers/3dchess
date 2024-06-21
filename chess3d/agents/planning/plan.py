@@ -54,8 +54,8 @@ class Plan(ABC):
         # sort new set of actions by start time 
         actions.sort(key= lambda a : a.t_start)
 
-        # if there are no actions in current plan, check if all new actions have no duration
-        if (not self.actions):
+        # if there are no actions in current plan
+        if not self.actions:
             self.actions.extend(actions)
         
         else:
@@ -133,7 +133,7 @@ class Plan(ABC):
 
             ## check if access occurs after an action was completed 
             completed_actions = [completed_action for completed_action in self.actions
-                            if completed_action.t_end <= action.t_start]
+                                 if completed_action.t_end <= action.t_start]
             
             if completed_actions:
                 # place action after action ends
@@ -206,10 +206,7 @@ class Plan(ABC):
             self.__is_feasible(plan_out)
         except ValueError as e:
             raise RuntimeError(f"Unfeasible plan. {e}")
-
-        if t > 10906.5:
-            x = 1
-
+        
         return plan_out    
     
     def copy(self) -> object:

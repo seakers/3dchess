@@ -83,6 +83,19 @@
             "args": "toy_random"
         },
         {
+            "name": "TOY ACBBA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            },
+            "args": "toy_acbba"
+        },
+        {
             "name": "COVERAGE TEST",
             "type": "python",
             "request": "launch",

@@ -427,6 +427,11 @@ class SimulationEnvironment(EnvironmentNode):
             # compile observations performed
             observations_performed : pd.DataFrame = self.compile_observations()
 
+            # log and save results
+            self.log(f"MEASUREMENTS RECEIVED:\n{str(observations_performed)}\n\n", level=logging.WARNING)
+            observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
+            
+            # TODO: move this section to external results compiler script -------------
             # count observations performed
             n_events, n_events_obs, n_events_partially_co_obs, \
                 n_events_fully_co_obs, n_events_detected \
@@ -457,13 +462,10 @@ class SimulationEnvironment(EnvironmentNode):
                         ['t_runtime', self.t_f - self.t_0]
                     ]
 
-            # log and save results
-            self.log(f"MEASUREMENTS RECEIVED:\n{str(observations_performed)}\n\n", level=logging.WARNING)
-            observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
-
             summary_df = DataFrame(summary_data, columns=summary_headers)
             self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)
             summary_df.to_csv(f"{self.results_path}/../summary.csv", index=False)
+            # --------------------------------------------------------------------
 
             # log performance stats
             n_decimals = 3
