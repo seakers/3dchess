@@ -1,0 +1,5 @@
+routine,t_avg,t_std,t_med,n
+ENVIRONMENT_wait,-1.0,0.0,-1.0,0
+thermal_0_wait,0.04,0.03,0.045,2283
+clock_wait,0.041,0.03,0.046,2283
+sim_runtime,93.483,0.0,93.483,1

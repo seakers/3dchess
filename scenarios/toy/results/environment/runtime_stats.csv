@@ -1,0 +1,3 @@
+routine,t_avg,t_std,t_med,n
+thermal_0,0.009,0.004,0.007,4906
+query_measurement_data,0.012,0.002,0.012,1144
