@@ -3,11 +3,12 @@ from ctypes import Union
 import logging
 import uuid
 import numpy as np
-from nodes.orbitdata import OrbitData
-from nodes.engineering.actions import *
-from utils import ModuleTypes
 
-from nodes.engineering.subsystems import Subsystem
+from chess3d.utils import ModuleTypes
+from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.engineering.actions import *
+from chess3d.agents.engineering.subsystems import Subsystem
+
        
 class EngineeringModule(object):
     """

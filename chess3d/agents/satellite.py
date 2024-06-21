@@ -2,10 +2,10 @@ import logging
 
 from dmas.network import NetworkConfig
 
-from chess3d.nodes.science.science import ScienceModule
-from chess3d.nodes.planning.module import PlanningModule
-from chess3d.nodes.agent import SimulationAgentState
-from chess3d.nodes.agent import SimulationAgent
+from chess3d.agents.science.science import ScienceModule
+from chess3d.agents.planning.module import PlanningModule
+from chess3d.agents.agent import SimulationAgentState
+from chess3d.agents.agent import SimulationAgent
 
 class SatelliteAgent(SimulationAgent):
     def __init__(   self, 

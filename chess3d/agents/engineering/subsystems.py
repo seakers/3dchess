@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Union
 import uuid
-from nodes.engineering.components import Component
-from nodes.engineering.actions import SubsystemAction
+from chess3d.agents.engineering.components import Component
+from chess3d.agents.engineering.actions import SubsystemAction
 
 
 class Subsystem(ABC):

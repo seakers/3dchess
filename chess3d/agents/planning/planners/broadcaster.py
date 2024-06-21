@@ -4,12 +4,12 @@ from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 
 from chess3d.messages import MeasurementRequestMessage
-from chess3d.nodes.actions import BroadcastMessageAction
-from chess3d.nodes.orbitdata import OrbitData
-from chess3d.nodes.planning.plan import Plan, Replan
-from chess3d.nodes.planning.planner import AbstractReplanner
-from chess3d.nodes.science.requests import MeasurementRequest
-from chess3d.nodes.states import SimulationAgentState
+from chess3d.agents.actions import BroadcastMessageAction
+from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.planning.plan import Plan, Replan
+from chess3d.agents.planning.planner import AbstractReplanner
+from chess3d.agents.science.requests import MeasurementRequest
+from chess3d.agents.states import SimulationAgentState
 
 class Broadcaster(AbstractReplanner):
        

@@ -9,11 +9,11 @@ from dmas.agents import *
 from dmas.network import NetworkConfig
 from dmas.utils import runtime_tracker
 
-from chess3d.nodes.states import SimulationAgentState
-from chess3d.nodes.science.requests import MeasurementRequest
-from chess3d.nodes.planning.module import PlanningModule
-from chess3d.nodes.science.science import ScienceModule
-from chess3d.nodes.actions import *
+from chess3d.agents.states import SimulationAgentState
+from chess3d.agents.science.requests import MeasurementRequest
+from chess3d.agents.planning.module import PlanningModule
+from chess3d.agents.science.science import ScienceModule
+from chess3d.agents.actions import *
 from chess3d.messages import *
 
 class SimulationAgent(Agent):

@@ -1,6 +1,6 @@
 
 
-from subsystems import ExampleSubsystem
+from chess3d.agents.engineering.subsystems import ExampleSubsystem
 
 
 if __name__ == "__main__":

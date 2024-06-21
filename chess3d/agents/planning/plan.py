@@ -2,8 +2,8 @@ from abc import ABC
 import uuid
 import numpy as np
 
-from chess3d.nodes.actions import AgentAction
-from chess3d.nodes.actions import *
+from chess3d.agents.actions import AgentAction
+from chess3d.agents.actions import *
 
 
 class Plan(ABC):

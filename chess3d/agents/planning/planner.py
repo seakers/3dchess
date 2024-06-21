@@ -5,10 +5,10 @@ import queue
 from dmas.modules import *
 from dmas.utils import runtime_tracker
 
-from chess3d.nodes.planning.plan import Plan, Preplan
-from chess3d.nodes.orbitdata import OrbitData, TimeInterval
-from chess3d.nodes.states import *
-from chess3d.nodes.science.requests import *
+from chess3d.agents.planning.plan import Plan, Preplan
+from chess3d.agents.orbitdata import OrbitData, TimeInterval
+from chess3d.agents.states import *
+from chess3d.agents.science.requests import *
 from chess3d.messages import *
 
 class AbstractPlanner(ABC):

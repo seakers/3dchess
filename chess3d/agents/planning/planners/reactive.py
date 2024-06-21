@@ -6,10 +6,10 @@ import numpy as np
 
 from dmas.clocks import ClockConfig
 
-from chess3d.nodes.orbitdata import OrbitData
-from chess3d.nodes.planning.plan import Plan, Replan
-from chess3d.nodes.planning.planner import AbstractPreplanner, AbstractReplanner
-from chess3d.nodes.states import SimulationAgentState
+from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.planning.plan import Plan, Replan
+from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
+from chess3d.agents.states import SimulationAgentState
 
 
 class ReactivePlanner(AbstractPreplanner):    

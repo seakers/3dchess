@@ -6,10 +6,10 @@ import zmq
 
 from dmas.network import NetworkConfig
 
-from chess3d.nodes.planning.module import PlanningModule
-from chess3d.nodes.science.requests import *
-from chess3d.nodes.science.science import ScienceModule
-from chess3d.nodes.agent import SimulationAgentState, SimulationAgent
+from chess3d.agents.planning.module import PlanningModule
+from chess3d.agents.science.requests import *
+from chess3d.agents.science.science import ScienceModule
+from chess3d.agents.agent import SimulationAgentState, SimulationAgent
 
 class GroundStationAgent(SimulationAgent):
     def __init__(self, 

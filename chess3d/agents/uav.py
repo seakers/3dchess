@@ -1,10 +1,11 @@
 import logging
-from typing import Any, Callable
-from nodes.agent import SimulationAgent
-from nodes.science.science import ScienceModule
-from chess3d.nodes.planning.module import PlanningModule
-from nodes.states import SimulationAgentState
+
 from dmas.network import NetworkConfig
+
+from agents.agent import SimulationAgent
+from chess3d.agents.science.science import ScienceModule
+from chess3d.agents.planning.module import PlanningModule
+from chess3d.agents.states import SimulationAgentState
 
 
 class UAVAgent(SimulationAgent):

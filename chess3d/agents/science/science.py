@@ -5,9 +5,9 @@ from zmq import asyncio as azmq
 from dmas.modules import NetworkConfig
 from dmas.modules import *
 
-from chess3d.nodes.actions import ObservationAction
-from chess3d.nodes.states import SimulationAgentState
-from chess3d.nodes.science.requests import *
+from chess3d.agents.actions import ObservationAction
+from chess3d.agents.states import SimulationAgentState
+from chess3d.agents.science.requests import *
 from chess3d.messages import *
 
 from instrupy.base import Instrument
