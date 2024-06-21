@@ -142,7 +142,7 @@ class ScienceModule(InternalModule):
                             req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
                             
                             # update list of known measurement requests
-                            if req.severity > 0.0: self.known_reqs.update(req)
+                            if req.severity > 0.0: self.known_reqs.add(req)
 
                 # if sim-end message, end agent `live()`
                 elif content['msg_type'] == ManagerMessageTypes.SIM_END.value:

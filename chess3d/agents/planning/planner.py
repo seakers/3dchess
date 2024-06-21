@@ -2,6 +2,8 @@
 import math
 import queue
 
+from instrupy.base import Instrument
+
 from dmas.modules import *
 from dmas.utils import runtime_tracker
 
@@ -15,9 +17,18 @@ class AbstractPlanner(ABC):
     """ 
     Describes a generic planner that, given a new set of percepts, decides whether to generate a new plan
     """
-    def __init__(self, logger : logging.Logger = None) -> None:
+    def __init__(self, 
+                 payload : list,
+                 logger : logging.Logger = None) -> None:
         # initialize object
         super().__init__()
+
+        # check inputs
+        if not isinstance(payload, list): raise ValueError(f'`payload` must be of type `list`. Is of type `{type(payload)}`')
+        if any([not isinstance(instrument, Instrument) for instrument in payload]): 
+            raise ValueError(f'`payload` must be a list of elements of type `Instrument`.')
+        if not isinstance(logger,logging.Logger) and logger is not None: 
+            raise ValueError(f'`logger` must be of type `Logger`. Is of type `{type(logger)}`.')
 
         # initialize attributes
         self.known_reqs = set()                 # set of known measurement requests
@@ -27,6 +38,9 @@ class AbstractPlanner(ABC):
         self.stats = {}                         # collector for runtime performance statistics
         
         # set attribute parameters
+        self.payload = {instrument.name: instrument 
+                        for instrument in payload
+                        if isinstance(instrument, Instrument)}
         self._logger = logger               # logger for debugging
 
     @abstractmethod
@@ -279,6 +293,7 @@ class AbstractPlanner(ABC):
 
             curr_observation : ObservationAction = observations[i]
             t_img = curr_observation.t_start
+            instrument : Instrument = self.payload[curr_observation.instrument_name]
                         
             # estimate previous state
             if i == 0:
@@ -300,6 +315,9 @@ class AbstractPlanner(ABC):
                 t_maneuver_start = prev_state.t
                 
                 th_f = curr_observation.look_angle
+
+                dth = abs(th_f - prev_state.attitude[0])
+                # if dth < 
 
                 dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
                 t_maneuver_end = t_maneuver_start + dt
@@ -454,6 +472,7 @@ class AbstractPreplanner(AbstractPlanner):
     Conducts operations planning for an agent at the beginning of a planning period. 
     """
     def __init__(   self, 
+                    payload : list,
                     horizon : float = np.Inf,
                     period : float = np.Inf,
                     logger: logging.Logger = None
@@ -469,7 +488,7 @@ class AbstractPreplanner(AbstractPlanner):
             - logger (`logging.Logger`) : debugging logger
         """
         # initialize planner
-        super().__init__(logger)    
+        super().__init__(payload, logger)    
 
         # set parameters
         self.horizon = horizon                               # planning horizon

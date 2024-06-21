@@ -14,13 +14,7 @@ from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.messages import *
 
 class NaivePlanner(AbstractPreplanner):
-    def __init__(self, 
-                 horizon: float = np.Inf, 
-                 period: float = np.Inf, 
-                 logger: logging.Logger = None
-                 ) -> None:
-        """ Schedules observations based on the earliest feasible access point and broadcasts plan to all agents in the network """
-        super().__init__(horizon, period, logger)
+    """ Schedules observations based on the earliest feasible access point and broadcasts plan to all agents in the network """
 
     @runtime_tracker
     def _schedule_observations(self, 

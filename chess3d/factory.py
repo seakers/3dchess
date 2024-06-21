@@ -87,6 +87,9 @@ class SimulationFactory:
         else:
             agent_orbitdata = None
 
+        # load payload
+        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) if instruments_dict else []
+
         # load science module
         if science_dict is not None:
             science_dict : dict
@@ -111,7 +114,7 @@ class SimulationFactory:
         else:
             science = None
 
-        ## load planner module
+        # load planner module
         if planner_dict is not None:
             planner_dict : dict
             
@@ -124,7 +127,8 @@ class SimulationFactory:
                 horizon = preplanner_dict.get('horizon', np.Inf)
 
                 if preplanner_type.lower() == "naive":
-                    preplanner = NaivePlanner(period, horizon, logger)
+                    preplanner = NaivePlanner(payload, period, horizon, logger)
+                # elif...
                 else:
                     raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
             else:
@@ -136,7 +140,7 @@ class SimulationFactory:
                 if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
 
                 if replanner_type.lower() == 'broadcaster':
-                    replanner = Broadcaster(logger)
+                    replanner = Broadcaster(payload, logger)
 
         #         # elif replanner_type == 'ACBBA': #TODO
         #         #     max_bundle_size = replanner_dict.get('bundle size', 3)
@@ -165,10 +169,7 @@ class SimulationFactory:
                                     level,
                                     logger
                                 )    
-            
-        # load payload
-        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) if instruments_dict else []
-
+        
         # create agent
         if agent_type == SimulationAgentTypes.SATELLITE:
             position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')

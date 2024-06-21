@@ -68,17 +68,17 @@
                     "ta": 0.0
                 }
             },
-            "planner": {
-                "preplanner": {
-                    "@type": "naive"
+            "planner" : {
+                "preplanner" : {
+                    "@type" : "milp"
                 },
-                "replanner": {
-                    "@type": "broadcaster"
+                "replanner" : {
+                    "@type" : "broadcaster"
                 }
             },
-            "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/toy_acbba/resources/events.csv"
+            "science" : {
+                "@type": "ORACLE", 
+                "eventsPath" : "./scenarios/toy_acbba/resources/events.csv"
             }
         }
     ],
@@ -88,19 +88,18 @@
             "covGridFilePath": "./scenarios/toy_acbba/resources/points.csv"
         }
     ],
-    "scenario": {
-        "events": {
-            "@type": "PREDEF",
-            "eventsPath": "./scenarios/toy_acbba/resources/events.csv"
+    "scenario": {   
+        "events" : {
+            "@type": "PREDEF", 
+            "eventsPath" : "./scenarios/toy_acbba/resources/events.csv"
         },
-        "connectivity": "FULL",
-        "utility": "LINEAR",
-        "clock": {
-            "@type": "EVENT"
+        "connectivity" : "FULL", 
+        "utility" : "LINEAR",
+        "clock" : {
+            "@type" : "EVENT"
         }
     },
     "settings": {
-        "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/toy_acbba/orbit_data/"
+        "coverageType": "GRID COVERAGE"
     }
 }

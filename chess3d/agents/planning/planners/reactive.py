@@ -7,19 +7,20 @@ import numpy as np
 from dmas.clocks import ClockConfig
 
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.plan import Plan, Replan
-from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
+from chess3d.agents.planning.plan import Plan
+from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.agents.states import SimulationAgentState
 
 
 class ReactivePlanner(AbstractPreplanner):    
     def __init__(self, 
+                 payload : list,
                  utility_func: Callable[[], Any], 
                  horizon: float = 3600, 
                  period: float = 3600, 
                  logger: Logger = None
                  ) -> None:
-        super().__init__(horizon, period, logger)
+        super().__init__(payload, horizon, period, logger)
 
         self.utility_func = utility_func
         self.reward_grid = {}
