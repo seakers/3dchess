@@ -548,9 +548,10 @@ class AbstractPreplanner(AbstractPlanner):
             t_wait_start = state.t 
         
         else:
-            prelim_plan = Preplan(observations, maneuvers, t=state.t)
+            prelim_actions = [action for action in maneuvers]
+            prelim_actions.extend(observations)
 
-            actions_in_period = [action for action in prelim_plan.actions 
+            actions_in_period = [action for action in prelim_actions 
                                  if  isinstance(action, AgentAction)
                                  and action.t_start < t_next]
 

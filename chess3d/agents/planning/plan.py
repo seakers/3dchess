@@ -36,21 +36,57 @@ class Plan(ABC):
             # check feasiblity
             try:
                 self.__is_feasible(actions)
-            except RuntimeError as e:
+            except RuntimeError:
                 raise RuntimeError("Cannot update plan: new plan is unfeasible.")
         
             # update plan
-            self.add_all(actions, t)
-                
-        # # add indefinite wait at the end of the plan
-        # t_wait_start = t if self.empty() else self.actions[-1].t_end
-        # if t_wait_start < np.Inf:
-        #     self.add(WaitForMessages(t_wait_start, np.Inf), t)
+            self.__add_all(actions, t)
 
         # update plan update time
-        self.t = t              
+        self.t = t            
+
+        # check feasibility of new plan
+        assert self.__is_feasible(self.actions)
         
-    def add(self, action : AgentAction, t : float) -> None:
+    def __add_all(self, actions : list, t : float) -> None:
+        """ adds a set of actions to plan """
+        
+        # sort new set of actions by start time 
+        actions.sort(key= lambda a : a.t_start)
+
+        # if there are no actions in current plan, check if all new actions have no duration
+        if (not self.actions):
+            self.actions.extend(actions)
+        
+        else:
+            # create preliminary plan
+            if all([abs(action.t_end-action.t_start)<=1e-3 
+                    for action in actions
+                    if isinstance(action, AgentAction)]):
+                prelim_plan = [action for action in actions]
+                prelim_plan.extend([action for action in self.actions])
+            else:
+                prelim_plan = [action for action in self.actions]
+                prelim_plan.extend([action for action in actions])
+
+            prelim_plan.sort(key= lambda a : a.t_start)
+
+            # check feasibility
+            try:
+                self.__is_feasible(prelim_plan)
+                feasible = True
+            except ValueError:
+                feasible = False
+            
+            if feasible:
+                # is feasible, no need to repair 
+                self.actions = [action for action in prelim_plan]
+                
+            else:
+                # possible conflicts exist, may need to repair 
+                for action in actions: self.__add(action, t)
+        
+    def __add(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
 
         # check argument types
@@ -59,12 +95,13 @@ class Plan(ABC):
 
         try:
             # check if action is scheduled to occur during while another action is being performed
-            interrupted_actions = [interrupted_action for interrupted_action in self.actions
-                                   if interrupted_action.t_start < action.t_start < interrupted_action.t_end]
+            interrupted_actions = [interrupted_action 
+                                   for interrupted_action in self.actions
+                                   if isinstance(interrupted_action, AgentAction)
+                                   and interrupted_action.t_start < action.t_start < interrupted_action.t_end]
             if interrupted_actions:
                 interrupted_action : AgentAction = interrupted_actions.pop(0)
-                if (    
-                        isinstance(interrupted_action, ObservationAction) 
+                if (    isinstance(interrupted_action, ObservationAction) 
                     or  isinstance(interrupted_action, BroadcastMessageAction)
                     ):
                     # interrupted action has no duration, schedule broadcast for right after
@@ -115,11 +152,6 @@ class Plan(ABC):
                 self.__is_feasible(self.actions)
             except ValueError as e:
                 raise RuntimeError(f"Cannot place action in plan. {e} \n {str(self)}\ncurrent plan:\n{str(self)}")
-
-    def add_all(self, actions : list, t : float) -> None:
-        """ adds a set of actions to plan """
-        for action in actions:
-            self.add(action, t)
 
     def update_action_completion(   self, 
                                     completed_actions : list, 
@@ -274,11 +306,11 @@ class Preplan(Plan):
     def copy(self) -> object:
         return Preplan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
     
-    def add(self, action: AgentAction, t: float) -> None:
+    def __add(self, action: AgentAction, t: float) -> None:
         if self.t + self.horizon < action.t_end:
             raise ValueError(f'cannot add action scheduled to be done past the planning horizon of this plan')
 
-        super().add(action, t)
+        super().__add(action, t)
 
 class Replan(Plan):
     def __init__(self, 
@@ -291,12 +323,12 @@ class Replan(Plan):
 
         super().__init__(*actions, t=t)
 
-    def add(self, action: AgentAction, t: float) -> None:
+    def __add(self, action: AgentAction, t: float) -> None:
         # if self.t_next < action.t_end:
         #     return
         #     # raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
 
-        super().add(action, t)
+        super().__add(action, t)
 
     def copy(self) -> object:
         return Replan(self.actions, t=self.t, t_next=self.t_next)

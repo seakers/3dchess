@@ -30,7 +30,7 @@ class NaivePlanner(AbstractPreplanner):
                                ) -> list:
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
-        
+
         # compile access times for this planning horizon
         access_times, ground_points = self.calculate_access_times(state, orbitdata)
         access_times : list; ground_points : dict
@@ -55,7 +55,8 @@ class NaivePlanner(AbstractPreplanner):
                 th_prev = action_prev.look_angle
           
             # find if feasible observation time exists 
-            feasible_obs = [(t[i], th[i]) for i in range(len(t))
+            feasible_obs = [(t[i], th[i]) 
+                            for i in range(len(t))
                             if self.is_observation_feasible(t[i], th[i], t_prev, th_prev)]
             
             if feasible_obs:
@@ -159,6 +160,7 @@ class NaivePlanner(AbstractPreplanner):
                             for instrument in access_times[grid_index][gp_index]
                             for interval, t, th in access_times[grid_index][gp_index][instrument]
                         ]
+        
         # sort by observation time
         access_times.sort(key = lambda a: a[3],reverse=True)
         

@@ -13,15 +13,15 @@ from dmas.network import NetworkConfig
 from dmas.clocks import ClockConfig
 
 from chess3d.factory import SimulationFactory
-from chess3d.manager import SimulationManager
-from chess3d.monitor import ResultsMonitor
+from chess3d.nodes.manager import SimulationManager
+from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.utils import *
 
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulationAgent
 from chess3d.agents.science.utility import utility_function
-from chess3d.environment import SimulationEnvironment
+from chess3d.nodes.environment import SimulationEnvironment
 
 # from satplan.visualizer import Visualizer
 

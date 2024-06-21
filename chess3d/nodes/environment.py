@@ -494,8 +494,7 @@ class SimulationEnvironment(EnvironmentNode):
         except Exception as e:
             print('\n','\n','\n')
             print(e.with_traceback())
-            raise e
-        
+            raise e        
             
 
     def compile_observations(self) -> pd.DataFrame:
@@ -591,7 +590,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         return n_events, n_events_obs, n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected
 
-    def calc_coverage_metrics() -> tuple:
+    def calc_coverage_metrics(self) -> tuple:
         # TODO improve performance or load precomputed vals
         return np.NAN, np.NAN, np.NAN
             
