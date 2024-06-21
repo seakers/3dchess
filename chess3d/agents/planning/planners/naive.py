@@ -43,35 +43,41 @@ class NaivePlanner(AbstractPreplanner):
             lat,lon = ground_points[grid_index][gp_index]
             target = [lat,lon,0.0]
 
+            # check feasibility 
+            if not observations:
+                # no prior observation exists, compare with current state
+                t_prev = state.t
+                th_prev = state.attitude[0]
+            else:
+                # compare with previous scheduled observation
+                action_prev : ObservationAction = observations[-1]
+                t_prev = action_prev.t_end
+                th_prev = action_prev.look_angle
+          
             # find if feasible observation time exists 
-            for i in range(len(t)):
-                t_img = t[i]
-                th_img = th[i]
+            feasible_obs = [(t[i], th[i]) for i in range(len(t))
+                            if self.is_observation_feasible(t[i], th[i], t_prev, th_prev)]
+            
+            if feasible_obs:
+                # is feasible; create observation action
+                t_img, th_img = feasible_obs[0]
                 action = ObservationAction(instrument, target, th_img, t_img)
-
-                # check feasibility given the prior obvservation
-                if not observations:
-                    # no prior observation exists, check with current state
-                    t_prev = state.t
-                    th_prev = state.attitude[0]
-                else:
-                    # get the previous scheduled observation
-                    action_prev : ObservationAction = observations[-1]
-                    t_prev = action_prev.t_end
-                    th_prev = action_prev.look_angle
-
-                # estimate maneuver time
-                dt_obs = action.t_start - t_prev
-                dt_maneuver = abs(action.look_angle - th_prev)
-
-                # check feasibility
-                if dt_maneuver <= dt_obs:
-                    observations.append(action)
-                    break
+                observations.append(action)
 
         assert self.no_redundant_observations(state, observations, orbitdata)
 
         return observations
+    
+    def is_observation_feasible(self, t_img, th_img, t_prev, th_prev) -> bool:
+        """ compares previous observation """
+        # calculate inteval between observations
+        dt_obs = t_img - t_prev
+
+        # estimate maneuver time
+        dt_maneuver = abs(th_img - th_prev)
+
+        # check feasibility
+        return dt_maneuver <= dt_obs
     
     def no_redundant_observations(self, 
                                  state : SimulationAgentState, 
@@ -187,8 +193,9 @@ class NaivePlanner(AbstractPreplanner):
                 
                 # add action performance broadcast to plan
                 for action_dict in plan_out:
+                    path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end'])
                     msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
-                    broadcasts.append(BroadcastMessageAction(msg.to_dict(),action_dict['t_end']))
+                    if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
 
         # return broadcast plan
         return broadcasts

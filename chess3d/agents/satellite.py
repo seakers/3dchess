@@ -2,7 +2,7 @@ import logging
 
 from dmas.network import NetworkConfig
 
-from chess3d.agents.science.science import ScienceModule
+from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.agent import SimulationAgentState
 from chess3d.agents.agent import SimulationAgent

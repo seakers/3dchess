@@ -120,7 +120,7 @@ class ScienceModule(InternalModule):
                         msg : SimulationMessage = message_from_dict(**sense)
 
                         # check type of message being received
-                        if isinstance(msg, AgentActionMessage):
+                        if isinstance(msg, AgentStateMessage):
                             self.log(f"received agent state message!")
                                                         
                             # update current state
@@ -230,7 +230,7 @@ class OracleScienceModule(ScienceModule):
         """ 
         ## Oracle Science Module
 
-        Has prior knowledge of the events that will occur during the simulation.
+        Has prior knowledge of all of the events that will occur during the simulation.
         Compares incoming observations to a predefined list of events to determine whether an event has been observed.
         """
         super().__init__(results_path, parent_name, parent_network_config, logger)

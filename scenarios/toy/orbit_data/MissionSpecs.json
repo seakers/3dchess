@@ -108,6 +108,9 @@
             "planner": {
                 "preplanner": {
                     "@type": "naive"
+                },
+                "replanner": {
+                    "@type": "broadcaster"
                 }
             },
             "science": {

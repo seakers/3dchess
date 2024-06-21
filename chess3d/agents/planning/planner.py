@@ -131,9 +131,21 @@ class AbstractPlanner(ABC):
     
     def _create_broadcast_path(self, 
                                state : SimulationAgentState, 
-                               orbitdata : OrbitData
+                               orbitdata : OrbitData = None,
+                               t_init : float = None
                                ) -> tuple:
-        """ Finds the best path for broadcasting a message to all agents using depth-first-search """
+        """ Finds the best path for broadcasting a message to all agents using depth-first-search 
+        
+        ### Arguments:
+            - state (`SimulationAgentState`): current state of the agent
+            - orbitdata (`OrbitData`): coverage data of agent if it is of type `SatelliteAgent`
+            - t_init (`float`): ealiest desired broadcast time
+        """
+        if not isinstance(state, SatelliteAgentState):
+            raise NotImplementedError(f'Broadcast routing path not yet supported for agents of type `{type(state)}`')
+        
+        # get earliest desired broadcast time 
+        t_init = state.t if t_init is None or t_init < state.t else t_init
 
         # populate list of all agents except the parent agent
         target_agents = [target_agent 
@@ -142,22 +154,22 @@ class AbstractPlanner(ABC):
         
         if not target_agents: 
             # no other agents in the simulation; no need for relays
-            return ([], state.t)
+            return ([], t_init)
         
         # check if broadcast needs to be routed
-        earliest_accesses = [   orbitdata.get_next_agent_access(target_agent, state.t) 
+        earliest_accesses = [   orbitdata.get_next_agent_access(target_agent, t_init) 
                                 for target_agent in target_agents]           
         
-        same_access_start = [   access.start == earliest_accesses[0].start 
+        same_access_start = [   abs(access.start - earliest_accesses[0].start) < 1e-3
                                 for access in earliest_accesses 
                                 if isinstance(access, TimeInterval)]
-        same_access_end = [     access.end == earliest_accesses[0].end 
+        same_access_end = [     abs(access.end - earliest_accesses[0].end) < 1e-3
                                 for access in earliest_accesses 
                                 if isinstance(access, TimeInterval)]
 
         if all(same_access_start) and all(same_access_end):
             # all agents are accessing eachother at the same time; no need for mesasge relays
-            return ([], state.t)   
+            return ([], t_init)   
 
         # look for relay path using depth-first search
 

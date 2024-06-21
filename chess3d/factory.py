@@ -16,7 +16,7 @@ from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.planning.planners.broadcaster import Broadcaster
 from chess3d.agents.planning.planners.naive import NaivePlanner
 from chess3d.agents.satellite import SatelliteAgent
-from chess3d.agents.science.science import OracleScienceModule
+from chess3d.agents.science.module import OracleScienceModule
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
 from chess3d.agents.agent import SimulationAgent
 from chess3d.agents.science.utility import utility_function
