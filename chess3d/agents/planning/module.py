@@ -1,5 +1,7 @@
 import pandas as pd
 
+from orbitpy.util import Spacecraft
+
 from dmas.modules import *
 from dmas.utils import runtime_tracker
 
@@ -14,7 +16,7 @@ from chess3d.messages import *
 class PlanningModule(InternalModule):
     def __init__(self, 
                 results_path : str, 
-                parent_name : str,
+                parent_agent_specs : object,
                 parent_network_config: NetworkConfig, 
                 preplanner : AbstractPreplanner = None,
                 replanner : AbstractReplanner = None,
@@ -24,10 +26,17 @@ class PlanningModule(InternalModule):
                 ) -> None:
         """ Internal Agent Module in charge of planning an scheduling. """
                        
+        # intialize module
+        if isinstance(parent_agent_specs, dict):
+            parent_name : str = parent_agent_specs.get('name', None)
+        elif isinstance(parent_agent_specs, Spacecraft):
+            parent_name = parent_agent_specs.name
+        else:
+            raise NotImplementedError('Data type for `parent_agent_specs` not yet supported.')
+
         # setup network settings
         planner_network_config : NetworkConfig = self._setup_planner_network_config(parent_name, parent_network_config)
-
-        # intialize module
+        
         super().__init__(f'{parent_name}-PLANNING_MODULE', 
                         planner_network_config, 
                         parent_network_config, 
@@ -43,6 +52,7 @@ class PlanningModule(InternalModule):
         
         # set parameters
         self.results_path = results_path
+        self.parent_agent_specs = parent_agent_specs
         self.parent_name = parent_name
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
@@ -215,6 +225,8 @@ class PlanningModule(InternalModule):
                     if not self.other_modules_exist:
                         # another type of message was received from another module 
                         self.other_modules_exist = True
+                        
+                    if content['msg_type'] == 'HANDSHAKE':
                         continue
 
                     # unpack message
@@ -245,7 +257,7 @@ class PlanningModule(InternalModule):
             while True:
                 # wait for agent to update state
                 state : SimulationAgentState = await self.states_inbox.get()
-                
+
                 # update internal clock
                 await self.update_current_time(state.t)
                 assert abs(self.get_current_time() - state.t) <= 1e-2
@@ -258,7 +270,7 @@ class PlanningModule(InternalModule):
                 # check action completion
                 completed_actions, aborted_actions, pending_actions \
                     = await self.__check_action_completion(level)
-
+                
                 # remove aborted or completed actions from plan
                 plan.update_action_completion(  completed_actions, 
                                                 aborted_actions, 
@@ -286,12 +298,15 @@ class PlanningModule(InternalModule):
                                                 )
                     
                     # check if there is a need to construct a new plan
-                    if self.preplanner.needs_planning(state, plan):     
+                    if self.preplanner.needs_planning(state, 
+                                                      self.parent_agent_specs, 
+                                                      plan):     
                         # initialize plan      
-                        plan : Plan = self.preplanner.generate_plan(    state, 
-                                                                        self._clock_config,
-                                                                        self.orbitdata
-                                                                        )
+                        plan : Plan = self.preplanner.generate_plan(state, 
+                                                                    self.parent_agent_specs,
+                                                                    self._clock_config,
+                                                                    self.orbitdata
+                                                                    )
 
                         # save copy of plan for post-processing
                         plan_copy = [action for action in plan]
@@ -318,7 +333,9 @@ class PlanningModule(InternalModule):
                                                     pending_actions
                                                 )
                     
-                    if self.replanner.needs_planning(state, plan):
+                    if self.replanner.needs_planning(state, 
+                                                     self.parent_agent_specs,
+                                                     plan):    
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
                         # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
                         x = 1
@@ -326,6 +343,7 @@ class PlanningModule(InternalModule):
 
                         # Modify current Plan      
                         plan : Plan = self.replanner.generate_plan(state, 
+                                                                   self.parent_agent_specs,    
                                                                    plan,
                                                                    self._clock_config,
                                                                    self.orbitdata
@@ -342,7 +360,7 @@ class PlanningModule(InternalModule):
                         pending_actions = []
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        # self.__log_plan(plan, "REPLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 

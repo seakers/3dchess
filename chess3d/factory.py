@@ -7,6 +7,7 @@ import zmq
 
 import orbitpy.util
 from instrupy.base import Instrument
+from orbitpy.util import Spacecraft
 
 from dmas.network import NetworkConfig
 from dmas.clocks import *
@@ -88,7 +89,11 @@ class SimulationFactory:
             agent_orbitdata = None
 
         # load payload
-        payload = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) if instruments_dict else []
+        if agent_type == SimulationAgentTypes.SATELLITE:
+            agent_specs : Spacecraft = Spacecraft.from_dict(agent_dict)
+        else:
+            agent_specs : dict = {key: val for key,val in agent_dict.items()}
+            agent_specs['payload'] = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) if instruments_dict else []
 
         # load science module
         if science_dict is not None:
@@ -127,7 +132,7 @@ class SimulationFactory:
                 horizon = preplanner_dict.get('horizon', np.Inf)
 
                 if preplanner_type.lower() == "naive":
-                    preplanner = NaivePlanner(payload, period, horizon, logger)
+                    preplanner = NaivePlanner(period, horizon, logger)
                 # elif...
                 else:
                     raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
@@ -140,7 +145,7 @@ class SimulationFactory:
                 if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
 
                 if replanner_type.lower() == 'broadcaster':
-                    replanner = Broadcaster(payload, logger)
+                    replanner = Broadcaster(logger)
 
         #         # elif replanner_type == 'ACBBA': #TODO
         #         #     max_bundle_size = replanner_dict.get('bundle size', 3)
@@ -161,7 +166,7 @@ class SimulationFactory:
         
         # create planning module
         planner = PlanningModule(   results_path, 
-                                    agent_name, 
+                                    agent_specs,
                                     agent_network_config, 
                                     preplanner,
                                     replanner,
@@ -178,8 +183,7 @@ class SimulationFactory:
             _, _, _, _, dt = l.split(' '); dt = float(dt)
 
             initial_state = SatelliteAgentState(agent_name,
-                                                orbit_state_dict, 
-                                                [instrument.name for instrument in payload], 
+                                                orbit_state_dict,
                                                 time_step=dt) 
             
             return SatelliteAgent(
@@ -188,8 +192,8 @@ class SimulationFactory:
                                     manager_network_config,
                                     agent_network_config,
                                     initial_state, 
+                                    agent_specs,
                                     planner,
-                                    payload,
                                     science,
                                     logger=logger
                                 )

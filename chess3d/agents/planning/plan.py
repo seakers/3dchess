@@ -60,16 +60,29 @@ class Plan(ABC):
         
         else:
             # create preliminary plan
-            if all([abs(action.t_end-action.t_start)<=1e-3 
-                    for action in actions
-                    if isinstance(action, AgentAction)]):
-                prelim_plan = [action for action in actions]
-                prelim_plan.extend([action for action in self.actions])
-            else:
-                prelim_plan = [action for action in self.actions]
-                prelim_plan.extend([action for action in actions])
+            prelim_plan = []
 
-            prelim_plan.sort(key= lambda a : a.t_start)
+            curr_actions = [action for action in self.actions]
+            new_actions = [action for action in actions]
+
+            while curr_actions and new_actions:
+                curr_action : AgentAction = curr_actions[0]
+                new_action : AgentAction = new_actions[0]
+
+                if curr_action.t_start < new_action.t_start:
+                    prelim_plan.append(curr_actions.pop(0))
+                
+                elif curr_action.t_start > new_action.t_start:
+                    prelim_plan.append(new_actions.pop(0))
+
+                elif abs(curr_action.t_end - curr_action.t_start) <= 1e-3:
+                    prelim_plan.append(curr_actions.pop(0))
+                
+                elif abs(new_action.t_end - new_action.t_start) <= 1e-3:
+                    prelim_plan.append(new_actions.pop(0))
+
+            if curr_actions: prelim_plan.extend(curr_actions)
+            if new_actions: prelim_plan.extend(new_actions)
 
             # check feasibility
             try:
@@ -84,9 +97,9 @@ class Plan(ABC):
                 
             else:
                 # possible conflicts exist, may need to repair 
-                for action in actions: self.__add(action, t)
+                for action in actions: self._add(action, t)
         
-    def __add(self, action : AgentAction, t : float) -> None:
+    def _add(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
 
         # check argument types
@@ -235,7 +248,7 @@ class Plan(ABC):
             # check if there is no overlap between tasks
             if t_start_prev is not None and t_end_prev is not None:
                 if t_start_prev > t_start:
-                    return
+                    continue 
                 elif t_end_prev > t_start:
                     raise ValueError(f"Plan contains action with start time prior to its previous action's end time.")
 
@@ -303,11 +316,11 @@ class Preplan(Plan):
     def copy(self) -> object:
         return Preplan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
     
-    def __add(self, action: AgentAction, t: float) -> None:
+    def _add(self, action: AgentAction, t: float) -> None:
         if self.t + self.horizon < action.t_end:
             raise ValueError(f'cannot add action scheduled to be done past the planning horizon of this plan')
 
-        super().__add(action, t)
+        super()._add(action, t)
 
 class Replan(Plan):
     def __init__(self, 
@@ -320,12 +333,12 @@ class Replan(Plan):
 
         super().__init__(*actions, t=t)
 
-    def __add(self, action: AgentAction, t: float) -> None:
+    def _add(self, action: AgentAction, t: float) -> None:
         # if self.t_next < action.t_end:
         #     return
         #     # raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
 
-        super().__add(action, t)
+        super()._add(action, t)
 
     def copy(self) -> object:
         return Replan(self.actions, t=self.t, t_next=self.t_next)

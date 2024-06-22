@@ -24,6 +24,12 @@
                 "orientation": {
                     "referenceFrame": "NADIR_POINTING",
                     "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 1000,
+                        "maxRate": 1
+                    }
                 }
             },
             "instrument": {

@@ -31,7 +31,6 @@ class SimulationAgentState(AbstractAgentState):
     def __init__(   self, 
                     agent_name : str,
                     state_type : str,
-                    payload : list,
                     pos : list,
                     vel : list,
                     attitude : list,
@@ -48,7 +47,6 @@ class SimulationAgentState(AbstractAgentState):
         
         self.agent_name = agent_name
         self.state_type = state_type
-        self.payload = payload
         self.pos : list = pos
         self.vel : list = vel
         self.attitude : list = attitude
@@ -236,7 +234,6 @@ class GroundStationAgentState(SimulationAgentState):
         
         super().__init__(agent_name,
                         SimulationAgentTypes.GROUND_STATION.value, 
-                        [],
                         pos, 
                         vel,
                         [0,0,0],
@@ -269,7 +266,6 @@ class SatelliteAgentState(SimulationAgentState):
     def __init__( self, 
                     agent_name : str,
                     orbit_state : dict,
-                    payload : list,
                     time_step : float = None,
                     eps : float = None,
                     pos : list = None,
@@ -279,7 +275,6 @@ class SatelliteAgentState(SimulationAgentState):
                     keplerian_state : dict = None,
                     t: Union[float, int] = 0.0, 
                     eclipse : int = 0,
-                    max_slew_rate : float = 1.0, #degs
                     engineering_module: EngineeringModule = None, 
                     status: str = SimulationAgentState.IDLING, 
                     **_
@@ -287,14 +282,13 @@ class SatelliteAgentState(SimulationAgentState):
         
         self.orbit_state = orbit_state
         self.eclipse = eclipse
-        self.max_slew_rate = max_slew_rate
         if pos is None and vel is None:
             orbit_state : OrbitState = OrbitState.from_dict(self.orbit_state)
             cartesian_state = orbit_state.get_cartesian_earth_centered_inertial_state()
             pos = cartesian_state[0:3]
             vel = cartesian_state[3:]
 
-            keplerian_state = orbit_state.get_keplerian_earth_centered_inertial_state()
+            keplerian_state : tuple = orbit_state.get_keplerian_earth_centered_inertial_state()
             self.keplerian_state = {"aop" : keplerian_state.aop,
                                     "ecc" : keplerian_state.ecc,
                                     "sma" : keplerian_state.sma,
@@ -313,7 +307,6 @@ class SatelliteAgentState(SimulationAgentState):
         
         super().__init__(   agent_name,
                             SimulationAgentTypes.SATELLITE.value, 
-                            payload,
                             pos, 
                             vel, 
                             attitude,
@@ -507,56 +500,6 @@ class SatelliteAgentState(SimulationAgentState):
 
         return dv < eps
 
-    # def calc_off_nadir_agle(self, req : MeasurementRequest) -> float:
-    #     """
-    #     Calculates the off-nadir angle between a satellite and a target
-    #     """
-    #     if isinstance(req, GroundPointMeasurementRequest):
-    #         lat,lon,alt = req.lat_lon_pos
-    #         R = 6.3781363e+003 + alt
-    #         target_pos = [
-    #                 R * np.cos( lat * np.pi / 180.0) * np.cos( lon * np.pi / 180.0),
-    #                 R * np.cos( lat * np.pi / 180.0) * np.sin( lon * np.pi / 180.0),
-    #                 R * np.sin( lat * np.pi / 180.0)
-    #         ]
-
-    #         # compute body-fixed frame
-    #         pos_norm = np.sqrt(np.dot(self.pos, self.pos))
-    #         nadir_dir = np.array([
-    #                         -self.pos[0]/pos_norm,
-    #                         -self.pos[1]/pos_norm,
-    #                         -self.pos[2]/pos_norm
-    #                     ])
-
-    #         vel_norm = np.sqrt(np.dot(self.vel, self.vel))
-    #         vel_dir = np.array([
-    #                         self.vel[0]/vel_norm,
-    #                         self.vel[1]/vel_norm,
-    #                         self.vel[2]/vel_norm
-    #                     ])
-    #         perp_dir = np.cross(nadir_dir, vel_dir)
-
-    #         # calculate projection to nadir x perp plane
-    #         sat_to_gp = np.array([
-    #                         target_pos[0]-self.pos[0],
-    #                         target_pos[1]-self.pos[1],
-    #                         target_pos[2]-self.pos[2]
-    #                     ])
-    #         sat_to_gp_norm = np.sqrt(np.dot(sat_to_gp, sat_to_gp))
-    #         sat_to_gp = np.array([
-    #                         sat_to_gp[0]/sat_to_gp_norm,
-    #                         sat_to_gp[1]/sat_to_gp_norm,
-    #                         sat_to_gp[2]/sat_to_gp_norm
-    #                     ])
-            
-    #         R_inert_2_rot = np.matrix([nadir_dir, vel_dir, perp_dir])
-    #         sat_to_gp_rot = np.matmul(R_inert_2_rot, sat_to_gp).A[0]
-
-    #         return np.arctan2(sat_to_gp_rot[2], sat_to_gp_rot[0]) * 180 / np.pi
-        
-    #     else:
-    #         raise NotImplementedError(f"cannot calculate off-nadir angle for measurement requests of type {type(req)}")
-
     def calc_maneuver_duration(self, final_state : AbstractAgentState) -> float:
         """ 
         Estimates the time required to perform a maneuver from the current state to a desired final state
@@ -583,7 +526,6 @@ class UAVAgentState(SimulationAgentState):
     """
     def __init__(   self, 
                     agent_name : str,
-                    payload : list,
                     pos: list, 
                     max_speed: float,
                     vel: list = [0.0,0.0,0.0], 
@@ -596,7 +538,6 @@ class UAVAgentState(SimulationAgentState):
                 
         super().__init__(   agent_name,
                             SimulationAgentTypes.UAV.value, 
-                            payload,
                             pos, 
                             vel, 
                             [0.0,0.0,0.0], 
@@ -605,8 +546,7 @@ class UAVAgentState(SimulationAgentState):
                             status, 
                             t)
         self.max_speed = max_speed
-        self.eps = eps
-        
+        self.eps = eps        
 
     def kinematic_model(self, tf: Union[int, float]) -> tuple:
         dt = tf - self.t

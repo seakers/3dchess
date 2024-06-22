@@ -4,6 +4,7 @@ import numpy as np
 from pandas import DataFrame
 
 from instrupy.base import Instrument
+from orbitpy.util import Spacecraft
 
 from dmas.agents import *
 from dmas.network import NetworkConfig
@@ -26,7 +27,7 @@ class SimulationAgent(Agent):
         - manager_network_config (:obj:`NetworkCdo(nfig`): netwdo(rk configuration of the simulation manager
         - agent_network_config (:obj:`NetworkConfig`): network configuration for this agent
         - initial_state (:obj:`SimulationAgentState`): initial state for this agent
-        - payload (`list): list of instruments on-board the spacecraft
+        - specs (`object`): describes the physical specifications of this agent
         - planning_module (`PlanningModule`): planning module assigned to this agent
         - science_module (`ScienceModule): science module assigned to this agent
         - level (int): logging level
@@ -38,7 +39,7 @@ class SimulationAgent(Agent):
                     manager_network_config: NetworkConfig, 
                     agent_network_config: NetworkConfig,
                     initial_state : SimulationAgentState,
-                    payload : list,
+                    specs : object,
                     planning_module : PlanningModule = None,
                     science_module : ScienceModule = None,
                     level: int = logging.INFO, 
@@ -79,12 +80,15 @@ class SimulationAgent(Agent):
                         level, 
                         logger)
 
-        if not isinstance(payload, list):
-            raise AttributeError(f'`payload` must be of type `list`; is of type {type(payload)}')
-        for instrument in payload:
-            if not isinstance(instrument, Instrument):
-                raise AttributeError(f'`payload` must be a `list` containing elements of type `Instrument`; contains elements of type {type(instrument)}')
-        self.payload = payload
+        self.specs = specs
+        if isinstance(self.specs, Spacecraft):
+            self.payload = {instrument.name: instrument for instrument in self.specs.instrument}
+        elif isinstance(self.specs, dict):
+            self.payload = {instrument.name: instrument for instrument in self.specs['instrument']}
+        else:
+            raise ValueError(f'`specs` must be of type `Spacecraft` or `dict`. Is of type `{type(specs)}`.')
+
+
         self.state_history : list = []
         
         # setup results folder:
@@ -230,7 +234,7 @@ class SimulationAgent(Agent):
             if content['msg_type'] == SimulationMessageTypes.PLAN.value:
                 msg = PlanMessage(**content)
 
-                assert self.get_current_time() - msg.t_plan <= 1e-3
+                # assert self.get_current_time() - msg.t_plan <= 1e-3
 
                 for action_dict in msg.plan:
                     self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
@@ -288,7 +292,7 @@ class SimulationAgent(Agent):
 
             elif action.action_type == ActionTypes.OBSERVE.value:                              
                 # perform observation
-                action.status = await self.perform_measurement(action)
+                action.status = await self.perform_observation(action)
                 
             else: # unknown action type; ignore action
                 self.log(f"action of type {action.action_type} not yet supported. ignoring...", level=logging.INFO)
@@ -401,7 +405,7 @@ class SimulationAgent(Agent):
                         return AgentAction.COMPLETED
                     
     @runtime_tracker
-    async def perform_measurement(self, action : ObservationAction) -> str:
+    async def perform_observation(self, action : ObservationAction) -> str:
         # update agent state and state history
         self.state : SimulationAgentState
         self.state.update_state(self.get_current_time(), 
@@ -410,10 +414,7 @@ class SimulationAgent(Agent):
         
         try:
             # find relevant instrument information 
-            instrument = [instrument for instrument in self.payload 
-                          if isinstance(instrument, Instrument)
-                          and instrument.name == action.instrument_name]
-            instrument : Instrument = instrument[0]
+            instrument : Instrument = self.payload[action.instrument_name]
 
             # create observation data request
             observation_req = ObservationResultsMessage(

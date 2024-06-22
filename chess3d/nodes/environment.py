@@ -366,7 +366,7 @@ class SimulationEnvironment(EnvironmentNode):
             orbitdata_columns : list = list(agent_orbitdata.gp_access_data.columns.values)
             
             # get satellite's off-axis angle
-            instrument_off_axis_angle = agent_state.attitude[0]
+            satellite_off_axis_angle = agent_state.attitude[0]
             
             # collect data for every instrument model onboard
             obs_data = []
@@ -375,7 +375,7 @@ class SimulationEnvironment(EnvironmentNode):
                 if isinstance(instrument_model, BasicSensorModel):
                     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
                     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
-                    instrument_off_axis_fov = instrument_fov_geometry.angle_width
+                    instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
                 else:
                     raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
 
@@ -384,9 +384,25 @@ class SimulationEnvironment(EnvironmentNode):
                                     for data in agent_orbitdata.gp_access_data.values
                                     if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
                                     and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
-                                    and abs(instrument_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
+                                    and abs(satellite_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
                                     ]
                 
+                raw_coverage_data_no_fov = [
+                                    list(data)
+                                    for data in agent_orbitdata.gp_access_data.values
+                                    if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
+                                    and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
+                                    ]
+                
+                # if not raw_coverage_data and raw_coverage_data_no_fov:
+                #     # for data in raw_coverage_data_no_fov:
+                #     #     look_angle_index = orbitdata_columns.index('look angle [deg]')
+                #     #     look_angle = data[look_angle_index]
+                #     #     pointing_angle = satellite_off_axis_angle
+
+                #     #     in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
+                #     x = 1
+
                 # compile data
                 for data in raw_coverage_data:                    
                     obs_data.append({

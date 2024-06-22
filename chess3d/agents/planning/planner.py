@@ -2,7 +2,9 @@
 import math
 import queue
 
-from instrupy.base import Instrument
+from instrupy.base import Instrument, BasicSensorModel
+from instrupy.util import ViewGeometry, SphericalGeometry
+from orbitpy.util import Spacecraft
 
 from dmas.modules import *
 from dmas.utils import runtime_tracker
@@ -18,15 +20,11 @@ class AbstractPlanner(ABC):
     Describes a generic planner that, given a new set of percepts, decides whether to generate a new plan
     """
     def __init__(self, 
-                 payload : list,
                  logger : logging.Logger = None) -> None:
         # initialize object
         super().__init__()
 
         # check inputs
-        if not isinstance(payload, list): raise ValueError(f'`payload` must be of type `list`. Is of type `{type(payload)}`')
-        if any([not isinstance(instrument, Instrument) for instrument in payload]): 
-            raise ValueError(f'`payload` must be a list of elements of type `Instrument`.')
         if not isinstance(logger,logging.Logger) and logger is not None: 
             raise ValueError(f'`logger` must be of type `Logger`. Is of type `{type(logger)}`.')
 
@@ -38,9 +36,6 @@ class AbstractPlanner(ABC):
         self.stats = {}                         # collector for runtime performance statistics
         
         # set attribute parameters
-        self.payload = {instrument.name: instrument 
-                        for instrument in payload
-                        if isinstance(instrument, Instrument)}
         self._logger = logger               # logger for debugging
 
     @abstractmethod
@@ -102,8 +97,7 @@ class AbstractPlanner(ABC):
 
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
-                             orbitdata : OrbitData,
-                             **_
+                             orbitdata : OrbitData
                             ) -> list:
         """ 
         Schedules any broadcasts to be done. 
@@ -260,10 +254,10 @@ class AbstractPlanner(ABC):
             if t_start <= state.t + self.horizon:
                 broadcasts.append(broadcast_action)
 
-
     @runtime_tracker
     def _schedule_maneuvers(    self, 
                                 state : SimulationAgentState, 
+                                specs : object,
                                 observations : list,
                                 clock_config : ClockConfig,
                                 orbitdata : OrbitData = None
@@ -275,6 +269,7 @@ class AbstractPlanner(ABC):
 
         ## Arguments:
             - state (:obj:`SimulationAgentState`): state of the agent at the start of the path
+            - specs (`dict` or `Sapcecraft`): contains information regarding the physical specifications of the agent
             - path (`list`): list of tuples indicating the sequence of observations to be performed and time of observation
             - t_init (`float`): start time for plan
             - clock_config (:obj:`ClockConfig`): clock being used for this simulation
@@ -282,8 +277,23 @@ class AbstractPlanner(ABC):
 
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Maneuver scheduling for agents of type `{type(state)}` not yet implemented.')
+        elif not isinstance(specs, Spacecraft):
+            raise ValueError(f'`specs` needs to be of type `Spacecraft` for agents of state type `{type(state)}`. Is of type `{type(specs)}`.')
         elif orbitdata is None:
             raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+
+        # compile instrument field of view specifications   
+        cross_track_fovs = self.collect_fov_specs(specs)
+
+        # get pointing agility specifications
+        adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
+        if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
+
+        max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
+        if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
+
+        max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
+        if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
 
         # initialize maneuver list
         maneuvers = []
@@ -293,7 +303,6 @@ class AbstractPlanner(ABC):
 
             curr_observation : ObservationAction = observations[i]
             t_img = curr_observation.t_start
-            instrument : Instrument = self.payload[curr_observation.instrument_name]
                         
             # estimate previous state
             if i == 0:
@@ -303,23 +312,40 @@ class AbstractPlanner(ABC):
             else:
                 prev_observation : ObservationAction = observations[i-1]
                 t_prev = prev_observation.t_end if prev_observation is not None else state.t
-                prev_state : SatelliteAgentState = state.propagate(t_prev)
+                prev_state : SatelliteAgentState = state.propagate(t_prev)          
+                prev_state.attitude = [prev_observation.look_angle, 0.0, 0.0]      
 
-                th_f = prev_observation.look_angle                
-                prev_state.attitude = [th_f, 0.0, 0.0]
+                # prev_maneuvers = [maneuver for maneuver in maneuvers
+                #                   if isinstance(maneuver, ManeuverAction)]
+                
+                # if prev_maneuvers:
+                #     prev_maneuvers.sort(key=lambda a: a.t_start)
+                #     last_maneuver : ManeuverAction = prev_maneuvers[-1]
+                #     prev_state.attitude = [th for th in last_maneuver.final_attitude]
 
             # maneuver to point to target
             t_maneuver_end = None
             if isinstance(state, SatelliteAgentState):
                 prev_state : SatelliteAgentState
-                t_maneuver_start = prev_state.t
                 
-                th_f = curr_observation.look_angle
+                dth = abs(curr_observation.look_angle - prev_state.attitude[0])
+                cross_track_fov = cross_track_fovs[curr_observation.instrument_name]
 
-                dth = abs(th_f - prev_state.attitude[0])
-                # if dth < 
+                if dth <= cross_track_fov / 2.0:
+                    # no need to maneuver
+                    th_f = prev_state.attitude[0]
+                else:
+                    # maneuver needed
+                    th_f = curr_observation.look_angle
 
-                dt = abs(th_f - prev_state.attitude[0]) / prev_state.max_slew_rate
+                    # TODO make efficient maneuvers
+                    # th_f_sign = abs(curr_observation.look_angle)/curr_observation.look_angle
+                    # th_f = abs(curr_observation.look_angle)- cross_track_fov / 2.0
+                    # th_f *= th_f_sign
+
+                dt = abs(th_f - prev_state.attitude[0]) / max_slew_rate
+                    
+                t_maneuver_start = prev_state.t
                 t_maneuver_end = t_maneuver_start + dt
 
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
@@ -345,6 +371,10 @@ class AbstractPlanner(ABC):
             
             # add travel maneuver if required
             if abs(t_move_start - t_move_end) >= 1e-3:
+                
+                if t_move_end < t_move_start:
+                    x = 1
+
                 move_action = TravelAction(final_pos, t_move_start, t_move_end)
                 action_sequence_i.append(move_action)
             
@@ -355,15 +385,48 @@ class AbstractPlanner(ABC):
             maneuvers.extend(action_sequence_i)
 
         return maneuvers
+    
+    def collect_fov_specs(self, specs : Spacecraft) -> dict:
+        # compile instrument field of view specifications   
+        cross_track_fovs = {instrument.name: np.NAN for instrument in specs.instrument}
+        for instrument in specs.instrument:
+            cross_track_fov = []
+            for instrument_model in instrument.mode:
+                if isinstance(instrument_model, BasicSensorModel):
+                    instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
+                    instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
+                    if instrument_fov_geometry.shape == 'RECTANGULAR':
+                        cross_track_fov.append(instrument_fov_geometry.angle_width)
+                    else:
+                        raise NotImplementedError(f'Extraction of FOV for instruments with view geometry of shape `{instrument_fov_geometry.shape}` not yet implemented.')
+                else:
+                    raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
+            cross_track_fovs[instrument.name] = max(cross_track_fov)
+
+        return cross_track_fovs
         
     @runtime_tracker
     def is_observation_path_valid(self, 
                                   state : SimulationAgentState, 
+                                  specs : object,
                                   observations : list
                                   ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
         
-        if isinstance(state, SatelliteAgentState):
+        if isinstance(state, SatelliteAgentState) and isinstance(specs, Spacecraft):
+
+            # get pointing agility specifications
+            adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
+            if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
+
+            max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
+            if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
+
+            max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
+            if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
+
+            # compile instrument field of view specifications   
+            cross_track_fovs : dict = self.collect_fov_specs(specs)
 
             # check if every observation can be reached from the prior measurement
             for j in range(len(observations)):
@@ -388,82 +451,100 @@ class AbstractPlanner(ABC):
                 th_j = observation_j.look_angle
                 t_j = observation_j.t_start
 
+                # check if desired instrument is contained within the satellite's specifications
+                if observation_j.instrument_name not in [instrument.name for instrument in specs.instrument]:
+                    return False 
+                
                 assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
 
                 # estimate maneuver time betweem states
-                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
+                fov = cross_track_fovs[observation_j.instrument_name]
+                if abs(th_j - th_i) <= fov / 2.0:
+                    dt_maneuver = 0.0
+                else:
+                    # th_f_sign = abs(th_j)/th_j
+                    # th_f = abs(th_j) - fov / 2.0
+                    # th_f *= th_f_sign
+
+                    # dt_maneuver = abs(th_f - th_i) / max_slew_rate
+                    dt_maneuver = abs(th_j - th_i) / max_slew_rate
+
                 dt_measurements = t_j - t_i
 
                 assert dt_measurements >= 0.0 and dt_maneuver >= 0.0
 
+                # Slewing constraint:
                 # check if there's enough time to maneuver from one observation to another
                 if dt_maneuver - dt_measurements >= 1e-9:
                     # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
                     return False
+                
+                # Torque constraint:
+                # TODO check if the agent has enough torque in its reaction wheels to perform the maneuver
                             
-            # if all measurements passed the check; measurement path
+            # if all measurements passed the check; observation path is valid
             return True
         else:
-            raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
+            raise NotImplementedError(f'Observation path validity check for agents with state type {type(state)} not yet implemented.')
         
-    def _print_observation_sequence(self, 
-                                    state : SatelliteAgentState, 
-                                    path : list, 
-                                    orbitdata : OrbitData = None
-                                    ) -> None :
-        """ Debugging tool. Prints current observation sequence being considered. """
+    # def _print_observation_sequence(self, 
+    #                                 state : SatelliteAgentState, 
+    #                                 path : list, 
+    #                                 orbitdata : OrbitData = None
+    #                                 ) -> None :
+    #     """ Debugging tool. Prints current observation sequence being considered. """
 
-        if not isinstance(state, SatelliteAgentState):
-            raise NotImplementedError('Observation sequence printouts for non-satellite agents not yet supported.')
-        elif orbitdata is None:
-            raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+    #     if not isinstance(state, SatelliteAgentState):
+    #         raise NotImplementedError('Observation sequence printouts for non-satellite agents not yet supported.')
+    #     elif orbitdata is None:
+    #         raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
 
-        out = f'\n{state.agent_name}:\n\n\ntarget\tinstr\tt_img\tth\tdt_mmt\tdt_mvr\tValid?\n'
+    #     out = f'\n{state.agent_name}:\n\n\ntarget\tinstr\tt_img\tth\tdt_mmt\tdt_mvr\tValid?\n'
 
-        out_temp = [f"N\A       ",
-                    f"N\A",
-                    f"\t{np.round(state.t,3)}",
-                    f"\t{np.round(state.attitude[0],3)}",
-                    f"\t-",
-                    f"\t-",
-                    f"\t-",
-                    f"\n"
-                    ]
-        out += ''.join(out_temp)
+    #     out_temp = [f"N\A       ",
+    #                 f"N\A",
+    #                 f"\t{np.round(state.t,3)}",
+    #                 f"\t{np.round(state.attitude[0],3)}",
+    #                 f"\t-",
+    #                 f"\t-",
+    #                 f"\t-",
+    #                 f"\n"
+    #                 ]
+    #     out += ''.join(out_temp)
 
-        for i in range(len(path)):
-            if i > 0:
-                measurement_prev : ObservationAction = path[i-1]
-                t_prev = measurement_i.t_end
-                lat,lon,_ = measurement_prev.target
-                obs_prev = orbitdata.get_groundpoint_access_data(lat, lon, measurement_prev.instrument_name, t_prev)
-                th_prev = obs_prev['look angle [deg]']
-            else:
-                t_prev = state.t
-                th_prev = state.attitude[0]
+    #     for i in range(len(path)):
+    #         if i > 0:
+    #             measurement_prev : ObservationAction = path[i-1]
+    #             t_prev = measurement_i.t_end
+    #             lat,lon,_ = measurement_prev.target
+    #             obs_prev = orbitdata.get_groundpoint_access_data(lat, lon, measurement_prev.instrument_name, t_prev)
+    #             th_prev = obs_prev['look angle [deg]']
+    #         else:
+    #             t_prev = state.t
+    #             th_prev = state.attitude[0]
 
-            measurement_i : ObservationAction = path[i]
-            t_i = measurement_i.t_start
-            lat,lon,alt = measurement_i.target
-            obs_i = orbitdata.get_groundpoint_access_data(lat, lon, measurement_i.instrument_name, t_i)
-            th_i = obs_i['look angle [deg]']
+    #         measurement_i : ObservationAction = path[i]
+    #         t_i = measurement_i.t_start
+    #         lat,lon,alt = measurement_i.target
+    #         obs_i = orbitdata.get_groundpoint_access_data(lat, lon, measurement_i.instrument_name, t_i)
+    #         th_i = obs_i['look angle [deg]']
 
-            dt_maneuver = abs(th_i - th_prev) / state.max_slew_rate
-            dt_measurements = t_i - t_prev
+    #         dt_maneuver = abs(th_i - th_prev) / state.max_slew_rate
+    #         dt_measurements = t_i - t_prev
 
-            out_temp = [f"({round(lat,3)}, {round(lon,3)}, {round(alt,3)})",
-                            f"  {measurement_i.instrument_name}",
-                            f"\t{np.round(measurement_i.t_start,3)}",
-                            f"\t{np.round(th_i,3)}",
-                            f"\t{np.round(dt_measurements,3)}",
-                            f"\t{np.round(dt_maneuver,3)}",
-                            f"\t{dt_maneuver <= dt_measurements}",
-                            f"\n"
-                            ]
-            out += ''.join(out_temp)
-        out += f'\nn measurements: {len(path)}\n'
+    #         out_temp = [f"({round(lat,3)}, {round(lon,3)}, {round(alt,3)})",
+    #                         f"  {measurement_i.instrument_name}",
+    #                         f"\t{np.round(measurement_i.t_start,3)}",
+    #                         f"\t{np.round(th_i,3)}",
+    #                         f"\t{np.round(dt_measurements,3)}",
+    #                         f"\t{np.round(dt_maneuver,3)}",
+    #                         f"\t{dt_maneuver <= dt_measurements}",
+    #                         f"\n"
+    #                         ]
+    #         out += ''.join(out_temp)
+    #     out += f'\nn measurements: {len(path)}\n'
 
-        print(out)
+    #     print(out)
 
 class AbstractPreplanner(AbstractPlanner):
     """
@@ -472,7 +553,6 @@ class AbstractPreplanner(AbstractPlanner):
     Conducts operations planning for an agent at the beginning of a planning period. 
     """
     def __init__(   self, 
-                    payload : list,
                     horizon : float = np.Inf,
                     period : float = np.Inf,
                     logger: logging.Logger = None
@@ -488,7 +568,7 @@ class AbstractPreplanner(AbstractPlanner):
             - logger (`logging.Logger`) : debugging logger
         """
         # initialize planner
-        super().__init__(payload, logger)    
+        super().__init__(logger)    
 
         # set parameters
         self.horizon = horizon                               # planning horizon
@@ -512,8 +592,8 @@ class AbstractPreplanner(AbstractPlanner):
     @runtime_tracker
     def needs_planning( self, 
                         state : SimulationAgentState,
-                        current_plan : Plan, 
-                        **_
+                        __ : object,
+                        current_plan : Plan
                         ) -> bool:
         """ Determines whether a new plan needs to be initalized """    
 
@@ -523,20 +603,20 @@ class AbstractPreplanner(AbstractPlanner):
     @runtime_tracker
     def generate_plan(  self, 
                         state : SimulationAgentState,
+                        specs : object,
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
-                        **_
                     ) -> Plan:
         
         # schedule observations
-        observations : list = self._schedule_observations(state, clock_config, orbitdata)
-        assert self.is_observation_path_valid(state, observations)
+        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata)
+        assert self.is_observation_path_valid(state, specs, observations)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, observations, orbitdata)
 
         # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, observations, clock_config, orbitdata)
+        maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
         
         # wait for next planning period to start
         replan : list = self.__schedule_periodic_replan(state, observations, maneuvers)
@@ -548,7 +628,7 @@ class AbstractPreplanner(AbstractPlanner):
         return self.plan.copy()
         
     @abstractmethod
-    def _schedule_observations(self, state : SimulationAgentState, clock_config : ClockConfig, orbitdata : OrbitData = None) -> list:
+    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData = None) -> list:
         """ Creates a list of observation actions to be performed by the agent """    
 
     @abstractmethod
@@ -605,4 +685,13 @@ class AbstractReplanner(AbstractPlanner):
         if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, Preplan): 
             self.preplan = current_plan.copy() 
 
-
+    @abstractmethod
+    def generate_plan(  self, 
+                        state : SimulationAgentState,
+                        specs : object,
+                        current_plan : Plan,
+                        clock_config : ClockConfig,
+                        orbitdata : OrbitData,
+                    ) -> Plan:
+        pass
+        
