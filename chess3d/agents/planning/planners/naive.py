@@ -109,13 +109,13 @@ class NaivePlanner(AbstractPreplanner):
         dt_obs = t_img - t_prev
 
         # estimate maneuver time
-        # if abs(th_img - th_prev) <= fov / 2.0:
-        #     # observations within the field-of-view of the instrument; no need to maneuver
-        #     dth_img = 0
-        # else:
-        #     # maneuver needed
-        #     dth_img = abs(th_img - th_prev)
-        dth_img = abs(th_img - th_prev)
+        if abs(th_img - th_prev) <= fov / 2.0:
+            # observations within the field-of-view of the instrument; no need to maneuver
+            dth_img = 0
+        else:
+            # maneuver needed
+            # dth_img = abs(th_img - th_prev)
+            dth_img = abs(th_img - th_prev) + fov
 
         dt_maneuver = dth_img / max_slew_rate
 

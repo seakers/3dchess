@@ -394,14 +394,14 @@ class SimulationEnvironment(EnvironmentNode):
                                     and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
                                     ]
                 
-                # if not raw_coverage_data and raw_coverage_data_no_fov:
-                #     # for data in raw_coverage_data_no_fov:
-                #     #     look_angle_index = orbitdata_columns.index('look angle [deg]')
-                #     #     look_angle = data[look_angle_index]
-                #     #     pointing_angle = satellite_off_axis_angle
+                if not raw_coverage_data and raw_coverage_data_no_fov:
+                    # for data in raw_coverage_data_no_fov:
+                    #     look_angle_index = orbitdata_columns.index('look angle [deg]')
+                    #     look_angle = data[look_angle_index]
+                    #     pointing_angle = satellite_off_axis_angle
 
-                #     #     in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
-                #     x = 1
+                    #     in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
+                    x = 1
 
                 # compile data
                 for data in raw_coverage_data:                    

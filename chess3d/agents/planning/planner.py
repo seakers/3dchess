@@ -313,15 +313,15 @@ class AbstractPlanner(ABC):
                 prev_observation : ObservationAction = observations[i-1]
                 t_prev = prev_observation.t_end if prev_observation is not None else state.t
                 prev_state : SatelliteAgentState = state.propagate(t_prev)          
-                prev_state.attitude = [prev_observation.look_angle, 0.0, 0.0]      
 
-                # prev_maneuvers = [maneuver for maneuver in maneuvers
-                #                   if isinstance(maneuver, ManeuverAction)]
+                prev_maneuvers = [maneuver for maneuver in maneuvers
+                                  if isinstance(maneuver, ManeuverAction)]
                 
-                # if prev_maneuvers:
-                #     prev_maneuvers.sort(key=lambda a: a.t_start)
-                #     last_maneuver : ManeuverAction = prev_maneuvers[-1]
-                #     prev_state.attitude = [th for th in last_maneuver.final_attitude]
+                if prev_maneuvers:
+                    prev_maneuvers.sort(key=lambda a: a.t_start)
+                    last_maneuver : ManeuverAction = prev_maneuvers[-1]
+                    prev_state.attitude = [th for th in last_maneuver.final_attitude]
+                # prev_state.attitude = [prev_observation.look_angle, 0.0, 0.0]      
 
             # maneuver to point to target
             t_maneuver_end = None
