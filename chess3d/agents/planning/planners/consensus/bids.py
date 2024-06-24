@@ -373,7 +373,8 @@ class Bid(ABC):
     def update(self, other : object, t : float) -> bool :
         """ updates the value of this bid according to the results of comparing """
         # compare bids
-        comp_result : BidComparisonResults = self.compare(other)
+        comp_result, _ = self.compare(other)
+        comp_result : BidComparisonResults
 
         # update accordingly 
         new_bid : Bid = self.copy()
@@ -411,14 +412,12 @@ class Bid(ABC):
             self.winner = other.winner
             self.t_img = other.t_img
 
-            if self.bidder == other.bidder:
-                self.own_bid = other.own_bid
-
             self.t_update = t
             self.performed = other.performed if not self.performed else True # Check if this hold true for all values
 
             assert self.t_img == other.t_img
-        raise ValueError(f'can only update bids from other bids.')
+        else:
+            raise ValueError(f'can only update bids from other bids.')
 
     def _reset(self, t_update) -> None:
         """
@@ -473,7 +472,6 @@ class Bid(ABC):
             - t_img (`int` or `float`): new imaging time
             - t_update (`int` or `float`): update time
         """
-        self.own_bid = new_bid
         self.bid = new_bid
         self.winner = self.bidder
         self.t_img = t_img

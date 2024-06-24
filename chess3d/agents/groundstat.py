@@ -103,7 +103,7 @@ class GroundStationAgent(SimulationAgent):
                         req.target[1],
                         req.target[2],
                         req.severity,
-                        f"{req.observations_types}",
+                        f"{req.observation_types}",
                         req.t_start,
                         req.t_end,
                         req.t_corr

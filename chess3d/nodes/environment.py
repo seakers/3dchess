@@ -456,6 +456,7 @@ class SimulationEnvironment(EnvironmentNode):
             # count number of GPs observed
             gps_observed : set = {(lat,lon) for _,_,lat,lon,*_ in observations_performed.values}
             n_gps_observed = len(gps_observed)
+            n_obs = len(observations_performed.values)
 
             # Generate summary
             summary_headers = ['stat_name', 'val']
@@ -471,6 +472,7 @@ class SimulationEnvironment(EnvironmentNode):
                         ['n_event_partially_co_obs', n_events_partially_co_obs],
                         ['n_events_fully_co_obs', n_events_fully_co_obs],
                         ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
+                        ['n_obs', n_obs],
                         ['n_events_detected', n_events_detected],
                         ['t_runtime', self.t_f - self.t_0]
                     ]
@@ -563,7 +565,7 @@ class SimulationEnvironment(EnvironmentNode):
                                         and abs(lat - req.target[0]) < 1e-3 
                                         and abs(lon - req.target[1]) < 1e-3
                                         and t_start <= req.t_start <= req.t_end <= t_start+duration
-                                        and all([instrument in observations_req for instrument in req.observations_types])
+                                        and all([instrument in observations_req for instrument in req.observation_types])
                                     ]
 
                 if matching_requests:

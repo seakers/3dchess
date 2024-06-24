@@ -4,8 +4,12 @@ from typing import Callable
 import numpy as np
 from traitlets import Callable
 
+from orbitpy.util import Spacecraft
+
 from dmas.utils import runtime_tracker
 
+from chess3d.agents.actions import ObservationAction
+from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.planners.consensus.bids import Bid
 from chess3d.agents.planning.planners.consensus.consensus import AbstractConsensusReplanner
 from chess3d.agents.science.requests import MeasurementRequest
@@ -27,7 +31,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                                     state: SimulationAgentState
                                     ) -> list:
         return [Bid(req.id, observation_type, state.agent_name) 
-                for observation_type in req.observations_types]
+                for observation_type in req.observation_types]
 
     def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
         """ Compares two bundles. Returns true if they are equal and false if not. """
@@ -42,6 +46,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
     def calc_path_bid(
                         self, 
                         state : SimulationAgentState, 
+                        specs : object,
                         original_results : dict,
                         original_path : list, 
                         req : MeasurementRequest, 
@@ -71,7 +76,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                     # calculate imaging time
                     req_i : MeasurementRequest
                     subtask_j : int
-                    t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
+                    t_img = self.calc_imaging_time(state, specs, path, req_i, subtask_j)
 
                     # calc utility
                     params = {"req" : req_i.to_dict(), 
@@ -88,7 +93,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                     ## calculate imaging time
                     req_i : MeasurementRequest
                     subtask_j : int
-                    t_img = self.calc_imaging_time(state, path, req_i, subtask_j)
+                    t_img = self.calc_imaging_time(state, specs, path, req_i, subtask_j)
 
                     if abs(t_img - t_img_prev) <= 1e-3:
                         # path was unchanged; keep the remaining elements of the previous path                    
@@ -126,7 +131,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                 
             assert len(tasks) == len(tasks_unique)
             assert len(tasks) == len(winning_path)
-            assert self.is_path_valid(state, winning_path)
+            assert self.is_task_path_valid(state, winning_path)
         else:
             x = 1
 
@@ -150,7 +155,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
             - level (`int`): logging level to be used
         """
         out = f'T{state.t}:\t\'{state.agent_name}\'\n{dsc}\n'
-        line = 'Req ID\t  j\tins\tdep\twinner\tbid\tt_img\tt_update  performed\n'
+        line = 'Req ID\tins\twinner\tbid\tt_img\tt_update  performed\n'
         L_LINE = len(line)
         out += line 
         for _ in range(L_LINE + 25):
@@ -163,18 +168,16 @@ class ACBBAPlanner(AbstractConsensusReplanner):
             req_id : str
             req_id_short = req_id.split('-')[0]
 
-            bids : list[Bid] = results[req_id]
-            if all([bid.winner == bid.NONE for bid in bids]): continue
+            bids : dict[str,Bid] = results[req_id]
+            if all([bid.winner == bid.NONE for _,bid in bids.items()]): continue
 
-            for bid in bids:
+            for _,bid in bids.items():
                 # if i > n: break
 
                 bid : Bid
                 if bid.winner == bid.NONE: continue
 
-                req : MeasurementRequest = MeasurementRequest.from_dict(bid.req)
-                ins, deps = req.observation_groups[bid.subtask_index]
-                line = f'{req_id_short}  {bid.subtask_index}\t{ins}\t{deps}\t{bid.winner}\t{np.round(bid.winning_bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\t  {int(bid.performed)}\n'
+                line = f'{req_id_short}  \t{bid.main_measurement}\t{bid.winner}\t{np.round(bid.bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\t  {int(bid.performed)}\n'
                 out += line
                 i +=1
 
@@ -193,15 +196,22 @@ class ACBBAPlanner(AbstractConsensusReplanner):
 
     def _can_bid(self, 
                 state : SimulationAgentState, 
+                specs : object,
                 results : dict,
                 req : MeasurementRequest, 
-                subtask_index : int
+                main_measurement : str
                 ) -> bool:
         """ Checks if an agent has the ability to bid on a measurement task """
+        if isinstance(specs, dict):
+            payload = specs['instrument']
+        elif isinstance(specs, Spacecraft):
+            payload = specs.instrument
+        else:
+            raise ValueError('`specs` type not supported.')
 
         # check capabilities - TODO: Replace with knowledge graph
-        bid : Bid = results[req.id][subtask_index]
-        if bid.main_measurement not in [instrument for instrument in state.payload]:
+        bid : Bid = results[req.id][main_measurement]
+        if bid.main_measurement not in [instrument.name for instrument in payload]:
             return False 
 
         # check time constraints
@@ -212,87 +222,64 @@ class ACBBAPlanner(AbstractConsensusReplanner):
         return True
 
     @runtime_tracker
-    def calc_imaging_time(self, state : SimulationAgentState, path : list, req : MeasurementRequest, subtask_index : int) -> float:
+    def calc_imaging_time(self, state : SimulationAgentState, specs : object, path : list, req : MeasurementRequest, main_measurement : str, orbitdata : OrbitData) -> float:
         """
         Computes the ideal time when a task in the path would be performed
         
         ### Returns
             - t_img (`float`): earliest available imaging time
         """
-        main_measurement = req.observations_types[subtask_index]
         proposed_path = [path_element for path_element in path]
         proposed_path_tasks = [(path_req, path_j) for path_req, path_j,_,_ in path]
-        j = proposed_path_tasks.index((req,subtask_index))  
+        j = proposed_path_tasks.index((req,main_measurement))  
         
         # get access times for all available measurements
         if j > 0:
             _,_,t_prev,_ = path[j-1]
             t_start = max(t_prev, req.t_start)
-            access_times = [t_img 
-                            for t_img in self.access_times[req.id][main_measurement]
-                            if state.t <= t_start <= t_img <= req.t_end]
 
         else:
             t_start = max(state.t, req.t_start)
-            access_times = [t_img 
-                            for t_img in self.access_times[req.id][main_measurement]
-                            if state.t <= t_start <= t_img <= req.t_end]
 
+        access_times = [t_img*orbitdata.time_step 
+                        for t_img,_,_,lat,lon,_,_,_,_,_,instrument,_ in orbitdata.gp_access_data.values
+                        if  abs(req.target[0] - lat) <= 1e-3
+                        and abs(req.target[1] - lon) <= 1e-3
+                        and t_start <= t_img*orbitdata.time_step <= req.t_end
+                        and instrument == main_measurement]
 
+        # find earliest time that is allowed
         while access_times:
             t_img = access_times.pop(0)
             u_exp = self.utility_func(req.to_dict(), t_img)
     
-            proposed_path[j] = (req, subtask_index, t_img, u_exp)
+            proposed_path[j] = (req, main_measurement, t_img, u_exp)
 
-            if self.is_path_valid(state, proposed_path):
+            if self.is_task_path_valid(state, specs, proposed_path, orbitdata):
                 return t_img
 
         return -1
 
-    def is_path_valid(self, state : SimulationAgentState, path : list) -> bool:
+    def is_task_path_valid(self, state : SimulationAgentState, specs : object, path : list, orbitdata : OrbitData) -> bool:
         if isinstance(state, SatelliteAgentState):
-            for j in range(len(path)):
-                # calculate previous off-nadir angle
-                i = j - 1
-                if i >= 0:
-                    req_i, subtask_i, t_i, _ = path[i]
-                    req_i : MeasurementRequest
-                    lat_i,lon_i,_ =  req_i.target
-                    main_instrument_i = req_i.observations_types[subtask_i]
+            # check if no suitable time was found for this observation
+            if any([t_img < 0.0 for _,_,t_img,_ in path]):
+                return False
 
-                    obs_i = self.agent_orbitdata.get_groundpoint_access_data(lat_i, lon_i, main_instrument_i, t_i)
-                    th_i = obs_i['look angle [deg]']
-                else:
-                    th_i = state.attitude[0]
-                    t_i = state.t
-                assert th_i is not None
+            # gather list of observation actions
+            observations = []
+            for req, main_measurement, t_img, _ in path:
+                req : MeasurementRequest
+                th_imgs = [ th_img
+                            for t,_,_,lat,lon,_,th_img,_,_,_,instrument,_ in orbitdata.gp_access_data.values
+                            if  abs(req.target[0] - lat) <= 1e-3
+                            and abs(req.target[1] - lon) <= 1e-3
+                            and abs(t_img - t*orbitdata.time_step) <= 1e-3
+                            and instrument == main_measurement
+                            ]
+                observations.append(ObservationAction(main_measurement, req.target, th_imgs.pop(), t_img))
 
-                if t_i < 0.0:
-                    return False
-
-                # calculate off-nadir angle for observation j
-                req_j, subtask_j, t_j, _ = path[j]
-                req_j : MeasurementRequest
-                lat_j,lon_j,_ =  req_j.target
-                main_instrument_j = req_j.observations_types[subtask_j]
-
-                obs_j = self.agent_orbitdata.get_groundpoint_access_data(lat_j, lon_j, main_instrument_j, t_j)
-                th_j = obs_j['look angle [deg]']
-
-                if th_j is None:
-                    # agent cannot perform action j (out of sight)
-                    return False 
-
-                # estimate maneuver time 
-                dt_maneuver = abs(th_j - th_i) / state.max_slew_rate
-                dt_measurements = t_j - t_i
-
-                # check if there's enough time to maneuver from one observation to another
-                if dt_maneuver - dt_measurements > 1e-3 :
-                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
-                    return False
+            return self.is_observation_path_valid(state, specs, observations)
+        
         else:
             raise NotImplementedError(f'Check for path validity for agents of type {type(state)} not yet supported.')
-
-        return True

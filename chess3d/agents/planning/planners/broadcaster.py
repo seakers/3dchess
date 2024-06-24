@@ -29,7 +29,8 @@ class Broadcaster(AbstractReplanner):
     def needs_planning( self, 
                         state : SimulationAgentState,
                         _ : object,
-                        current_plan : Plan
+                        current_plan : Plan,
+                        __ : OrbitData
                         ) -> bool:
         """ only replans whenever there are any pending relays or requests to broadcasts to perform """
 

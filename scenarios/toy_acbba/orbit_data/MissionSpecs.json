@@ -101,7 +101,7 @@
                 "components": {
                     "adcs": {
                         "maxTorque": 1000,
-                        "maxRate": 1
+                        "maxRate": 0.1
                     }
                 }
             },
@@ -126,8 +126,8 @@
                 },
                 "maneuver": {
                     "maneuverType": "SINGLE_ROLL_ONLY",
-                    "A_rollMin": -50,
-                    "A_rollMax": 50
+                    "A_rollMin": -20.0,
+                    "A_rollMax": 20.0
                 },
                 "@id": "img1",
                 "@type": "Basic Sensor"
@@ -149,7 +149,7 @@
                     "inc": 0.0,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": -10.0
                 }
             },
             "planner": {

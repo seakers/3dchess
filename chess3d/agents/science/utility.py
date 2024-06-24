@@ -21,11 +21,11 @@ List of utility functions used to evalute the value of observations
 def no_utility(**_) -> float:
     return 0.0
 
-def fixed_utility(req : dict, **_) -> float:
+def fixed_utility(req : dict, t_img : float, *_) -> float:
     # unpack request
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
-    return req.severity
+    return req.severity if req.t_start <= t_img <= req.t_end else 0.0
 
 def random_utility(req : dict, **_) -> float:    
     # unpack request
@@ -57,7 +57,7 @@ def linear_utility(
     # calculate urgency factor from task
     utility = req.severity * (t_img - req.t_end) / (req.t_start - req.t_end)
 
-    return utility / len(req.observations_types)
+    return utility if req.t_start <= t_img <= req.t_end else 0.0
 
 def exp_utility(   
                     req : dict, 
