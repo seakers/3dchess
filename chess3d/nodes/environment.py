@@ -592,7 +592,7 @@ class SimulationEnvironment(EnvironmentNode):
                 if all([obs in observations_req for obs in observations]):
                     if len(observations) == len(observations_req):
                         n_events_fully_co_obs += 1
-                    elif len(observations) > 2:
+                    elif len(observations) > 1:
                         n_events_partially_co_obs += 1
 
             # count number of events detected

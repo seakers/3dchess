@@ -101,12 +101,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                         and abs(completed_observation.target[0] - preplanned_action.target[0]) <= 1e-3
                                         and abs(completed_observation.target[1] - preplanned_action.target[1]) <= 1e-3
                                         and abs(completed_observation.target[2] - preplanned_action.target[2]) <= 1e-3]
-            x = 1
+            
             # remove from plan
             for preplanned_observation in preplanned_observations:
                 preplanned_observation : ObservationAction
                 self.preplan.actions.remove(preplanned_observation)
-            x = 1
 
         # update incoming bids
         self.incoming_bids = [  Bid.from_dict(msg.bid) 
