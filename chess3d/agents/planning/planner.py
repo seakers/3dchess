@@ -345,8 +345,10 @@ class AbstractPlanner(ABC):
 
                 dt = abs(th_f - prev_state.attitude[0]) / max_slew_rate
                     
-                t_maneuver_start = prev_state.t
-                t_maneuver_end = t_maneuver_start + dt
+                # t_maneuver_start = prev_state.t
+                # t_maneuver_end = t_maneuver_start + dt
+                t_maneuver_end = curr_observation.t_start
+                t_maneuver_start = t_maneuver_end - dt
 
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
                     action_sequence_i.append(ManeuverAction([th_f, 0, 0], 
@@ -356,8 +358,10 @@ class AbstractPlanner(ABC):
                     t_maneuver_end = None
 
             # move to target
-            t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
-            t_move_end = t_img
+            # t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
+            t_move_start = t_prev
+            # t_move_end = t_img
+            t_move_end = t_img if t_maneuver_end is None else t_maneuver_start
             future_state : SatelliteAgentState = state.propagate(t_move_end)
             final_pos = future_state.pos
             
@@ -379,11 +383,12 @@ class AbstractPlanner(ABC):
                 action_sequence_i.append(move_action)
             
             # wait for measurement action to start
-            if t_move_end < t_img:
-                action_sequence_i.append( WaitForMessages(t_move_end, t_img) )
+            # if t_move_end < t_img:
+            #     action_sequence_i.append( WaitForMessages(t_move_end, t_img) )
 
             maneuvers.extend(action_sequence_i)
 
+        maneuvers.sort(key=lambda a: a.t_start)
         return maneuvers
     
     def collect_fov_specs(self, specs : Spacecraft) -> dict:

@@ -165,15 +165,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # perform consesus phase
         # ---------------------------------
         # DEBUGGING OUTPUTS 
-        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     bid : Bid
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        # print('')
+        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+        print(f'bundle:')
+        for req, subtask_index, bid in self.bundle:
+            req : MeasurementRequest
+            bid : Bid
+            id_short = req.id.split('-')[0]
+            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        print('')
         # ---------------------------------
 
         self.results, self.bundle, \
@@ -189,15 +189,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # ---------------------------------
         # DEBUGGING OUTPUTS 
-        # self.log_results('CONSENSUS PHASE', state, self.results)
-        # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     bid : Bid
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        # print('')
+        self.log_results('CONSENSUS PHASE', state, self.results)
+        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+        print(f'bundle:')
+        for req, subtask_index, bid in self.bundle:
+            req : MeasurementRequest
+            bid : Bid
+            id_short = req.id.split('-')[0]
+            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        print('')
         # ---------------------------------
 
         if len(self.bids_to_rebroadcasts) >= self.replan_threshold:
@@ -250,14 +250,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        # self.log_results('PLANNING PHASE', state, self.results)
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     bid : Bid
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        # print('')
+        self.log_results('PLANNING PHASE', state, self.results)
+        print(f'bundle:')
+        for req, subtask_index, bid in self.bundle:
+            req : MeasurementRequest
+            bid : Bid
+            id_short = req.id.split('-')[0]
+            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        print('')
         # -------------------------------
 
         # output plan
@@ -925,18 +925,21 @@ class AbstractConsensusReplanner(AbstractReplanner):
             
             # get next path on the queue
             path_i : list = queue.get()
+
+            path_bids : list[Bid] = [Bid(req.id, main_measurement, state.agent_name, u_exp)
+                                for req,main_measurement,_,u_exp in path_i]
                 
             # check if it out-performs the current best path
-            if any([results[req.id][main_measurement].bid >= u_exp     # at least one bid is outbid by competitors
-                    for req,main_measurement,_,u_exp in path_i]):
+            if any([results[bid.req_id][bid.main_measurement] >= bid     # at least one bid is outbid by competitors
+                    for bid in path_bids]):
                 # ignore path
                 continue
             
             # check if it outbids competitors
             path_utility = sum([u_exp for _,_,_,u_exp in path_i])
             if (path_utility > max_path_utility                         # path utility is increased
-                and all([results[req.id][main_measurement].bid < u_exp     # all new bids outbid competitors
-                         for req,main_measurement,_,u_exp in path_i])
+                and all([results[bid.req_id][bid.main_measurement] < bid     # all new bids outbid competitors
+                         for bid in path_bids])
                 ):
                 max_path = [path_element for path_element in path_i]
                 max_path_utility = path_utility
@@ -953,6 +956,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         if (req, main_measurement) not in path_reqs
                         ]
             
+            x = 1
             for req, main_measurement in reqs_to_add:
                 req : MeasurementRequest
                 # copy current path
@@ -969,8 +973,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 path_j[-1] = (req, main_measurement, t_img, u_exp)
 
                 # only add to queue if the path can be performed
-                if self.is_task_path_valid(state, specs, path_j, orbitdata): queue.put(path_j)
-        
+                if self.is_task_path_valid(state, specs, path_j, orbitdata): 
+                    queue.put(path_j)
+                else:
+                    x = 1
+            x = 1
         return max_path
 
     @runtime_tracker

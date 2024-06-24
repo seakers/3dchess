@@ -169,13 +169,13 @@ class ACBBAPlanner(AbstractConsensusReplanner):
             req_id_short = req_id.split('-')[0]
 
             bids : dict[str,Bid] = results[req_id]
-            if all([bid.winner == bid.NONE for _,bid in bids.items()]): continue
+            # if all([bid.winner == bid.NONE for _,bid in bids.items()]): continue
 
             for _,bid in bids.items():
                 # if i > n: break
 
                 bid : Bid
-                if bid.winner == bid.NONE: continue
+                # if bid.winner == bid.NONE: continue
 
                 line = f'{req_id_short}  \t{bid.main_measurement}\t{bid.winner}\t{np.round(bid.bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\t  {int(bid.performed)}\n'
                 out += line
@@ -247,7 +247,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                         and abs(req.target[1] - lon) <= 1e-3
                         and t_start <= t_img*orbitdata.time_step <= req.t_end
                         and instrument == main_measurement]
-
+        x = 1
         # find earliest time that is allowed
         while access_times:
             t_img = access_times.pop(0)
