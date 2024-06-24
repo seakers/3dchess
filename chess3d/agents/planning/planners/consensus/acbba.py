@@ -247,7 +247,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                         and abs(req.target[1] - lon) <= 1e-3
                         and t_start <= t_img*orbitdata.time_step <= req.t_end
                         and instrument == main_measurement]
-        x = 1
+        
         # find earliest time that is allowed
         while access_times:
             t_img = access_times.pop(0)

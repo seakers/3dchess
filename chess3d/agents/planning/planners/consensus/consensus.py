@@ -956,7 +956,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         if (req, main_measurement) not in path_reqs
                         ]
             
-            x = 1
             for req, main_measurement in reqs_to_add:
                 req : MeasurementRequest
                 # copy current path
@@ -973,11 +972,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 path_j[-1] = (req, main_measurement, t_img, u_exp)
 
                 # only add to queue if the path can be performed
-                if self.is_task_path_valid(state, specs, path_j, orbitdata): 
-                    queue.put(path_j)
-                else:
-                    x = 1
-            x = 1
+                if self.is_task_path_valid(state, specs, path_j, orbitdata): queue.put(path_j)
+                    
         return max_path
 
     @runtime_tracker

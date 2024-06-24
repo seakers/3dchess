@@ -190,6 +190,9 @@ class SimulationAgent(Agent):
             _, _, msg_dict = await queue.get()
             msg = message_from_dict(**msg_dict)
             senses.append(msg)
+
+            # give other agents time to finish sending their messages
+            await asyncio.sleep(1e-6)
         return senses
     
     @runtime_tracker
