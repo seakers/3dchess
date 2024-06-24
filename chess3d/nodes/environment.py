@@ -40,8 +40,6 @@ class SimulationEnvironment(EnvironmentNode):
                 results_path : str, 
                 env_network_config: NetworkConfig, 
                 manager_network_config: NetworkConfig, 
-                utility_func : Callable[[], Any], 
-                # measurement_reqs : list = [],
                 events_path : str = None,
                 level: int = logging.INFO, 
                 logger: logging.Logger = None) -> None:
@@ -95,7 +93,6 @@ class SimulationEnvironment(EnvironmentNode):
             self.agents[self.GROUND_STATION] = gs_names
 
         # initialize parameters
-        self.utility_func = utility_func
         self.observation_history = []
         self.agent_connectivity = {}
         for src in agent_names:

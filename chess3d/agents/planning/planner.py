@@ -462,11 +462,6 @@ class AbstractPlanner(ABC):
                 if abs(th_j - th_i) <= fov / 2.0:
                     dt_maneuver = 0.0
                 else:
-                    # th_f_sign = abs(th_j)/th_j
-                    # th_f = abs(th_j) - fov / 2.0
-                    # th_f *= th_f_sign
-
-                    # dt_maneuver = abs(th_f - th_i) / max_slew_rate
                     dt_maneuver = abs(th_j - th_i) / max_slew_rate
 
                 dt_measurements = t_j - t_i
