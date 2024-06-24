@@ -226,7 +226,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # -------------------------------
         # DEBUG PRINTOUTS
-        # self.log_results('PRE-PLANNING PHASE', state, self.results)
+        self.log_results('PRE-PLANNING PHASE', state, self.results)
         # -------------------------------
 
         # check if bundle is full
@@ -795,6 +795,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         t_0 = time.perf_counter()
         # -------------------------------------
         # TEMPORARY FIX: resets bundle and replans from scratch
+        reset_reqs = []
         if len(bundle) > 0:
             # reset path
             path = []
@@ -806,10 +807,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 results[req.id][main_measurement] = bid
 
                 available_reqs.append((req,main_measurement))
+                reset_reqs.append((req,main_measurement))
 
             # reset bundle 
             bundle = []
         # -------------------------------------
+        available_reqs.sort(key=lambda a : a[0].id)
 
         if len(bundle) == 0: # create bundle from scratch
             # generate path 
@@ -835,6 +838,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
             # update path
             path = [path_elem for path_elem in max_path]
+
+            # announce that tasks were reset
+            path_reqs = [(req, main_measurement) 
+                         for req,main_measurement,*_ in max_path]
+            reset_bids : list[Bid] = [results[req.id][main_measurement]
+                                      for req,main_measurement in reset_reqs
+                                      if (req,main_measurement) not in path_reqs]
+            if reset_bids:
+                x = 1
+            
+            changes.extend(reset_bids)
 
         else: # add tasks to the bundle
             raise NotImplementedError('Repairing bundle not yet implemented')

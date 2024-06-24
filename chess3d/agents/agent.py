@@ -192,7 +192,7 @@ class SimulationAgent(Agent):
             senses.append(msg)
 
             # give other agents time to finish sending their messages
-            await asyncio.sleep(1e-6)
+            await asyncio.sleep(1e-3)
         return senses
     
     @runtime_tracker

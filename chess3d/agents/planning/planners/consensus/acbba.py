@@ -155,7 +155,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
             - level (`int`): logging level to be used
         """
         out = f'T{state.t}:\t\'{state.agent_name}\'\n{dsc}\n'
-        line = 'Req ID\tins\twinner\tbid\tt_img\tt_update  performed\n'
+        line = 'Req ID\t ins\twinner\tbid\tt_img\tt_update  performed\n'
         L_LINE = len(line)
         out += line 
         for _ in range(L_LINE + 25):
@@ -177,7 +177,10 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                 bid : Bid
                 # if bid.winner == bid.NONE: continue
 
-                line = f'{req_id_short}  \t{bid.main_measurement}\t{bid.winner}\t{np.round(bid.bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\t  {int(bid.performed)}\n'
+                if bid.winner != bid.NONE:
+                    line = f'{req_id_short} {bid.main_measurement[0]}\t{bid.winner[0]}_{bid.winner[-1]}\t{np.round(bid.bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\t  {int(bid.performed)}\n'
+                else:
+                    line = f'{req_id_short} {bid.main_measurement[0]}\tn/a\t{np.round(bid.bid,3)}\t{np.round(bid.t_img,3)}\t{np.round(bid.t_update,1)}\t  {int(bid.performed)}\n'
                 out += line
                 i +=1
 
