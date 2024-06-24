@@ -74,7 +74,7 @@ class NaivePlanner(AbstractPreplanner):
             # find if feasible observation time exists 
             feasible_obs = [(t[i], th[i]) 
                             for i in range(len(t))
-                            if self.is_observation_feasible(t[i], th[i], t_prev, th_prev, 
+                            if self.is_observation_feasible(state, t[i], th[i], t_prev, th_prev, 
                                                             max_slew_rate, max_torque, 
                                                             cross_track_fovs[instrument])]
             
@@ -96,6 +96,7 @@ class NaivePlanner(AbstractPreplanner):
         return observations
     
     def is_observation_feasible(self, 
+                                state : SimulationAgentState,
                                 t_img : float, 
                                 th_img : float, 
                                 t_prev : float, 
@@ -197,7 +198,7 @@ class NaivePlanner(AbstractPreplanner):
                 t : list
                 th : list
 
-                if (interval.is_during(t_img - orbitdata.time_step) 
+                if (   interval.is_during(t_img - orbitdata.time_step) 
                     or interval.is_during(t_img + orbitdata.time_step)):
                     interval.extend(t_img)
                     t.append(t_img)

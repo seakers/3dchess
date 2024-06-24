@@ -463,18 +463,18 @@ class SimulationEnvironment(EnvironmentNode):
             summary_data = [
                         ['t_start', self._clock_config.start_date], 
                         ['t_end', self._clock_config.end_date], 
-                        ['n_events', n_events],
                         ['n_gps', n_gps],
                         ['n_gps_accessible', n_gps_accessible],
                         ['n_gps_access_ptg', n_gps_access_ptg],
                         ['n_gps_obs', n_gps_observed],
+                        ['n_obs', n_obs],
+                        ['n_events', n_events],
+                        ['n_events_detected', n_events_detected],
                         ['n_events_obs', n_events_obs],
+                        ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
                         ['n_event_partially_co_obs', n_events_partially_co_obs],
                         ['n_events_fully_co_obs', n_events_fully_co_obs],
-                        ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
-                        ['n_obs', n_obs],
-                        ['n_events_detected', n_events_detected],
-                        ['t_runtime', self.t_f - self.t_0]
+                        ['t_runtime', round(self.t_f - self.t_0,3)]
                     ]
 
             summary_df = DataFrame(summary_data, columns=summary_headers)
