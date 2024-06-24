@@ -470,7 +470,7 @@ class AbstractPlanner(ABC):
 
                 # Slewing constraint:
                 # check if there's enough time to maneuver from one observation to another
-                if dt_maneuver - dt_measurements >= 1e-9:
+                if dt_maneuver > dt_measurements:
                     # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
                     return False
                 

@@ -42,100 +42,100 @@ class ACBBAPlanner(AbstractConsensusReplanner):
             return True
         return False
     
-    @runtime_tracker
-    def calc_path_bid(
-                        self, 
-                        state : SimulationAgentState, 
-                        specs : object,
-                        original_results : dict,
-                        original_path : list, 
-                        req : MeasurementRequest, 
-                        subtask_index : int
-                    ) -> tuple:
-        state : SimulationAgentState = state.copy()
-        winning_path = None
-        winning_path_utility = 0.0
-        winning_t_img = -1
-        winning_utility = 0.0
+    # @runtime_tracker
+    # def calc_path_bid(
+    #                     self, 
+    #                     state : SimulationAgentState, 
+    #                     specs : object,
+    #                     original_results : dict,
+    #                     original_path : list, 
+    #                     req : MeasurementRequest, 
+    #                     subtask_index : int
+    #                 ) -> tuple:
+    #     state : SimulationAgentState = state.copy()
+    #     winning_path = None
+    #     winning_path_utility = 0.0
+    #     winning_t_img = -1
+    #     winning_utility = 0.0
 
-        # TODO: Improve runtime efficiency:
-        for i in range(len(original_path)+1):
-            # generate possible path
-            path = [scheduled_obs for scheduled_obs in original_path]
-            path.insert(i, (req, subtask_index, -1, -1))
+    #     # TODO: Improve runtime efficiency:
+    #     for i in range(len(original_path)+1):
+    #         # generate possible path
+    #         path = [scheduled_obs for scheduled_obs in original_path]
+    #         path.insert(i, (req, subtask_index, -1, -1))
             
-            # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
+    #         # self.log_task_sequence('new proposed path', path, level=logging.WARNING)
 
-            # recalculate bids for each task in the path if needed
-            for j in range(i, len(path), 1):
-                req_i, subtask_j, t_img_prev, _ = path[j]
+    #         # recalculate bids for each task in the path if needed
+    #         for j in range(i, len(path), 1):
+    #             req_i, subtask_j, t_img_prev, _ = path[j]
                     
-                if j == i:
-                    # new request and subtask are being added; recalculate bid
+    #             if j == i:
+    #                 # new request and subtask are being added; recalculate bid
 
-                    # calculate imaging time
-                    req_i : MeasurementRequest
-                    subtask_j : int
-                    t_img = self.calc_imaging_time(state, specs, path, req_i, subtask_j)
+    #                 # calculate imaging time
+    #                 req_i : MeasurementRequest
+    #                 subtask_j : int
+    #                 t_img = self.calc_imaging_time(state, specs, path, req_i, subtask_j)
 
-                    # calc utility
-                    params = {"req" : req_i.to_dict(), 
-                              "subtask_index" : subtask_j, 
-                              "t_img" : t_img}
-                    utility = self.utility_func(**params) if t_img >= 0 else np.NINF
+    #                 # calc utility
+    #                 params = {"req" : req_i.to_dict(), 
+    #                           "subtask_index" : subtask_j, 
+    #                           "t_img" : t_img}
+    #                 utility = self.utility_func(**params) if t_img >= 0 else np.NINF
 
-                    # place bid in path
-                    path[j] = (req_i, subtask_j, t_img, utility)
+    #                 # place bid in path
+    #                 path[j] = (req_i, subtask_j, t_img, utility)
 
-                else:
-                    # elements from previous path are being adapted to new path
+    #             else:
+    #                 # elements from previous path are being adapted to new path
 
-                    ## calculate imaging time
-                    req_i : MeasurementRequest
-                    subtask_j : int
-                    t_img = self.calc_imaging_time(state, specs, path, req_i, subtask_j)
+    #                 ## calculate imaging time
+    #                 req_i : MeasurementRequest
+    #                 subtask_j : int
+    #                 t_img = self.calc_imaging_time(state, specs, path, req_i, subtask_j)
 
-                    if abs(t_img - t_img_prev) <= 1e-3:
-                        # path was unchanged; keep the remaining elements of the previous path                    
-                        break
-                    else:
-                        # calc utility
-                        params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
-                        utility = self.utility_func(**params) if t_img >= 0 else np.NINF
+    #                 if abs(t_img - t_img_prev) <= 1e-3:
+    #                     # path was unchanged; keep the remaining elements of the previous path                    
+    #                     break
+    #                 else:
+    #                     # calc utility
+    #                     params = {"req" : req_i.to_dict(), "subtask_index" : subtask_j, "t_img" : t_img}
+    #                     utility = self.utility_func(**params) if t_img >= 0 else np.NINF
 
-                        # place bid in path
-                        path[j] = (req_i, subtask_j, t_img, utility)
+    #                     # place bid in path
+    #                     path[j] = (req_i, subtask_j, t_img, utility)
 
-            # look for path with the best utility
-            path_utility = self.__sum_path_utility(path)
-            if path_utility > winning_path_utility:
-                winning_path = [scheduled_obs for scheduled_obs in path]
-                winning_path_utility = path_utility
-                _, _, winning_t_img, winning_utility = path[i]
+    #         # look for path with the best utility
+    #         path_utility = self.__sum_path_utility(path)
+    #         if path_utility > winning_path_utility:
+    #             winning_path = [scheduled_obs for scheduled_obs in path]
+    #             winning_path_utility = path_utility
+    #             _, _, winning_t_img, winning_utility = path[i]
         
-        ## replacement strategy
-        if winning_path is None:
-            # TODO add replacement strategy
-            pass
+    #     ## replacement strategy
+    #     if winning_path is None:
+    #         # TODO add replacement strategy
+    #         pass
         
-        # ensure winning path contains desired task 
-        if winning_path:
-            assert len(winning_path) == len(original_path) + 1
+    #     # ensure winning path contains desired task 
+    #     if winning_path:
+    #         assert len(winning_path) == len(original_path) + 1
 
-            tasks = [(path_req, path_subtask_index) for path_req, path_subtask_index, _, __ in winning_path]
-            assert (req, subtask_index) in tasks
+    #         tasks = [(path_req, path_subtask_index) for path_req, path_subtask_index, _, __ in winning_path]
+    #         assert (req, subtask_index) in tasks
 
-            tasks_unique = []
-            for task in tasks:
-                if task not in tasks_unique: tasks_unique.append(task)
+    #         tasks_unique = []
+    #         for task in tasks:
+    #             if task not in tasks_unique: tasks_unique.append(task)
                 
-            assert len(tasks) == len(tasks_unique)
-            assert len(tasks) == len(winning_path)
-            assert self.is_task_path_valid(state, winning_path)
-        else:
-            x = 1
+    #         assert len(tasks) == len(tasks_unique)
+    #         assert len(tasks) == len(winning_path)
+    #         assert self.is_task_path_valid(state, winning_path)
+    #     else:
+    #         x = 1
 
-        return winning_path, winning_path_utility, winning_t_img, winning_utility
+    #     return winning_path, winning_path_utility, winning_t_img, winning_utility
     
     def __sum_path_utility(self, path : list) -> float:
         """ Gives the total utility of a proposed observations sequence """

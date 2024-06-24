@@ -338,7 +338,7 @@ class PlanningModule(InternalModule):
                                                      plan,
                                                      self.orbitdata):    
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                        self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -454,6 +454,9 @@ class PlanningModule(InternalModule):
                     if request.severity > 0.0:
                         # event was detected and an observation was requested
                         requests.append(request)
+
+                    # give science module time to send any remaining measurement requests
+                    await asyncio.sleep(1e-6)
                 else:
                     # the science module generated a different response; process later
                     await self.misc_inbox.put(internal_msg)

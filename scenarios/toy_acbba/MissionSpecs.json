@@ -179,7 +179,6 @@
             "eventsPath" : "./scenarios/toy_acbba/resources/events.csv"
         },
         "connectivity" : "FULL", 
-        "utility" : "LINEAR",
         "clock" : {
             "@type" : "EVENT"
         }
