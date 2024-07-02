@@ -96,17 +96,17 @@
             "args": "toy_acbba"
         },
         {
-            "name": "COVERAGE TEST",
+            "name": "WRAPPER TEST",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/coverage.py",
+            "program": "${workspaceRoot}/examples/toy/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             },
-            "args": "coverage_test"
+            "args": "-n toy"
         }
     ],
     "compounds": [
