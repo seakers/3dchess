@@ -1,4 +1,4 @@
-import logging
+from orbitpy.util import Spacecraft
 
 from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
@@ -19,16 +19,35 @@ class NaivePlanner(AbstractPreplanner):
     @runtime_tracker
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
+                               specs : object,
                                _: ClockConfig, 
                                orbitdata: OrbitData = None
                                ) -> list:
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
+        elif not isinstance(specs, Spacecraft):
+            raise ValueError(f'`specs` needs to be of type `{Spacecraft}` for agents with states of type `{SatelliteAgentState}`')
 
         # compile access times for this planning horizon
-        access_times, ground_points = self.calculate_access_times(state, orbitdata)
+        access_times, ground_points = self.calculate_access_times(state, specs, orbitdata)
         access_times : list; ground_points : dict
+
+        # compile list of instruments available in payload
+        payload : dict = {instrument.name: instrument for instrument in specs.instrument}
         
+        # compile instrument field of view specifications   
+        cross_track_fovs : dict = self.collect_fov_specs(specs)
+        
+        # get pointing agility specifications
+        adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
+        if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
+
+        max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
+        if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
+
+        max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
+        if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
+
         # generate plan
         observations = []
         while access_times:
@@ -37,7 +56,11 @@ class NaivePlanner(AbstractPreplanner):
             lat,lon = ground_points[grid_index][gp_index]
             target = [lat,lon,0.0]
 
-            # check feasibility 
+            # check if agent has the payload to peform observation
+            if instrument not in payload:
+                continue
+
+            # compare to previous measurement 
             if not observations:
                 # no prior observation exists, compare with current state
                 t_prev = state.t
@@ -51,25 +74,53 @@ class NaivePlanner(AbstractPreplanner):
             # find if feasible observation time exists 
             feasible_obs = [(t[i], th[i]) 
                             for i in range(len(t))
-                            if self.is_observation_feasible(t[i], th[i], t_prev, th_prev)]
+                            if self.is_observation_feasible(state, t[i], th[i], t_prev, th_prev, 
+                                                            max_slew_rate, max_torque, 
+                                                            cross_track_fovs[instrument])]
             
             if feasible_obs:
                 # is feasible; create observation action
                 t_img, th_img = feasible_obs[0]
                 action = ObservationAction(instrument, target, th_img, t_img)
+
+                # check if another observation was already scheduled at this time
+                if observations:
+                    action_prev : ObservationAction = observations[-1]
+                    if abs(action_prev.t_start - action.t_start) <= 1e-3:
+                        continue
+
                 observations.append(action)
 
         assert self.no_redundant_observations(state, observations, orbitdata)
 
         return observations
     
-    def is_observation_feasible(self, t_img, th_img, t_prev, th_prev) -> bool:
+    def is_observation_feasible(self, 
+                                state : SimulationAgentState,
+                                t_img : float, 
+                                th_img : float, 
+                                t_prev : float, 
+                                th_prev : float, 
+                                max_slew_rate : float, 
+                                max_torque : float,
+                                fov : float
+                                ) -> bool:
         """ compares previous observation """
         # calculate inteval between observations
         dt_obs = t_img - t_prev
 
         # estimate maneuver time
-        dt_maneuver = abs(th_img - th_prev)
+        if abs(th_img - th_prev) <= fov / 2.0:
+            # observations within the field-of-view of the instrument; no need to maneuver
+            dth_img = 0
+        else:
+            # maneuver needed
+            # dth_img = abs(th_img - th_prev)
+            dth_img = abs(th_img - th_prev) + fov
+
+        dt_maneuver = dth_img / max_slew_rate
+
+        #TODO implement torque constraint
 
         # check feasibility
         return dt_maneuver <= dt_obs
@@ -101,7 +152,11 @@ class NaivePlanner(AbstractPreplanner):
             raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
             
     @runtime_tracker
-    def calculate_access_times(self, state : SimulationAgentState, orbitdata : OrbitData) -> dict:
+    def calculate_access_times(self, 
+                               state : SimulationAgentState, 
+                               specs : Spacecraft,
+                               orbitdata : OrbitData
+                               ) -> dict:
         # define planning horizon
         t_start = state.t
         t_end = self.plan.t_next+self.horizon
@@ -109,6 +164,7 @@ class NaivePlanner(AbstractPreplanner):
         t_index_end = t_end / orbitdata.time_step
 
         # compile coverage data
+        orbitdata_columns : list = list(orbitdata.gp_access_data.columns.values)
         raw_coverage_data = [(t_index*orbitdata.time_step, *_)
                              for t_index, *_ in orbitdata.gp_access_data.values
                              if t_index_start <= t_index <= t_index_end]
@@ -117,16 +173,22 @@ class NaivePlanner(AbstractPreplanner):
         access_times = {}
         ground_points = {}
         
-        for t_img, gp_index, _, lat, lon, _, look_angle, _, _, grid_index, instrument, _ in raw_coverage_data:
-        # for t_index,_,_,lat_access,lon_access,_,th_img,*_ in accesses.values:
+        for data in raw_coverage_data:
+            t_img = data[orbitdata_columns.index('time index')]
+            grid_index = data[orbitdata_columns.index('grid index')]
+            gp_index = data[orbitdata_columns.index('GP index')]
+            lat = data[orbitdata_columns.index('lat [deg]')]
+            lon = data[orbitdata_columns.index('lon [deg]')]
+            instrument = data[orbitdata_columns.index('instrument')]
+            look_angle = data[orbitdata_columns.index('look angle [deg]')]
             
             # initialize dictionaries if needed
             if grid_index not in access_times:
                 access_times[grid_index] = {}
                 ground_points[grid_index] = {}
             if gp_index not in access_times[grid_index]:
-                access_times[grid_index][gp_index] = {instrument : [] 
-                                                        for instrument in state.payload}
+                access_times[grid_index][gp_index] = {instr.name : [] 
+                                                        for instr in specs.instrument}
                 ground_points[grid_index][gp_index] = (lat, lon)
 
             # compile time interval information 
@@ -136,7 +198,7 @@ class NaivePlanner(AbstractPreplanner):
                 t : list
                 th : list
 
-                if (interval.is_during(t_img - orbitdata.time_step) 
+                if (   interval.is_during(t_img - orbitdata.time_step) 
                     or interval.is_during(t_img + orbitdata.time_step)):
                     interval.extend(t_img)
                     t.append(t_img)

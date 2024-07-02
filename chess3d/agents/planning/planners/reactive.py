@@ -43,12 +43,12 @@ class ReactivePlanner(AbstractPreplanner):
         """updates internal knowledge of the reward grid for planning purposes """
         raise NotImplementedError('TODO: Implement reward grid')
     
-    @abstractmethod
-    def _schedule_measurements(self, state : SimulationAgentState, current_plan : list, clock_config : ClockConfig, orbitdata : dict) -> list:
-        pass
+    # @abstractmethod
+    # def _schedule_measurements(self, state : SimulationAgentState, specs : object, current_plan : list, clock_config : ClockConfig, orbitdata : dict) -> list:
+    #     pass
 
-    def _schedule_broadcasts(self, 
-                             state: SimulationAgentState, 
-                             observations: list, 
-                             orbitdata: OrbitData) -> list:
-        broadcasts = super()._schedule_broadcasts(state, observations, orbitdata)
+    # def _schedule_broadcasts(self, 
+    #                          state: SimulationAgentState, 
+    #                          observations: list, 
+    #                          orbitdata: OrbitData) -> list:
+    #     broadcasts = super()._schedule_broadcasts(state, observations, orbitdata)

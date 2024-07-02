@@ -105,6 +105,7 @@ class ScienceModule(InternalModule):
             while True:
                 self.log('listening to manager broadcast!')
                 _, _, content = await self.listen_manager_broadcast()
+
                 if content['msg_type'] == SimulationMessageTypes.SENSES.value:
                     self.log(f"received senses from parent agent!", level=logging.DEBUG)
 
@@ -172,12 +173,13 @@ class ScienceModule(InternalModule):
             while True:
                 # wait for next observation to be performed by parent agent
                 msg : ObservationResultsMessage = await self.onboard_processing_inbox.get()
-                
+
                 # unpack information from observation message
                 observation_data = msg.observation_data
                 instrument = Instrument.from_dict(msg.instrument)
                 
                 # process each observation
+                reqs_from_observations = []
                 for obs in observation_data:
                     # process observation
                     lat_event,lon_event,t_start,t_end,t_corr,severity,observations_required \
@@ -203,7 +205,24 @@ class ScienceModule(InternalModule):
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 
                                                         self.get_parent_name(), 
                                                         measurement_req.to_dict())
+                    reqs_from_observations.append(req_msg)
+                
+                if not reqs_from_observations:
+                    measurement_req = MeasurementRequest(self.get_parent_name(),
+                                                         [-1,-1,0.0],
+                                                         0.0,
+                                                         observations_required,
+                                                         t_start,
+                                                         t_end,
+                                                         t_corr)
+                    req_msg = MeasurementRequestMessage(self.get_module_name(), 
+                                                        self.get_parent_name(), 
+                                                        measurement_req.to_dict())
+                    reqs_from_observations.append(req_msg)
+                    
+                for req_msg in reqs_from_observations:
                     await self._send_manager_msg(req_msg, zmq.PUB)
+
 
         except asyncio.CancelledError:
             return

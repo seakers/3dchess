@@ -40,8 +40,6 @@ class SimulationEnvironment(EnvironmentNode):
                 results_path : str, 
                 env_network_config: NetworkConfig, 
                 manager_network_config: NetworkConfig, 
-                utility_func : Callable[[], Any], 
-                # measurement_reqs : list = [],
                 events_path : str = None,
                 level: int = logging.INFO, 
                 logger: logging.Logger = None) -> None:
@@ -95,7 +93,6 @@ class SimulationEnvironment(EnvironmentNode):
             self.agents[self.GROUND_STATION] = gs_names
 
         # initialize parameters
-        self.utility_func = utility_func
         self.observation_history = []
         self.agent_connectivity = {}
         for src in agent_names:
@@ -366,7 +363,7 @@ class SimulationEnvironment(EnvironmentNode):
             orbitdata_columns : list = list(agent_orbitdata.gp_access_data.columns.values)
             
             # get satellite's off-axis angle
-            instrument_off_axis_angle = agent_state.attitude[0]
+            satellite_off_axis_angle = agent_state.attitude[0]
             
             # collect data for every instrument model onboard
             obs_data = []
@@ -375,7 +372,7 @@ class SimulationEnvironment(EnvironmentNode):
                 if isinstance(instrument_model, BasicSensorModel):
                     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
                     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
-                    instrument_off_axis_fov = instrument_fov_geometry.angle_width
+                    instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
                 else:
                     raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
 
@@ -384,9 +381,25 @@ class SimulationEnvironment(EnvironmentNode):
                                     for data in agent_orbitdata.gp_access_data.values
                                     if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
                                     and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
-                                    and abs(instrument_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
+                                    and abs(satellite_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
                                     ]
                 
+                raw_coverage_data_no_fov = [
+                                    list(data)
+                                    for data in agent_orbitdata.gp_access_data.values
+                                    if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
+                                    and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
+                                    ]
+                
+                if not raw_coverage_data and raw_coverage_data_no_fov:
+                    # for data in raw_coverage_data_no_fov:
+                    #     look_angle_index = orbitdata_columns.index('look angle [deg]')
+                    #     look_angle = data[look_angle_index]
+                    #     pointing_angle = satellite_off_axis_angle
+
+                    #     in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
+                    x = 1
+
                 # compile data
                 for data in raw_coverage_data:                    
                     obs_data.append({
@@ -443,23 +456,25 @@ class SimulationEnvironment(EnvironmentNode):
             # count number of GPs observed
             gps_observed : set = {(lat,lon) for _,_,lat,lon,*_ in observations_performed.values}
             n_gps_observed = len(gps_observed)
+            n_obs = len(observations_performed.values)
 
             # Generate summary
             summary_headers = ['stat_name', 'val']
             summary_data = [
                         ['t_start', self._clock_config.start_date], 
                         ['t_end', self._clock_config.end_date], 
-                        ['n_events', n_events],
                         ['n_gps', n_gps],
                         ['n_gps_accessible', n_gps_accessible],
                         ['n_gps_access_ptg', n_gps_access_ptg],
                         ['n_gps_obs', n_gps_observed],
+                        ['n_obs', n_obs],
+                        ['n_events', n_events],
+                        ['n_events_detected', n_events_detected],
                         ['n_events_obs', n_events_obs],
+                        ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
                         ['n_event_partially_co_obs', n_events_partially_co_obs],
                         ['n_events_fully_co_obs', n_events_fully_co_obs],
-                        ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
-                        ['n_events_detected', n_events_detected],
-                        ['t_runtime', self.t_f - self.t_0]
+                        ['t_runtime', round(self.t_f - self.t_0,3)]
                     ]
 
             summary_df = DataFrame(summary_data, columns=summary_headers)
@@ -550,7 +565,7 @@ class SimulationEnvironment(EnvironmentNode):
                                         and abs(lat - req.target[0]) < 1e-3 
                                         and abs(lon - req.target[1]) < 1e-3
                                         and t_start <= req.t_start <= req.t_end <= t_start+duration
-                                        and all([instrument in observations_req for instrument in req.observations_types])
+                                        and all([instrument in observations_req for instrument in req.observation_types])
                                     ]
 
                 if matching_requests:
@@ -577,7 +592,7 @@ class SimulationEnvironment(EnvironmentNode):
                 if all([obs in observations_req for obs in observations]):
                     if len(observations) == len(observations_req):
                         n_events_fully_co_obs += 1
-                    elif len(observations) > 2:
+                    elif len(observations) > 1:
                         n_events_partially_co_obs += 1
 
             # count number of events detected

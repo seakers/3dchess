@@ -1,5 +1,7 @@
 import logging
 
+from orbitpy.util import Spacecraft
+
 from dmas.network import NetworkConfig
 
 from chess3d.agents.science.module import ScienceModule
@@ -14,8 +16,8 @@ class SatelliteAgent(SimulationAgent):
                     manager_network_config: NetworkConfig, 
                     agent_network_config: NetworkConfig,
                     initial_state: SimulationAgentState, 
+                    specs: Spacecraft, 
                     planning_module : PlanningModule,
-                    payload: list, 
                     science_module: ScienceModule = None, 
                     level: int = logging.INFO, 
                     logger: logging.Logger = None
@@ -27,7 +29,7 @@ class SatelliteAgent(SimulationAgent):
                         manager_network_config, 
                         agent_network_config, 
                         initial_state, 
-                        payload, 
+                        specs,
                         planning_module, 
                         science_module, 
                         level, 
@@ -36,3 +38,4 @@ class SatelliteAgent(SimulationAgent):
     async def setup(self) -> None:
         # nothing to setup
         return
+    

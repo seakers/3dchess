@@ -144,7 +144,7 @@ class ObservationPerformedMessage(SimulationMessage):
     def __init__(self, 
                  src: str, 
                  dst: str, 
-                 measurement_action : dict,
+                 observation_action : dict,
                  id: str = None,
                  path : list = [],
                  **_
@@ -155,7 +155,7 @@ class ObservationPerformedMessage(SimulationMessage):
         Informs other agents that a measurement action was performed to satisfy a measurement request
         """
         super().__init__(src, dst, SimulationMessageTypes.OBSERVATION_PERFORMED.value, id, path)
-        self.measurement_action = measurement_action
+        self.observation_action = observation_action
 
 class MeasurementBidMessage(SimulationMessage):
     """

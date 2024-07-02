@@ -1,6 +1,4 @@
 import argparse
-import csv
-from datetime import datetime, timedelta
 import json
 import logging
 import pandas as pd
@@ -20,7 +18,6 @@ from chess3d.utils import *
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulationAgent
-from chess3d.agents.science.utility import utility_function
 from chess3d.nodes.environment import SimulationEnvironment
 
 # from satplan.visualizer import Visualizer
@@ -157,8 +154,6 @@ def main(   scenario_name : str,
     
     # ------------------------------------
     # create environment
-    ## unpack config
-    env_utility_function = scenario_config_dict.get('utility', 'LINEAR')
     
     ## subscribe to all elements in the network
     env_subs = []
@@ -186,7 +181,6 @@ def main(   scenario_name : str,
                                         results_path, 
                                         env_network_config, 
                                         manager_network_config,
-                                        utility_function[env_utility_function], 
                                         events_path,
                                         logger=logger)
     

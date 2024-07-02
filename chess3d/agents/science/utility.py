@@ -6,32 +6,32 @@ from chess3d.agents.science.requests import MeasurementRequest
 List of utility functions used to evalute the value of observations
 """
 
-def synergy_factor(req : dict, subtask_index : int, **_) -> float:
-    # unpack request
-    req : MeasurementRequest = MeasurementRequest.from_dict(req)
+# def synergy_factor(req : dict, subtask_index : int, **_) -> float:
+#     # unpack request
+#     req : MeasurementRequest = MeasurementRequest.from_dict(req)
     
-    _, dependent_measurements = req.observation_groups[subtask_index]
-    k = len(dependent_measurements) + 1
+#     _, dependent_measurements = req.observation_groups[subtask_index]
+#     k = len(dependent_measurements) + 1
 
-    if k / len(req.observations_types) == 1.0:
-        return 1.0
-    else:
-        return 1.0/3.0
+#     if k / len(req.observations_types) == 1.0:
+#         return 1.0
+#     else:
+#         return 1.0/3.0
 
 def no_utility(**_) -> float:
     return 0.0
 
-def fixed_utility(req : dict, **_) -> float:
+def fixed_utility(req : dict, t_img : float, *_) -> float:
     # unpack request
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
-    return req.s_max / len(req.observations_types)
+    return req.severity if req.t_start <= t_img <= req.t_end else 0.0
 
 def random_utility(req : dict, **_) -> float:    
     # unpack request
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
-    return req.s_max * random.random() / len(req.observations_types)
+    return req.severity * random.random()
 
 def linear_utility(   
                     req : dict, 
@@ -55,9 +55,9 @@ def linear_utility(
     req : MeasurementRequest = MeasurementRequest.from_dict(req)
     
     # calculate urgency factor from task
-    utility = req.s_max * (t_img - req.t_end) / (req.t_start - req.t_end)
+    utility = req.severity * (t_img - req.t_end) / (req.t_start - req.t_end)
 
-    return utility / len(req.observations_types)
+    return utility if req.t_start <= t_img <= req.t_end else 0.0
 
 def exp_utility(   
                     req : dict, 
@@ -85,14 +85,14 @@ def exp_utility(
         return 0.0
     
     # calculate urgency factor from task
-    utility = req.s_max * np.exp( - req.urgency * (t_img - req.t_start) )
+    utility = req.severity * np.exp( - (t_img - req.t_start) )
 
-    return utility / len(req.observations_types)
+    return utility
 
 utility_function = {
-    "NONE" : no_utility,
-    "FIXED" : fixed_utility,
-    "RANDOM" : random_utility,
-    "LINEAR" : linear_utility,
-    "EXPONENTIAL" : exp_utility
+    "none" : no_utility,
+    "fixed" : fixed_utility,
+    "random" : random_utility,
+    "linear" : linear_utility,
+    "exponential" : exp_utility
 }

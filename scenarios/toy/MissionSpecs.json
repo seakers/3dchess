@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 0.5,
+    "duration": 0.1,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -26,35 +26,9 @@
                     "convention": "REF_FRAME_ALIGNED"
                 },
                 "components": {
-                    "cmdh": {
-                        "power": 2,
-                        "memorySize": 100
-                    },
-                    "comms": {
-                        "transmitter": {
-                            "power": 3,
-                            "maxDataRate": 1,
-                            "bufferSize": 10,
-                            "numChannels": 1
-                        },
-                        "receiver": {
-                            "power": 3,
-                            "maxDataRate": 1,
-                            "bufferSize": 10
-                        }
-                    },
-                    "eps": {
-                        "powerGenerator": {
-                            "@type": "Solar Panel",
-                            "maxPowerGeneration": 10
-                        },
-                        "powerStorage": {
-                            "@type": "Battery",
-                            "maxPowerGeneration": 10,
-                            "energyStorageCapacity": 0.01,
-                            "depthOfDischarge": 0.99,
-                            "initialCharge": 1
-                        }
+                    "adcs" : {
+                        "maxTorque" : 1000,
+                        "maxRate" : 1
                     }
                 }
             },

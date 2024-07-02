@@ -21,7 +21,7 @@ class MeasurementRequest(object):
                  requester : str,
                  target : list,
                  severity : float,
-                 observations_types : list,
+                 observation_types : list,
                  t_start: Union[float, int] = 0.0, 
                  t_end: Union[float, int] = np.Inf, 
                  t_corr: Union[float, int] = np.Inf, 
@@ -52,9 +52,9 @@ class MeasurementRequest(object):
             raise ValueError(f'`target` must be a list of size 3. Is of size {len(target)}.')
         if not isinstance(severity, float) and not isinstance(severity, int):
             raise ValueError(f'`severity` must be of type `float` or type `int`. is of type {type(severity)}.')
-        if not isinstance(observations_types, list):
-            raise ValueError(f'`instruments` must be of type `list`. is of type {type(observations_types)}.')
-        if any([not isinstance(observations_type, str) for observations_type in observations_types]):
+        if not isinstance(observation_types, list):
+            raise ValueError(f'`instruments` must be of type `list`. is of type {type(observation_types)}.')
+        if any([not isinstance(observations_type, str) for observations_type in observation_types]):
             raise ValueError(f'`measurements` must a `list` of elements of type `str`.')
         
         if isinstance(t_start, str) and t_start.lower() == "inf":   t_start = np.Inf
@@ -68,7 +68,7 @@ class MeasurementRequest(object):
         self.requester = requester
         self.target = [target_val for target_val in target]
         self.severity = severity
-        self.observations_types = [obs_type for obs_type in observations_types]    
+        self.observation_types = [obs_type for obs_type in observation_types]    
         self.t_start = t_start
         self.t_end = t_end
         self.t_corr = t_corr
@@ -107,15 +107,15 @@ class MeasurementRequest(object):
 
         same_target = all([abs(self.target[i]-other.target[i]) <= 1e-3 for i in range(len(self.target))])
         same_severity = abs(self.severity - other.severity) <= 1e-3
-        same_observations = (len(self.observations_types) == len(other.observation_types)
-                             and all([observation in other.observation_types for observation in self.observations_types]))
+        same_observations = (len(self.observation_types) == len(other.observation_types)
+                             and all([observation in other.observation_types for observation in self.observation_types]))
         same_time = abs(self.t_end - other.t_end) <= 1e-3
         same_decorrelation = abs(self.t_corr - other.t_corr) <= 1e-3
         return (same_target
                 and same_severity
                 # and same_observations
                 and same_time
-                and same_decorrelation
+                # and same_decorrelation
                 )
 
     def __hash__(self) -> int:
