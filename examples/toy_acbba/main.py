@@ -10,7 +10,7 @@ if __name__ == "__main__":
     print_welcome()
     
     # load scenario json file
-    scenario_file = os.path.join('./examples', 'toy', 'MissionSpecs.json')
+    scenario_file = os.path.join('./examples', 'toy_acbba', 'MissionSpecs.json')
     with open(scenario_file, 'r') as scenario_file:
         scenario_specs : dict = json.load(scenario_file)
 

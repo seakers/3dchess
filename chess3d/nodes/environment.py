@@ -446,8 +446,9 @@ class SimulationEnvironment(EnvironmentNode):
             
             # TODO: move this section to external results compiler script -------------
             # count observations performed
-            n_events, n_events_obs, n_events_partially_co_obs, \
-                n_events_fully_co_obs, n_events_detected \
+            # n_events, n_unique_event_obs, n_total_event_obs,
+            n_events, n_unique_event_obs, n_total_event_obs, \
+                 n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected \
                     = self.count_observations(observations_performed)
 
             # calculate coverage
@@ -463,14 +464,15 @@ class SimulationEnvironment(EnvironmentNode):
             summary_data = [
                         ['t_start', self._clock_config.start_date], 
                         ['t_end', self._clock_config.end_date], 
-                        ['n_gps', n_gps],
-                        ['n_gps_accessible', n_gps_accessible],
-                        ['n_gps_access_ptg', n_gps_access_ptg],
+                        # ['n_gps', n_gps],
+                        # ['n_gps_accessible', n_gps_accessible],
+                        # ['n_gps_access_ptg', n_gps_access_ptg],
                         ['n_gps_obs', n_gps_observed],
                         ['n_obs', n_obs],
                         ['n_events', n_events],
                         ['n_events_detected', n_events_detected],
-                        ['n_events_obs', n_events_obs],
+                        ['n_unique_event_obs', n_unique_event_obs],
+                        ['n_total_event_obs', n_total_event_obs],
                         ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
                         ['n_event_partially_co_obs', n_events_partially_co_obs],
                         ['n_events_fully_co_obs', n_events_fully_co_obs],
@@ -558,7 +560,7 @@ class SimulationEnvironment(EnvironmentNode):
                     # add to list of observed events
                     events_observed.append(matching_observations)
 
-                # find measurement requests that match the event bieng
+                # find measurement requests that match this event
                 matching_requests = [req
                                         for req in self.measurement_reqs
                                         if isinstance(req, MeasurementRequest)
@@ -568,6 +570,7 @@ class SimulationEnvironment(EnvironmentNode):
                                         and all([instrument in observations_req for instrument in req.observation_types])
                                     ]
 
+                # check if a measurement request was made
                 if matching_requests:
                     events_detected.append(matching_requests)
 
@@ -575,7 +578,8 @@ class SimulationEnvironment(EnvironmentNode):
             n_events = len(self.events.values)                
 
             # count number of observed events
-            n_events_obs = len(events_observed)
+            n_unique_event_obs = len(events_observed)
+            n_total_event_obs = sum([len(obs) for obs in events_observed])
 
             # count number of co-observed events 
             n_events_partially_co_obs = 0
@@ -600,12 +604,13 @@ class SimulationEnvironment(EnvironmentNode):
 
         else: # no events present in the simulation
             n_events = 0
-            n_events_obs = 0
+            n_unique_event_obs = 0
+            n_total_event_obs = 0
             n_events_partially_co_obs = 0
             n_events_fully_co_obs = 0
             n_events_detected = 0   
 
-        return n_events, n_events_obs, n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected
+        return n_events, n_unique_event_obs, n_total_event_obs, n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected
 
     def calc_coverage_metrics(self) -> tuple:
         # TODO improve performance or load precomputed vals

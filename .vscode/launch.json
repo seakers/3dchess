@@ -60,54 +60,38 @@
             "name": "TOY",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": "toy"
-        },
-        {
-            "name": "TOY RANDOM",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": "toy_random"
-        },
-        {
-            "name": "TOY ACBBA",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": "toy_acbba"
-        },
-        {
-            "name": "WRAPPER TEST",
-            "type": "python",
-            "request": "launch",
             "program": "${workspaceRoot}/examples/toy/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": "-n toy"
-        }
+            }
+        },
+        {
+            "name": "TOY ACBBA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/examples/toy_acbba/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
+            "name": "ALGAL BLOOMS",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/scenarios/algal_bloom/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
     ],
     "compounds": [
         //{

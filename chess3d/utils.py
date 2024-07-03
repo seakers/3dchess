@@ -53,14 +53,14 @@ def setup_results_directory(scenario_path : list, agent_names : list) -> str:
 
     return results_path
 
-def print_welcome(scenario_name) -> None:
+def print_welcome(scenario_name = None) -> None:
     os.system('cls' if os.name == 'nt' else 'clear')
     out = "\n======================================================"
     out += '\n   _____ ____        ________  __________________\n  |__  // __ \      / ____/ / / / ____/ ___/ ___/\n   /_ </ / / /_____/ /   / /_/ / __/  \__ \\__ \ \n ___/ / /_/ /_____/ /___/ __  / /___ ___/ /__/ / \n/____/_____/      \____/_/ /_/_____//____/____/ (v1.0)'
     out += "\n======================================================"
     out += '\n\tTexas A&M University - SEAK Lab ©'
     out += "\n======================================================"
-    out += f"\nSCENARIO: {scenario_name}"
+    if scenario_name is not None: out += f"\nSCENARIO: {scenario_name}"
     print(out)
 
 def arg_parser() -> tuple:

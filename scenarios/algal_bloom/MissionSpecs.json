@@ -89,14 +89,14 @@
             },
             "science" : {
                 "@type": "ORACLE", 
-                "eventsPath" : "./scenarios/toy/resources/events.csv"
+                "eventsPath" : "./scenarios/algal_bloom/resources/events.csv"
             }
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/toy/resources/points.csv"
+            "covGridFilePath": "./scenarios/algal_bloom/resources/points.csv"
         }
     ],
     "scenario": {   
@@ -104,16 +104,16 @@
         "utility" : "LINEAR",
         "events" : {
             "@type": "PREDEF", 
-            "eventsPath" : "./scenarios/toy/resources/events.csv"
+            "eventsPath" : "./scenarios/algal_bloom/resources/events.csv"
         },
         "clock" : {
             "@type" : "EVENT"
         },
-        "scenarioPath" : "./examples/toy/",
+        "scenarioPath" : "./scenarios/algal_bloom/",
         "name" : "toy"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir" : "./examples/toy/orbit_data"
+        "outDir" : "./scenarios/algal_bloom/orbit_data"
     }
 }
