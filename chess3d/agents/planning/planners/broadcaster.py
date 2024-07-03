@@ -47,6 +47,6 @@ class Broadcaster(AbstractReplanner):
         
         # initialize list of broadcasts to be done
         broadcasts = self._schedule_broadcasts(state, orbitdata)
-                                        
+
         # update and return plan with new broadcasts
         return Replan.from_preplan(current_plan, broadcasts, t=state.t)

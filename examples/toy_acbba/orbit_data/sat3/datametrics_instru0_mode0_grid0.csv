@@ -3,6 +3,6 @@ Epoch [JDUT1] is 2458849.5
 Step size [s] is 10.0
 Mission Duration [Days] is 0.05
 time index,GP index,pnt-opt index,lat [deg],lon [deg],observation range [km],look angle [deg],incidence angle [deg],solar zenith [deg]
-192,0,,0.0,0.0,721.3,0.78,0.86,nan
-192,1,,-1.0,0.0,730.8,-8.8,9.8,nan
-192,2,,1.0,0.0,730.8,8.8,9.8,nan
+195,0,,0.0,0.0,721.3,1.51,1.68,nan
+195,1,,-1.0,0.0,730.8,-8.89,9.9,nan
+195,2,,1.0,0.0,730.8,8.89,9.9,nan

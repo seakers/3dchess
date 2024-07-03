@@ -9,9 +9,6 @@ from chess3d.utils import print_welcome
 if __name__ == "__main__":
     # set scenario name
     scenario_name = 'algal_bloom'
-
-    # terminal welcome message
-    print_welcome(scenario_name)
     
     # load base scenario json file
     scenario_file = os.path.join('./scenarios', scenario_name, 'MissionSpecs.json')
@@ -28,7 +25,11 @@ if __name__ == "__main__":
     max_slew_rate = 1
     max_torque = 1
 
-    instruments = ['visual', 'thermal', 'sar']
+    instruments = [
+                    'visual', 
+                    'thermal', 
+                    'sar'
+                   ]
     abbreviations = {'visual' : 'vis', 
                    'thermal' : "therm", 
                    'sar' : 'sar'}
@@ -36,8 +37,14 @@ if __name__ == "__main__":
     field_of_regard = 45
 
     preplanners = ['naive']
-    replanners = ['broadcaster', 'acbba']
+    replanners = [
+                  'broadcaster', 
+                #   'acbba'
+                  ]
     bundle_sizes = [1, 2, 3, 5]
+    utility = 'fixed'
+
+    n_runs = len(preplanners) * ((len(replanners) - 1) * len(bundle_sizes) + 1)
 
     for preplanner in preplanners:
         for replanner in replanners:
@@ -56,6 +63,10 @@ if __name__ == "__main__":
                     for i in range(n_sats_per_plane):
                         sat : dict = copy.deepcopy(scenario_specs['spacecraft'][-1])
 
+                        # set agent name and id
+                        sat['@id'] = f'{abbreviations[instruments[j]]}_sat_{j}_{i}'
+                        sat['name'] = f'{abbreviations[instruments[j]]}_{i}'
+
                         # set slew rate
                         sat['spacecraftBus']['components']['adcs']['maxRate'] = max_slew_rate
                         sat['spacecraftBus']['components']['adcs']['maxTorque'] = max_torque
@@ -71,6 +82,14 @@ if __name__ == "__main__":
                         # set orbit
                         sat['orbitState']['state']['raan'] = raans[j]
                         sat['orbitState']['state']['ta'] = tas[j]
+
+                        # set preplanner
+                        sat['planner']['preplanner']['@type'] = preplanner
+
+                        # set replanner
+                        sat['planner']['replanner']['@type'] = replanner
+                        sat['planner']['replanner']['utility'] = utility
+                        sat['planner']['replanner']['bundle size'] = bundle_size
                         
                         # add to list of sats
                         sats.append(sat)
@@ -78,10 +97,19 @@ if __name__ == "__main__":
                 # update list of satellites
                 scenario_specs['spacecraft'] = sats
 
+                # set scenario name
+                if replanner == 'broadcaster':
+                    scenario_specs['scenario']['name'] = f'{preplanner}_{replanner}'
+                else:
+                    scenario_specs['scenario']['name'] = f'{preplanner}_{replanner}_{bundle_size}'
+
                 # initialize mission
                 mission : Mission = Mission.from_dict(scenario_specs)
 
+                # print welcome message
+                print_welcome(scenario_specs['scenario']['name'])
+
                 # execute mission
-                # mission.execute()
+                mission.execute()
 
     print('DONE')

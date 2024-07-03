@@ -60,21 +60,21 @@ class Mission:
                 agent : SimulationAgent
                 pool.submit(agent.run, *[])  
         
-    def from_dict(d : dict, level=logging.WARNING):
+    def from_dict(mission_specs : dict, level=logging.WARNING):
         """ Loads simulation from input json """
 
         # select unsused ports
         port = random.randint(5555, 9999)
 
         # unpack agent info
-        spacecraft_dict : dict = d.get('spacecraft', None)
-        uav_dict        : dict = d.get('uav', None)
-        gstation_dict   : dict = d.get('groundStation', None)
-        scenario_dict   : dict = d.get('scenario', None)
+        spacecraft_dict : dict = mission_specs.get('spacecraft', None)
+        uav_dict        : dict = mission_specs.get('uav', None)
+        gstation_dict   : dict = mission_specs.get('groundStation', None)
+        scenario_dict   : dict = mission_specs.get('scenario', None)
 
         # unpack scenario info
-        scenario_dict : dict = d.get('scenario', None)
-        grid_dict : dict = d.get('grid', None)
+        scenario_dict : dict = mission_specs.get('scenario', None)
+        grid_dict : dict = mission_specs.get('grid', None)
         
         # load agent names
         agent_names = [SimulationElementRoles.ENVIRONMENT.value]
@@ -86,18 +86,18 @@ class Mission:
         # get scenario name
         scenario_name = scenario_dict.get('name', 'test')
         
-        # get scenario path
+        # get scenario path and name
         scenario_path : str = scenario_dict.get('scenarioPath', None)
         if scenario_path is None: raise ValueError(f'`scenarioPath` not contained in input file.')
 
         # create results directory
-        results_path : str = setup_results_directory(scenario_path, agent_names)
+        results_path : str = setup_results_directory(scenario_path, scenario_name, agent_names)
 
         # precompute orbit data
-        orbitdata_dir = OrbitData.precompute(d) if spacecraft_dict is not None else None
+        orbitdata_dir = OrbitData.precompute(mission_specs) if spacecraft_dict is not None else None
 
         # load simulation clock configuration
-        clock_config : ClockConfig = SimulationFactory.generate_clock(d, spacecraft_dict, orbitdata_dir)
+        clock_config : ClockConfig = SimulationFactory.generate_clock(mission_specs, spacecraft_dict, orbitdata_dir)
         
         # load events
         events_path = SimulationFactory.load_events(scenario_dict, grid_dict, clock_config)
@@ -181,12 +181,16 @@ class Mission:
                                                 })
         
         ## initialize environment
-        environment = SimulationEnvironment(scenario_path, 
-                                            results_path, 
+        environment = SimulationEnvironment(results_path, 
+                                            orbitdata_dir,
+                                            spacecraft_dict,
+                                            uav_dict,
+                                            gstation_dict,
                                             env_network_config, 
                                             manager_network_config,
                                             events_path,
-                                            logger=logger)
+                                            level,
+                                            logger)
         
         # return initialized mission
         return Mission(manager, environment, agents, monitor)
@@ -253,7 +257,7 @@ class SimulationFactory:
 
         # load orbitdata
         if orbitdata_dir is not None:
-            agent_orbitdata : OrbitData = OrbitData.load(scenario_path, agent_name)
+            agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name)
         else:
             agent_orbitdata = None
 

@@ -195,9 +195,7 @@ class ScienceModule(InternalModule):
                                                          t_corr)
                     
                     # check if another request has already been made for this event
-                    redundant_reqs = [req for req in self.known_reqs
-                                      if measurement_req.same_event(req)]
-                    if redundant_reqs:
+                    if any([measurement_req.same_event(req) for req in self.known_reqs]):
                         # another request has been made for this same event; ignore
                         measurement_req.severity = 0.0
                     

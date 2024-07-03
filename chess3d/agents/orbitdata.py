@@ -411,12 +411,10 @@ class OrbitData:
     """
     LOAD FROM PRE-COMPUTED DATA
     """
-    def load(scenario_path : str, agent_name : str) -> object:
+    def load(orbitdata_path : str, agent_name : str) -> object:
         """
         Loads agent orbit data from pre-computed csv files in scenario directory
         """
-        orbitdata_path = os.path.join(scenario_path, 'orbit_data')
-
         with open(os.path.join(orbitdata_path, 'MissionSpecs.json'), 'r') as mission_specs:
             # load json file as dictionary
             mission_dict : dict = json.load(mission_specs)
@@ -608,7 +606,7 @@ class OrbitData:
                 return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
 
     
-    def from_directory(scenario_dir: str):
+    def from_directory(orbitdata_dir: str):
         """
         Loads orbit data from a directory containig a json file specifying the details of the mission being simulated.
         If the data has not been previously propagated, it will do so and store it in the same directory as the json file
@@ -617,7 +615,7 @@ class OrbitData:
         The data gets stored as a dictionary, with each entry containing the orbit data of each agent in the mission 
         indexed by the name of the agent.
         """
-        orbitdata_specs : str = os.path.join(scenario_dir, 'MissionSpecs.json')
+        orbitdata_specs : str = os.path.join(orbitdata_dir, 'MissionSpecs.json')
         with open(orbitdata_specs, 'r') as scenario_specs:
             
             # load json file as dictionary
@@ -633,7 +631,7 @@ class OrbitData:
                     spacecraft : dict
                     agent_name = spacecraft.get('name')
 
-                    data[agent_name] = OrbitData.load(scenario_dir, agent_name)
+                    data[agent_name] = OrbitData.load(orbitdata_dir, agent_name)
 
             if uav_list:
                 raise NotImplementedError('Orbitdata for UAVs not yet supported')
@@ -689,67 +687,62 @@ class OrbitData:
                         os.remove(f_dir) 
             print('\'orbitdata\' cleared!')
 
-            scenario_file = os.path.join(scenario_dir, 'MissionSpecs.json') 
-            with open(scenario_file, 'r') as scenario_specs:
-                # load json file as dictionary
-                mission_dict : dict = json.load(scenario_specs)
-
-                # set grid 
-                grid_dicts : list = mission_dict.get("grid", None)
-                for grid_dict in grid_dicts:
-                    grid_dict : dict
-                    if grid_dict is not None:
-                        grid_type : str = grid_dict.get('@type', None)
-                        
-                        if grid_type.lower() == 'customgrid':
-                            # do nothing
-                            pass
-                        elif grid_type.lower() == 'uniform':
-                            # create uniform grid
-                            lat_spacing = grid_dict.get('lat_spacing', 1)
-                            lon_spacing = grid_dict.get('lon_spacing', 1)
-                            grid_index  = grid_dicts.index(grid_dict)
-                            grid_path : str = OrbitData._create_uniform_grid(scenario_dir, grid_index, lat_spacing, lon_spacing)
-
-                            # set to customgrid
-                            grid_dict['@type'] = 'customgrid'
-                            grid_dict['covGridFilePath'] = grid_path
-                            
-                        elif grid_type.lower() == 'cluster':
-                            # create clustered grid
-                            n_clusters          = grid_dict.get('n_clusters', 100)
-                            n_cluster_points    = grid_dict.get('n_cluster_points', 1)
-                            variance            = grid_dict.get('variance', 1)
-                            grid_index          = grid_dicts.index(grid_dict)
-                            grid_path : str = OrbitData._create_clustered_grid(scenario_dir, grid_index, n_clusters, n_cluster_points, variance)
-
-                            # set to customgrid
-                            grid_dict['@type'] = 'customgrid'
-                            grid_dict['covGridFilePath'] = grid_path
-                            
-                        else:
-                            raise ValueError(f'Grids of type \'{grid_type}\' not supported.')
-                    else:
+            # set grid 
+            grid_dicts : list = scenario_specs.get("grid", None)
+            for grid_dict in grid_dicts:
+                grid_dict : dict
+                if grid_dict is not None:
+                    grid_type : str = grid_dict.get('@type', None)
+                    
+                    if grid_type.lower() == 'customgrid':
+                        # do nothing
                         pass
-                mission_dict['grid'] = grid_dicts
+                    elif grid_type.lower() == 'uniform':
+                        # create uniform grid
+                        lat_spacing = grid_dict.get('lat_spacing', 1)
+                        lon_spacing = grid_dict.get('lon_spacing', 1)
+                        grid_index  = grid_dicts.index(grid_dict)
+                        grid_path : str = OrbitData._create_uniform_grid(scenario_dir, grid_index, lat_spacing, lon_spacing)
 
-                # set output directory to orbit data directory
-                if mission_dict.get("settings", None) is not None:
-                    if mission_dict["settings"].get("outDir", None) is None:
-                        mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+                        # set to customgrid
+                        grid_dict['@type'] = 'customgrid'
+                        grid_dict['covGridFilePath'] = grid_path
+                        
+                    elif grid_type.lower() == 'cluster':
+                        # create clustered grid
+                        n_clusters          = grid_dict.get('n_clusters', 100)
+                        n_cluster_points    = grid_dict.get('n_cluster_points', 1)
+                        variance            = grid_dict.get('variance', 1)
+                        grid_index          = grid_dicts.index(grid_dict)
+                        grid_path : str = OrbitData._create_clustered_grid(scenario_dir, grid_index, n_clusters, n_cluster_points, variance)
+
+                        # set to customgrid
+                        grid_dict['@type'] = 'customgrid'
+                        grid_dict['covGridFilePath'] = grid_path
+                        
+                    else:
+                        raise ValueError(f'Grids of type \'{grid_type}\' not supported.')
                 else:
-                    mission_dict["settings"] = {}
-                    mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+                    pass
+            scenario_specs['grid'] = grid_dicts
 
-                # propagate data and save to orbit data directory
-                print("Propagating orbits...")
-                mission : Mission = Mission.from_json(mission_dict)  
-                mission.execute()                
-                print("Propagation done!")
+            # set output directory to orbit data directory
+            if scenario_specs.get("settings", None) is not None:
+                if scenario_specs["settings"].get("outDir", None) is None:
+                    scenario_specs["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+            else:
+                scenario_specs["settings"] = {}
+                scenario_specs["settings"]["outDir"] = scenario_dir + '/orbit_data/'
 
-                # save specifications of propagation in the orbit data directory
-                with open(os.path.join(data_dir,'MissionSpecs.json'), 'w') as mission_specs:
-                    mission_specs.write(json.dumps(mission_dict, indent=4))
+            # propagate data and save to orbit data directory
+            print("Propagating orbits...")
+            mission : Mission = Mission.from_json(scenario_specs)  
+            mission.execute()                
+            print("Propagation done!")
+
+            # save specifications of propagation in the orbit data directory
+            with open(os.path.join(data_dir,'MissionSpecs.json'), 'w') as mission_specs:
+                mission_specs.write(json.dumps(scenario_specs, indent=4))
 
         return data_dir
 
