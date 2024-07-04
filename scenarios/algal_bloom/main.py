@@ -39,7 +39,7 @@ if __name__ == "__main__":
     preplanners = ['naive']
     replanners = [
                 #   'broadcaster', 
-                  'acbba'
+                #   'acbba'
                   ]
     bundle_sizes = [1, 2, 3, 5]
     utility = 'fixed'
