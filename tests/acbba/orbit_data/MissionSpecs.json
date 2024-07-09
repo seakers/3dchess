@@ -84,7 +84,7 @@
             },
             "science": {
                 "@type": "ORACLE",
-                "eventsPath": "./examples/toy_acbba/resources/events.csv"
+                "eventsPath": "./tests/acbba/resources/events.csv"
             }
         },
         {
@@ -163,7 +163,7 @@
             },
             "science": {
                 "@type": "ORACLE",
-                "eventsPath": "./examples/toy_acbba/resources/events.csv"
+                "eventsPath": "./tests/acbba/resources/events.csv"
             }
         },
         {
@@ -242,7 +242,7 @@
             },
             "science": {
                 "@type": "ORACLE",
-                "eventsPath": "./examples/toy_acbba/resources/events.csv"
+                "eventsPath": "./tests/acbba/resources/events.csv"
             }
         },
         {
@@ -321,14 +321,14 @@
             },
             "science": {
                 "@type": "ORACLE",
-                "eventsPath": "./examples/toy_acbba/resources/events.csv"
+                "eventsPath": "./tests/acbba/resources/events.csv"
             }
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./examples/toy_acbba/resources/points.csv"
+            "covGridFilePath": "./tests/acbba/resources/points.csv"
         }
     ],
     "scenario": {
@@ -336,16 +336,16 @@
         "utility": "LINEAR",
         "events": {
             "@type": "PREDEF",
-            "eventsPath": "./examples/toy_acbba/resources/events.csv"
+            "eventsPath": "./tests/acbba/resources/events.csv"
         },
         "clock": {
             "@type": "EVENT"
         },
-        "scenarioPath": "./examples/toy_acbba/",
-        "name": "toy"
+        "scenarioPath": "./tests/acbba/",
+        "name": "acbba"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./examples/toy_acbba/orbit_data"
+        "outDir": "./tests/acbba/orbit_data"
     }
 }

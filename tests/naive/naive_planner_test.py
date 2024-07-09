@@ -3,10 +3,10 @@ import unittest
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
 
-class TestDynamicProgrammingPlanner(unittest.TestCase):
+class TestNaivePlanner(unittest.TestCase):
     def setUp(self) -> None:
         # terminal welcome message
-        print_welcome('Dynamic Programming Planner Test')
+        print_welcome('Naive Planner Test')
         
         # load scenario json file
         scenario_specs : dict = {
@@ -100,14 +100,14 @@ class TestDynamicProgrammingPlanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "ORACLE", 
-                        "eventsPath" : "./tests/dynamic/resources/events.csv"
+                        "eventsPath" : "./tests/naive/resources/all_events_formatted.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/dynamic/resources/points.csv"
+                    "covGridFilePath": "./tests/naive/resources/lake_event_points.csv"
                 }
             ],
             "scenario": {   
@@ -115,17 +115,17 @@ class TestDynamicProgrammingPlanner(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/dynamic/resources/events.csv"
+                    "eventsPath" : "./tests/naive/resources/all_events_formatted.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/dynamic/",
-                "name" : "dynamic"
+                "scenarioPath" : "./tests/naive/",
+                "name" : "naive"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/dynamic/orbit_data"
+                "outDir" : "./tests/naive/orbit_data"
             }
         }
 

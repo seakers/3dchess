@@ -160,4 +160,4 @@ cython_debug/
 #.idea/
 
 # Data and Results
-.csv
+./tests/*/orbit_data

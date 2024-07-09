@@ -89,14 +89,14 @@
             },
             "science": {
                 "@type": "ORACLE",
-                "eventsPath": "./tests/dynamic/resources/events.csv"
+                "eventsPath": "./tests/naive/resources/all_events_formatted.csv"
             }
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./tests/dynamic/resources/points.csv"
+            "covGridFilePath": "./tests/naive/resources/lake_event_points.csv"
         }
     ],
     "scenario": {
@@ -104,16 +104,16 @@
         "utility": "LINEAR",
         "events": {
             "@type": "PREDEF",
-            "eventsPath": "./tests/dynamic/resources/events.csv"
+            "eventsPath": "./tests/naive/resources/all_events_formatted.csv"
         },
         "clock": {
             "@type": "EVENT"
         },
-        "scenarioPath": "./tests/dynamic/",
+        "scenarioPath": "./tests/naive/",
         "name": "toy"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./orbit_data"
+        "outDir": "./tests/naive/orbit_data"
     }
 }
