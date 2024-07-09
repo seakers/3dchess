@@ -338,7 +338,7 @@ class PlanningModule(InternalModule):
                                                      plan,
                                                      self.orbitdata):    
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -361,7 +361,7 @@ class PlanningModule(InternalModule):
                         pending_actions = []
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        # self.__log_plan(plan, "REPLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 

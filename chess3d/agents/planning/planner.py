@@ -49,9 +49,9 @@ class AbstractPlanner(ABC):
         """ Updates internal knowledge based on incoming percepts """
         
         # check parameters
-        for req in incoming_reqs:                   assert isinstance(req, MeasurementRequest)
-        for relay_message in relay_messages:        assert isinstance(relay_message, SimulationMessage)
-        for completed_action in completed_actions:  assert isinstance(completed_action, AgentAction)
+        assert all([isinstance(req, MeasurementRequest)          for req in incoming_reqs])
+        assert all([isinstance(relay_message, SimulationMessage) for relay_message in relay_messages])
+        assert all([isinstance(completed_action, AgentAction)    for completed_action in completed_actions])
 
         # update list of known requests
         self.known_reqs.update(incoming_reqs)

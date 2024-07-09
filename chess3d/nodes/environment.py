@@ -36,8 +36,11 @@ class SimulationEnvironment(EnvironmentNode):
     GROUND_STATION = 'GROUND_STATION'
 
     def __init__(self, 
-                scenario_path : dict,
                 results_path : str, 
+                orbitdata_dir : str,
+                sat_list : list,
+                uav_list : list,
+                gs_list : list,
                 env_network_config: NetworkConfig, 
                 manager_network_config: NetworkConfig, 
                 events_path : str = None,
@@ -49,48 +52,41 @@ class SimulationEnvironment(EnvironmentNode):
         self.results_path : str = os.path.join(results_path, self.get_element_name().lower())
 
         # load observation data
-        self.orbitdata : dict = OrbitData.from_directory(scenario_path)
+        self.orbitdata : dict = OrbitData.from_directory(orbitdata_dir) if orbitdata_dir is not None else None
 
         # load agent names and classify by type of agent
         self.agents = {}
         agent_names = []
-        scenario_specs_filename = os.path.join(scenario_path, 'MissionSpecs.json')
-
-        with open(scenario_specs_filename, 'r') as scenario_specs:
-            scenario_dict : dict = json.load(scenario_specs)
             
-            # load satellite names
-            sat_names = []
-            sat_list : dict = scenario_dict.get('spacecraft', None)
-            if sat_list:
-                for sat in sat_list:
-                    sat : dict
-                    sat_name = sat.get('name')
-                    sat_names.append(sat_name)
-                    agent_names.append(sat_name)
-            self.agents[self.SPACECRAFT] = sat_names
+        # load satellite names
+        sat_names = []
+        if sat_list:
+            for sat in sat_list:
+                sat : dict
+                sat_name = sat.get('name')
+                sat_names.append(sat_name)
+                agent_names.append(sat_name)
+        self.agents[self.SPACECRAFT] = sat_names
 
-            # load uav names
-            uav_names = []
-            uav_list : dict = scenario_dict.get('uav', None)
-            if uav_list:
-                for uav in uav_list:
-                    uav : dict
-                    uav_name = uav.get('name')
-                    uav_names.append(uav_name)
-                    agent_names.append(uav_name)
-            self.agents[self.UAV] = uav_names
+        # load uav names
+        uav_names = []
+        if uav_list:
+            for uav in uav_list:
+                uav : dict
+                uav_name = uav.get('name')
+                uav_names.append(uav_name)
+                agent_names.append(uav_name)
+        self.agents[self.UAV] = uav_names
 
-            # load GS agent names
-            gs_names = []
-            gs_list : dict = scenario_dict.get('groundStation', None)
-            if gs_list:
-                for gs in gs_list:
-                    gs : dict
-                    gs_name = gs.get('name')
-                    gs_names.append(gs_name)
-                    agent_names.append(gs_name)
-            self.agents[self.GROUND_STATION] = gs_names
+        # load GS agent names
+        gs_names = []
+        if gs_list:
+            for gs in gs_list:
+                gs : dict
+                gs_name = gs.get('name')
+                gs_names.append(gs_name)
+                agent_names.append(gs_name)
+        self.agents[self.GROUND_STATION] = gs_names
 
         # initialize parameters
         self.observation_history = []
@@ -191,6 +187,8 @@ class SimulationEnvironment(EnvironmentNode):
                         elif src in self.agents[self.GROUND_STATION]:
                             # Do NOT update state
                             updated_state = GroundStationAgentState(**msg.state)
+                        else:
+                            x = 1
 
                         updated_state.t = max(self.get_current_time(), current_state.t)
                         
@@ -446,8 +444,9 @@ class SimulationEnvironment(EnvironmentNode):
             
             # TODO: move this section to external results compiler script -------------
             # count observations performed
-            n_events, n_events_obs, n_events_partially_co_obs, \
-                n_events_fully_co_obs, n_events_detected \
+            # n_events, n_unique_event_obs, n_total_event_obs,
+            n_events, n_unique_event_obs, n_total_event_obs, \
+                 n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected \
                     = self.count_observations(observations_performed)
 
             # calculate coverage
@@ -463,14 +462,15 @@ class SimulationEnvironment(EnvironmentNode):
             summary_data = [
                         ['t_start', self._clock_config.start_date], 
                         ['t_end', self._clock_config.end_date], 
-                        ['n_gps', n_gps],
-                        ['n_gps_accessible', n_gps_accessible],
-                        ['n_gps_access_ptg', n_gps_access_ptg],
+                        # ['n_gps', n_gps],
+                        # ['n_gps_accessible', n_gps_accessible],
+                        # ['n_gps_access_ptg', n_gps_access_ptg],
                         ['n_gps_obs', n_gps_observed],
                         ['n_obs', n_obs],
                         ['n_events', n_events],
                         ['n_events_detected', n_events_detected],
-                        ['n_events_obs', n_events_obs],
+                        ['n_unique_event_obs', n_unique_event_obs],
+                        ['n_total_event_obs', n_total_event_obs],
                         ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
                         ['n_event_partially_co_obs', n_events_partially_co_obs],
                         ['n_events_fully_co_obs', n_events_fully_co_obs],
@@ -558,7 +558,7 @@ class SimulationEnvironment(EnvironmentNode):
                     # add to list of observed events
                     events_observed.append(matching_observations)
 
-                # find measurement requests that match the event bieng
+                # find measurement requests that match this event
                 matching_requests = [req
                                         for req in self.measurement_reqs
                                         if isinstance(req, MeasurementRequest)
@@ -568,6 +568,7 @@ class SimulationEnvironment(EnvironmentNode):
                                         and all([instrument in observations_req for instrument in req.observation_types])
                                     ]
 
+                # check if a measurement request was made
                 if matching_requests:
                     events_detected.append(matching_requests)
 
@@ -575,7 +576,8 @@ class SimulationEnvironment(EnvironmentNode):
             n_events = len(self.events.values)                
 
             # count number of observed events
-            n_events_obs = len(events_observed)
+            n_unique_event_obs = len(events_observed)
+            n_total_event_obs = sum([len(obs) for obs in events_observed])
 
             # count number of co-observed events 
             n_events_partially_co_obs = 0
@@ -600,12 +602,13 @@ class SimulationEnvironment(EnvironmentNode):
 
         else: # no events present in the simulation
             n_events = 0
-            n_events_obs = 0
+            n_unique_event_obs = 0
+            n_total_event_obs = 0
             n_events_partially_co_obs = 0
             n_events_fully_co_obs = 0
             n_events_detected = 0   
 
-        return n_events, n_events_obs, n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected
+        return n_events, n_unique_event_obs, n_total_event_obs, n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected
 
     def calc_coverage_metrics(self) -> tuple:
         # TODO improve performance or load precomputed vals

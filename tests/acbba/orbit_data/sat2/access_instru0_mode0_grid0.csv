@@ -1,0 +1,8 @@
+GRID COVERAGE
+Epoch [JDUT1] is 2458849.5
+Step size [s] is 10.0
+Mission Duration [Days] is 0.05
+time index,GP index,lat [deg],lon [deg]
+194,0,0.0,0.0
+194,1,-1.0,0.0
+194,2,1.0,0.0

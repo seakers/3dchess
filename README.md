@@ -21,17 +21,19 @@ monitoring system.
 
 ## Directory structure
 ```
-├───docs (sphinx and other documentation)
-├───scenarios (folder with the input and results files)
 ├───.temp (To be determined, temporary folder with old files)
+├───docs (sphinx and other documentation)
+├───scenarios (folder with the input and results files for simulations)
+├───tests (unit tests)
 └───chess3d (folder with main source code)
     ├───nodes (dmas network nodes)
-    └───agents (files for all agents)
+    └───agents (implementations for all agents)
         ├───engineering (engineering module files)
         ├───science (science module files)
         └───planning (planning module files)
             ├───.backup (To be determined, temporary folder with old files)
-            └───consensus (consensus-based planners)
+            └───planners (planner implementation files)
+                └───conseunsus (consensus-based planners)
 ```
 
 

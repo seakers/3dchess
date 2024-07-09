@@ -183,17 +183,16 @@ class SimulationAgent(Agent):
                     self.unsubscribe_to_broadcasts(resp_msg.target)
         return senses 
     
-    async def __empty_queue(self, queue : asyncio.Queue) -> list:
-        senses = []
-        while not queue.empty():
+    async def __empty_queue(self, q : asyncio.Queue) -> list:
+        msgs = []
+        while not q.empty():
             # save as senses to forward to planner
-            _, _, msg_dict = await queue.get()
-            msg = message_from_dict(**msg_dict)
-            senses.append(msg)
+            _, _, d = await q.get()
+            msgs.append(message_from_dict(**d))
 
             # give other agents time to finish sending their messages
-            await asyncio.sleep(1e-3)
-        return senses
+            await asyncio.sleep(1e-2)
+        return msgs
     
     @runtime_tracker
     async def get_environment_broadcasts(self) -> list:

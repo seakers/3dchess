@@ -115,6 +115,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # check if any new measurement requests have been received
         new_req_bids : list[Bid] = self.compile_new_measurement_request_bids(state)
         self.incoming_bids.extend(new_req_bids)
+
+        if new_req_bids:
+            x = 1
         
     def _compile_completed_observations(self, 
                                         completed_actions : list, 
@@ -165,15 +168,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # perform consesus phase
         # ---------------------------------
         # DEBUGGING OUTPUTS 
-        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-        print(f'bundle:')
-        for req, subtask_index, bid in self.bundle:
-            req : MeasurementRequest
-            bid : Bid
-            id_short = req.id.split('-')[0]
-            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        print('')
+        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        # print(f'length of path: {len(self.path)}\nbids to rebroadcast: {len(self.bids_to_rebroadcasts)}')
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        # print('')
         # ---------------------------------
 
         self.results, self.bundle, \
@@ -189,15 +192,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # ---------------------------------
         # DEBUGGING OUTPUTS 
-        self.log_results('CONSENSUS PHASE', state, self.results)
-        print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-        print(f'bundle:')
-        for req, subtask_index, bid in self.bundle:
-            req : MeasurementRequest
-            bid : Bid
-            id_short = req.id.split('-')[0]
-            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        print('')
+        # self.log_results('CONSENSUS PHASE', state, self.results)
+        # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        # print('')
         # ---------------------------------
 
         if len(self.bids_to_rebroadcasts) >= self.replan_threshold:
@@ -567,11 +570,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
             action : ObservationAction
 
             # check if observation was performed to respond to a measurement request
-            completed_req : MeasurementRequest = self._get_completed_request(action)
+            completed_req : MeasurementRequest = self._get_completed_request(results, action)
 
-            if completed_req is None or action.instrument_name not in completed_req.observation_types:
+            if (completed_req is None 
+                or action.instrument_name not in completed_req.observation_types):
                 # observation was not performed to respond to a measurement request; ignore
                 continue
+
+            if completed_req.id not in results:
+                x = 1
             
             # set bid as completed           
             bid : Bid = results[completed_req.id][action.instrument_name]
@@ -600,10 +607,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         return results, bundle, path, changes, rebroadcasts
     
-    def _get_completed_request(self, action : ObservationAction) -> MeasurementRequest:
+    def _get_completed_request(self,
+                               results : dict, 
+                               action : ObservationAction
+                               ) -> MeasurementRequest:
         reqs = {req 
                 for req in self.known_reqs
                 if isinstance(req, MeasurementRequest)
+                and req.id in results
                 and abs(req.target[0] - action.target[0]) <= 1e-3
                 and abs(req.target[1] - action.target[1]) <= 1e-3
                 and abs(req.target[2] - action.target[2]) <= 1e-3
@@ -612,6 +623,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
     def _get_matching_request(self, id : list) -> MeasurementRequest:
         reqs = {req for req in self.known_reqs if req.id == id}
+        if not reqs:
+            x = 1
         return reqs.pop() if reqs else None
 
     @runtime_tracker
@@ -695,6 +708,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
             # check bids are for new requests
             is_new_req : bool = their_bid.req_id not in results
+
+            if req is None:
+                x= 1
 
             if is_new_req:
                 # create a new blank bid and save it to results

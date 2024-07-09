@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import random
@@ -410,12 +411,10 @@ class OrbitData:
     """
     LOAD FROM PRE-COMPUTED DATA
     """
-    def load(scenario_path : str, agent_name : str) -> object:
+    def load(orbitdata_path : str, agent_name : str) -> object:
         """
         Loads agent orbit data from pre-computed csv files in scenario directory
         """
-        orbitdata_path = os.path.join(scenario_path, 'orbit_data')
-
         with open(os.path.join(orbitdata_path, 'MissionSpecs.json'), 'r') as mission_specs:
             # load json file as dictionary
             mission_dict : dict = json.load(mission_specs)
@@ -606,7 +605,8 @@ class OrbitData:
 
                 return OrbitData(name, time_data, eclipse_data, position_data, isl_data, gs_access_data, gp_access_data, grid_data_compiled)
 
-    def from_directory(scenario_dir: str):
+    
+    def from_directory(orbitdata_dir: str):
         """
         Loads orbit data from a directory containig a json file specifying the details of the mission being simulated.
         If the data has not been previously propagated, it will do so and store it in the same directory as the json file
@@ -615,7 +615,7 @@ class OrbitData:
         The data gets stored as a dictionary, with each entry containing the orbit data of each agent in the mission 
         indexed by the name of the agent.
         """
-        orbitdata_specs : str = os.path.join(scenario_dir, 'MissionSpecs.json')
+        orbitdata_specs : str = os.path.join(orbitdata_dir, 'MissionSpecs.json')
         with open(orbitdata_specs, 'r') as scenario_specs:
             
             # load json file as dictionary
@@ -631,7 +631,7 @@ class OrbitData:
                     spacecraft : dict
                     agent_name = spacecraft.get('name')
 
-                    data[agent_name] = OrbitData.load(scenario_dir, agent_name)
+                    data[agent_name] = OrbitData.load(orbitdata_dir, agent_name)
 
             if uav_list:
                 raise NotImplementedError('Orbitdata for UAVs not yet supported')
@@ -640,24 +640,29 @@ class OrbitData:
                 raise NotImplementedError('Orbitdata for ground stations not yet supported')
 
             return data
-        
-    def precompute(scenario_name : str) -> str:
+               
+    def precompute(scenario_specs : dict) -> str:
         """
         Pre-calculates coverage and position data for a given scenario
         """
         
-        scenario_dir = scenario_name if './scenarios/' in scenario_name else os.path.join('./scenarios', scenario_name)
-        if './scenarios/' in scenario_name and '/orbit_data/' in scenario_name:
-            data_dir = scenario_name
+        # get desired orbit data path
+        scenario_dir = scenario_specs['scenario']['scenarioPath']
+        settings_dict : dict = scenario_specs.get('settings', None)
+        if settings_dict is None:
+            data_dir = None
         else:
-            data_dir = os.path.join('./scenarios/', scenario_name, 'orbit_data')
+            data_dir = settings_dict.get('outDir', None)
+
+        if data_dir is None:
+            data_dir = os.path.join(scenario_dir, 'orbit_data')
     
         if not os.path.exists(data_dir):
             # if directory does not exists, create it
             os.mkdir(data_dir)
             changes_to_scenario = True
         else:
-            changes_to_scenario : bool = OrbitData._check_changes_to_scenario(scenario_dir, data_dir)
+            changes_to_scenario : bool = OrbitData._check_changes_to_scenario(scenario_specs, data_dir)
 
         if not changes_to_scenario:
             # if propagation data files already exist, load results
@@ -682,145 +687,140 @@ class OrbitData:
                         os.remove(f_dir) 
             print('\'orbitdata\' cleared!')
 
-            scenario_file = os.path.join(scenario_dir, 'MissionSpecs.json') 
-            with open(scenario_file, 'r') as scenario_specs:
-                # load json file as dictionary
-                mission_dict : dict = json.load(scenario_specs)
-
-                # set grid 
-                grid_dicts : list = mission_dict.get("grid", None)
-                for grid_dict in grid_dicts:
-                    grid_dict : dict
-                    if grid_dict is not None:
-                        grid_type : str = grid_dict.get('@type', None)
-                        
-                        if grid_type.lower() == 'customgrid':
-                            # do nothing
-                            pass
-                        elif grid_type.lower() == 'uniform':
-                            # create uniform grid
-                            lat_spacing = grid_dict.get('lat_spacing', 1)
-                            lon_spacing = grid_dict.get('lon_spacing', 1)
-                            grid_index  = grid_dicts.index(grid_dict)
-                            grid_path : str = OrbitData._create_uniform_grid(scenario_dir, grid_index, lat_spacing, lon_spacing)
-
-                            # set to customgrid
-                            grid_dict['@type'] = 'customgrid'
-                            grid_dict['covGridFilePath'] = grid_path
-                            
-                        elif grid_type.lower() == 'cluster':
-                            # create clustered grid
-                            n_clusters          = grid_dict.get('n_clusters', 100)
-                            n_cluster_points    = grid_dict.get('n_cluster_points', 1)
-                            variance            = grid_dict.get('variance', 1)
-                            grid_index          = grid_dicts.index(grid_dict)
-                            grid_path : str = OrbitData._create_clustered_grid(scenario_dir, grid_index, n_clusters, n_cluster_points, variance)
-
-                            # set to customgrid
-                            grid_dict['@type'] = 'customgrid'
-                            grid_dict['covGridFilePath'] = grid_path
-                            
-                        else:
-                            raise ValueError(f'Grids of type \'{grid_type}\' not supported.')
-                    else:
+            # set grid 
+            grid_dicts : list = scenario_specs.get("grid", None)
+            for grid_dict in grid_dicts:
+                grid_dict : dict
+                if grid_dict is not None:
+                    grid_type : str = grid_dict.get('@type', None)
+                    
+                    if grid_type.lower() == 'customgrid':
+                        # do nothing
                         pass
-                mission_dict['grid'] = grid_dicts
+                    elif grid_type.lower() == 'uniform':
+                        # create uniform grid
+                        lat_spacing = grid_dict.get('lat_spacing', 1)
+                        lon_spacing = grid_dict.get('lon_spacing', 1)
+                        grid_index  = grid_dicts.index(grid_dict)
+                        grid_path : str = OrbitData._create_uniform_grid(scenario_dir, grid_index, lat_spacing, lon_spacing)
 
-                # set output directory to orbit data directory
-                if mission_dict.get("settings", None) is not None:
-                    mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+                        # set to customgrid
+                        grid_dict['@type'] = 'customgrid'
+                        grid_dict['covGridFilePath'] = grid_path
+                        
+                    elif grid_type.lower() == 'cluster':
+                        # create clustered grid
+                        n_clusters          = grid_dict.get('n_clusters', 100)
+                        n_cluster_points    = grid_dict.get('n_cluster_points', 1)
+                        variance            = grid_dict.get('variance', 1)
+                        grid_index          = grid_dicts.index(grid_dict)
+                        grid_path : str = OrbitData._create_clustered_grid(scenario_dir, grid_index, n_clusters, n_cluster_points, variance)
+
+                        # set to customgrid
+                        grid_dict['@type'] = 'customgrid'
+                        grid_dict['covGridFilePath'] = grid_path
+                        
+                    else:
+                        raise ValueError(f'Grids of type \'{grid_type}\' not supported.')
                 else:
-                    mission_dict["settings"] = {}
-                    mission_dict["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+                    pass
+            scenario_specs['grid'] = grid_dicts
 
-                # propagate data and save to orbit data directory
-                print("Propagating orbits...")
-                mission : Mission = Mission.from_json(mission_dict)  
-                mission.execute()                
-                print("Propagation done!")
+            # set output directory to orbit data directory
+            if scenario_specs.get("settings", None) is not None:
+                if scenario_specs["settings"].get("outDir", None) is None:
+                    scenario_specs["settings"]["outDir"] = scenario_dir + '/orbit_data/'
+            else:
+                scenario_specs["settings"] = {}
+                scenario_specs["settings"]["outDir"] = scenario_dir + '/orbit_data/'
 
-                # save specifications of propagation in the orbit data directory
-                with open(os.path.join(data_dir,'MissionSpecs.json'), 'w') as mission_specs:
-                    mission_specs.write(json.dumps(mission_dict, indent=4))
+            # propagate data and save to orbit data directory
+            print("Propagating orbits...")
+            mission : Mission = Mission.from_json(scenario_specs)  
+            mission.execute()                
+            print("Propagation done!")
+
+            # save specifications of propagation in the orbit data directory
+            with open(os.path.join(data_dir,'MissionSpecs.json'), 'w') as mission_specs:
+                mission_specs.write(json.dumps(scenario_specs, indent=4))
 
         return data_dir
 
-    def _check_changes_to_scenario(scenario_dir : str, orbitdata_dir : str) -> bool:
+    def _check_changes_to_scenario(scenario_dict : dict, orbitdata_dir : str) -> bool:
         """ 
         Checks if the scenario has already been pre-computed 
         or if relevant changes have been made 
         """
-
+        # check if directory exists
         filename = 'MissionSpecs.json'
-        scenario_filename = os.path.join(scenario_dir, filename)
+        orbitdata_filename = os.path.join(orbitdata_dir, filename)
+        if not os.path.exists(orbitdata_filename):
+            return True
+        
+        # copy scenario specs
+        scenario_specs : dict = copy.deepcopy(scenario_dict)
+            
+        # compare specifications
+        with open(orbitdata_filename, 'r') as orbitdata_specs:
+            orbitdata_dict : dict = json.load(orbitdata_specs)
 
-        with open(scenario_filename, 'r') as scenario_specs:
-            # check if data has been previously calculated
-            orbitdata_filename = os.path.join(orbitdata_dir, filename)
-            if not os.path.exists(orbitdata_filename):
+            scenario_specs.pop('settings')
+            orbitdata_dict.pop('settings')
+            scenario_specs.pop('scenario')
+            orbitdata_dict.pop('scenario')
+
+            if (
+                    scenario_specs['epoch'] != orbitdata_dict['epoch']
+                or scenario_specs['duration'] != orbitdata_dict['duration']
+                or scenario_specs.get('groundStation', None) != orbitdata_dict.get('groundStation', None)
+                # or scenario_dict['grid'] != orbitdata_dict['grid']
+                # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
+                ):
                 return True
-                
-            with open(orbitdata_filename, 'r') as orbitdata_specs:
-                scenario_dict : dict = json.load(scenario_specs)
-                orbitdata_dict : dict = json.load(orbitdata_specs)
-
-                scenario_dict.pop('settings')
-                orbitdata_dict.pop('settings')
-                scenario_dict.pop('scenario')
-                orbitdata_dict.pop('scenario')
-
-                if (
-                        scenario_dict['epoch'] != orbitdata_dict['epoch']
-                    or scenario_dict['duration'] != orbitdata_dict['duration']
-                    or scenario_dict.get('groundStation', None) != orbitdata_dict.get('groundStation', None)
-                    # or scenario_dict['grid'] != orbitdata_dict['grid']
-                    # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']
-                    ):
+            
+            if scenario_specs['grid'] != orbitdata_dict['grid']:
+                if len(scenario_specs['grid']) != len(orbitdata_dict['grid']):
                     return True
                 
-                if scenario_dict['grid'] != orbitdata_dict['grid']:
-                    if len(scenario_dict['grid']) != len(orbitdata_dict['grid']):
-                        return True
-                    
-                    for i in range(len(scenario_dict['grid'])):
-                        scenario_grid : dict = scenario_dict['grid'][i]
-                        mission_grid : dict = orbitdata_dict['grid'][i]
+                for i in range(len(scenario_specs['grid'])):
+                    scenario_grid : dict = scenario_specs['grid'][i]
+                    mission_grid : dict = orbitdata_dict['grid'][i]
 
-                        scenario_gridtype = scenario_grid['@type'].lower()
-                        mission_gridtype = mission_grid['@type'].lower()
+                    scenario_gridtype = scenario_grid['@type'].lower()
+                    mission_gridtype = mission_grid['@type'].lower()
 
-                        if scenario_gridtype != mission_gridtype == 'customgrid':
-                            if scenario_gridtype not in mission_grid['covGridFilePath']:
-                                return True
-
-                if scenario_dict['spacecraft'] != orbitdata_dict['spacecraft']:
-                    if len(scenario_dict['spacecraft']) != len(orbitdata_dict['spacecraft']):
-                        return True
-                    
-                    for i in range(len(scenario_dict['spacecraft'])):
-                        scenario_sat : dict = scenario_dict['spacecraft'][i]
-                        mission_sat : dict = orbitdata_dict['spacecraft'][i]
-                        
-                        if "planner" in scenario_sat:
-                            scenario_sat.pop("planner")
-                        if "science" in scenario_sat:
-                            scenario_sat.pop("science")
-                        if "notifier" in scenario_sat:
-                            scenario_sat.pop("notifier") 
-                        if "missionProfile" in scenario_sat:
-                            scenario_sat.pop("missionProfile")
-
-                        if "planner" in mission_sat:
-                            mission_sat.pop("planner")
-                        if "science" in mission_sat:
-                            mission_sat.pop("science")
-                        if "notifier" in mission_sat:
-                            mission_sat.pop("notifier") 
-                        if "missionProfile" in mission_sat:
-                            mission_sat.pop("missionProfile")
-
-                        if scenario_sat != mission_sat:
+                    if scenario_gridtype != mission_gridtype == 'customgrid':
+                        if scenario_gridtype not in mission_grid['covGridFilePath']:
                             return True
+
+            if scenario_specs['spacecraft'] != orbitdata_dict['spacecraft']:
+                if len(scenario_specs['spacecraft']) != len(orbitdata_dict['spacecraft']):
+                    return True
+                
+                for i in range(len(scenario_specs['spacecraft'])):
+                    scenario_sat : dict = scenario_specs['spacecraft'][i]
+                    mission_sat : dict = orbitdata_dict['spacecraft'][i]
+                    
+                    if "planner" in scenario_sat:
+                        scenario_sat.pop("planner")
+                    if "science" in scenario_sat:
+                        scenario_sat.pop("science")
+                    if "notifier" in scenario_sat:
+                        scenario_sat.pop("notifier") 
+                    if "missionProfile" in scenario_sat:
+                        scenario_sat.pop("missionProfile")
+
+                    if "planner" in mission_sat:
+                        mission_sat.pop("planner")
+                    if "science" in mission_sat:
+                        mission_sat.pop("science")
+                    if "notifier" in mission_sat:
+                        mission_sat.pop("notifier") 
+                    if "missionProfile" in mission_sat:
+                        mission_sat.pop("missionProfile")
+
+                    if scenario_sat != mission_sat:
+                        return True
                         
         return False
 

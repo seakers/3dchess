@@ -60,54 +60,38 @@
             "name": "TOY",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/main.py",
+            "program": "${workspaceRoot}/examples/toy/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": "toy"
-        },
-        {
-            "name": "TOY RANDOM",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceRoot}/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": "toy_random"
+            }
         },
         {
             "name": "TOY ACBBA",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/main.py",
+            "program": "${workspaceRoot}/examples/toy_acbba/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": "toy_acbba"
+            }
         },
         {
-            "name": "COVERAGE TEST",
+            "name": "ALGAL BLOOMS",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/coverage.py",
+            "program": "${workspaceRoot}/scenarios/algal_bloom/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": "coverage_test"
-        }
+            }
+        },
     ],
     "compounds": [
         //{
