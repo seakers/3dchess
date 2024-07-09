@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 0.75,
+    "duration": 0.1,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -26,9 +26,9 @@
                     "convention": "REF_FRAME_ALIGNED"
                 },
                 "components": {
-                    "adcs" : {
-                        "maxTorque" : 1000,
-                        "maxRate" : 1
+                    "adcs": {
+                        "maxTorque": 1000,
+                        "maxRate": 1
                     }
                 }
             },
@@ -51,8 +51,8 @@
                     "angleHeight": 5,
                     "angleWidth": 10
                 },
-                "maneuver" : {
-                    "maneuverType":"SINGLE_ROLL_ONLY",
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
                     "A_rollMin": -50,
                     "A_rollMax": 50
                 },
@@ -79,41 +79,41 @@
                     "ta": 0.0
                 }
             },
-            "planner" : {
-                "preplanner" : {
-                    "@type" : "naive"
+            "planner": {
+                "preplanner": {
+                    "@type": "naive"
                 },
-                "replanner" : {
-                    "@type" : "broadcaster"
+                "replanner": {
+                    "@type": "broadcaster"
                 }
             },
-            "science" : {
-                "@type": "ORACLE", 
-                "eventsPath" : "./scenarios/algal_bloom/resources/events.csv"
+            "science": {
+                "@type": "ORACLE",
+                "eventsPath": "./tests/dynamic/resources/events.csv"
             }
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/algal_bloom/resources/points.csv"
+            "covGridFilePath": "./tests/dynamic/resources/points.csv"
         }
     ],
-    "scenario": {   
-        "connectivity" : "FULL", 
-        "utility" : "LINEAR",
-        "events" : {
-            "@type": "PREDEF", 
-            "eventsPath" : "./scenarios/algal_bloom/resources/events.csv"
+    "scenario": {
+        "connectivity": "FULL",
+        "utility": "LINEAR",
+        "events": {
+            "@type": "PREDEF",
+            "eventsPath": "./tests/dynamic/resources/events.csv"
         },
-        "clock" : {
-            "@type" : "EVENT"
+        "clock": {
+            "@type": "EVENT"
         },
-        "scenarioPath" : "./scenarios/algal_bloom/",
-        "name" : "toy"
+        "scenarioPath": "./tests/dynamic/",
+        "name": "toy"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir" : "./scenarios/algal_bloom/orbit_data"
+        "outDir": "./orbit_data"
     }
 }

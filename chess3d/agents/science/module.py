@@ -199,6 +199,9 @@ class ScienceModule(InternalModule):
                         # another request has been made for this same event; ignore
                         measurement_req.severity = 0.0
                     
+                    if measurement_req.severity > 0.0:
+                        x = 1
+                    
                     # send request to all internal agent modules
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 
                                                         self.get_parent_name(), 

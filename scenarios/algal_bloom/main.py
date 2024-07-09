@@ -2,6 +2,8 @@ import copy
 import json
 import os
 
+from numpy import mod
+
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
 
@@ -16,9 +18,9 @@ if __name__ == "__main__":
         template_specs : dict = json.load(scenario_file)
 
     # set parameters
-    duration = 1
-    n_planes = 3
-    n_sats_per_plane = 3
+    duration = 0.5
+    n_planes = 1
+    n_sats_per_plane = 6
     raans = [360 * j / n_planes for j in range(n_planes)]
     tas = [360 * i / n_sats_per_plane for i in range(n_sats_per_plane)]
     
@@ -39,9 +41,14 @@ if __name__ == "__main__":
     preplanners = ['naive']
     replanners = [
                 #   'broadcaster', 
-                #   'acbba'
+                  'acbba'
                   ]
-    bundle_sizes = [1, 2, 3, 5]
+    bundle_sizes = [
+                    1
+                    # 2, 
+                    # 3, 
+                    # 5
+                    ]
     utility = 'fixed'
 
     n_runs = len(preplanners) * ((len(replanners) - 1) * len(bundle_sizes) + 1)
@@ -60,24 +67,29 @@ if __name__ == "__main__":
                 # set spacecraft specs
                 sats = []
                 for j in range(n_planes):
+                    instr_counter = {instrument : 0 for instrument in instruments}
                     for i in range(n_sats_per_plane):
                         sat : dict = copy.deepcopy(scenario_specs['spacecraft'][-1])
 
+                        # choose agent instrument
+                        i_instrument = mod(i, len(instruments))
+                        instrument = instruments[i_instrument] 
+
                         # set agent name and id
-                        sat['@id'] = f'{abbreviations[instruments[j]]}_sat_{j}_{i}'
-                        sat['name'] = f'{abbreviations[instruments[j]]}_{i}'
+                        sat['@id'] = f'{abbreviations[instrument]}_sat_{j}_{instr_counter[instrument]}'
+                        sat['name'] = f'{abbreviations[instrument]}_{instr_counter[instrument]}'
 
                         # set slew rate
                         sat['spacecraftBus']['components']['adcs']['maxRate'] = max_slew_rate
                         sat['spacecraftBus']['components']['adcs']['maxTorque'] = max_torque
 
                         # set instrument properties
-                        sat['instrument']['name'] = instruments[j]
+                        sat['instrument']['name'] = instrument
                         sat['instrument']['fieldOfViewGeometry'] ['angleHeight'] = field_of_view
                         sat['instrument']['fieldOfViewGeometry'] ['angleWidth'] = field_of_view
                         sat['instrument']['maneuver']['A_rollMin'] = - field_of_regard / 2.0
                         sat['instrument']['maneuver']['A_rollMax'] = field_of_regard / 2.0
-                        sat['instrument']['@id'] = f'{abbreviations[instruments[j]]}1'
+                        sat['instrument']['@id'] = f'{abbreviations[instrument]}1'
 
                         # set orbit
                         sat['orbitState']['state']['raan'] = raans[j]
@@ -93,6 +105,9 @@ if __name__ == "__main__":
                         
                         # add to list of sats
                         sats.append(sat)
+
+                        # update counter 
+                        instr_counter[instrument] += 1
                 
                 # update list of satellites
                 scenario_specs['spacecraft'] = sats

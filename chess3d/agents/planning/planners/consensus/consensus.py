@@ -229,7 +229,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # -------------------------------
         # DEBUG PRINTOUTS
-        # self.log_results('PRE-PLANNING PHASE', state, self.results)
+        self.log_results('PRE-PLANNING PHASE', state, self.results)
         # -------------------------------
 
         # check if bundle is full

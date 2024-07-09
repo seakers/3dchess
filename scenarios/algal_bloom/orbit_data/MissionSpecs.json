@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 1,
+    "duration": 0.5,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -84,7 +84,167 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
+                    "utility": "fixed",
+                    "bundle size": 1
+                }
+            },
+            "science": {
+                "@type": "ORACLE",
+                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+            }
+        },
+        {
+            "@id": "therm_sat_0_0",
+            "name": "therm_0",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 1,
+                        "maxRate": 1
+                    }
+                }
+            },
+            "instrument": {
+                "name": "thermal",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5,
+                    "angleWidth": 5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -22.5,
+                    "A_rollMax": 22.5
+                },
+                "@id": "therm1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 0.0,
+                    "aop": 0.0,
+                    "ta": 0.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naive"
+                },
+                "replanner": {
+                    "@type": "acbba",
+                    "utility": "fixed",
+                    "bundle size": 1
+                }
+            },
+            "science": {
+                "@type": "ORACLE",
+                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+            }
+        },
+        {
+            "@id": "sar_sat_0_0",
+            "name": "sar_0",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 1,
+                        "maxRate": 1
+                    }
+                }
+            },
+            "instrument": {
+                "name": "sar",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5,
+                    "angleWidth": 5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -22.5,
+                    "A_rollMax": 22.5
+                },
+                "@id": "sar1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 0.0,
+                    "aop": 0.0,
+                    "ta": 0.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naive"
+                },
+                "replanner": {
+                    "@type": "acbba",
                     "utility": "fixed",
                     "bundle size": 1
                 }
@@ -164,7 +324,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
                     "bundle size": 1
                 }
@@ -175,167 +335,7 @@
             }
         },
         {
-            "@id": "vis_sat_0_2",
-            "name": "vis_2",
-            "spacecraftBus": {
-                "name": "BlueCanyon",
-                "mass": 20,
-                "volume": 0.5,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "components": {
-                    "adcs": {
-                        "maxTorque": 1,
-                        "maxRate": 1
-                    }
-                }
-            },
-            "instrument": {
-                "name": "visual",
-                "mass": 10,
-                "volume": 12.45,
-                "dataRate": 40,
-                "bitsPerPixel": 8,
-                "power": 12,
-                "snr": 33,
-                "spatial_res": 50,
-                "spectral_res": 7e-09,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "fieldOfViewGeometry": {
-                    "shape": "RECTANGULAR",
-                    "angleHeight": 5,
-                    "angleWidth": 5
-                },
-                "maneuver": {
-                    "maneuverType": "SINGLE_ROLL_ONLY",
-                    "A_rollMin": -22.5,
-                    "A_rollMax": 22.5
-                },
-                "@id": "vis1",
-                "@type": "Basic Sensor"
-            },
-            "orbitState": {
-                "date": {
-                    "@type": "GREGORIAN_UT1",
-                    "year": 2020,
-                    "month": 1,
-                    "day": 1,
-                    "hour": 0,
-                    "minute": 0,
-                    "second": 0
-                },
-                "state": {
-                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 7078,
-                    "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 0.0,
-                    "aop": 0.0,
-                    "ta": 0.0
-                }
-            },
-            "planner": {
-                "preplanner": {
-                    "@type": "naive"
-                },
-                "replanner": {
-                    "@type": "broadcaster",
-                    "utility": "fixed",
-                    "bundle size": 1
-                }
-            },
-            "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
-            }
-        },
-        {
-            "@id": "therm_sat_1_0",
-            "name": "therm_0",
-            "spacecraftBus": {
-                "name": "BlueCanyon",
-                "mass": 20,
-                "volume": 0.5,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "components": {
-                    "adcs": {
-                        "maxTorque": 1,
-                        "maxRate": 1
-                    }
-                }
-            },
-            "instrument": {
-                "name": "thermal",
-                "mass": 10,
-                "volume": 12.45,
-                "dataRate": 40,
-                "bitsPerPixel": 8,
-                "power": 12,
-                "snr": 33,
-                "spatial_res": 50,
-                "spectral_res": 7e-09,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "fieldOfViewGeometry": {
-                    "shape": "RECTANGULAR",
-                    "angleHeight": 5,
-                    "angleWidth": 5
-                },
-                "maneuver": {
-                    "maneuverType": "SINGLE_ROLL_ONLY",
-                    "A_rollMin": -22.5,
-                    "A_rollMax": 22.5
-                },
-                "@id": "therm1",
-                "@type": "Basic Sensor"
-            },
-            "orbitState": {
-                "date": {
-                    "@type": "GREGORIAN_UT1",
-                    "year": 2020,
-                    "month": 1,
-                    "day": 1,
-                    "hour": 0,
-                    "minute": 0,
-                    "second": 0
-                },
-                "state": {
-                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 7078,
-                    "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 120.0,
-                    "aop": 0.0,
-                    "ta": 120.0
-                }
-            },
-            "planner": {
-                "preplanner": {
-                    "@type": "naive"
-                },
-                "replanner": {
-                    "@type": "broadcaster",
-                    "utility": "fixed",
-                    "bundle size": 1
-                }
-            },
-            "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
-            }
-        },
-        {
-            "@id": "therm_sat_1_1",
+            "@id": "therm_sat_0_1",
             "name": "therm_1",
             "spacecraftBus": {
                 "name": "BlueCanyon",
@@ -394,9 +394,9 @@
                     "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
-                    "raan": 120.0,
+                    "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 120.0
+                    "ta": 0.0
                 }
             },
             "planner": {
@@ -404,7 +404,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
                     "bundle size": 1
                 }
@@ -415,167 +415,7 @@
             }
         },
         {
-            "@id": "therm_sat_1_2",
-            "name": "therm_2",
-            "spacecraftBus": {
-                "name": "BlueCanyon",
-                "mass": 20,
-                "volume": 0.5,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "components": {
-                    "adcs": {
-                        "maxTorque": 1,
-                        "maxRate": 1
-                    }
-                }
-            },
-            "instrument": {
-                "name": "thermal",
-                "mass": 10,
-                "volume": 12.45,
-                "dataRate": 40,
-                "bitsPerPixel": 8,
-                "power": 12,
-                "snr": 33,
-                "spatial_res": 50,
-                "spectral_res": 7e-09,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "fieldOfViewGeometry": {
-                    "shape": "RECTANGULAR",
-                    "angleHeight": 5,
-                    "angleWidth": 5
-                },
-                "maneuver": {
-                    "maneuverType": "SINGLE_ROLL_ONLY",
-                    "A_rollMin": -22.5,
-                    "A_rollMax": 22.5
-                },
-                "@id": "therm1",
-                "@type": "Basic Sensor"
-            },
-            "orbitState": {
-                "date": {
-                    "@type": "GREGORIAN_UT1",
-                    "year": 2020,
-                    "month": 1,
-                    "day": 1,
-                    "hour": 0,
-                    "minute": 0,
-                    "second": 0
-                },
-                "state": {
-                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 7078,
-                    "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 120.0,
-                    "aop": 0.0,
-                    "ta": 120.0
-                }
-            },
-            "planner": {
-                "preplanner": {
-                    "@type": "naive"
-                },
-                "replanner": {
-                    "@type": "broadcaster",
-                    "utility": "fixed",
-                    "bundle size": 1
-                }
-            },
-            "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
-            }
-        },
-        {
-            "@id": "sar_sat_2_0",
-            "name": "sar_0",
-            "spacecraftBus": {
-                "name": "BlueCanyon",
-                "mass": 20,
-                "volume": 0.5,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "components": {
-                    "adcs": {
-                        "maxTorque": 1,
-                        "maxRate": 1
-                    }
-                }
-            },
-            "instrument": {
-                "name": "sar",
-                "mass": 10,
-                "volume": 12.45,
-                "dataRate": 40,
-                "bitsPerPixel": 8,
-                "power": 12,
-                "snr": 33,
-                "spatial_res": 50,
-                "spectral_res": 7e-09,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "fieldOfViewGeometry": {
-                    "shape": "RECTANGULAR",
-                    "angleHeight": 5,
-                    "angleWidth": 5
-                },
-                "maneuver": {
-                    "maneuverType": "SINGLE_ROLL_ONLY",
-                    "A_rollMin": -22.5,
-                    "A_rollMax": 22.5
-                },
-                "@id": "sar1",
-                "@type": "Basic Sensor"
-            },
-            "orbitState": {
-                "date": {
-                    "@type": "GREGORIAN_UT1",
-                    "year": 2020,
-                    "month": 1,
-                    "day": 1,
-                    "hour": 0,
-                    "minute": 0,
-                    "second": 0
-                },
-                "state": {
-                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 7078,
-                    "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 240.0,
-                    "aop": 0.0,
-                    "ta": 240.0
-                }
-            },
-            "planner": {
-                "preplanner": {
-                    "@type": "naive"
-                },
-                "replanner": {
-                    "@type": "broadcaster",
-                    "utility": "fixed",
-                    "bundle size": 1
-                }
-            },
-            "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
-            }
-        },
-        {
-            "@id": "sar_sat_2_1",
+            "@id": "sar_sat_0_1",
             "name": "sar_1",
             "spacecraftBus": {
                 "name": "BlueCanyon",
@@ -634,9 +474,9 @@
                     "sma": 7078,
                     "ecc": 0.01,
                     "inc": 67,
-                    "raan": 240.0,
+                    "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 240.0
+                    "ta": 0.0
                 }
             },
             "planner": {
@@ -644,87 +484,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
-                    "utility": "fixed",
-                    "bundle size": 1
-                }
-            },
-            "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
-            }
-        },
-        {
-            "@id": "sar_sat_2_2",
-            "name": "sar_2",
-            "spacecraftBus": {
-                "name": "BlueCanyon",
-                "mass": 20,
-                "volume": 0.5,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "components": {
-                    "adcs": {
-                        "maxTorque": 1,
-                        "maxRate": 1
-                    }
-                }
-            },
-            "instrument": {
-                "name": "sar",
-                "mass": 10,
-                "volume": 12.45,
-                "dataRate": 40,
-                "bitsPerPixel": 8,
-                "power": 12,
-                "snr": 33,
-                "spatial_res": 50,
-                "spectral_res": 7e-09,
-                "orientation": {
-                    "referenceFrame": "NADIR_POINTING",
-                    "convention": "REF_FRAME_ALIGNED"
-                },
-                "fieldOfViewGeometry": {
-                    "shape": "RECTANGULAR",
-                    "angleHeight": 5,
-                    "angleWidth": 5
-                },
-                "maneuver": {
-                    "maneuverType": "SINGLE_ROLL_ONLY",
-                    "A_rollMin": -22.5,
-                    "A_rollMax": 22.5
-                },
-                "@id": "sar1",
-                "@type": "Basic Sensor"
-            },
-            "orbitState": {
-                "date": {
-                    "@type": "GREGORIAN_UT1",
-                    "year": 2020,
-                    "month": 1,
-                    "day": 1,
-                    "hour": 0,
-                    "minute": 0,
-                    "second": 0
-                },
-                "state": {
-                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                    "sma": 7078,
-                    "ecc": 0.01,
-                    "inc": 67,
-                    "raan": 240.0,
-                    "aop": 0.0,
-                    "ta": 240.0
-                }
-            },
-            "planner": {
-                "preplanner": {
-                    "@type": "naive"
-                },
-                "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
                     "bundle size": 1
                 }
@@ -752,7 +512,7 @@
             "@type": "EVENT"
         },
         "scenarioPath": "./scenarios/algal_bloom/",
-        "name": "toy"
+        "name": "naive_acbba_1"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
