@@ -82,8 +82,9 @@ class TimeInterval:
     
     def __repr__(self) -> str:
         return f'TimeInterval({self.start},{self.end})'
-
-
+    
+    def __hash__(self) -> int:
+        return hash(str(self))
 
 class OrbitData:
     """

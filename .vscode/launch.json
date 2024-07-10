@@ -57,7 +57,7 @@
             "args": "visualizer_test"
         },
         {
-            "name": "TOY",
+            "name": "TEST NAIVE PLANNER",
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/examples/toy/main.py",
@@ -69,7 +69,7 @@
             }
         },
         {
-            "name": "TOY ACBBA",
+            "name": "TEST ACBBA",
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/examples/toy_acbba/main.py",
@@ -85,6 +85,18 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceRoot}/scenarios/algal_bloom/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
+            "name": "TEST DYNAMIC PROGRAMMING PLANNER",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/dynamic/dp_planner_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
