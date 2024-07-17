@@ -746,7 +746,7 @@ class OrbitData:
                 mission_specs.write(json.dumps(scenario_specs, indent=4))
 
         return data_dir
-
+    
     def _check_changes_to_scenario(scenario_dict : dict, orbitdata_dir : str) -> bool:
         """ 
         Checks if the scenario has already been pre-computed 
