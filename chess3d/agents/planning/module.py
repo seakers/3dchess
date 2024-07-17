@@ -1,3 +1,4 @@
+import copy
 import pandas as pd
 
 from orbitpy.util import Spacecraft
@@ -159,7 +160,7 @@ class PlanningModule(InternalModule):
                     self.log(f"received senses from parent agent!", level=logging.DEBUG)
 
                     # unpack message 
-                    senses_msg : SensesMessage = SensesMessage(**content)
+                    senses_msg : SenseMessage = SenseMessage(**content)
 
                     # sort agent senses to be processed
                     senses = [senses_msg.state]
@@ -170,56 +171,8 @@ class PlanningModule(InternalModule):
                         # unpack message
                         msg : SimulationMessage = message_from_dict(**sense)
 
-                        # check relay path
-                        if msg.path:
-                            # message contains relay path; forward message copy
-                            await self.relay_inbox.put(message_from_dict(**sense))
-
-                        # check type of message being received
-                        if isinstance(msg, AgentActionMessage):
-                            # agent action received
-                            self.log(f"received agent action of status {msg.status}!")
-                            
-                            # send to planner
-                            await self.action_status_inbox.put(msg)
-
-                        elif isinstance(msg, AgentStateMessage):
-                            # agent state received
-                            self.log(f"received agent state message!")
-                            
-                            # unpack state
-                            state : SimulationAgentState = SimulationAgentState.from_dict(msg.state)                                                          
-                            
-                            # send to planner
-                            await self.states_inbox.put(state)
-
-                        elif isinstance(msg, MeasurementRequestMessage):
-                            # measurement request message received
-                            self.log(f"received measurement request message!")
-
-                            # unapack measurement request
-                            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
-                            
-                            # send to planner
-                            await self.req_inbox.put(req)
-
-                        elif isinstance(msg, ObservationResultsMessage):
-                            # observation data from another agent was received
-                            self.log(f"received observation data from agent!")
-
-                            # send to planner
-                            await self.observations_inbox.put(msg)
-
-                        # TODO support down-linked information processing
-                        ## elif isinstance(msg, DOWNLINKED MESSAGE CONFIRMATION):
-                        ##     pass
-
-                        else:
-                            # other type of message was received
-                            self.log(f"received some other kind of message!")
-
-                            # send to planner
-                            await self.misc_inbox.put(msg)
+                        # place in correct inbox
+                        await self.categorize_messages(msg)
 
                 else:
                     if not self.other_modules_exist:
@@ -227,16 +180,86 @@ class PlanningModule(InternalModule):
                         self.other_modules_exist = True
                         
                     if content['msg_type'] == 'HANDSHAKE':
-                        continue
+                        pass
 
-                    # unpack message
-                    msg : SimulationMessage = message_from_dict(**content)
+                    elif content['msg_type'] == SimulationMessageTypes.BUS.value:
+                        # received bus message containing other messages
+                        self.log(f"received bus message!", level=logging.DEBUG)
 
-                    # send to planner
-                    await self.internal_inbox.put(msg)
+                        # unpack bus message 
+                        bus_msg : BusMessage = BusMessage(**content)
+
+                        # process agent senses
+                        for msg_dict in bus_msg.msgs:
+                            # unpack message
+                            msg : SimulationMessage = message_from_dict(**msg_dict)
+
+                            # send to planner
+                            await self.internal_inbox.put(msg)
+                    else:
+                        # received an internal message
+                        self.log(f"received bus message!", level=logging.DEBUG)
+
+                        # unpack message
+                        msg : SimulationMessage = message_from_dict(**content)
+
+                        # send to planner
+                        await self.internal_inbox.put(msg)
 
         except asyncio.CancelledError:
             return
+        
+    async def categorize_messages(self, msg : SimulationMessage) -> None:
+        # check relay path
+        if msg.path:
+            # message contains relay path; forward message copy
+            await self.relay_inbox.put(copy.deepcopy(msg))
+
+        # check type of message being received
+        if isinstance(msg, AgentActionMessage):
+            # agent action received
+            self.log(f"received agent action of status {msg.status}!")
+            
+            # send to planner
+            await self.action_status_inbox.put(msg)
+
+        elif isinstance(msg, AgentStateMessage):
+            # agent state received
+            self.log(f"received agent state message!")
+            
+            # unpack state
+            state : SimulationAgentState = SimulationAgentState.from_dict(msg.state)                                                          
+            
+            # send to planner
+            await self.states_inbox.put(state)
+
+        elif isinstance(msg, MeasurementRequestMessage):
+            # measurement request message received
+            self.log(f"received measurement request message!")
+
+            # unapack measurement request
+            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
+            
+            # send to planner
+            await self.req_inbox.put(req)
+
+        elif isinstance(msg, ObservationResultsMessage):
+            # observation data from another agent was received
+            self.log(f"received observation data from agent!")
+
+            # send to planner
+            await self.observations_inbox.put(msg)
+
+        # TODO support down-linked information processing
+        ## elif isinstance(msg, DOWNLINKED MESSAGE CONFIRMATION):
+        ##     pass
+
+        else:
+            # other type of message was received
+            self.log(f"received some other kind of message!")
+
+            # send to planner
+            await self.misc_inbox.put(msg)
         
     """
     -----------------
@@ -313,7 +336,7 @@ class PlanningModule(InternalModule):
                         self.plan_history.append((state.t, plan_copy))
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -455,8 +478,6 @@ class PlanningModule(InternalModule):
                         # event was detected and an observation was requested
                         requests.append(request)
 
-                    # give science module time to send any remaining measurement requests
-                    await asyncio.sleep(1e-6)
                 else:
                     # the science module generated a different response; process later
                     await self.misc_inbox.put(internal_msg)

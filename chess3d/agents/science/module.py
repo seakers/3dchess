@@ -110,7 +110,7 @@ class ScienceModule(InternalModule):
                     self.log(f"received senses from parent agent!", level=logging.DEBUG)
 
                     # unpack message 
-                    senses_msg : SensesMessage = SensesMessage(**content)
+                    senses_msg : SenseMessage = SenseMessage(**content)
 
                     senses = []
                     senses.append(senses_msg.state)
@@ -179,7 +179,7 @@ class ScienceModule(InternalModule):
                 instrument = Instrument.from_dict(msg.instrument)
                 
                 # process each observation
-                reqs_from_observations = []
+                reqs_from_observations : list[MeasurementRequestMessage] = []
                 for obs in observation_data:
                     # process observation
                     lat_event,lon_event,t_start,t_end,t_corr,severity,observations_required \
@@ -199,15 +199,13 @@ class ScienceModule(InternalModule):
                         # another request has been made for this same event; ignore
                         measurement_req.severity = 0.0
                     
-                    if measurement_req.severity > 0.0:
-                        x = 1
-                    
                     # send request to all internal agent modules
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 
                                                         self.get_parent_name(), 
                                                         measurement_req.to_dict())
                     reqs_from_observations.append(req_msg)
                 
+                # create blank request if no requests were discovered in this observation
                 if not reqs_from_observations:
                     measurement_req = MeasurementRequest(self.get_parent_name(),
                                                          [-1,-1,0.0],
@@ -220,9 +218,12 @@ class ScienceModule(InternalModule):
                                                         self.get_parent_name(), 
                                                         measurement_req.to_dict())
                     reqs_from_observations.append(req_msg)
-                    
-                for req_msg in reqs_from_observations:
-                    await self._send_manager_msg(req_msg, zmq.PUB)
+
+                # package into bus    
+                req_dicts = [req.to_dict() for req in reqs_from_observations]
+                req_bus = BusMessage(self.get_module_name(), self.get_parent_name(), req_dicts)
+                
+                await self._send_manager_msg(req_bus, zmq.PUB)
 
 
         except asyncio.CancelledError:

@@ -30,11 +30,13 @@ def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
     elif msg_type == SimulationMessageTypes.PLAN.value:
         return PlanMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.SENSES.value:
-        return SensesMessage(**kwargs)
+        return SenseMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.OBSERVATION.value:
         return ObservationResultsMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.OBSERVATION_PERFORMED.value:
         return ObservationPerformedMessage(**kwargs)
+    elif msg_type == SimulationMessageTypes.BUS.value:
+        return SenseMessage(**kwargs)
     else:
         raise NotImplementedError(f'Action of type {msg_type} not yet implemented.')
 
@@ -219,12 +221,11 @@ class PlanMessage(SimulationMessage):
         self.plan = plan
         self.t_plan = t_plan
 
-class SensesMessage(SimulationMessage):
+class SenseMessage(SimulationMessage):
     """
-    # Plan Message
+    # Bus Message
     
-    Informs an agent's internal modules of the most recent sensed information.
-    This includes exteral messages and the latest agent state
+    Message containing other messages meant to be broadcasted in the same transmission
 
     ### Attributes:
         - src (`str`): name of the simulation element sending this message

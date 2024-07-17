@@ -220,7 +220,7 @@ class SimulationAgent(Agent):
             else:
                 senses_dict.append(sense.to_dict())
 
-        senses_msg = SensesMessage( self.get_element_name(), 
+        senses_msg = SenseMessage( self.get_element_name(), 
                                     self.get_element_name(),
                                     state_dict, 
                                     senses_dict)

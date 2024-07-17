@@ -229,7 +229,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         
         # -------------------------------
         # DEBUG PRINTOUTS
-        self.log_results('PRE-PLANNING PHASE', state, self.results)
+        # self.log_results('PRE-PLANNING PHASE', state, self.results)
         # -------------------------------
 
         # check if bundle is full
@@ -253,14 +253,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        self.log_results('PLANNING PHASE', state, self.results)
-        print(f'bundle:')
-        for req, subtask_index, bid in self.bundle:
-            req : MeasurementRequest
-            bid : Bid
-            id_short = req.id.split('-')[0]
-            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        print('')
+        # self.log_results('PLANNING PHASE', state, self.results)
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        # print('')
         # -------------------------------
 
         # output plan

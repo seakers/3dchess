@@ -72,7 +72,7 @@
             "name": "TEST ACBBA",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceRoot}/examples/toy_acbba/main.py",
+            "program": "${workspaceRoot}/tests/acbba/acbba_replanner_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
