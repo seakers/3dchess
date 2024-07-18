@@ -1,0 +1,8 @@
+routine,t_avg,t_std,t_med,n
+ENVIRONMENT_wait,-1.0,0.0,-1.0,0
+vis_sat_0_0_wait,0.153,0.642,0.104,4860
+therm_sat_0_0_wait,0.157,0.638,0.107,4860
+vis_sat_1_0_wait,0.154,0.639,0.108,4860
+therm_sat_1_0_wait,0.157,0.642,0.109,4860
+clock_wait,0.174,0.643,0.128,4860
+sim_runtime,843.544,0.0,843.544,1

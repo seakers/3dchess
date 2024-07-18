@@ -281,6 +281,9 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                             and instrument == main_measurement
                             ]
                 observations.append(ObservationAction(main_measurement, req.target, th_imgs.pop(), t_img))
+            
+            if not self.is_observation_path_valid(state, specs, observations):
+                x = 1
 
             return self.is_observation_path_valid(state, specs, observations)
         

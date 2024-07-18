@@ -471,10 +471,12 @@ class AbstractPlanner(ABC):
 
                 dt_measurements = t_j - t_i
 
-                assert dt_measurements >= 0.0 and dt_maneuver >= 0.0
+                if dt_measurements < 0.0 or dt_maneuver < 0.0:
+                    return False
 
-                # Slewing constraint:
-                # check if there's enough time to maneuver from one observation to another
+                # assert dt_measurements >= 0.0 and dt_maneuver >= 0.0
+
+                # Slewing constraint: check if there's enough time to maneuver from one observation to another
                 if dt_maneuver > dt_measurements:
                     # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
                     return False

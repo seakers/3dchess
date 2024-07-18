@@ -12,24 +12,27 @@ from chess3d.utils import print_welcome
 
 if __name__ == "__main__":
     # set scenario name
-    scenario_name = 'algal_blooms_study'
+    parent_scenario_name = 'algal_blooms_study'
     
     # load base scenario json file
-    template_file = os.path.join('./scenarios', scenario_name, 'MissionSpecs.json')
+    template_file = os.path.join('./scenarios', parent_scenario_name,'MissionSpecs.json')
     with open(template_file, 'r') as template_file:
         template_specs : dict = json.load(template_file)
 
     # read scenarios file
-    scenarios_file = os.path.join('./scenarios', scenario_name, 'lhs_scenarios.csv')
+    scenarios_file = os.path.join('./scenarios', parent_scenario_name, 'resources', 'lhs_scenarios.csv')
     scenarios_df : pd.DataFrame = pd.read_csv(scenarios_file)
 
     # extract parameters from previous
     params = {c: scenarios_df[c].unique() for c in scenarios_df}
-    fovs = list(params['fov (deg)'])
-    fors = list(params['for (deg)'])
-    agility = list(params['agility (deg/s)'])
-    num_planes = list(params['num_planes'])
-    num_sats_per_plane = list(params['num_sats_per_plane'])
+    # fovs = list(params['fov (deg)'])
+    # fors = list(params['for (deg)'])
+    # agility = list(params['agility (deg/s)'])
+    fovs = [5]
+    fors = [60]
+    agility = [1.0]
+    num_planes = list(params['num_planes']); num_planes.sort()
+    num_sats_per_plane = list(params['num_sats_per_plane']); num_sats_per_plane.sort()
 
     # set parameters
     duration = 1
@@ -45,7 +48,7 @@ if __name__ == "__main__":
                    'sar' : 'sar'}
     preplanners = ['naive']
     replanners = [
-                #   'broadcaster', 
+                  'broadcaster', 
                   'acbba'
                   ]
     bundle_sizes = [
@@ -55,6 +58,8 @@ if __name__ == "__main__":
                     # 5
                     ]
     utility = 'fixed'
+
+    overwrite = False
 
     # count number of runs to be made
     n_runs : int = int(len(num_planes) * len(num_sats_per_plane) 
@@ -77,9 +82,9 @@ if __name__ == "__main__":
                 # calculate list of true anomalies for each sat 
                 tas = [360 * i / n_sats_per_plane for i in range(n_sats_per_plane)]
 
-                if n_planes * n_sats_per_plane < 10:
-                    pbar.update(1)
-                    continue
+                # if n_planes * n_sats_per_plane < 10:
+                #     pbar.update(1)
+                #     continue
 
                 for field_of_view in fovs:
                     field_of_view = float(field_of_view)
@@ -152,17 +157,26 @@ if __name__ == "__main__":
                                         # update list of satellites
                                         scenario_specs['spacecraft'] = sats
 
+                                        # create scenario name
+                                        scenario_name = f'{parent_scenario_name}_{n_planes}_{n_sats_per_plane}_{int(field_of_view)}_{int(field_of_regard)}_{int(max_slew_rate)}_{preplanner}_{replanner}'
+                                        if replanner != 'broadcaster': scenario_name += f'-{bundle_size}'
+                                        
                                         # set scenario name
-                                        if replanner == 'broadcaster':
-                                            scenario_specs['scenario']['name'] = f'{scenario_name}_{n_planes}_{field_of_view}_{field_of_regard}_{int(max_slew_rate)}_{preplanner}_{replanner}'
-                                        else:
-                                            scenario_specs['scenario']['name'] = f'{scenario_name}_{n_planes}_{field_of_view}_{field_of_regard}_{int(max_slew_rate)}_{preplanner}_{replanner}_{bundle_size}'
+                                        scenario_specs['scenario']['name'] = scenario_name
+
+                                        # check overwrite toggle
+                                        if not overwrite:
+                                            results_summary_path = os.path.join('./scenarios',parent_scenario_name, 'results', scenario_name, 'summary.csv')
+                                            if os.path.exists(results_summary_path):
+                                                # scenario already ran; skip to avoid overwrite
+                                                pbar.update(1)
+                                                continue
 
                                         # initialize mission
                                         mission : Mission = Mission.from_dict(scenario_specs)
 
                                         # print welcome message
-                                        print_welcome(scenario_specs['scenario']['name'])
+                                        print_welcome(scenario_name)
 
                                         # execute mission
                                         mission.execute()

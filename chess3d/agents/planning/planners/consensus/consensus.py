@@ -356,7 +356,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     observations.pop()
                 else:
                     planned_observations.pop(0)
+        
+        # check if compiled observations path is valid
+        assert self.is_observation_path_valid(state, specs, observations)
 
+        # check if there are still proposed observations to be added to the path
         while proposed_observations:
             # get next actions in the lists
             proposed_observation : ObservationAction = proposed_observations[0]
@@ -371,6 +375,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 observations.append(proposed_observations.pop(0))
             else:
                 observations.pop()
+
+        # check if compiled observations path is valid
+        assert self.is_observation_path_valid(state, specs, observations)
 
         while planned_observations:
             # get next actions in the lists
@@ -395,6 +402,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
             else:
                 planned_observations.pop(0)
 
+        # check if compiled observations path is valid
+        assert self.is_observation_path_valid(state, specs, observations)
+
+        # return compiled observations path
         return observations
     
     @runtime_tracker

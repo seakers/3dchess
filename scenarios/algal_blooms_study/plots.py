@@ -9,11 +9,18 @@ import matplotlib.pyplot as plt
 
 
 if __name__  == "__main__":
+    # set params
     results_path = './results'
+    show_plots = False
+    save_plots = True
     
-    run_names = [run_name for run_name in os.listdir(results_path)]
-    run_names.sort(reverse=True)
+    # get run names
+    run_names = list({run_name for run_name in os.listdir(results_path)
+                 if os.path.isfile(os.path.join(results_path, run_name, 'summary.csv'))})
+    run_names.sort()
 
+    # initialize metrics
+    ## Bar plots
     events = {
         'Events Detected': [],
         'Total Event Observations' : [],
@@ -26,17 +33,41 @@ if __name__  == "__main__":
         "Full Co-observations" : []
     }
 
+    # Scatter plots
+    scatter_metrics = { planner : {
+                                    "N sats" : [],
+                                    "N planes" : [],
+                                    "N sats per plane" : [],
+                                    "Events Detected" : [],
+                                    "Total Event Observations" : [],
+                                    "Unique Event Observations" : [],
+                                    "Co-observations" : [],
+                                    "Partial Co-observations" : [],
+                                    "Full Co-observations" : []
+                                    } 
+                        for planner in ['naive_fifo', 'acbba-1', 'acbba-3']
+                    }
+
+    # collect metrics
     n_events = None
+    ignored_runs = []
     for run_name in run_names:
+        # load run specs
+        *_,n_planes,n_sats_per_plane,field_of_view,field_of_regard,max_slew_rate,preplanner,replanner = run_name.split('_')
+        n_planes = int(n_planes)
+        n_sats_per_plane = int(n_sats_per_plane)
+        field_of_view = float(field_of_view)
+        field_of_regard = float(field_of_regard)
+
         # load results summary
         summary_path = os.path.join(results_path, run_name, 'summary.csv')
         summary : pd.DataFrame = pd.read_csv(summary_path)
 
-        # load list of observations
-        observations_path = os.path.join(results_path, run_name, 'environment', 'measurements.csv')
-        observations : pd.DataFrame = pd.read_csv(observations_path)
+        # # load list of observations
+        # observations_path = os.path.join(results_path, run_name, 'environment', 'measurements.csv')
+        # observations : pd.DataFrame = pd.read_csv(observations_path)
 
-        # add data to plot inputs
+        # collect data for plots
         n_events = [int(val) for key,val in summary.values if key == 'n_events'][0] if n_events is None else n_events
 
         events['Events Detected'].append([int(val) for key,val in summary.values if key == 'n_events_detected'][0])
@@ -46,7 +77,21 @@ if __name__  == "__main__":
         coobservations['Co-observations'].append([int(val) for key,val in summary.values if key == 'n_co_obs'][0])
         coobservations['Partial Co-observations'].append([int(val) for key,val in summary.values if key == 'n_event_partially_co_obs'][0])
         coobservations['Full Co-observations'].append([int(val) for key,val in summary.values if key == 'n_events_fully_co_obs'][0])
-    
+
+        planner = replanner if 'acbba' in replanner else 'naive_fifo'
+        scatter_metrics[planner]['N sats'].append(n_planes*n_sats_per_plane)
+        scatter_metrics[planner]['N planes'].append(n_planes)
+        scatter_metrics[planner]['N sats per plane'].append(n_sats_per_plane)
+
+        scatter_metrics[planner]['Events Detected'].append([int(val) for key,val in summary.values if key == 'n_events_detected'][0])
+        scatter_metrics[planner]['Total Event Observations'].append([int(val) for key,val in summary.values if key == 'n_total_event_obs'][0])
+        scatter_metrics[planner]['Unique Event Observations'].append([int(val) for key,val in summary.values if key == 'n_unique_event_obs'][0])
+
+        scatter_metrics[planner]['Co-observations'].append([int(val) for key,val in summary.values if key == 'n_co_obs'][0])
+        scatter_metrics[planner]['Partial Co-observations'].append([int(val) for key,val in summary.values if key == 'n_event_partially_co_obs'][0])
+        scatter_metrics[planner]['Full Co-observations'].append([int(val) for key,val in summary.values if key == 'n_events_fully_co_obs'][0])
+
+    # ---- BAR PLOTS ----
     # set x-axis
     x = np.arange(len(run_names))  # the label locations
     width = 0.25  # the width of the bars
@@ -67,7 +112,9 @@ if __name__  == "__main__":
     ax.set_xticks(x + width, run_names)
     ax.legend(loc='upper left')
 
-    plt.show()
+    # show/save plots
+    # if show_plots: plt.show()
+    # if save_plots: plt.savefig('./plots/events.png')
 
     # event observation plot
     fig, ax = plt.subplots(layout='constrained')
@@ -84,4 +131,33 @@ if __name__  == "__main__":
     ax.set_xticks(x + width, run_names)
     ax.legend(loc='upper left')
 
-    plt.show()
+    # show/save plots
+    # if show_plots: plt.show()
+    # if save_plots: plt.savefig('./plots/observations.png')
+
+    # ---- SCATTER PLOTS ----
+    titles = ['Events Detected', 'Total Event Observations', 'Unique Event Observations', 'Co-observations', 'Partial Co-observations', 'Full Co-observations']
+    counter = 1
+    for title in titles:
+        # create plot
+        fig, ax = plt.subplots(layout='constrained')
+        for planner in scatter_metrics:
+            x = scatter_metrics[planner]['N sats']
+            y = scatter_metrics[planner][title]
+            ax.scatter(x, y, label=planner, edgecolors='none')
+
+        # set axis and title
+        ax.set_title(f'{title} per N sats')
+        ax.set_xlabel('N sats')
+        ax.set_ylabel(title)
+        ax.legend()
+        ax.grid(True)
+
+        # show/save plots
+        if show_plots: plt.show()
+        if save_plots: plt.savefig(f'./plots/scatter{counter}.png')
+        
+        # increase counter
+        counter += 1 
+
+    x = 1
