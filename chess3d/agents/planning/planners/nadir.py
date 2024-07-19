@@ -30,5 +30,7 @@ class NadirPointingPlaner(NaivePlanner):
         # ensure no attitude manuvers exist in plan
         assert all([not isinstance(action, ManeuverAction) for action in maneuvers])
 
+        assert False
+
         # return travel manuvers
         return maneuvers

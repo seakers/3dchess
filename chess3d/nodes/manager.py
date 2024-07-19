@@ -174,6 +174,9 @@ class SimulationManager(AbstractManager):
                 _, src, msg_dict = read_task.result()
                 msg_type = msg_dict['msg_type']
 
+                if NodeMessageTypes[msg_type] != NodeMessageTypes.NODE_DEACTIVATED.value:
+                    x = 1
+
                 if ((NodeMessageTypes[msg_type] != NodeMessageTypes.TIC_REQ
                     and NodeMessageTypes[msg_type] != NodeMessageTypes.CANCEL_TIC_REQ)
                     or SimulationElementRoles.ENVIRONMENT.value in src):
