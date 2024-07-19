@@ -52,7 +52,7 @@ class NaivePlanner(AbstractPreplanner):
         if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
 
         # generate plan
-        observations = []
+        observations : list[ObservationAction] = []
         while access_times:
             # get next available access interval
             grid_index, gp_index, instrument, _, t, th = access_times.pop()
@@ -74,7 +74,7 @@ class NaivePlanner(AbstractPreplanner):
                 t_prev = action_prev.t_end
                 th_prev = action_prev.look_angle
           
-            # find if feasible observation time exists 
+            # find if feasible observation times exist
             feasible_obs = [(t[i], th[i]) 
                             for i in range(len(t))
                             if self.is_observation_feasible(state, t[i], th[i], t_prev, th_prev, 
@@ -123,10 +123,11 @@ class NaivePlanner(AbstractPreplanner):
 
         dt_maneuver = dth_img / max_slew_rate
 
-        #TODO implement torque constraint
-
         # check feasibility
         return dt_maneuver <= dt_obs
+    
+        #TODO implement torque constraint
+
     
     def no_redundant_observations(self, 
                                  state : SimulationAgentState, 

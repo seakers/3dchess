@@ -31,6 +31,7 @@ from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.planning.planners.broadcaster import Broadcaster
 from chess3d.agents.planning.planners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.planning.planners.naive import NaivePlanner
+from chess3d.agents.planning.planners.nadir import NadirPointingPlaner
 from chess3d.agents.satellite import SatelliteAgent
 from chess3d.agents.science.module import *
 from chess3d.agents.science.utility import utility_function
@@ -508,13 +509,16 @@ class SimulationFactory:
                 horizon = preplanner_dict.get('horizon', np.Inf)
 
                 if preplanner_type.lower() == "naive":
-                    preplanner = NaivePlanner(period, horizon, logger)
+                    preplanner = NaivePlanner(horizon, period, logger)
+
+                elif preplanner_type.lower() == 'nadir':
+                    preplanner = NadirPointingPlaner(horizon, period, logger)
 
                 elif preplanner_type.lower() == "dynamic":
                     sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
                     preplanner = DynamicProgrammingPlanner(sharing, period, horizon, logger)
                 
-                # elif...
+                # elif... # add more planners here
                 
                 else:
                     raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')

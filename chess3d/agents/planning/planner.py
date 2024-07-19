@@ -469,12 +469,12 @@ class AbstractPlanner(ABC):
                 else:
                     dt_maneuver = abs(th_j - th_i) / max_slew_rate
 
+                # calculate time between measuremnets
                 dt_measurements = t_j - t_i
 
-                if dt_measurements < 0.0 or dt_maneuver < 0.0:
+                # check if observation sequence is correct 
+                if dt_measurements < 0.0:
                     return False
-
-                # assert dt_measurements >= 0.0 and dt_maneuver >= 0.0
 
                 # Slewing constraint: check if there's enough time to maneuver from one observation to another
                 if dt_maneuver > dt_measurements:

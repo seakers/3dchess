@@ -60,7 +60,19 @@
             "name": "TEST NAIVE PLANNER",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/naive/main.py",
+            "program": "${workspaceRoot}/tests/naive/naive_planner_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
+            "name": "TEST NADIR PLANNER",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/nadir/nadir_planner_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
