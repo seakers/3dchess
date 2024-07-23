@@ -76,11 +76,12 @@ class SimulationManager(AbstractManager):
 
                         # wait for everyone to ask to fast forward            
                         self.log(f'waiting for tic requests...')
-                        await self.wait_for_tic_requests()
+                        reqs = await self.wait_for_tic_requests()
                         self.log(f'tic requests received!')
 
                         # announce new time to simulation elements
                         self.log(f'sending toc for time {t}[s]...', level=logging.INFO)
+                        if reqs is None: break
                         toc = TocMessage(self.get_network_name(), t)
 
                         await self.send_manager_broadcast(toc)
@@ -114,9 +115,12 @@ class SimulationManager(AbstractManager):
                         reqs = await self.wait_for_tic_requests()
                         self.log(f'tic requests received!')
 
-                        tic_reqs = [reqs[src].tf for src in reqs]
-                        tic_reqs.append(tf)
-                        t_next = min(tic_reqs)
+                        if reqs is None:
+                            t_next = tf
+                        else:
+                            tic_reqs = [reqs[src].tf for src in reqs]
+                            tic_reqs.append(tf)
+                            t_next = min(tic_reqs)
                         
                         # announce new time to simulation elements
                         self.log(f'sending toc for time {t_next}[s]...', level=logging.INFO)
@@ -174,8 +178,8 @@ class SimulationManager(AbstractManager):
                 _, src, msg_dict = read_task.result()
                 msg_type = msg_dict['msg_type']
 
-                if NodeMessageTypes[msg_type] != NodeMessageTypes.NODE_DEACTIVATED.value:
-                    x = 1
+                if NodeMessageTypes[msg_type] == NodeMessageTypes.DEACTIVATED:
+                    return None
 
                 if ((NodeMessageTypes[msg_type] != NodeMessageTypes.TIC_REQ
                     and NodeMessageTypes[msg_type] != NodeMessageTypes.CANCEL_TIC_REQ)

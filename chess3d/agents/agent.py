@@ -454,6 +454,16 @@ class SimulationAgent(Agent):
           TEARDOWN       
     --------------------
     """
+    async def _publish_deactivate(self) -> None:
+        # notify monitor
+        await super()._publish_deactivate()
+
+        # notify manager
+        manager_message = NodeDeactivatedMessage(self.get_element_name(), SimulationElementRoles.MANAGER.value)
+        await self._send_manager_msg(manager_message, zmq.PUB)
+
+        x = 1
+
     async def teardown(self) -> None:
         # TODO log agent capabilities
 
