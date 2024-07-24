@@ -257,8 +257,8 @@ class SimulationAgent(Agent):
 
         # perform each action and record action status
         statuses = []
-        for action in [action_from_dict(**action_dict) for action_dict in actions]:
-            action : AgentAction
+        for action_dict in actions:
+            action : AgentAction = action_from_dict(**action_dict)
 
             # check action start time
             if (action.t_start - self.get_current_time()) > np.finfo(np.float32).eps:
@@ -491,7 +491,7 @@ class SimulationAgent(Agent):
             data.append(line_data)
         
         state_df = DataFrame(data,columns=headers)
-        self.log(f'\nPayload: {self.state.payload}\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
+        self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
         state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
         # log performance stats

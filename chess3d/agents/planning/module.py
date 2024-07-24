@@ -1,4 +1,5 @@
 import copy
+import traceback
 import pandas as pd
 
 from orbitpy.util import Spacecraft
@@ -58,6 +59,11 @@ class PlanningModule(InternalModule):
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
         self.orbitdata : OrbitData = orbitdata
+
+        # counters
+        self.n_observations = 0
+        self.n_broadcasts = 0
+        self.n_maneuvers = 0
 
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
         """ Sets up network configuration for intra-agent module communication """
@@ -380,7 +386,7 @@ class PlanningModule(InternalModule):
                         pending_actions = []
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        # self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        self.__log_plan(plan, "REPLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -389,7 +395,14 @@ class PlanningModule(InternalModule):
                 plan_out : list = plan.get_next_actions(self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+
+                self.n_observations += len([action for action in plan_out if action['action_type'] == 'OBSERVE'])
+                self.n_broadcasts += len([action for action in plan_out if action['action_type'] == 'BROADCAST'])
+                self.n_maneuvers += len([action for action in plan_out if action['action_type'] == 'MANEUVER'])
+
+                counts = plan.counters()
+
                 x = 1
                 # -------------------------------------
 
@@ -402,6 +415,10 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
+        
+        except Exception as e:
+            traceback.format_exc()
+            x = 1
                 
     @runtime_tracker
     async def __check_action_completion(self, level : int = logging.DEBUG) -> tuple:
@@ -531,19 +548,23 @@ class PlanningModule(InternalModule):
             self.log(out, logging.WARNING)
 
     def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
-        out = f'\n{title}\n'
+        try:
+            out = f'\n{title}\n'
 
-        if isinstance(plan, Plan):
-            out += str(plan)
-        else:
-            for action in plan:
-                if isinstance(action, AgentAction):
-                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-                elif isinstance(action, dict):
-                    out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
-        
+            if isinstance(plan, Plan):
+                out += str(plan)
+            else:
+                for action in plan:
+                    if isinstance(action, AgentAction):
+                        out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+                    elif isinstance(action, dict):
+                        out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+            
 
-        self.log(out, level)
+            self.log(out, level)
+        except Exception as e:
+            print(e)
+            raise e
                
     async def teardown(self) -> None:
         # log plan history

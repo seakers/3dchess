@@ -20,6 +20,18 @@ class Plan(ABC):
         # load preplan
         if actions:
             self.update(*actions, t=t)
+            
+    def counters(self) -> dict:
+        counts = {}
+        for action in self.actions:
+            action : AgentAction
+
+            if type(action) not in counts:
+                counts[type(action)] = 0
+            
+            counts[type(action)] += 1
+        
+        return counts
 
     def update(self, *action_lists, t : float) -> None:
         """ Updates the current plan to a new list of actions """
@@ -40,7 +52,7 @@ class Plan(ABC):
                 raise RuntimeError("Cannot update plan: new plan is unfeasible.")
         
             # update plan
-            self.__add_all(actions, t)
+            self.add_all(actions, t)
 
         # update plan update time
         self.t = t            
@@ -48,7 +60,7 @@ class Plan(ABC):
         # check feasibility of new plan
         assert self.__is_feasible(self.actions)
         
-    def __add_all(self, actions : list, t : float) -> None:
+    def add_all(self, actions : list, t : float) -> None:
         """ adds a set of actions to plan """
         
         # sort new set of actions by start time 
@@ -97,9 +109,9 @@ class Plan(ABC):
                 
             else:
                 # possible conflicts exist, may need to repair 
-                for action in actions: self._add(action, t)
+                for action in actions: self.add(action, t)
         
-    def _add(self, action : AgentAction, t : float) -> None:
+    def add(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
 
         # check argument types
@@ -195,7 +207,7 @@ class Plan(ABC):
         """ returns a list of dicts """
 
         # get next available action to perform
-        eps = 1e-9
+        eps = 1e-6
         plan_out : list[AgentAction] = [action
                                         for action in self.actions 
                                         if action.t_start - eps <= t <= action.t_end + eps]
@@ -204,12 +216,12 @@ class Plan(ABC):
         plan_out.sort(key=lambda a: a.t_start)
 
         if plan_out:
-            # only return tasks of the same type
             plan_out = [action.to_dict()
                         for action in plan_out
-                        if isinstance(action, type(plan_out[0]))]
+                        # if isinstance(action, type(plan_out[0])) # only return tasks of the same type
+                        ]
         else:
-            # idle if no more actions can be performed
+            # idle if no more actions can be performed at this time
             t_idle = self.actions[0].t_start if not self.empty() else np.Inf
             action = WaitForMessages(t, t_idle)
             plan_out.append(action.to_dict())     
@@ -285,7 +297,7 @@ class Plan(ABC):
                     out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}\n"
         out += f'\nn actions in plan: {len(self)}'
         out += f'\nn measurements in plan: {len([action for action in self if isinstance(action, ObservationAction)])}'
-        out += f'\nn bradcasts in plan: {len([action for action in self if isinstance(action, BroadcastMessageAction)])}'
+        out += f'\nn broadcasts in plan: {len([action for action in self if isinstance(action, BroadcastMessageAction)])}'
         out += f'\nn maneuvers in plan: {len([action for action in self if isinstance(action, ManeuverAction)])}'
         out += f'\nn travel actions in plan: {len([action for action in self if isinstance(action, TravelAction)])}\n'
         return out
@@ -321,11 +333,11 @@ class Preplan(Plan):
     def copy(self) -> object:
         return Preplan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
     
-    def _add(self, action: AgentAction, t: float) -> None:
+    def add(self, action: AgentAction, t: float) -> None:
         if self.t + self.horizon < action.t_end:
             raise ValueError(f'cannot add action scheduled to be done past the planning horizon of this plan')
 
-        super()._add(action, t)
+        super().add(action, t)
 
 class Replan(Plan):
     def __init__(self, 
@@ -338,12 +350,12 @@ class Replan(Plan):
 
         super().__init__(*actions, t=t)
 
-    def _add(self, action: AgentAction, t: float) -> None:
+    def add(self, action: AgentAction, t: float) -> None:
         # if self.t_next < action.t_end:
         #     return
         #     # raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
 
-        super()._add(action, t)
+        super().add(action, t)
 
     def copy(self) -> object:
         return Replan(self.actions, t=self.t, t_next=self.t_next)

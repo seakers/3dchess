@@ -99,7 +99,7 @@ class TestNaivePlanner(unittest.TestCase):
                         }
                     },
                     "science" : {
-                        "@type": "lookup", 
+                        "@type": "ORACLE", 
                         "eventsPath" : "./tests/nadir/resources/all_events_formatted.csv"
                     }
                 }

@@ -559,7 +559,7 @@ class SimulationEnvironment(EnvironmentNode):
                     events_observed.append(matching_observations)
 
                 # find measurement requests that match this event
-                matching_requests = [req
+                matching_requests = [   req
                                         for req in self.measurement_reqs
                                         if isinstance(req, MeasurementRequest)
                                         and abs(lat - req.target[0]) < 1e-3 

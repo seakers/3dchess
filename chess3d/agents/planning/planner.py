@@ -82,6 +82,7 @@ class AbstractPlanner(ABC):
         broadcasted_reqs = {MeasurementRequest.from_dict(msg.req) 
                             for msg in self.completed_broadcasts
                             if isinstance(msg, MeasurementRequestMessage)}
+        
         for req in broadcasted_reqs:
             if req in self.pending_reqs_to_broadcast:
                 self.pending_reqs_to_broadcast.remove(req)
@@ -114,21 +115,51 @@ class AbstractPlanner(ABC):
 
         # schedule generated measurement request broadcasts
         if self.pending_reqs_to_broadcast:
-            # find best path for broadcasts
-            path, t_start = self._create_broadcast_path(state, orbitdata)
+            # sort requests based on their start time
+            pending_reqs_to_broadcast = list(self.pending_reqs_to_broadcast) 
+            pending_reqs_to_broadcast.sort(key=lambda a : a.t_start)
 
-            # check feasibility of path found
-            if t_start >= 0:
-                # create a broadcast action for all unbroadcasted measurement requests
-                while self.pending_reqs_to_broadcast:
-                    # get next request to broadcast
-                    req : MeasurementRequest = self.pending_reqs_to_broadcast.pop()
+            # find best path for broadcasts at the current time
+            path, t_start = self._create_broadcast_path(state, orbitdata, state.t)
 
-                    # create broadcast action
-                    msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-                    broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+            for req in pending_reqs_to_broadcast:
+                req : MeasurementRequest
+                
+                # calculate broadcast start time
+                if req.t_start > t_start:
+                    path, t_start = self._create_broadcast_path(state, orbitdata, req.t_start)
                     
-                    broadcasts.append(broadcast_action)
+                # check broadcast feasibility
+                if t_start < 0:
+                    break
+
+                # create broadcast action
+                msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                
+                # add to list of broadcasts
+                broadcasts.append(broadcast_action)
+
+                # remove request from list of pending broadcasts
+                self.pending_reqs_to_broadcast.remove(req)
+
+            # # create a broadcast action for all unbroadcasted measurement requests
+            # while (t_start >= 0                         # there exist a valid broadcasting time
+            #        and self.pending_reqs_to_broadcast   # there are requests to be broadcasted
+            #        ):
+            #     # get next request to broadcast
+            #     req : MeasurementRequest = self.pending_reqs_to_broadcast.pop()
+
+            #     # check 
+            #     if req.t_start > t_start:
+            #         path, t_start = self._create_broadcast_path(state, orbitdata, req.t_start)
+            #         x = 1
+
+            #     # create broadcast action
+            #     msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+            #     broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                
+            #     broadcasts.append(broadcast_action)
 
         # schedule message relay
         relay_broadcasts = [self._schedule_relay(relay) for relay in self.pending_relays]
@@ -380,7 +411,7 @@ class AbstractPlanner(ABC):
                     x = 1
 
                 move_action = TravelAction(final_pos, t_move_start, t_move_end)
-                action_sequence_i.append(move_action)
+                # action_sequence_i.append(move_action)
             
             # wait for measurement action to start
             # if t_move_end < t_img:
@@ -620,11 +651,12 @@ class AbstractPreplanner(AbstractPlanner):
         # generate maneuver and travel actions from measurements
         maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
         
-        # wait for next planning period to start
-        replan : list = self.__schedule_periodic_replan(state, observations, maneuvers)
-
         # generate plan from actions
-        self.plan : Preplan = Preplan(observations, maneuvers, broadcasts, replan, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
+        self.plan : Preplan = Preplan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
+        
+        # wait for next planning period to start
+        replan : list = self.__schedule_periodic_replan(state, self.plan)
+        self.plan.add_all(replan, t=state.t)
 
         # return plan and save local copy
         return self.plan.copy()
@@ -638,21 +670,18 @@ class AbstractPreplanner(AbstractPlanner):
         return super()._schedule_broadcasts(state, orbitdata)
 
     @runtime_tracker
-    def __schedule_periodic_replan(self, state : SimulationAgentState, observations : list, maneuvers : list) -> list:
+    def __schedule_periodic_replan(self, state : SimulationAgentState, prelim_plan : Plan) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
         
         # calculate next period for planning
         t_next = state.t + self.period
 
         # find wait start time
-        if not observations and not maneuvers:
+        if prelim_plan.empty():
             t_wait_start = state.t 
         
         else:
-            prelim_actions = [action for action in maneuvers]
-            prelim_actions.extend(observations)
-
-            actions_in_period = [action for action in prelim_actions 
+            actions_in_period = [action for action in prelim_plan 
                                  if  isinstance(action, AgentAction)
                                  and action.t_start < t_next]
 
