@@ -14,6 +14,7 @@ from instrupy.base import Instrument
 
 class ScienceModuleTypes(Enum):
     LOOKUP = 'LOOKUP'
+    ORACLE = 'ORACLE'
 
 class ScienceModule(InternalModule):
     def __init__(   self, 
@@ -73,8 +74,7 @@ class ScienceModule(InternalModule):
         """
         try:
             # announce existance to other modules 
-            announcement_msg = SimulationMessage(self.get_element_name(), self.get_parent_name(), 'HANDSHAKE')
-            await self._send_manager_msg(announcement_msg, zmq.PUB)
+            await self.make_announcement()
 
             # initialize concurrent tasks
             listener_task = asyncio.create_task(self.listener(), name='listener()')
@@ -91,13 +91,17 @@ class ScienceModule(InternalModule):
                     task.cancel()
                     await task
 
-    async def listener(self):
-        """ Unpacks and classifies any incoming messages """
-        # 
-        try:
-            # initiate results tracker
-            results = {}
+    async def make_announcement(self) -> None:
+        """ Announces presence of science module to other internal modules """
+        # create announcement message
+        announcement_msg = SimulationMessage(self.get_element_name(), self.get_parent_name(), 'HANDSHAKE')
 
+        # broadcast announcement
+        await self._send_manager_msg(announcement_msg, zmq.PUB)
+
+    async def listener(self) -> None:
+        """ Unpacks and classifies any incoming messages """
+        try:
             # create poller for all broadcast sockets
             poller = azmq.Poller()
             manager_socket, _ = self._manager_socket_map.get(zmq.SUB)
@@ -225,6 +229,7 @@ class ScienceModule(InternalModule):
                 req_dicts = [req.to_dict() for req in reqs_from_observations]
                 req_bus = BusMessage(self.get_module_name(), self.get_parent_name(), req_dicts)
                 
+                # send to parent agent
                 await self._send_manager_msg(req_bus, zmq.PUB)
 
 
@@ -241,8 +246,8 @@ class ScienceModule(InternalModule):
     async def teardown(self) -> None:
         # nothing to tear-down
         return
-
-class OracleScienceModule(ScienceModule):
+    
+class LookupTableScienceModule(ScienceModule):
     def __init__(self, 
                  results_path: str, 
                  events_path : str,
@@ -251,7 +256,7 @@ class OracleScienceModule(ScienceModule):
                  logger: Logger = None
                  ) -> None:
         """ 
-        ## Oracle Science Module
+        ## Lookuup Table Science Module
 
         Has prior knowledge of all of the events that will occur during the simulation.
         Compares incoming observations to a predefined list of events to determine whether an event has been observed.
@@ -274,12 +279,16 @@ class OracleScienceModule(ScienceModule):
         
         # query known events
         observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
-                            for lat_event,lon_event,t_start,duration,severity,measurements 
-                            in self.events.values
+                            for lat_event,lon_event,t_start,duration,severity,measurements in self.events.values
+                            # same location as the observation
                             if abs(lat - lat_event) <= 1e-3
                             and abs(lon - lon_event) <= 1e-3
+                            # availability during the time of observation
                             and t_start <= t_img <= t_start+duration
+                            # event requires observations of the same type as the one performed
                             and instrument.name in measurements
+                            # event has not been detected before
+                            and (lat_event,lon_event,t_start,duration,severity,measurements) not in self.events_detected 
                             ]
         
         # sort by severity  
@@ -288,11 +297,6 @@ class OracleScienceModule(ScienceModule):
         while observed_events:
             # get next highest severity event
             event = observed_events.pop()
-
-            # check if event has already been detected before
-            if event in self.events_detected:
-                # already been detected, skip
-                continue
             
             # add event to list of detected events
             self.events_detected.update(event)
@@ -316,3 +320,54 @@ class OracleScienceModule(ScienceModule):
 
         return np.NaN,np.NaN,-1,-1,0.0,0.0,[]
     
+
+class OracleScienceModule(LookupTableScienceModule):
+    def __init__(self, 
+                 results_path: str, 
+                 events_path : str,
+                 parent_name: str, 
+                 parent_network_config: NetworkConfig, 
+                 logger: Logger = None
+                 ) -> None:
+        """ 
+        ## Oracle Science Module
+
+        Has prior knowledge of all of the events that will occur during the simulation.
+        Checks current simulation time 
+        """
+        super().__init__(results_path, events_path, parent_name, parent_network_config, logger)
+        
+    async def make_announcement(self) -> None:
+        # announce presence
+        await super().make_announcement()
+
+        # announce events
+        await self.announce_events()
+
+    async def announce_events(self): 
+        try:
+            # generate measurement requests for all events
+            reqs = []
+            for lat,lon,t_start,duration,severity,measurements in self.events.values:
+                measurements : str = measurements.replace('[','')
+                measurements : str = measurements.replace(']','')
+                observation_types : list = measurements.split(',')
+
+                req = MeasurementRequest(self.get_parent_name(), [lat,lon,0.0], severity, observation_types, t_start, t_start+duration, duration)
+                reqs.append(req)
+
+            # register all events as detected
+            for event in self.events.values: self.events_detected.update(event)
+
+            # create request messages
+            msgs = [MeasurementRequestMessage(self.get_parent_name(), self.get_parent_name(), req.to_dict())
+                    for req in reqs]
+            
+            req_dicts = [req.to_dict() for req in msgs]
+            req_bus = BusMessage(self.get_module_name(), self.get_parent_name(), req_dicts)
+
+            # send to parent agent
+            await self._send_manager_msg(req_bus, zmq.PUB)
+            
+        except asyncio.CancelledError:
+            return

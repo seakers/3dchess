@@ -448,19 +448,20 @@ class PlanningModule(InternalModule):
             generated_reqs 
             misc_messages
         """
-        requests = []
-        while not self.req_inbox.empty():
-            requests.append(await self.req_inbox.get())
-
+        # compile incoming observations
         incoming_obsevations = []
         while not self.observations_inbox.empty():
             incoming_obsevations.append(await self.observations_inbox.get())
 
-        if (self.other_modules_exist                # science module exists within the parent agent
-            and len(incoming_obsevations) > 0       # some agent just performed an observation
-            ):
+        # compile incoming requests
+        requests = []
+        while not self.req_inbox.empty():
+            requests.append(await self.req_inbox.get())
 
-            while True:
+        # process internal messages
+        if self.other_modules_exist:                
+            # check if the parent agent just performed an observation
+            while len(incoming_obsevations) > 0:    
                 # wait for science module to send their assesment of the observation 
                 internal_msg = await self.internal_inbox.get()
 
@@ -482,16 +483,39 @@ class PlanningModule(InternalModule):
                 if self.internal_inbox.empty():
                     # no more messages from the science module; stop wait
                     break
+            
+            # process internal messages
+            while not self.internal_inbox.empty():
+                # get next internal message
+                internal_msg = await self.internal_inbox.get()
 
+                # classify message
+                if isinstance(internal_msg, MeasurementRequestMessage):
+                    # the science module analized out latest observation(s)
+                    request : MeasurementRequest = MeasurementRequest.from_dict(internal_msg.req)
+                    
+                    # check if outlier was deteced
+                    if request.severity > 0.0:
+                        # event was detected and an observation was requested
+                        requests.append(request)
+
+                else:
+                    # the science module generated a different response; process later
+                    await self.misc_inbox.put(internal_msg)
+
+        # compile incoming relay messages
         relay_messages= []
         while not self.relay_inbox.empty():
             relay_messages.append(await self.relay_inbox.get())
 
+        # compile miscellaneous messages
         misc_messages = []
         while not self.misc_inbox.empty():
             misc_messages.append(await self.misc_inbox.get())
 
+        # return classified messages
         return requests, relay_messages, misc_messages
+    
     
     def __log_actions(self, completed_actions : list, aborted_actions : list, pending_actions : list) -> None:
         all_actions = [action for action in completed_actions]

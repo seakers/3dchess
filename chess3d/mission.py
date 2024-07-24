@@ -463,6 +463,7 @@ class SimulationFactory:
                             agent_name : str, 
                             agent_network_config : NetworkConfig, 
                             logger : logging.Logger) -> ScienceModule:
+        
         if science_dict is not None:
             science_dict : dict
 
@@ -471,23 +472,41 @@ class SimulationFactory:
             if science_module_type is None: raise ValueError(f'science module type not specified in input file.')
 
             # create an instance of the science module based on the specified science module type
-            if science_module_type.lower() == "oracle":
+            if science_module_type.lower() == "lookup":
+                # load events path
                 events_path : str = science_dict.get('eventsPath', None)
 
                 if events_path is None: raise ValueError(f'predefined events path not specified in input file.')
 
+                # create science module
+                science = LookupTableScienceModule(results_path, 
+                                              events_path, 
+                                              agent_name, 
+                                              agent_network_config, 
+                                              logger)
+                                              
+            elif science_module_type.lower() == 'oracle':
+                # load events path
+                events_path : str = science_dict.get('eventsPath', None)
+
+                if events_path is None: raise ValueError(f'predefined events path not specified in input file.')
+
+                # create science module
                 science = OracleScienceModule(results_path, 
                                               events_path, 
                                               agent_name, 
                                               agent_network_config, 
                                               logger)
+
             else:
                 raise NotImplementedError(f'science module of type `{science_module_type}` not yet supported.')
-        else:
-            science = None
-        
-        return science
-       
+            
+            # return science module
+            return science
+
+        # return nothing
+        return None            
+   
     def load_planner_module(planner_dict : str,
                             results_path : str,
                             agent_specs : object,

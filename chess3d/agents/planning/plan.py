@@ -196,18 +196,23 @@ class Plan(ABC):
 
         # get next available action to perform
         eps = 1e-9
-        plan_out = [action.to_dict() 
-                    for action in self.actions 
-                    if action.t_start - eps <= t <= action.t_end + eps]
+        plan_out : list[AgentAction] = [action
+                                        for action in self.actions 
+                                        if action.t_start - eps <= t <= action.t_end + eps]
+        
+        # sort plan in order of ascending start time 
+        plan_out.sort(key=lambda a: a.t_start)
 
-        # idle if no more actions can be performed
-        if not plan_out:
+        if plan_out:
+            # only return tasks of the same type
+            plan_out = [action.to_dict()
+                        for action in plan_out
+                        if isinstance(action, type(plan_out[0]))]
+        else:
+            # idle if no more actions can be performed
             t_idle = self.actions[0].t_start if not self.empty() else np.Inf
             action = WaitForMessages(t, t_idle)
             plan_out.append(action.to_dict())     
-
-        # sort plan in order of ascending start time 
-        plan_out.sort(key=lambda a: a['t_end'])
 
         if any([action_out['t_start'] == action_out['t_end']
                 for action_out in plan_out]):

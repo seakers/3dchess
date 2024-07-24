@@ -99,7 +99,7 @@ class TestNaivePlanner(unittest.TestCase):
                         }
                     },
                     "science" : {
-                        "@type": "ORACLE", 
+                        "@type": "lookup", 
                         "eventsPath" : "./tests/nadir/resources/all_events_formatted.csv"
                     }
                 }
@@ -138,8 +138,9 @@ class TestNaivePlanner(unittest.TestCase):
     def test_planner(self) -> None:
         # execute mission
         self.mission.execute()
-
         print('DONE')
+
+        self.assertTrue(True)
 
     def test_outputs(self) -> None:
         # TODO Check outputs
