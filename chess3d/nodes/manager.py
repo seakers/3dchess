@@ -115,12 +115,11 @@ class SimulationManager(AbstractManager):
                         reqs = await self.wait_for_tic_requests()
                         self.log(f'tic requests received!')
 
-                        if reqs is None:
-                            t_next = tf
-                        else:
-                            tic_reqs = [reqs[src].tf for src in reqs]
-                            tic_reqs.append(tf)
-                            t_next = min(tic_reqs)
+                        if reqs is None: break # an agent in the simulation is offline; terminate sim
+
+                        tic_reqs = [reqs[src].tf for src in reqs]
+                        tic_reqs.append(tf)
+                        t_next = min(tic_reqs)
                         
                         # announce new time to simulation elements
                         self.log(f'sending toc for time {t_next}[s]...', level=logging.INFO)

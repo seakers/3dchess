@@ -71,23 +71,25 @@ class ScienceModule(InternalModule):
         - Science reasoning: checks data for outliers
         - Onboard processing: converts data of one type into data of another type (e.g. level 0 to level 1)
         """
-        # announce existance to other modules 
-        announcement_msg = SimulationMessage(self.get_element_name(), self.get_parent_name(), 'HANDSHAKE')
-        await self._send_manager_msg(announcement_msg, zmq.PUB)
+        try:
+            # announce existance to other modules 
+            announcement_msg = SimulationMessage(self.get_element_name(), self.get_parent_name(), 'HANDSHAKE')
+            await self._send_manager_msg(announcement_msg, zmq.PUB)
 
-        # initialize concurrent tasks
-        listener_task = asyncio.create_task(self.listener(), name='listener()')
-        onboard_processing_task = asyncio.create_task(self.onboard_processing(), name='onboard_processing()')
-        
-        # wait for a task to terminate
-        _, pending = await asyncio.wait([listener_task, onboard_processing_task], 
-                                        return_when=asyncio.FIRST_COMPLETED)
+            # initialize concurrent tasks
+            listener_task = asyncio.create_task(self.listener(), name='listener()')
+            onboard_processing_task = asyncio.create_task(self.onboard_processing(), name='onboard_processing()')
+            tasks : list[asyncio.Task] = [listener_task, onboard_processing_task]
+            
+            # wait for a task to terminate
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
-        # cancel the remaning tasks
-        for task in pending:
-            task : asyncio.Task
-            task.cancel()
-            await task
+        finally:
+            # cancel the remaning tasks
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+                    await task
 
     async def listener(self):
         """ Unpacks and classifies any incoming messages """

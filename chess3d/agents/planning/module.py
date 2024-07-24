@@ -118,19 +118,15 @@ class PlanningModule(InternalModule):
             listener_task = asyncio.create_task(self.listener(), name='listener()')
             planner_task = asyncio.create_task(self.planner(), name='planner()')
             
-            tasks = [listener_task, planner_task]
+            tasks : list[asyncio.Task] = [listener_task, planner_task]
 
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
         finally:
-            for task in done:
-                self.log(f'`{task.get_name()}` task finalized! Terminating all other tasks...')
-
-            for task in pending:
-                task : asyncio.Task
+            for task in tasks:
                 if not task.done():
                     task.cancel()
-                    await task
+                    await task           
 
     """
     -----------------
