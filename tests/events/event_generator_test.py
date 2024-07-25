@@ -1,4 +1,7 @@
+import os
 import unittest
+
+import pandas as pd
 
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
@@ -9,7 +12,7 @@ class TestNaivePlanner(unittest.TestCase):
         print_welcome('Naive Planner Test')
         
         # load scenario json file
-        scenario_specs : dict = {
+        self.scenario_specs : dict = {
             "epoch": {
                 "@type": "GREGORIAN_UT1",
                 "year": 2020,
@@ -30,41 +33,67 @@ class TestNaivePlanner(unittest.TestCase):
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/nadir/resources/lake_event_points.csv"
+                    "covGridFilePath": "./tests/events/resources/points.csv"
                 }
             ],
             "scenario": {   
                 "connectivity" : "FULL", 
                 "utility" : "LINEAR",
                 "events" : {
-                    "@type": "PREDEF", 
-                    "eventsPath" : "./tests/nadir/resources/all_events_formatted.csv"
+                    "@type": "random", 
+                    "numberOfEvents" : 1000,
+                    "duration" : 3600,
+                    "minSeverity" : 0.0,
+                    "maxSeverity" : 100,
+                    "measurements" : ['sar', 'visual', 'thermal']
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/nadir/",
-                "name" : "nadir"
+                "scenarioPath" : "./tests/events/",
+                "name" : "events"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/nadir/orbit_data"
+                "outDir" : "./tests/events/orbit_data"
             }
         }
 
         # initialize mission
-        # self.mission : Mission = Mission.from_dict(scenario_specs)
+        self.mission : Mission = Mission.from_dict(self.scenario_specs)
 
-    def test_planner(self) -> None:
-        # execute mission
-        # self.mission.execute()
-        print('DONE')
+    def test_events(self) -> None:
+        # load events parameters
+        scenario_dict = self.scenario_specs['scenario']
+        events_config_dict = scenario_dict['events']
+        sim_duration = float(self.scenario_specs['duration'])
 
-        self.assertTrue(True)
+        n_events = int(events_config_dict.get('numberOfEvents', None))
+        event_duration = float(events_config_dict.get('duration', None))
+        max_severity = float(events_config_dict.get('maxSeverity', None)) 
+        min_severity = float(events_config_dict.get('minSeverity', None)) 
+        measurements = events_config_dict.get('measurements', None)
 
-    def test_outputs(self) -> None:
-        # TODO Check outputs
-        self.assertTrue(True)
+        # load generated events
+        events_path = os.path.join('./tests/events/resources/','random_events.csv')
+        events : pd.DataFrame = pd.read_csv(events_path)
+        
+        # TODO: load ground points
+
+        # check event parameters 
+        self.assertEqual(n_events,len(events.values))
+        for lat,lon,t_start,duration,severity,event_measurements in events.values:
+            self.assertLessEqual(sim_duration,t_start)
+            self.assertAlmostEqual(event_duration, duration)
+            self.assertGreaterEqual(severity,min_severity)
+            self.assertGreaterEqual(max_severity,severity)
+            
+            event_measurements : str
+            measurement_str = event_measurements.replace('[','')
+            measurement_str = measurement_str.replace(']','')
+            measurement_list : list = measurement_str.split(',')
+
+            self.assertTrue(all([m in measurements for m in measurement_list]))
 
 if __name__ == '__main__':
     unittest.main()

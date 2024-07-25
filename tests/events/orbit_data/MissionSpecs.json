@@ -17,7 +17,7 @@
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./tests/nadir/resources/lake_event_points.csv"
+            "covGridFilePath": "./tests/events/resources/points.csv"
         }
     ],
     "scenario": {
@@ -38,11 +38,11 @@
         "clock": {
             "@type": "EVENT"
         },
-        "scenarioPath": "./tests/nadir/",
-        "name": "nadir"
+        "scenarioPath": "./tests/events/",
+        "name": "events"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./tests/nadir/orbit_data"
+        "outDir": "./tests/events/orbit_data"
     }
 }

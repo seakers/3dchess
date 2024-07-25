@@ -417,15 +417,14 @@ class SimulationFactory:
                 grids.append(grid)
 
             # load number of events to be generated
-            n_events = int(events_config_dict.get('n_events', None))
+            n_events = int(events_config_dict.get('numberOfEvents', None))
             if not n_events: raise ValueError('Number of random events not specified in Mission Specs input file.')
             
             # load event parameters
-            sim_duration = clock_config.get_total_seconds()
-            event_duration = float(events_config_dict.get('duration', None)) * 3600
-            severity = float(events_config_dict.get('severity', None))
+            event_duration = float(events_config_dict.get('duration', None))
+            max_severity = float(events_config_dict.get('maxSeverity', None)) 
+            min_severity = float(events_config_dict.get('minSeverity', None)) 
             measurements = events_config_dict.get('measurements', None)
-            n_measurements = int(events_config_dict.get('n_measurements', None))
 
             # generate random events
             events = []
@@ -435,14 +434,31 @@ class SimulationFactory:
                 gp_index = random.randint(0, len(grid)-1)
                 gp = grid.iloc[gp_index]
                 
+                # generate start time 
+                t_start = clock_config.get_total_seconds() * random.random()
+
+                # generate severity
+                severity = max_severity * random.random() + min_severity
+
+                # generate required measurements
+                n_measurements = random.randint(1,len(measurements)-1)
+                required_measurements = random.sample(measurements,k=n_measurements)
+                measurements_str = '['
+                for req in required_measurements: 
+                    if required_measurements.index(req) == 0:
+                        measurements_str += req
+                    else:
+                        measurements_str += f',{req}'
+                measurements_str += ']'
+                
                 # create event
                 event = [
                     gp['lat [deg]'],
                     gp['lon [deg]'],
-                    random.random()*sim_duration,
+                    t_start,
                     event_duration,
                     severity,
-                    random.sample(measurements,k=n_measurements)
+                    measurements_str
                 ]
 
                 # add to list of events
@@ -450,10 +466,10 @@ class SimulationFactory:
             
             # compile list of events
             events_path = os.path.join(resources_path, 'random_events.csv')
-            events_df = pd.DataFrame(events, columns=['lat [deg]','lon [deg]','start time [s]','duration [s]','severity','measurements'])
+            events_df = pd.DataFrame(data=events, columns=['lat [deg]','lon [deg]','start time [s]','duration [s]','severity','measurements'])
             
             # save list of events to events path 
-            events_df.to_csv(events_path)
+            events_df.to_csv(events_path,index=False)
 
             # return path address
             return events_path

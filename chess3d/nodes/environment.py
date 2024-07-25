@@ -113,9 +113,13 @@ class SimulationEnvironment(EnvironmentNode):
         if not os.path.isfile(events_path): raise ValueError(f'List of events not found in `{events_path}`')
 
         # get simulation duration 
-        temp_agent = list(self.orbitdata.keys())[0]
-        temp_agent_orbit_data : OrbitData = self.orbitdata[temp_agent]
-        sim_duration : float = temp_agent_orbit_data.duration*24*3600
+        agent_names = list(self.orbitdata.keys())
+        if agent_names:
+            temp_agent = agent_names.pop()
+            temp_agent_orbit_data : OrbitData = self.orbitdata[temp_agent]
+            sim_duration : float = temp_agent_orbit_data.duration*24*3600
+        else:
+            sim_duration = np.Inf
 
         # load events 
         events : pd.DataFrame = pd.read_csv(events_path)
