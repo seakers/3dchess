@@ -23,7 +23,16 @@ if __name__ == "__main__":
     scenarios_file = os.path.join('./scenarios', parent_scenario_name, 'resources', 'lhs_scenarios.csv')
     scenarios_df : pd.DataFrame = pd.read_csv(scenarios_file)
 
-    # extract parameters from previous
+    # set event parameters
+    event_type = 'random'
+    n_events = 1000
+    event_duration = 3600
+    min_severity = 0.0
+    max_severity = 100
+    measurement_list = ['sar', 'visual', 'thermal']
+    same_events = True
+    
+    # get agent parameters from previous study
     params = {c: scenarios_df[c].unique() for c in scenarios_df}
     # fovs = list(params['fov (deg)'])
     # fors = list(params['for (deg)'])
@@ -34,7 +43,7 @@ if __name__ == "__main__":
     num_planes = list(params['num_planes']); num_planes.sort()
     num_sats_per_plane = list(params['num_sats_per_plane']); num_sats_per_plane.sort()
 
-    # set parameters
+    # set agent parameters
     duration = 1
     max_torque = 0.0
         
@@ -59,6 +68,7 @@ if __name__ == "__main__":
                     ]
     utility = 'fixed'
 
+    # set results paramters
     overwrite = False
 
     # count number of runs to be made
@@ -70,6 +80,8 @@ if __name__ == "__main__":
     
     # run simulations
     with tqdm.tqdm(total=n_runs) as pbar:
+        pregenerated_events = False
+
         for n_planes in num_planes:
             n_planes = int(n_planes)
 
@@ -108,6 +120,35 @@ if __name__ == "__main__":
 
                                         # set simulation duration
                                         scenario_specs['duration'] = duration
+
+                                        # set events
+                                        if event_type == 'random':
+                                            if same_events:
+                                                if not pregenerated_events:
+                                                    events = {
+                                                                "@type": "random", 
+                                                                "numberOfEvents" : n_events,
+                                                                "duration" : event_duration,
+                                                                "minSeverity" : min_severity,
+                                                                "maxSeverity" : max_severity,
+                                                                "measurements" : measurement_list
+                                                            }
+                                                    pregenerated_events = True
+                                                else:
+                                                    events = {
+                                                                "@type": "PREDEF", 
+                                                                "eventsPath" : "./scenarios/algal_blooms_study/resources/random_events.csv"
+                                                            }
+                                            else:
+                                                events = {
+                                                            "@type": "random", 
+                                                            "numberOfEvents" : n_events,
+                                                            "duration" : event_duration,
+                                                            "minSeverity" : min_severity,
+                                                            "maxSeverity" : max_severity,
+                                                            "measurements" : measurement_list
+                                                        }
+                                            scenario_specs['scenario']['events'] = events
 
                                         # set spacecraft specs
                                         sats = []

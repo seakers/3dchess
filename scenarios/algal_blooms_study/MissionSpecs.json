@@ -103,8 +103,12 @@
         "connectivity" : "FULL", 
         "utility" : "LINEAR",
         "events" : {
-            "@type": "PREDEF", 
-            "eventsPath" : "./scenarios/algal_blooms_study/resources/events.csv"
+            "@type": "random", 
+            "numberOfEvents" : 1000,
+            "duration" : 3600,
+            "minSeverity" : 0.0,
+            "maxSeverity" : 100,
+            "measurements" : ["sar", "visual", "thermal"]
         },
         "clock" : {
             "@type" : "EVENT"
