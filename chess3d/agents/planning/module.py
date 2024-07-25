@@ -338,7 +338,7 @@ class PlanningModule(InternalModule):
                         self.plan_history.append((state.t, plan_copy))
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -386,7 +386,7 @@ class PlanningModule(InternalModule):
                         pending_actions = []
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        # self.__log_plan(plan, "REPLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -395,15 +395,13 @@ class PlanningModule(InternalModule):
                 plan_out : list = plan.get_next_actions(self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
 
-                self.n_observations += len([action for action in plan_out if action['action_type'] == 'OBSERVE'])
-                self.n_broadcasts += len([action for action in plan_out if action['action_type'] == 'BROADCAST'])
-                self.n_maneuvers += len([action for action in plan_out if action['action_type'] == 'MANEUVER'])
+                # self.n_observations += len([action for action in plan_out if action['action_type'] == 'OBSERVE'])
+                # self.n_broadcasts += len([action for action in plan_out if action['action_type'] == 'BROADCAST'])
+                # self.n_maneuvers += len([action for action in plan_out if action['action_type'] == 'MANEUVER'])
 
-                counts = plan.counters()
-
-                x = 1
+                # counts = plan.counters()
                 # -------------------------------------
 
                 # send plan to parent agent

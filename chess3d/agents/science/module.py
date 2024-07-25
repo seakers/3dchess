@@ -264,10 +264,16 @@ class LookupTableScienceModule(ScienceModule):
         super().__init__(results_path, parent_name, parent_network_config, logger)
 
         # load predefined events
-        self.events = pd.read_csv(events_path)
+        self.events : pd.DataFrame = self.load_events(events_path)
 
         # initialize empty list of detected events
         self.events_detected = set()
+
+    def load_events(self, events_path : str = None) -> pd.DataFrame:
+        
+        if events_path is None: raise ValueError('`events_path` must be of type `str`. Is `None`.')
+
+        return pd.read_csv(events_path)
                 
     def process_observation(self, 
                             instrument : Instrument,

@@ -79,7 +79,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.agents[self.UAV] = uav_names
 
         # load GS agent names
-        gs_names = []
+        gs_names : list = []
         if gs_list:
             for gs in gs_list:
                 gs : dict
@@ -87,6 +87,9 @@ class SimulationEnvironment(EnvironmentNode):
                 gs_names.append(gs_name)
                 agent_names.append(gs_name)
         self.agents[self.GROUND_STATION] = gs_names
+
+        # load events
+        self.events : pd.DataFrame = self.load_events(events_path)
 
         # initialize parameters
         self.observation_history = []
@@ -99,12 +102,27 @@ class SimulationEnvironment(EnvironmentNode):
                 self.agent_connectivity[src][target] = -1
 
         self.measurement_reqs = []
-
         self.stats = {}
-        self.events : pd.DataFrame = pd.read_csv(events_path) if events_path is not None else None
-
         self.t_0 = None
         self.t_f = None
+        
+    def load_events(self, events_path : str = None) -> pd.DataFrame:
+        
+        if events_path is None:
+            return None
+
+        temp_agent = list(self.orbitdata.keys())[0]
+        temp_agent_orbit_data : OrbitData = self.orbitdata[temp_agent]
+        sim_duration : float = temp_agent_orbit_data.duration*24*3600
+
+        events : pd.DataFrame = pd.read_csv(events_path)
+        columns = events.columns
+        data = [(lat,lon,t_start,duration,severity,measurements)
+                for lat,lon,t_start,duration,severity,measurements in events.values
+                if t_start+duration <= sim_duration]
+        events = pd.DataFrame(data=data,columns=columns)
+
+        return events
 
     async def setup(self) -> None:
         # nothing to set up
