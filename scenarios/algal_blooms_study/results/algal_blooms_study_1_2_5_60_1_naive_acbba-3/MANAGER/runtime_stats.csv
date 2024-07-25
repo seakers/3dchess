@@ -1,6 +1,6 @@
 routine,t_avg,t_std,t_med,n
 ENVIRONMENT_wait,-1.0,0.0,-1.0,0
-vis_sat_0_0_wait,0.1,0.503,0.06,2498
-therm_sat_0_0_wait,0.108,0.501,0.07,2498
-clock_wait,0.112,0.503,0.075,2498
-sim_runtime,279.057,0.0,279.057,1
+vis_sat_0_0_wait,-1.0,0.0,-1.0,0
+therm_sat_0_0_wait,-1.0,0.0,-1.0,0
+clock_wait,-1.0,0.0,-1.0,0
+sim_runtime,13.225,0.0,13.225,1

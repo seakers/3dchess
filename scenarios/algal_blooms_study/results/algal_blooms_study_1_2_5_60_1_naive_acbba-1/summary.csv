@@ -1,13 +1,13 @@
 stat_name,val
 t_start,2020-01-01 00:00:00+00:00
-t_end,2020-01-02 00:00:00+00:00
-n_gps_obs,1705
-n_obs,3985
-n_events,790
-n_events_detected,6
-n_unique_event_obs,6
-n_total_event_obs,6
+t_end,2020-01-01 02:24:00+00:00
+n_gps_obs,0
+n_obs,0
+n_events,0
+n_events_detected,0
+n_unique_event_obs,0
+n_total_event_obs,0
 n_co_obs,0
 n_event_partially_co_obs,0
 n_events_fully_co_obs,0
-t_runtime,283.419
+t_runtime,4.402

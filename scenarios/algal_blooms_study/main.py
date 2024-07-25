@@ -26,7 +26,7 @@ if __name__ == "__main__":
     # set event parameters
     event_type = 'random'
     n_events = 1000
-    event_duration = 3600
+    event_duration = 3600 * 3
     min_severity = 0.0
     max_severity = 100
     measurement_list = ['sar', 'visual', 'thermal']
@@ -40,11 +40,12 @@ if __name__ == "__main__":
     fovs = [5]
     fors = [60]
     agility = [1.0]
+    n_sats_min = 1
     num_planes = list(params['num_planes']); num_planes.sort()
     num_sats_per_plane = list(params['num_sats_per_plane']); num_sats_per_plane.sort()
 
     # set agent parameters
-    duration = 1
+    duration = 0.1
     max_torque = 0.0
         
     instruments = [
@@ -53,7 +54,7 @@ if __name__ == "__main__":
                     'sar'
                    ]
     abbreviations = {'visual' : 'vis', 
-                   'thermal' : "therm", 
+                   'thermal' : 'therm', 
                    'sar' : 'sar'}
     preplanners = ['naive']
     replanners = [
@@ -75,7 +76,13 @@ if __name__ == "__main__":
     n_runs : int = int(len(num_planes) * len(num_sats_per_plane) 
                        * len(fovs) * len(fors) * len(agility)
                        * len(preplanners) 
+                       * ((len(replanners) - 1) * len(bundle_sizes) + 1)
+                       
+                       - n_sats_min
+                       * len(fovs) * len(fors) * len(agility)
+                       * len(preplanners) 
                        * ((len(replanners) - 1) * len(bundle_sizes) + 1))
+    
     print(F'NUMBER OF RUNS TO PERFORM: {n_runs}')
     
     # run simulations
@@ -94,9 +101,11 @@ if __name__ == "__main__":
                 # calculate list of true anomalies for each sat 
                 tas = [360 * i / n_sats_per_plane for i in range(n_sats_per_plane)]
 
-                # if n_planes * n_sats_per_plane < 10:
-                #     pbar.update(1)
-                #     continue
+                # check if number of sats does not meet min
+                if n_planes * n_sats_per_plane < n_sats_min:
+                    # skip
+                    pbar.update(1)
+                    continue
 
                 for field_of_view in fovs:
                     field_of_view = float(field_of_view)

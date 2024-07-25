@@ -18,7 +18,7 @@ if __name__ == "__main__":
         template_specs : dict = json.load(scenario_file)
 
     # set parameters
-    duration = 0.5
+    duration = 1
     n_planes = 1
     n_sats_per_plane = 6
     raans = [360 * j / n_planes for j in range(n_planes)]
@@ -38,15 +38,15 @@ if __name__ == "__main__":
     field_of_view = 5
     field_of_regard = 45
 
-    preplanners = ['naive']
+    preplanners = ['nadir']
     replanners = [
                 #   'broadcaster', 
                   'acbba'
                   ]
     bundle_sizes = [
-                    1
+                    # 1
                     # 2, 
-                    # 3, 
+                    3
                     # 5
                     ]
     utility = 'fixed'
