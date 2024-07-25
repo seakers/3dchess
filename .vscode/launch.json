@@ -57,6 +57,18 @@
             "args": "visualizer_test"
         },
         {
+            "name": "TEST EVENT GENERATION",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/events/event_generator_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
             "name": "TEST NAIVE PLANNER",
             "type": "debugpy",
             "request": "launch",
