@@ -88,8 +88,8 @@
                 }
             },
             "science" : {
-                "@type": "ORACLE", 
-                "eventsPath" : "./scenarios/algal_blooms_study/resources/events.csv"
+                "@type": "lookup", 
+                "eventsPath" : "./scenarios/algal_blooms_study/resources/random_events.csv"
             }
         }
     ],

@@ -1,0 +1,13 @@
+stat_name,val
+t_start,2020-01-01 00:00:00+00:00
+t_end,2020-01-01 06:00:00+00:00
+n_gps_obs,515
+n_obs,3204
+n_events,1000
+n_events_detected,35
+n_unique_event_obs,35
+n_total_event_obs,140
+n_co_obs,35
+n_event_partially_co_obs,0
+n_events_fully_co_obs,35
+t_runtime,931.858

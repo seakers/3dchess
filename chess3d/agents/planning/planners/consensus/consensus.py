@@ -238,11 +238,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
             self.results, self.bundle, self.path, self.planner_changes = \
                 self.planning_phase(state, specs, self.results, self.bundle, self.path, orbitdata)
         
+        if not self.is_task_path_valid(state, specs, self.path, orbitdata):
+            x = 1
+
         assert self.is_task_path_valid(state, specs, self.path, orbitdata)
         # TODO check convergence
 
         # generate plan from bids
-        plan : Replan = self._plan_from_path(state, specs, self.results, self.path, clock_config, orbitdata)     
+        plan : Replan = self._plan_from_path(state, specs, current_plan, self.results, self.path, clock_config, orbitdata)     
 
         # set new plan as the new basis for future plans    
         # self.preplan = plan.copy()
@@ -270,6 +273,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def _plan_from_path(self, 
                         state : SimulationAgentState, 
                         specs : object,
+                        current_plan : Plan,
                         results : dict,
                         path : list,
                         clock_config: ClockConfig, 
@@ -295,7 +299,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def _schedule_observations(self, state : SimulationAgentState, specs : object, results : dict, path : list, orbitdata : OrbitData) -> list:
         """ compiles and merges lists of measurement actions to be performed by the agent """
         
-
         # generate proposed observation actions
         proposed_observations = []
         for req, main_measurement, t_img, _ in path:
@@ -406,6 +409,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
         assert self.is_observation_path_valid(state, specs, observations)
 
         # return compiled observations path
+
+        planned_observations = [action for action in self.preplan
+                                if isinstance(action, ObservationAction)]
+        planned_observations.sort(key=lambda a : a.t_start)
+
+        if len(planned_observations) > len(observations):
+            x = 1
+
         return observations
     
     @runtime_tracker
@@ -819,6 +830,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # get requests that can be bid on by this agent
         available_reqs : list = self._get_available_requests(state, specs, results, bundle, path, orbitdata)
                 
+        if available_reqs:
+            x = 1
+
         t_0 = time.perf_counter()
         # -------------------------------------
         # TEMPORARY FIX: resets bundle and replans from scratch
@@ -1059,7 +1073,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     continue
 
                 biddable_requests.append((req, bid.main_measurement))  
-                                    
+
+        if results:
+            x=1
+
         # find access intervals 
         n_intervals = self.max_bundle_size - len(bundle)
         intervals : list = self._get_available_intervals(biddable_requests, n_intervals, orbitdata)

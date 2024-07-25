@@ -41,11 +41,14 @@ if __name__ == "__main__":
     fors = [60]
     agility = [1.0]
     n_sats_min = 1
-    num_planes = list(params['num_planes']); num_planes.sort()
-    num_sats_per_plane = list(params['num_sats_per_plane']); num_sats_per_plane.sort()
+    # num_planes = list(params['num_planes']); num_planes.sort()
+    # num_sats_per_plane = list(params['num_sats_per_plane']); num_sats_per_plane.sort()
+    num_planes = [1]
+    num_sats_per_plane = [3*i for i in range(2,3)]
+    ta_spacing = 'even'
 
     # set agent parameters
-    duration = 0.1
+    duration = 6 / 24
     max_torque = 0.0
         
     instruments = [
@@ -56,7 +59,11 @@ if __name__ == "__main__":
     abbreviations = {'visual' : 'vis', 
                    'thermal' : 'therm', 
                    'sar' : 'sar'}
-    preplanners = ['naive']
+    preplanners = [
+                    'naive'
+                    # 'nadir'
+                    
+                    ]
     replanners = [
                   'broadcaster', 
                   'acbba'
@@ -64,7 +71,7 @@ if __name__ == "__main__":
     bundle_sizes = [
                     1,
                     # 2, 
-                    3 
+                    # 3 
                     # 5
                     ]
     utility = 'fixed'
@@ -78,10 +85,11 @@ if __name__ == "__main__":
                        * len(preplanners) 
                        * ((len(replanners) - 1) * len(bundle_sizes) + 1)
                        
-                       - n_sats_min
-                       * len(fovs) * len(fors) * len(agility)
-                       * len(preplanners) 
-                       * ((len(replanners) - 1) * len(bundle_sizes) + 1))
+                    #    - n_sats_min
+                    #    * len(fovs) * len(fors) * len(agility)
+                    #    * len(preplanners) 
+                    #    * ((len(replanners) - 1) * len(bundle_sizes) + 1)
+                       )
     
     print(F'NUMBER OF RUNS TO PERFORM: {n_runs}')
     
@@ -99,7 +107,8 @@ if __name__ == "__main__":
                 n_sats_per_plane = int(n_sats_per_plane)
 
                 # calculate list of true anomalies for each sat 
-                tas = [360 * i / n_sats_per_plane for i in range(n_sats_per_plane)]
+                ta_spacing = 360 / n_sats_per_plane if ta_spacing == 'even' else ta_spacing
+                tas = [ta_spacing * i for i in range(n_sats_per_plane)]
 
                 # check if number of sats does not meet min
                 if n_planes * n_sats_per_plane < n_sats_min:

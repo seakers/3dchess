@@ -126,7 +126,7 @@ class SimulationEnvironment(EnvironmentNode):
         columns = events.columns
         data = [(lat,lon,t_start,duration,severity,measurements)
                 for lat,lon,t_start,duration,severity,measurements in events.values
-                if t_start+duration <= sim_duration]
+                if t_start <= sim_duration]
         events = pd.DataFrame(data=data,columns=columns)
 
         return events

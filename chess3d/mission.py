@@ -441,7 +441,8 @@ class SimulationFactory:
                 severity = max_severity * random.random() + min_severity
 
                 # generate required measurements
-                n_measurements = random.randint(1,len(measurements)-1)
+                if len(measurements) < 2: raise ValueError('`measurements` must include more than one sensor')
+                n_measurements = random.randint(2,len(measurements)-1)
                 required_measurements = random.sample(measurements,k=n_measurements)
                 measurements_str = '['
                 for req in required_measurements: 

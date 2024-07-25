@@ -94,7 +94,7 @@ class TestACBBAReplanner(unittest.TestCase):
                         }
                     },
                     "science" : {
-                        "@type": "ORACLE", 
+                        "@type": "lookup", 
                         "eventsPath" : "./tests/acbba/resources/events.csv"
                     }
                 },
@@ -173,7 +173,7 @@ class TestACBBAReplanner(unittest.TestCase):
                         }
                     },
                     "science" : {
-                        "@type": "ORACLE", 
+                        "@type": "lookup", 
                         "eventsPath" : "./tests/acbba/resources/events.csv"
                     }
                 },
@@ -252,7 +252,7 @@ class TestACBBAReplanner(unittest.TestCase):
                         }
                     },
                     "science" : {
-                        "@type": "ORACLE", 
+                        "@type": "lookup", 
                         "eventsPath" : "./tests/acbba/resources/events.csv"
                     }
                 },
@@ -331,7 +331,7 @@ class TestACBBAReplanner(unittest.TestCase):
                         }
                     },
                     "science" : {
-                        "@type": "ORACLE", 
+                        "@type": "lookup", 
                         "eventsPath" : "./tests/acbba/resources/events.csv"
                     }
                 }
@@ -364,7 +364,6 @@ class TestACBBAReplanner(unittest.TestCase):
         # initialize mission
         self.mission : Mission = Mission.from_dict(scenario_specs)
 
-        x = 1
 
     def test_mission(self) -> None:
         # check type of mission object
