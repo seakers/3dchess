@@ -6,6 +6,7 @@ import pandas as pd
 from orbitpy.util import Spacecraft
 
 from chess3d.agents.actions import ObservationAction
+from chess3d.agents.science.requests import MeasurementRequest
 
 class GridPoint(object):
     """ Describes the reward of performing an observation of a given ground point """
@@ -17,7 +18,8 @@ class GridPoint(object):
                  gp_index : int,
                  alt : float = 0.0, 
                  observations : list = [],
-                 reward : float = 0.0, 
+                 requests : list = [],
+                 reward : float = 1.0,                  
                  t_update : float = np.NAN
                  ) -> None:
         # set fixed parameters
@@ -28,6 +30,7 @@ class GridPoint(object):
 
         # set variable parameters
         self.observations : list[ObservationAction] = [observation for observation in observations]
+        self.requests : list[MeasurementRequest] = [request for request in requests]
         self.reward : float = reward
         self.t_update : float = t_update
 
@@ -57,7 +60,10 @@ class RewardGrid(object):
                  reward_func : Callable,
                  specs : dict, 
                  grid_data : list, 
-                 prev_observations : list = []) -> None:       
+                 prev_observations : list = [],
+                 unobserved_reward_rate : float = 2.0, # reward points per hour
+                 
+                 ) -> None:       
         # save reward function
         self.reward_func = reward_func
 
