@@ -2,7 +2,6 @@ from logging import Logger
 import logging
 from typing import Callable
 import numpy as np
-from traitlets import Callable
 
 from orbitpy.util import Spacecraft
 
