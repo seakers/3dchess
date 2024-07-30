@@ -22,7 +22,7 @@ class MeasurementRequest(object):
                  target : list,
                  severity : float,
                  observation_types : list,
-                 t_start: Union[float, int] = 0.0, 
+                 t_start: Union[float, int], 
                  t_end: Union[float, int] = np.Inf, 
                  t_corr: Union[float, int] = np.Inf, 
                  id: str = None, 
