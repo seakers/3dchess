@@ -20,6 +20,7 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.planning.planners.dynamic import DynamicProgrammingPlanner
+from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
@@ -34,7 +35,7 @@ from chess3d.agents.planning.planners.naive import NaivePlanner
 from chess3d.agents.planning.planners.nadir import NadirPointingPlaner
 from chess3d.agents.satellite import SatelliteAgent
 from chess3d.agents.science.module import *
-from chess3d.agents.science.utility import utility_function
+from chess3d.agents.science.utility import utility_function, reobservation_strategy
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
 from chess3d.agents.agent import SimulationAgent
 from chess3d.utils import *
@@ -524,7 +525,7 @@ class SimulationFactory:
         # return nothing
         return None            
    
-    def load_planner_module(planner_dict : str,
+    def load_planner_module(planner_dict : dict,
                             results_path : str,
                             agent_specs : object,
                             agent_network_config : NetworkConfig,
@@ -534,16 +535,43 @@ class SimulationFactory:
                             ) -> PlanningModule:
         
         if planner_dict is not None:
-            planner_dict : dict
-            
+            # get reward grid spes
+            reward_grid_params : dict = planner_dict.get('rewardGrid', 'fixed')
+
+            if reward_grid_params:
+                assert agent_orbitdata is not None
+
+                # get utility function 
+                reward_func_name = reward_grid_params.get('reward', 'fixed')
+                reward_func = utility_function[reward_func_name]
+
+                # get observation startegy
+                reobsevation_strategy_name = reward_grid_params.get('reobservation', 'constant')
+                reobs_strategy = reobservation_strategy[reobsevation_strategy_name]
+
+                # add parameters
+                reward_grid_params['reward_function'] = reward_func
+                reward_grid_params['specs'] = agent_specs
+                reward_grid_params['grid_data'] = agent_orbitdata.grid_data
+                reward_grid_params['reobservation_strategy'] = reobs_strategy
+
+                # create reward gri
+                reward_grid = RewardGrid(**reward_grid_params)
+            else:
+                reward_grid = None
+
+            # get preplanner specs
             preplanner_dict = planner_dict.get('preplanner', None)
-            if isinstance(preplanner_dict, dict):
+            
+            if isinstance(preplanner_dict, dict): # preplanner exists
+                # get preplanner parameters
                 preplanner_type : str = preplanner_dict.get('@type', None)
                 if preplanner_type is None: raise ValueError(f'preplanner type within planner module not specified in input file.')
 
                 period = preplanner_dict.get('period', np.Inf)
                 horizon = preplanner_dict.get('horizon', np.Inf)
 
+                # initialize preplanner
                 if preplanner_type.lower() == "naive":
                     preplanner = NaivePlanner(horizon, period, logger)
 
@@ -558,7 +586,8 @@ class SimulationFactory:
                 
                 else:
                     raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
-            else:
+            
+            else: # no preplanner exists in agent specs
                 preplanner = None
 
             replanner_dict = planner_dict.get('replanner', None)
@@ -569,18 +598,16 @@ class SimulationFactory:
                 if replanner_type.lower() == 'broadcaster':
                     replanner = Broadcaster(logger)
 
-                elif replanner_type.lower() == 'acbba': 
-                    max_bundle_size = replanner_dict.get('bundle size', 3)
-                    threshold = replanner_dict.get('threshold', 1)
-                    horizon = replanner_dict.get('horizon', np.Inf)
-                    utility_func_name = replanner_dict.get('utility', 'fixed')
-                    utility_func = utility_function[utility_func_name]
+                # elif replanner_type.lower() == 'acbba': 
+                #     max_bundle_size = replanner_dict.get('bundle size', 3)
+                #     threshold = replanner_dict.get('threshold', 1)
+                #     horizon = replanner_dict.get('horizon', np.Inf)
 
-                    replanner = ACBBAPlanner(utility_func, 
-                                             max_bundle_size, 
-                                             threshold, 
-                                             horizon,
-                                             logger)
+                #     replanner = ACBBAPlanner(reward_func, 
+                #                              max_bundle_size, 
+                #                              threshold, 
+                #                              horizon,
+                #                              logger)
                 
                 else:
                     raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
@@ -594,6 +621,7 @@ class SimulationFactory:
         return PlanningModule(results_path, 
                               agent_specs,
                               agent_network_config, 
+                              reward_grid,
                               preplanner,
                               replanner,
                               agent_orbitdata,

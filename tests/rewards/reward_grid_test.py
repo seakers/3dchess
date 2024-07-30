@@ -1,4 +1,5 @@
 import os
+from typing import Callable
 import unittest
 import numpy as np
 import pandas as pd
@@ -8,6 +9,7 @@ from orbitpy.util import Spacecraft
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.planning.planners.rewards import RewardGrid, GridPoint
 from chess3d.agents.science.requests import MeasurementRequest
+from chess3d.agents.science.utility import event_driven
 
 class RewardGridTester(unittest.TestCase):
     def __init__(self, methodName: str = "runTest") -> None:
@@ -119,7 +121,7 @@ class RewardGridTester(unittest.TestCase):
     def test_reward_grid_init(self) -> None:
         """ checks if the reward grid was properly initialized """
         # load reward grid 
-        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
+        reward_grid = RewardGrid(event_driven, self.agent_specs, self.grid_data, **self.grid_params)
         
         # check type
         self.assertIsInstance(reward_grid, RewardGrid)
@@ -159,7 +161,7 @@ class RewardGridTester(unittest.TestCase):
         ref_values = [min(i*time_step*unobserved_reward_rate/3600.0 + min_val, max_val)  for i in range(n_steps)]
 
         # load reward grid 
-        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
+        reward_grid = RewardGrid(event_driven, self.agent_specs, self.grid_data, **self.grid_params)
         
         for i in range(n_steps):
             # calculate time
@@ -189,7 +191,7 @@ class RewardGridTester(unittest.TestCase):
         time_step = 1.0
         
         # load reward grid 
-        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
+        reward_grid = RewardGrid(event_driven, self.agent_specs, self.grid_data, **self.grid_params)
         
         # propagate grid
         for i in range(n_steps):
@@ -237,7 +239,7 @@ class RewardGridTester(unittest.TestCase):
         observations = [ObservationAction('thermal', [0.0, 0.0, 0.0], 0.0, 4.0)]
 
         # load reward grid
-        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
+        reward_grid = RewardGrid(event_driven, self.agent_specs, self.grid_data, **self.grid_params)
 
         for i in range(n_steps):
             # calculate time
@@ -266,9 +268,6 @@ class RewardGridTester(unittest.TestCase):
                         # check correct updated reward
                         self.assertAlmostEqual(reward_point.reward, ref_values[i])
 
-        # reset grid
-        reward_grid.reset()
-
     def test_event_propagation(self) -> None:
         """ checks if the utility function properly """
         # create reference values
@@ -284,7 +283,7 @@ class RewardGridTester(unittest.TestCase):
         events = [MeasurementRequest('ADMIN', [0.0,0.0,0.0], 1.0, ['thermal'], 4.0, 13.0)]
 
         # load reward grid
-        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
+        reward_grid = RewardGrid(event_driven, self.agent_specs, self.grid_data, **self.grid_params)
 
         for i in range(n_steps):
             # calculate time
@@ -313,69 +312,29 @@ class RewardGridTester(unittest.TestCase):
                         # check correct updated reward
                         self.assertAlmostEqual(reward_point.reward, ref_values[i])
 
-        # reset grid
-        reward_grid.reset()
-
-def reward_func(
-                observations,
-                events,
-                reward, 
-                min_reward, 
-                unobserved_reward_rate, 
-                max_unobserved_reward, 
-                event_reward,
-                t, 
-                t_update, 
-                reobsevation_strategy,
-                **_):
-    if np.isnan(t_update) and np.isnan(t):
-        return reward
-
-    # find latest event
-    events : list[MeasurementRequest] = list(events)
-    events.sort(key=lambda a : a.t_end)
-    latest_event = events.pop() if events else None
-
-    # find latest observations
-    observations : list[ObservationAction] = list(observations)
-    observations.sort(key= lambda a : a.t_start)
-    
-    # calculate utility
-    if latest_event:
-        # an event exists for this ground point
-        assert latest_event.t_start <= t
-
-        if latest_event.t_start <= t <= latest_event.t_end: # event is current
-            # count previous observations
-            latest_observations = [observation for observation in observations
-                                   if latest_event.t_start <= observation.t_start <= latest_event.t_end]
-            
-            # calculate reward
-            tp=[latest_event.t_start, latest_event.t_end]
-            rp=[event_reward,min_reward]
-            reward = np.interp(t,tp,rp) * reobsevation_strategy(len(latest_observations))
-            
-        else: # event has already passed
-            # check if an observation has occurred since then
-            latest_observations = [observation for observation in observations
-                                   if latest_event.t_end < observation.t_start]
-            latest_observation = latest_observations.pop() if latest_observations else None
-
-            # calculate reward
-            t_init = max(latest_event.t_end, latest_observation.t_end) if latest_observation else latest_event.t_end
-            reward = (t - t_init) * unobserved_reward_rate / 3600  + min_reward
-            reward = min(reward, max_unobserved_reward)
-
-    else: # no events have been detected for this ground point
-        # get latest observation if it exists
-        latest_observation = observations.pop() if observations else None
-        t_init = latest_observation.t_end if latest_observation else 0.0
+    def test_printout(self) -> None:
+        # set params
+        n_steps = 11
+        time_step = 1.0
+        file_path = './tests/rewards/results/rewards.csv'
         
-        # calculate reward
-        reward = (t - t_init) * unobserved_reward_rate / 3600  + min_reward
-        reward = min(reward, max_unobserved_reward)
+        # load reward grid 
+        reward_grid = RewardGrid(event_driven, self.agent_specs, self.grid_data, **self.grid_params)
+        
+        # propagate grid
+        for i in range(n_steps):
+            # calculate time
+            t = i * time_step
 
-    return reward
+            # update grid rewards
+            reward_grid.update(t)
+
+        # print reward grid
+        with open(file_path, 'w') as f:
+            f.write(str(reward_grid))
+
+        # load reward grid
+        pd.read_csv(file_path)
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,5 +1,6 @@
 import copy
 import traceback
+from typing import Callable
 import pandas as pd
 
 from orbitpy.util import Spacecraft
@@ -11,6 +12,7 @@ from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.agents.planning.planner import AbstractReplanner
 from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -20,6 +22,7 @@ class PlanningModule(InternalModule):
                 results_path : str, 
                 parent_agent_specs : object,
                 parent_network_config: NetworkConfig, 
+                reward_grid : RewardGrid,
                 preplanner : AbstractPreplanner = None,
                 replanner : AbstractReplanner = None,
                 orbitdata : OrbitData = None,
@@ -51,19 +54,15 @@ class PlanningModule(InternalModule):
                     }
         self.agent_state : SimulationAgentState = None
         self.other_modules_exist : bool = False
-        
-        # set parameters
+
+        # set attributes
         self.results_path = results_path
         self.parent_agent_specs = parent_agent_specs
         self.parent_name = parent_name
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
         self.orbitdata : OrbitData = orbitdata
-
-        # counters
-        self.n_observations = 0
-        self.n_broadcasts = 0
-        self.n_maneuvers = 0
+        self.reward_grid = reward_grid
 
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
         """ Sets up network configuration for intra-agent module communication """
@@ -303,6 +302,18 @@ class PlanningModule(InternalModule):
                                                 self.get_current_time()
                                             )
                 
+                # compile measurements performed by myself or other agents
+                observations = [action for action in completed_actions
+                                if isinstance(action, ObservationAction)]
+                observations.extend([action_from_dict(**msg.observation_action) 
+                                    for msg in misc_messages
+                                    if isinstance(msg, ObservationPerformedMessage)])
+                # compile measurement requests
+                events = [req for req in incoming_reqs if isinstance(req, MeasurementRequest)]
+                
+                # update reward grid
+                self.reward_grid.update(state.t, observations, events)
+                
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_actions(completed_actions, aborted_actions, pending_actions)
                 # -------------------------------------
@@ -416,7 +427,8 @@ class PlanningModule(InternalModule):
         
         except Exception as e:
             traceback.format_exc()
-            x = 1
+            print(e)
+            raise e
                 
     @runtime_tracker
     async def __check_action_completion(self, level : int = logging.DEBUG) -> tuple:
@@ -566,7 +578,7 @@ class PlanningModule(InternalModule):
                
     async def teardown(self) -> None:
         # log plan history
-        headers = ['plan_index', 't_plan', 'req_id', 'subtask_index', 't_img', 'u_exp']
+        headers = ['plan_index', 't_plan', 'instrument', 't_img']
         data = []
         
         for i in range(len(self.plan_history)):
@@ -577,19 +589,23 @@ class PlanningModule(InternalModule):
                 if not isinstance(action, ObservationAction):
                     continue
 
-                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
                 line_data = [   i,
                                 np.round(t_plan,3),
-                                req.id.split('-')[0],
-                                action.subtask_index,
-                                np.round(action.t_start,3 ),
-                                np.round(action.u_exp,3)
+                                action.instrument_name,
+                                np.round(action.t_start,3 )
                 ]
                 data.append(line_data)
 
         df = pd.DataFrame(data, columns=headers)
         self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
         df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
+
+        # log reward grid history
+        headers = ['t_update','grid_index','GP index','instrument','reward','n_observations','n_events']
+        data = self.reward_grid.get_history()
+        df = pd.DataFrame(data, columns=headers)
+        self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
+        df.to_csv(f"{self.results_path}/{self.get_parent_name()}/reward_grid_history.csv", index=False)
 
         # log performance stats
         n_decimals = 3
