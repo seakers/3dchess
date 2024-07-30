@@ -22,12 +22,12 @@ class RewardGridTester(unittest.TestCase):
                         if 'points' in file_name]
         
         # add grid index and gp index
-        i_grid = 0
+        i_grid = int(0)
         for grid_datum in self.grid_data:
             nrows, _ = grid_datum.shape
             grid_datum['grid index'] = [i_grid] * nrows
             grid_datum['GP index'] = [i for i in range(nrows)]
-            i_grid += 1
+            i_grid += int(1)
         
         # create reward grid
         agent_dict = {
@@ -96,7 +96,7 @@ class RewardGridTester(unittest.TestCase):
                         }
                     }
                 }
-        agent_specs : Spacecraft = Spacecraft.from_dict(agent_dict)
+        self.agent_specs : Spacecraft = Spacecraft.from_dict(agent_dict)
 
         self.grid_params = {
             'initial_reward' : 1.0,
@@ -105,8 +105,7 @@ class RewardGridTester(unittest.TestCase):
             'max_unobserved_reward' : 10.0,
             'event_reward' : 10.0,
             'reobsevation_strategy' : lambda a : 1.0
-        }
-        self.reward_grid = RewardGrid(reward_func, agent_specs, self.grid_data, **self.grid_params)
+        }        
 
     def test_grid_data(self) -> None:
         """ check if grid data was loaded correctly """
@@ -119,8 +118,11 @@ class RewardGridTester(unittest.TestCase):
                 
     def test_reward_grid_init(self) -> None:
         """ checks if the reward grid was properly initialized """
+        # load reward grid 
+        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
+        
         # check type
-        self.assertIsInstance(self.reward_grid, RewardGrid)
+        self.assertIsInstance(reward_grid, RewardGrid)
 
         # check initial values
         for grid_datum in self.grid_data:
@@ -128,7 +130,7 @@ class RewardGridTester(unittest.TestCase):
                 grid_index = int(grid_index)
                 gp_index = int(gp_index)
 
-                for _,reward_point in self.reward_grid.rewards[grid_index][gp_index].items():
+                for _,reward_point in reward_grid.rewards[grid_index][gp_index].items():
                     reward_point : GridPoint
                     gp_lat,gp_lon,_ = reward_point.target
 
@@ -146,27 +148,32 @@ class RewardGridTester(unittest.TestCase):
 
     def test_grid_propagation(self) -> None:
         """ checks that reward grid values are being propagated correctly """
+        # set params
         n_steps = 11
         time_step = 1.0
         min_val = 1.0
         max_val = 10.0
         unobserved_reward_rate = 3600
         
+        # create reference values
         ref_values = [min(i*time_step*unobserved_reward_rate/3600.0 + min_val, max_val)  for i in range(n_steps)]
 
+        # load reward grid 
+        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
+        
         for i in range(n_steps):
             # calculate time
             t = i * time_step
 
             # update grid rewards
-            self.reward_grid.update(t)
+            reward_grid.update(t)
 
             # check values
             for grid_datum in self.grid_data:
                 for *_,grid_index,gp_index in grid_datum.values:
                     grid_index,gp_index = int(grid_index), int(gp_index)
 
-                    for _,reward_point in self.reward_grid.rewards[grid_index][gp_index].items():
+                    for _,reward_point in reward_grid.rewards[grid_index][gp_index].items():
                         reward_point : GridPoint
 
                         # check correct updated time
@@ -175,15 +182,62 @@ class RewardGridTester(unittest.TestCase):
                         # check correct updated reward
                         self.assertAlmostEqual(reward_point.reward, ref_values[i])
 
+    def test_reward_grid_reset(self) -> None:
+        """ checks if all values are set to the default values when calling `reset()` """
+        # set params
+        n_steps = 11
+        time_step = 1.0
+        
+        # load reward grid 
+        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
+        
+        # propagate grid
+        for i in range(n_steps):
+            # calculate time
+            t = i * time_step
+
+            # update grid rewards
+            reward_grid.update(t)
+
         # reset grid
-        self.reward_grid.reset()
+        reward_grid.reset()
+
+        # check values
+        for grid_datum in self.grid_data:
+            for lat,lon,grid_index,gp_index in grid_datum.values:
+                grid_index = int(grid_index)
+                gp_index = int(gp_index)
+
+                for _,reward_point in reward_grid.rewards[grid_index][gp_index].items():
+                    reward_point : GridPoint
+                    gp_lat,gp_lon,_ = reward_point.target
+
+                    # check gp position
+                    self.assertAlmostEqual(gp_lat, lat)
+                    self.assertAlmostEqual(gp_lon, lon)
+                    self.assertEqual(reward_point.gp_index, gp_index)
+                    self.assertEqual(reward_point.grid_index, grid_index)
+
+                    # check initial reward
+                    self.assertAlmostEqual(reward_point.reward, self.grid_params['initial_reward'])
+
+                    # check initial time
+                    self.assertTrue(np.isnan(reward_point.t_update))
 
     def test_observation_propagation(self) -> None:
         """ checks if the utility function properly """
+        # create reference values
         ref_values = [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.0, 10.0]
+
+        # set parameters
         n_steps = len(ref_values)
         time_step = 1.0
+
+        # create observations
         observations = [ObservationAction('thermal', [0.0, 0.0, 0.0], 0.0, 4.0)]
+
+        # load reward grid
+        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
 
         for i in range(n_steps):
             # calculate time
@@ -194,7 +248,7 @@ class RewardGridTester(unittest.TestCase):
                                      if observation.t_end <= t]
 
             # update grid rewards
-            self.reward_grid.update(t, relevant_observations)
+            reward_grid.update(t, relevant_observations)
 
             for observation in relevant_observations: observations.remove(observation)
 
@@ -203,7 +257,7 @@ class RewardGridTester(unittest.TestCase):
                 for *_,grid_index,gp_index in grid_datum.values:
                     grid_index,gp_index = int(grid_index), int(gp_index)
 
-                    for _,reward_point in self.reward_grid.rewards[grid_index][gp_index].items():
+                    for _,reward_point in reward_grid.rewards[grid_index][gp_index].items():
                         reward_point : GridPoint
 
                         # check correct updated time
@@ -213,16 +267,24 @@ class RewardGridTester(unittest.TestCase):
                         self.assertAlmostEqual(reward_point.reward, ref_values[i])
 
         # reset grid
-        self.reward_grid.reset()
+        reward_grid.reset()
 
     def test_event_propagation(self) -> None:
         """ checks if the utility function properly """
+        # create reference values
         ref_values = [1.0, 2.0, 3.0, 4.0, 
                       10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 
                       2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.0, 10.0]
+        
+        # set parameters
         n_steps = len(ref_values)
         time_step = 1.0
+
+        # create events
         events = [MeasurementRequest('ADMIN', [0.0,0.0,0.0], 1.0, ['thermal'], 4.0, 13.0)]
+
+        # load reward grid
+        reward_grid = RewardGrid(reward_func, self.agent_specs, self.grid_data, **self.grid_params)
 
         for i in range(n_steps):
             # calculate time
@@ -233,7 +295,7 @@ class RewardGridTester(unittest.TestCase):
                                if event.t_start <= t]
 
             # update grid rewards
-            self.reward_grid.update(t, events=relevant_events)
+            reward_grid.update(t, events=relevant_events)
 
             for event in relevant_events: events.remove(event)
 
@@ -242,7 +304,7 @@ class RewardGridTester(unittest.TestCase):
                 for *_,grid_index,gp_index in grid_datum.values:
                     grid_index,gp_index = int(grid_index), int(gp_index)
 
-                    for _,reward_point in self.reward_grid.rewards[grid_index][gp_index].items():
+                    for _,reward_point in reward_grid.rewards[grid_index][gp_index].items():
                         reward_point : GridPoint
 
                         # check correct updated time
@@ -252,7 +314,7 @@ class RewardGridTester(unittest.TestCase):
                         self.assertAlmostEqual(reward_point.reward, ref_values[i])
 
         # reset grid
-        self.reward_grid.reset()
+        reward_grid.reset()
 
 def reward_func(
                 observations,
