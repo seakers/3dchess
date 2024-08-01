@@ -10,6 +10,7 @@ from traitlets import Callable
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
+from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.planning.plan import Plan, Preplan, Replan
 from chess3d.agents.planning.planners.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
@@ -22,7 +23,6 @@ from chess3d.messages import *
 
 class AbstractConsensusReplanner(AbstractReplanner):    
     def __init__(self, 
-                 utility_func: Callable, 
                  max_bundle_size : int = 1,
                  replan_threshold : int = 1,
                  planning_horizon : float = np.Inf,
@@ -32,7 +32,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # initialize variables
         self.bundle = []
-        self.path = []
+        # self.path = []
         self.results = {}
         self.bids_to_rebroadcasts = []
         self.completed_measurements = set()
@@ -40,11 +40,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.recently_completed_observations = set()
         self.my_completed_observations = set()
         self.planner_changes = []
+        self.ignored_requests = set()
         self.agent_orbitdata : OrbitData = None
         self.preplan : Preplan = None
+        self.plan : Plan = None
 
         # set paremeters
-        self.utility_func = utility_func
         self.max_bundle_size = max_bundle_size
         self.replan_threshold = replan_threshold
         self.planning_horizon = planning_horizon
@@ -71,14 +72,23 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                 aborted_actions,
                                 pending_actions)
 
-        # save latest preplan
+        # check if new preplan was received
         if state.t == current_plan.t and isinstance(current_plan, Preplan): 
+            # save latest preplan
             self.preplan : Preplan = current_plan.copy() 
+            self.plan = current_plan.copy()
             
-            #TODO reset bundle and results
+            # reset results
+            for req, main_measurement, bid in self.bundle:
+                # reset bid
+                bid : Bid; bid._reset(state.t)
+
+                # update results
+                req : MeasurementRequest
+                self.results[req.id][main_measurement] = bid
+
+            # reset bundle 
             self.bundle = []
-            self.path = []
-            self.results = {}
 
         # update preplan
         self.preplan.update_action_completion(completed_actions, aborted_actions, pending_actions, state.t)
@@ -107,16 +117,32 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 preplanned_observation : ObservationAction
                 self.preplan.actions.remove(preplanned_observation)
 
-        # update incoming bids
-        self.incoming_bids = [  Bid.from_dict(msg.bid) 
-                                for msg in misc_messages 
-                                if isinstance(msg, MeasurementBidMessage)]
-
         # check if any new measurement requests have been received
-        new_req_bids : list[Bid] = self.compile_new_measurement_request_bids(state)
-        self.incoming_bids.extend(new_req_bids)
+        self.incoming_bids : list[Bid] = self.compile_new_measurement_request_bids(state)
 
-        if new_req_bids:
+        # update incoming bids
+        self.incoming_bids.extend([ Bid.from_dict(msg.bid) 
+                                    for msg in misc_messages 
+                                    if isinstance(msg, MeasurementBidMessage)])
+
+        # check if any request refers to an action in the pre-plan
+        for req in incoming_reqs:
+            # find all observations that match a given request
+            matching_planned_observations : list[ObservationAction] \
+                = [action for action in self.preplan
+                   if isinstance(action, ObservationAction)
+                   and abs(action.target[0] - req.target[0]) <= 1e-3
+                   and abs(action.target[1] - req.target[1]) <= 1e-3
+                   and abs(action.target[2] - req.target[2]) <= 1e-3
+                   ]
+            
+            # remove from pre-plan
+            for observation in matching_planned_observations: 
+                self.preplan.actions.remove(observation)
+
+        if incoming_reqs:
+            x = 1
+        elif self.incoming_bids:
             x = 1
         
     def _compile_completed_observations(self, 
@@ -168,92 +194,91 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # perform consesus phase
         # ---------------------------------
         # DEBUGGING OUTPUTS 
-        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        # print(f'length of path: {len(self.path)}\nbids to rebroadcast: {len(self.bids_to_rebroadcasts)}')
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     bid : Bid
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        # print('')
+        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        print(f'length of bundle: {len(self.bundle)}\nbids to rebroadcast: {len(self.bids_to_rebroadcasts)}')
+        print(f'bundle:')
+        for req, subtask_index, bid in self.bundle:
+            req : MeasurementRequest
+            bid : Bid
+            id_short = req.id.split('-')[0]
+            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        print('')
         # ---------------------------------
 
         self.results, self.bundle, \
-            self.path, _, bids_to_rebroadcasts = self.consensus_phase(state,
-                                                                      self.results,
-                                                                      self.bundle, 
-                                                                      self.path, 
-                                                                      self.incoming_bids,
-                                                                      self.recently_completed_observations)
+            _, bids_to_rebroadcasts = self.consensus_phase(state,
+                                                            self.results,
+                                                            self.bundle, 
+                                                            self.incoming_bids,
+                                                            self.recently_completed_observations)
         self.bids_to_rebroadcasts.extend(bids_to_rebroadcasts)
         
-        assert self.is_task_path_valid(state, specs, self.path, orbitdata)
+        path = self.path_from_bundle(self.bundle)
+        assert self.is_task_path_valid(state, specs, path, orbitdata)
         
         # ---------------------------------
         # DEBUGGING OUTPUTS 
-        # self.log_results('CONSENSUS PHASE', state, self.results)
-        # print(f'length of path: {len(self.path)}\nbids to rebradcast: {len(self.bids_to_rebroadcasts)}')
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     bid : Bid
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        # print('')
+        self.log_results('CONSENSUS PHASE', state, self.results)
+        print(f'length of bundle: {len(self.bundle)}\nbids to rebroadcast: {len(self.bids_to_rebroadcasts)}')
+        print(f'bundle:')
+        for req, subtask_index, bid in self.bundle:
+            req : MeasurementRequest
+            bid : Bid
+            id_short = req.id.split('-')[0]
+            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        print('')
         # ---------------------------------
 
-        if len(self.bids_to_rebroadcasts) >= self.replan_threshold:
+        # check if relevant changes were made to the results
+        if self.bids_to_rebroadcasts:
             return True
         
-        if len(self.bundle) < self.max_bundle_size and self.my_completed_observations:
-            available_reqs = self._get_available_requests(state, specs, self.results, self.bundle, self.path, orbitdata)
+        if (len(self.bundle) < self.max_bundle_size # there is room in the bundle
+            and self.my_completed_observations      # and I just performed an observation  
+            ):
+        # if len(self.bundle) < self.max_bundle_size:
+            available_reqs : list = self._get_available_requests(state, specs, self.results, self.bundle, orbitdata)
             
-            if len(available_reqs) > 0:
+            if available_reqs: 
                 x = 1
-
-            return len(available_reqs) > 0
+            
+            # check if there are requests available
+            return len(available_reqs) >= self.replan_threshold
         
         return False
-        
-        # TODO: Consider preplan
     
+    def path_from_bundle(self, bundle : list) -> list:
+        """ Extracts the sequence of observations being scheduled by a given bundle """
+        path = [(req, instrument_name, bid.t_img, bid.th_img, bid.bid)
+                for req, instrument_name, bid in bundle
+                if isinstance(bid, Bid)]
+        
+        path.sort(key=lambda a : a[2])
+
+        # TODO: add preplan path?
+
+        return path
+
     @runtime_tracker
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         specs : object,
+                        reward_grid : RewardGrid,
                         current_plan : Plan,
                         clock_config : ClockConfig,
                         orbitdata : dict = None
                     ) -> list:
         
+
         # -------------------------------
         # DEBUG PRINTOUTS
         # self.log_results('PRE-PLANNING PHASE', state, self.results)
         # -------------------------------
 
-        # check if bundle is full
-        if len(self.bundle) < self.max_bundle_size:
-            # There is room in the bundle; perform bidding phase
-            self.results, self.bundle, self.path, self.planner_changes = \
-                self.planning_phase(state, specs, self.results, self.bundle, self.path, orbitdata)
+        # perform bidding phase
+        self.results, self.bundle, self.planner_changes = \
+            self.planning_phase(state, specs, self.results, self.bundle, reward_grid, orbitdata)
         
-        if not self.is_task_path_valid(state, specs, self.path, orbitdata):
-            x = 1
-
-        assert self.is_task_path_valid(state, specs, self.path, orbitdata)
-        # TODO check convergence
-
-        # generate plan from bids
-        plan : Replan = self._plan_from_path(state, specs, current_plan, self.results, self.path, clock_config, orbitdata)     
-
-        # set new plan as the new basis for future plans    
-        # self.preplan = plan.copy()
-
-        # reset broadcast list
-        # TODO only reset after broadcasts have been performed?
-        self.bids_to_rebroadcasts = []
-
         # -------------------------------
         # DEBUG PRINTOUTS
         # self.log_results('PLANNING PHASE', state, self.results)
@@ -261,60 +286,56 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # for req, subtask_index, bid in self.bundle:
         #     req : MeasurementRequest
         #     bid : Bid
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        #     print(f'\t{req.id.split('-')[0]}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
         # print('')
         # -------------------------------
 
-        # output plan
-        return plan
-        
-    @runtime_tracker
-    def _plan_from_path(self, 
-                        state : SimulationAgentState, 
-                        specs : object,
-                        current_plan : Plan,
-                        results : dict,
-                        path : list,
-                        clock_config: ClockConfig, 
-                        orbitdata: dict = None
-                        ) -> Replan:
-        """ creates a new plan to be performed by the agent based on the results of the planning phase """
-
-        # schedule observations
-        observations : list = self._schedule_observations(state, specs, results, path, orbitdata)
-
-        # schedule bruadcasts
-        broadcasts : list = self._schedule_broadcasts(state, observations, orbitdata)
+        # schedule observations from bids
+        observations : list = self._schedule_observations(state, specs, self.bundle, orbitdata)
 
         # generate maneuver and travel actions from observations
         maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
 
+        # schedule broadcasts
+        broadcasts : list = self._schedule_broadcasts(state, current_plan, orbitdata)       
+
         # generate wait actions 
         waits : list = self._schedule_waits(state)
         
-        return Replan(observations, broadcasts, maneuvers, waits, t=state.t, t_next=self.preplan.t_next)
+        # compile and generate plan
+        self.plan = Replan(observations, broadcasts, maneuvers, waits, t=state.t, t_next=self.preplan.t_next)
+
+        return self.plan.copy()
     
     @runtime_tracker
-    def _schedule_observations(self, state : SimulationAgentState, specs : object, results : dict, path : list, orbitdata : OrbitData) -> list:
+    def _schedule_observations(self, 
+                               state : SimulationAgentState, 
+                               specs : object, 
+                               bundle : list, 
+                               orbitdata : OrbitData) -> list:
         """ compiles and merges lists of measurement actions to be performed by the agent """
-        
-        # generate proposed observation actions
-        proposed_observations = []
-        for req, main_measurement, t_img, _ in path:
-            req : MeasurementRequest
-            th_imgs = [ th_img
-                        for t,_,_,lat,lon,_,th_img,_,_,_,instrument,_ in orbitdata.gp_access_data.values
-                        if  abs(req.target[0] - lat) <= 1e-3
-                        and abs(req.target[1] - lon) <= 1e-3
-                        and abs(t_img - t*orbitdata.time_step) <= 1e-3
-                        and instrument == main_measurement
-                        ]
+        try:
+            # generate plan from path        
+            path : list = self.path_from_bundle(bundle)
             
-            proposed_observations.append(ObservationAction(main_measurement,
-                                                           req.target,
-                                                           th_imgs.pop(),
-                                                           t_img))
+            # merge with preplanned observations
+            observations : list[ObservationAction] = self.merge_plans(state, specs, path)
+            
+            # return observations
+            return observations
+        
+        finally:
+            # ensure path given was valid
+            assert self.is_task_path_valid(state, specs, path, orbitdata)
+
+            # ensure resulting plan is valid
+            assert self.is_observation_path_valid(state, specs, observations)
+
+    def merge_plans(self, state : SimulationAgentState, specs : object, path : list) -> list:
+        # generate proposed observation actions
+        proposed_observations = [ObservationAction(main_measurement, req.target, th_img, t_img)
+                                for req, main_measurement, t_img, th_img, _ in path
+                                if isinstance(req,MeasurementRequest)]
         proposed_observations.sort(key=lambda a : a.t_start)
 
         # check for if the right number of measurements was created
@@ -397,6 +418,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     and abs(observations[-1].target[0]-planned_observation.target[0]) <= 1e-3
                     and abs(observations[-1].target[1]-planned_observation.target[1]) <= 1e-3
                     and abs(observations[-1].target[2]-planned_observation.target[2]) <= 1e-3):
+                    
                     # is already in plan; ignore
                     planned_observations.pop(0)
                 else:
@@ -422,11 +444,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
     @runtime_tracker
     def _schedule_broadcasts(self, 
                              state: SimulationAgentState, 
-                             observations: list, 
+                             current_plan: Plan, 
                              orbitdata: dict
                              ) -> list:
+        # compile IDs of requests to be broadcasted
+        req_ids = [req.id for req in self.pending_reqs_to_broadcast]
+        
         broadcasts : list[BroadcastMessageAction] = super()._schedule_broadcasts(state,
                                                                                  orbitdata)
+        
         
         # compile bids to be broadcasted
         compiled_bids : list[Bid] = [bid for bid in self.bids_to_rebroadcasts]
@@ -449,16 +475,19 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 if current_bid.t_update <= bid_to_rebroadcast.t_update:
                     bids[req_id][bid_to_rebroadcast.main_measurement] = bid_to_rebroadcast
 
-        # Find best path for broadcasts
-        relay_path, t_start = self._create_broadcast_path(state, orbitdata, state.t)
+        # find best path for broadcasts
+        relay_path, t_start = self._create_broadcast_path(state, orbitdata, state.t)       
 
-        # Schedule bid re-broadcast and planner changes
+        # schedule bid re-broadcast and planner changes
         bids_out = [MeasurementBidMessage(state.agent_name, state.agent_name, bid_to_rebroadcast.to_dict(), path=relay_path) 
                     for req_id in bids 
                     for _, bid_to_rebroadcast in bids[req_id].items() 
                     if bid_to_rebroadcast is not None
                     and t_start >=0]
         broadcasts.extend([BroadcastMessageAction(msg.to_dict(), t_start) for msg in bids_out])
+
+        # reset broadcast list
+        self.bids_to_rebroadcasts = []
 
         # ensure the right number of broadcasts were created
         assert len(bids_out) <= len(compiled_bids)
@@ -496,21 +525,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
     
     @runtime_tracker
     def _schedule_waits(self, state : SimulationAgentState) -> list:
-        """ schedules periodic rescheduling checks """
-
-        # horizon = self.planning_horizon if self.planning_horizon < np.Inf else 10*24*3600
-        
-        # # n_steps = int((state.t + horizon)/self.replan_period)
-        # n_steps = 1
-        
-        # waits = [WaitForMessages(state.t+self.replan_period*step, 
-        #                          state.t+self.replan_period*step)
-        #          for step in range(1,n_steps+1)]
-
-        # return waits 
-        # t_horizon = state.t + self.planning_horizon
-        # return [WaitForMessages(t_horizon, t_horizon)]
-    
+        """ schedules periodic rescheduling checks """   
         return []
 
     """
@@ -523,8 +538,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                 self, 
                                 state : SimulationAgentState,
                                 results : dict, 
-                                bundle : list, 
-                                path : list, 
+                                bundle : list,
                                 bids_received : list,
                                 completed_measurements : list,
                                 level : int = logging.DEBUG
@@ -534,22 +548,16 @@ class AbstractConsensusReplanner(AbstractReplanner):
         """
         
         # check if tasks were performed
-        results, bundle, path, \
-            done_changes, done_rebroadcasts = self.check_request_completion(state, results, bundle, path, completed_measurements, level)
-        # ensure that path and bundle are in agreement
-        assert all([(req, instrument_name, bid.t_img, bid.bid) in path for req, instrument_name, bid in bundle])
+        results, bundle, \
+            done_changes, done_rebroadcasts = self.check_request_completion(state, results, bundle, completed_measurements, level)
 
         # check if tasks expired
-        results, bundle, path, \
-            exp_changes, exp_rebroadcasts = self.check_request_end_time(state, results, bundle, path, level)
-        # ensure that path and bundle are in agreement
-        assert all([(req, instrument_name, bid.t_img, bid.bid) in path for req, instrument_name, bid in bundle])
+        results, bundle, \
+            exp_changes, exp_rebroadcasts = self.check_request_end_time(state, results, bundle, level)
 
         # compare bids with incoming messages
-        results, bundle, path, \
-            comp_changes, comp_rebroadcasts = self.compare_bids(state, results, bundle, path, bids_received, level)
-        # ensure that path and bundle are in agreement
-        assert all([(req, instrument_name, bid.t_img, bid.bid) in path for req, instrument_name, bid in bundle])
+        results, bundle, \
+            comp_changes, comp_rebroadcasts = self.compare_bids(state, results, bundle, bids_received, level)
 
         # compile changes
         changes = []
@@ -563,14 +571,13 @@ class AbstractConsensusReplanner(AbstractReplanner):
         rebroadcasts.extend(exp_rebroadcasts)
         rebroadcasts.extend(comp_rebroadcasts)
 
-        return results, bundle, path, changes, rebroadcasts
+        return results, bundle, changes, rebroadcasts
     
     @runtime_tracker
     def check_request_completion(self, 
                                  state : SimulationAgentState,
                                  results : dict, 
                                  bundle : list, 
-                                 path : list, 
                                  completed_measurements : list,
                                  level=logging.DEBUG
                                  ) -> tuple:
@@ -598,9 +605,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 or action.instrument_name not in completed_req.observation_types):
                 # observation was not performed to respond to a measurement request; ignore
                 continue
-
-            if completed_req.id not in results:
-                x = 1
             
             # set bid as completed           
             bid : Bid = results[completed_req.id][action.instrument_name]
@@ -619,28 +623,21 @@ class AbstractConsensusReplanner(AbstractReplanner):
             ## remove all completed tasks from bundle
             self.bundle.remove(task)
         
-        # check for task completion in path
-        for task in [(req, instrument_name, t_img, u_exp)
-                    for req, instrument_name, t_img, u_exp in path
-                    if req.id in results
-                    and results[req.id][instrument_name].performed]:
-            ## remove all completed tasks from path
-            self.path.remove(task) 
-
-        return results, bundle, path, changes, rebroadcasts
+        return results, bundle, changes, rebroadcasts
     
     def _get_completed_request(self,
                                results : dict, 
                                action : ObservationAction
                                ) -> MeasurementRequest:
-        reqs = {req 
-                for req in self.known_reqs
-                if isinstance(req, MeasurementRequest)
-                and req.id in results
-                and abs(req.target[0] - action.target[0]) <= 1e-3
-                and abs(req.target[1] - action.target[1]) <= 1e-3
-                and abs(req.target[2] - action.target[2]) <= 1e-3
-                }
+        reqs : list[MeasurementRequest] = list({req 
+                                                for req in self.known_reqs
+                                                if isinstance(req, MeasurementRequest)
+                                                and req.id in results
+                                                and abs(req.target[0] - action.target[0]) <= 1e-3
+                                                and abs(req.target[1] - action.target[1]) <= 1e-3
+                                                and abs(req.target[2] - action.target[2]) <= 1e-3
+                                                })
+        reqs.sort(key=lambda a : a.t_start)
         return reqs.pop() if reqs else None
 
     def _get_matching_request(self, id : list) -> MeasurementRequest:
@@ -654,7 +651,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                state : SimulationAgentState,
                                results : dict, 
                                bundle : list, 
-                               path : list, 
                                level=logging.DEBUG
                                ) -> tuple:
         """
@@ -687,9 +683,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 # remove from bundle
                 measurement_req, instrument_name, current_bid = bundle.pop(expired_index)
 
-                # remove from path
-                path.remove((measurement_req, instrument_name, current_bid.t_img, current_bid.bid))
-
                 # reset bid results
                 current_bid : Bid; measurement_req : MeasurementRequest
                 resetted_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
@@ -698,7 +691,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 rebroadcasts.append(resetted_bid)
                 changes.append(resetted_bid)
 
-        return results, bundle, path, changes, rebroadcasts
+        return results, bundle, changes, rebroadcasts
 
     @runtime_tracker
     def compare_bids(
@@ -706,7 +699,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     state : SimulationAgentState, 
                     results : dict, 
                     bundle : list, 
-                    path : list, 
                     bids_received : list,
                     level=logging.DEBUG
                     ) -> tuple:
@@ -739,9 +731,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 bids : list[Bid] = self._generate_bids_from_request(req, state)
                 results[their_bid.req_id] = {bid.main_measurement : bid for bid in bids}
 
-                # add to changes broadcast in case this request was generated by me
-                if(their_bid.bidder == state.agent_name 
-                   and their_bid.winner == their_bid.NONE):
+                # check who generated the request
+                if(their_bid.bidder == state.agent_name   # bid belongs to me
+                   and their_bid.winner == their_bid.NONE # has not been bid on
+                   ):
+                    # request was generated by me; add to broadcasts 
                     my_bid : Bid = results[their_bid.req_id][their_bid.main_measurement]
                     rebroadcasts.append(my_bid.copy())
                                     
@@ -775,17 +769,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                 outbid_index = bundle.index((req, my_bid.main_measurement, my_bid))
 
-                for req, subtask_index, new_bid in bundle:
-                    new_bid : Bid
-                    assert (req, subtask_index, new_bid.t_img, new_bid.bid) in path
-
                 # remove all subsequent bids
                 for bundle_index in range(outbid_index, len(bundle)):
                     # remove from bundle
                     measurement_req, subtask_index, current_bid = bundle.pop(outbid_index)
-
-                    # remove from path
-                    path.remove((measurement_req, subtask_index, current_bid.t_img, current_bid.bid))
 
                     # reset bid results
                     current_bid : Bid; measurement_req : MeasurementRequest
@@ -795,170 +782,114 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                         rebroadcasts.append(reset_bid)
                         changes.append(reset_bid)
-            
-            # if outbid for a bid in the bundle; remove from path
-            if ((req, my_bid.main_measurement, my_bid.t_img, my_bid.bid) in path
-                and updated_bid.winner != state.agent_name):
 
-                path.remove((req, my_bid.main_measurement, my_bid.t_img, my_bid.bid))
-        
-        return results, bundle, path, changes, rebroadcasts
+        return results, bundle, changes, rebroadcasts
 
     """
     -----------------------
         PLANNING PHASE
     -----------------------
     """
-    def calc_path_times():
-        pass
-
     @runtime_tracker
     def planning_phase( self, 
                         state : SimulationAgentState, 
                         specs : object,
                         results : dict, 
                         bundle : list,
-                        path : list,
+                        reward_grid : RewardGrid,
                         orbitdata : OrbitData
                     ) -> tuple:
         """
         Creates a modified plan from all known requests and current plan
         """
-        # initialzie changes
-        changes = []
-
-        # get requests that can be bid on by this agent
-        available_reqs : list = self._get_available_requests(state, specs, results, bundle, path, orbitdata)
-                
-        if available_reqs:
-            x = 1
-
-        t_0 = time.perf_counter()
-        # -------------------------------------
-        # TEMPORARY FIX: resets bundle and replans from scratch
-        reset_reqs = []
-        if len(bundle) > 0:
-            # reset path
-            path = []
-
-            # reset results
-            for req, main_measurement, _ in bundle:
-                bid : Bid = results[req.id][main_measurement]
-                bid._reset(state.t)
-                results[req.id][main_measurement] = bid
-
-                available_reqs.append((req,main_measurement))
-                reset_reqs.append((req,main_measurement))
-
-            # reset bundle 
-            bundle = []
-        # -------------------------------------
-        available_reqs.sort(key=lambda a : a[0].id)
-
-        if len(bundle) == 0: # create bundle from scratch
-            # generate path 
-            max_path = self._generate_path(state, specs, results, available_reqs, orbitdata)
-
-            # update bundle and results 
-            bundle = []
-            for req, main_measurement, t_img, u_exp in max_path:
-                req : MeasurementRequest
-
-                # update bid
-                old_bid : Bid = results[req.id][main_measurement]
-                new_bid : Bid = old_bid.copy()
-                new_bid.set(u_exp, t_img, state.t)
-
-                # place in bundle
-                bundle.append((req, main_measurement, new_bid))
-
-                # if changed, update results
-                if old_bid != new_bid:
-                    changes.append(new_bid.copy())
-                    results[req.id][main_measurement] = new_bid
-
-            # update path
-            path = [path_elem for path_elem in max_path]
-
-            # announce that tasks were reset
-            path_reqs = [(req, main_measurement) 
-                         for req,main_measurement,*_ in max_path]
-            reset_bids : list[Bid] = [results[req.id][main_measurement]
-                                      for req,main_measurement in reset_reqs
-                                      if (req,main_measurement) not in path_reqs]
-            if reset_bids:
-                x = 1
+        try:
+            # initialzie changes and resetted requirement lists
+            changes = []
+            reset_reqs = []
             
-            changes.extend(reset_bids)
+            # check if bundle is full
+            if len(self.bundle) >= self.max_bundle_size:
+                # no room left in bundle; return original results
+                return results, bundle, changes 
+            
+            # -------------------------------------
+            # TEMPORARY FIX: resets bundle and always replans from scratch
+            if len(bundle) > 0:
+                # reset results
+                for req, main_measurement, bid in bundle:
+                    # reset bid
+                    bid : Bid; bid._reset(state.t)
 
-        else: # add tasks to the bundle
-            raise NotImplementedError('Repairing bundle not yet implemented')
-        
-        dt = time.perf_counter() - t_0
-        
-        # check if path is valid
-        assert self.is_task_path_valid(state, specs, path, orbitdata)
+                    # update results
+                    results[req.id][main_measurement] = bid
 
-        # ensure that bundle is within the allowed size
-        assert len(bundle) <= self.max_bundle_size
+                    # add to list of resetted requests
+                    reset_reqs.append((req,main_measurement))
 
-        # return results
-        return results, bundle, path, changes 
-    
-        # TODO implement bundle repair strategy
-        #     max_path = [path_element for path_element in path]
-        #     max_path_utility = sum([u_exp for _,_,_,u_exp in path])
-        #     max_req = -1
-        #     t_img = None
-        #     u_exp = None
+                # reset bundle 
+                bundle = []
+            # -------------------------------------
+            
+            # get requests that can be bid on by this agent
+            available_reqs : list[tuple] = self._get_available_requests(state, specs, results, bundle, orbitdata)
 
-        #     while (len(bundle) < self.max_bundle_size   # there is room in the bundle
-        #            and len(available_reqs) > 0          # there tasks available
-        #            and max_req is not None              # a task was added in the previous iteration
-        #            ):
-        #         # search for best bid
-        #         max_req = None
-        #         for req, subtask_index in available_reqs:
-        #             proposed_path, proposed_path_utility, \
-        #                 proposed_t_img, proposed_utility = self.calc_path_bid(state, results, path, req, subtask_index)
+            if not available_reqs: 
+                # no tasks available to be bid on by this agent; return original results
+                return results, bundle, changes 
 
-        #             if proposed_path is None:
-        #                 continue
+            if not bundle: # bundle is empty; create bundle from scratch
+                # generate path 
+                max_path = self._generate_path(state, specs, results, available_reqs, reward_grid, orbitdata)
 
-        #             current_bid : Bid = results[req.id][subtask_index]
+                # update bundle and results 
+                for req, main_measurement, t_img, th_img, u_exp in max_path:
+                    req : MeasurementRequest
 
-        #             if (max_path_utility < proposed_path_utility
-        #                 and current_bid.winning_bid < proposed_utility):
-        #                 max_path = [path_element for path_element in proposed_path]
-        #                 max_path_utility = proposed_path_utility
-        #                 max_req = (req, subtask_index)
-        #                 t_img = proposed_t_img
-        #                 u_exp = proposed_utility
+                    # update bid
+                    old_bid : Bid = results[req.id][main_measurement]
+                    new_bid : Bid = old_bid.copy()
+                    new_bid.set(u_exp, t_img, th_img, state.t)
+
+                    # place in bundle
+                    bundle.append((req, main_measurement, new_bid))
+
+                    # if changed, update results
+                    if old_bid != new_bid:
+                        changes.append(new_bid.copy())
+                        results[req.id][main_measurement] = new_bid
+
+                # announce that tasks were reset and were not re-added to the plan
+                path_reqs = {(req, main_measurement) 
+                            for req,main_measurement,*_ in max_path}
+                reset_bids : list[Bid] = [results[req.id][main_measurement]
+                                        for req,main_measurement in reset_reqs
+                                        if (req,main_measurement) not in path_reqs]
                 
-        #         # check if a task to be added was found
-        #         if max_req is not None:
-        #             # update path 
-        #             path = [path_element for path_element in max_path]
+                changes.extend(reset_bids)
 
-        #             # update bids
-        #             for req, subtask_index, t_img, u_exp in max_path:
-        #                 req : MeasurementRequest
+            else: # add tasks to the bundle
+                raise NotImplementedError('Repairing bundle not yet implemented')
 
-        #                 # update bid
-        #                 old_bid : Bid = results[req.id][subtask_index]
-        #                 new_bid : Bid = old_bid.copy()
-        #                 new_bid.set(u_exp, t_img, state.t)
+            # return results
+            return results, bundle, changes 
+        
+        finally:
+            # ensure that bundle is within the allowed size
+            assert len(bundle) <= self.max_bundle_size
+                    
+            # construct observation sequence from bundle
+            path = self.path_from_bundle(bundle)
 
-        #                 # if changed, update results
-        #                 if old_bid != new_bid:
-        #                     changes.append(new_bid.copy())
-        #                     results[req.id][subtask_index] = new_bid
-
-        #             # add to bundle
-        #             bid = results[req.id][subtask_index]
-        #             bundle.append((req, subtask_index, bid))
-    
-    def _generate_path(self, state :SimulationAgentState, specs : object, results : dict, available_reqs : list, orbitdata : OrbitData) -> list:
+            # check if path is valid
+            assert self.is_task_path_valid(state, specs, path, orbitdata)
+        
+    def _generate_path(self, 
+                       state :SimulationAgentState, 
+                       specs : object, 
+                       results : dict, 
+                       available_reqs : list, 
+                       reward_grid : RewardGrid,
+                       orbitdata : OrbitData) -> list:
         # count maximum number of paths to be searched
         n_max = 0
         for n in range(1,self.max_bundle_size+1):
@@ -981,55 +912,81 @@ class AbstractConsensusReplanner(AbstractReplanner):
             # get next path on the queue
             path_i : list = queue.get()
 
-            path_bids : list[Bid] = [Bid(req.id, main_measurement, state.agent_name, u_exp)
-                                for req,main_measurement,_,u_exp in path_i]
+            # create potential bids for observations in the path
+            path_bids : list[Bid] = [Bid(req.id, 
+                                         main_measurement, 
+                                         state.agent_name, 
+                                         u_exp, 
+                                         t_img=t_img, 
+                                         th_img=th_img)
+                                     for req,main_measurement,t_img,th_img,u_exp in path_i
+                                     if isinstance(req,MeasurementRequest)]
                 
             # check if it out-performs the current best path
-            if any([results[bid.req_id][bid.main_measurement] >= bid     # at least one bid is outbid by competitors
+            if any([results[bid.req_id][bid.main_measurement] >= bid
                     for bid in path_bids]):
-                # ignore path
+                # at least one proposed bid is outbid by existing bid; ignore path
                 continue
             
+            # calculate path utility 
+            path_utility : float = self.calc_path_utility(state, specs, path_i, reward_grid)
+
             # check if it outbids competitors
-            path_utility = sum([u_exp for _,_,_,u_exp in path_i])
-            if (path_utility > max_path_utility                         # path utility is increased
-                and all([results[bid.req_id][bid.main_measurement] < bid     # all new bids outbid competitors
+            if (path_utility > max_path_utility                             # path utility is increased
+                and all([results[bid.req_id][bid.main_measurement] < bid    # all new bids outbid competitors
                          for bid in path_bids])
                 ):
+                # outbids competitors; set new max utility path
                 max_path = [path_element for path_element in path_i]
                 max_path_utility = path_utility
-
 
             # check if there is room to be added to the bundle
             if len(path_i) >= self.max_bundle_size:
                 continue
 
             # add available requests to the path and place it in the queue
-            path_reqs = [(req, main_measurement) for req,main_measurement,_,_ in path_i]
+            path_reqs = [(req, main_measurement) 
+                         for req,main_measurement,*_ in path_i]
             reqs_to_add = [(req, main_measurement) 
                         for req, main_measurement in available_reqs
                         if (req, main_measurement) not in path_reqs
                         ]
             
             for req, main_measurement in reqs_to_add:
-                req : MeasurementRequest
+                req : MeasurementRequest                
                 # copy current path
                 path_j = [path_element_i for path_element_i in path_i]
                 
                 # add request to path
                 path_j.append((req, main_measurement, -1, -1))
                 
+                # estimate observation time and look angle
+                t_img,th_img = self.calc_imaging_time(state, specs, path_j, req, main_measurement, orbitdata)
+                
+                # check if imaging time was found
+                if t_img < 0.0: continue # skip
+
                 # calculate performance
-                t_img = self.calc_imaging_time(state, specs, path_j, req, main_measurement, orbitdata)
-                u_exp = self.utility_func(req.to_dict(), t_img)
+                observation = ObservationAction(main_measurement, req.target, th_img, t_img)
+                u_exp = reward_grid.estimate_reward(observation)
 
                 # update values
-                path_j[-1] = (req, main_measurement, t_img, u_exp)
+                path_j[-1] = (req, main_measurement, t_img, th_img, u_exp)
 
                 # only add to queue if the path can be performed
                 if self.is_task_path_valid(state, specs, path_j, orbitdata): queue.put(path_j)
-                    
+        
         return max_path
+    
+    def calc_path_utility(self, 
+                          state : SimulationAgentState, 
+                          specs : object, 
+                          path : list, 
+                          reward_grid : RewardGrid
+                          ) -> float:
+        # merge current path with 
+        observations : list[ObservationAction] = self.merge_plans(state, specs, path)
+        return sum([reward_grid.estimate_reward(observation) for observation in observations])
 
     @runtime_tracker
     def _get_available_requests(self, 
@@ -1037,14 +994,12 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                 specs : object,
                                 results : dict, 
                                 bundle : list,
-                                path : list,
                                 orbitdata : OrbitData
                                 ) -> list:
         """ Returns a list of known requests that can be performed within the current planning horizon """
-        path_reqs = [(req, main_measurement) for req, main_measurement, _, _ in path]
         
         # find requests that can be bid on
-        biddable_requests = []        
+        biddable_reqs = []        
         for req_id in results:
             req = None
             for main_measurement in results[req_id]:
@@ -1060,43 +1015,49 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 if not self._can_access(state, req, orbitdata):
                     continue 
                 
-                # check if task is already in the bundle
+                # check if the task is already in the bundle
                 if (req, main_measurement, bid) in bundle:
-                    continue
-
-                # check if task is already in the path
-                if (req, main_measurement) in path_reqs:
                     continue
 
                 # check if the task has already been performed
                 if self.__request_has_been_performed(results, req, main_measurement, state.t):
                     continue
 
-                biddable_requests.append((req, bid.main_measurement))  
+                # check if the task can be placed in the bundle:
+                if not self._can_add_to_bundle(bundle, req, main_measurement):
+                    continue
 
-        if results:
-            x=1
+                biddable_reqs.append((req, main_measurement))  
 
-        # find access intervals 
-        n_intervals = self.max_bundle_size - len(bundle)
-        intervals : list = self._get_available_intervals(biddable_requests, n_intervals, orbitdata)
+        # sort biddable requests by earliest access times
+        biddable_reqs_accesses = []
+        for req,main_measurement in biddable_reqs:
+            # find access times for a given request
+            req_accesses = [
+                (t_img*orbitdata.time_step,req.id,req,main_measurement)
+                for t_img,_,_,lat,lon,*_,instrument,_ in orbitdata.gp_access_data.values
+                if req.t_start <= t_img*orbitdata.time_step <= req.t_end
+                and instrument == main_measurement
+                and abs(lat - req.target[0]) <= 1e-3
+                and abs(lon - req.target[1]) <= 1e-3
+            ]
 
-        # find biddable requests that can be accessed in the next observation intervals
-        available_requests = []
-        for req, main_measurement in biddable_requests:
-            req : MeasurementRequest
-            bid : Bid = results[req.id][main_measurement]
-            t_arrivals = [t*orbitdata.time_step 
-                          for t,*_ in orbitdata.gp_access_data.values
-                          for t_start, t_end in intervals
-                          if req.t_start <= t*orbitdata.time_step <= req.t_end 
-                          and t_start <= t*orbitdata.time_step <= t_end]
+            # sort in ascending order 
+            req_accesses.sort()
 
-            if t_arrivals:
-                available_requests.append((req, main_measurement))
-
-        return available_requests
+            # save only the earliest access time to request target
+            biddable_reqs_accesses.append(req_accesses.pop(0))
         
+        # sort requests by ascending access time 
+        biddable_reqs_accesses.sort()
+
+        # return sorted list of access times
+        return [(req,main_measurement) for *_,req,main_measurement in biddable_reqs_accesses]
+        
+    def _can_add_to_bundle(self, bundle : list, req : MeasurementRequest, main_measurement : str) -> bool:
+        # TODO
+        return True
+
     @abstractmethod
     def is_task_path_valid(self, state : SimulationAgentState, specs : object, path : list, orbitdata : OrbitData) -> bool:
         pass
@@ -1142,99 +1103,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         subtask_already_performed = t > current_bid.t_img and current_bid.winner != Bid.NONE
 
         return subtask_already_performed or current_bid.performed
-
-    def _get_available_intervals(self, 
-                                 available_requests : list, 
-                                 n_intervals : int,
-                                 orbitdata : OrbitData
-                                 ) -> list:
-        intervals = set()
-        for req, _ in available_requests:
-            req : MeasurementRequest
-
-            t_arrivals = [t*orbitdata.time_step 
-                          for t,*_ in orbitdata.gp_access_data.values
-                          if req.t_start <= t*orbitdata.time_step <= req.t_end]
-            
-            t_start = None
-            t_prev = None
-            for t_arrival in t_arrivals:
-                if t_prev is None:
-                    t_prev = t_arrival
-                    t_start = t_arrival
-                    continue
-                    
-                if abs(t_arrivals[-1] - t_arrival) <= 1e-6: 
-                    intervals.add((t_start, t_arrival))
-                    continue
-
-                dt = t_arrival - t_prev
-                if abs(orbitdata.time_step - dt) <= 1e-6:
-                    t_prev = t_arrival
-                    continue
-                else:
-                    intervals.add((t_start, t_prev))
-                    t_prev = t_arrival
-                    t_start = t_arrival
-
-        # split intervals if they overlap
-        intervals_to_remove = set()
-        intervals_to_add = set()
-        for t_start, t_end in intervals:
-            splits = [ [t_start_j, t_end_j, t_start, t_end] 
-                        for t_start_j, t_end_j in intervals
-                        if (t_start_j < t_start < t_end_j < t_end)
-                        or (t_start < t_start_j < t_end < t_end_j)]
-            
-            for t_start_j, t_end_j, t_start, t_end in splits:
-                intervals_to_remove.add((t_start,t_end))
-                intervals_to_remove.add((t_start_j,t_end_j))
-                
-                split = [t_start_j, t_end_j, t_start, t_end]
-                split.sort()
-
-                intervals_to_add.add((split[0], split[1]))
-                intervals_to_add.add((split[1], split[2]))
-                intervals_to_add.add((split[2], split[3]))
-        
-        for interval in intervals_to_remove:
-            intervals.remove(interval)
-
-        for interval in intervals_to_add:
-            intervals.add(interval)
-
-        # remove overlaps
-        intervals_to_remove = []
-        for t_start, t_end in intervals:
-            containers = [(t_start_j, t_end_j) 
-                        for t_start_j, t_end_j in intervals
-                        if (t_start_j < t_start and t_end <= t_end_j)
-                        or (t_start_j <= t_start and t_end < t_end_j)]
-            if containers:
-                intervals_to_remove.append((t_start,t_end))
-        
-        for interval in intervals_to_remove:
-            intervals.remove(interval)
-        
-        # sort intervals
-        intervals = list(intervals)
-        intervals.sort(key= lambda a: a[0])
-
-        # return intervals 
-        return intervals[:n_intervals]
-
-    # @abstractmethod
-    # def calc_path_bid(
-    #                     self, 
-    #                     state : SimulationAgentState, 
-    #                     specs : object,
-    #                     original_results : dict,
-    #                     original_path : list, 
-    #                     req : MeasurementRequest, 
-    #                     subtask_index : int
-    #                 ) -> tuple:
-    #     """finds the best placement of a task at a given path. returns None if this is not possible"""
-    #     pass
 
     @abstractmethod
     def calc_imaging_time(self, state : SimulationAgentState, specs : object, path : list, req : MeasurementRequest, main_measurement : str, orbitdata : OrbitData) -> float:

@@ -15,7 +15,7 @@ class Plan(ABC):
                 ) -> None:
         # initialize values
         self.t = t
-        self.actions = []
+        self.actions : list[AgentAction] = []
         
         # load preplan
         if actions:
@@ -191,17 +191,19 @@ class Plan(ABC):
         
         """
         # compile performed actions
-        performed_actions = [action for action in completed_actions]
+        performed_actions : list[AgentAction] = [action for action in completed_actions]
         performed_actions.extend(aborted_actions)
 
         # remove performed actions from plan
         for performed_action in performed_actions:
-            performed_action : AgentAction
-            for action in self.actions:
-                action : AgentAction
-                if performed_action.id == action.id:
-                    self.actions.remove(action)
-                    break
+            matching_actions = [action for action in self.actions
+                                if performed_action.id == action.id]
+            for action in matching_actions: self.actions.remove(action)
+
+        # removed expired actions
+        expired_actions = [action for action in self.actions
+                           if action.t_end < t]
+        for action in expired_actions: self.actions.remove(action)
 
     def get_next_actions(self, t : float) -> list:
         """ returns a list of dicts """

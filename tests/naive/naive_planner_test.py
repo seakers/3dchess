@@ -96,10 +96,18 @@ class TestNaivePlanner(unittest.TestCase):
                         },
                         "replanner" : {
                             "@type" : "broadcaster"
+                        },
+                        "rewardGrid":{
+                            "reward_function" : 'event',
+                            'initial_reward' : 1.0,
+                            'min_reward' : 1.0,
+                            'unobserved_reward_rate' : 2.0, # pts/hrs
+                            'max_unobserved_reward' : 10.0,
+                            'event_reward' : 10.0
                         }
                     },
                     "science" : {
-                        "@type": "ORACLE", 
+                        "@type": "lookup", 
                         "eventsPath" : "./tests/naive/resources/all_events_formatted.csv"
                     }
                 }

@@ -3,6 +3,7 @@ import logging
 from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 
+from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.messages import MeasurementRequestMessage, message_from_dict
 from chess3d.agents.actions import BroadcastMessageAction
 from chess3d.agents.orbitdata import OrbitData
@@ -50,9 +51,10 @@ class Broadcaster(AbstractReplanner):
     
     def generate_plan(self, 
                       state : SimulationAgentState,
-                      specs : object,
+                      _ : object,
+                      __ : RewardGrid,
                       current_plan : Plan,
-                      _ : ClockConfig,
+                      ____ : ClockConfig,
                       orbitdata : OrbitData
                       ) -> Plan:
         

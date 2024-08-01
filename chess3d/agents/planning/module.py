@@ -308,11 +308,9 @@ class PlanningModule(InternalModule):
                 observations.extend([action_from_dict(**msg.observation_action) 
                                     for msg in misc_messages
                                     if isinstance(msg, ObservationPerformedMessage)])
-                # compile measurement requests
-                events = [req for req in incoming_reqs if isinstance(req, MeasurementRequest)]
                 
                 # update reward grid
-                self.reward_grid.update(state.t, observations, events)
+                self.reward_grid.update(state.t, observations, incoming_reqs)
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_actions(completed_actions, aborted_actions, pending_actions)
@@ -340,6 +338,7 @@ class PlanningModule(InternalModule):
                         # initialize plan      
                         plan : Plan = self.preplanner.generate_plan(state, 
                                                                     self.parent_agent_specs,
+                                                                    self.reward_grid,
                                                                     self._clock_config,
                                                                     self.orbitdata
                                                                     )
@@ -349,7 +348,7 @@ class PlanningModule(InternalModule):
                         self.plan_history.append((state.t, plan_copy))
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -381,6 +380,7 @@ class PlanningModule(InternalModule):
                         # Modify current Plan      
                         plan : Plan = self.replanner.generate_plan(state, 
                                                                    self.parent_agent_specs,    
+                                                                   self.reward_grid,
                                                                    plan,
                                                                    self._clock_config,
                                                                    self.orbitdata
@@ -397,7 +397,7 @@ class PlanningModule(InternalModule):
                         pending_actions = []
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        # self.__log_plan(plan, "REPLAN", logging.WARNING)
+                        self.__log_plan(plan, "REPLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -406,13 +406,8 @@ class PlanningModule(InternalModule):
                 plan_out : list = plan.get_next_actions(self.get_current_time())
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
-
-                # self.n_observations += len([action for action in plan_out if action['action_type'] == 'OBSERVE'])
-                # self.n_broadcasts += len([action for action in plan_out if action['action_type'] == 'BROADCAST'])
-                # self.n_maneuvers += len([action for action in plan_out if action['action_type'] == 'MANEUVER'])
-
-                # counts = plan.counters()
+                self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+                x = 1
                 # -------------------------------------
 
                 # send plan to parent agent
@@ -601,7 +596,7 @@ class PlanningModule(InternalModule):
         df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
 
         # log reward grid history
-        headers = ['t_update','grid_index','GP index','instrument','reward','n_observations','n_events']
+        headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
         data = self.reward_grid.get_history()
         df = pd.DataFrame(data, columns=headers)
         self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)

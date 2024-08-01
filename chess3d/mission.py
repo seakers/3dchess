@@ -542,7 +542,7 @@ class SimulationFactory:
                 assert agent_orbitdata is not None
 
                 # get utility function 
-                reward_func_name = reward_grid_params.get('reward', 'fixed')
+                reward_func_name = reward_grid_params.get('reward_function', 'fixed')
                 reward_func = utility_function[reward_func_name]
 
                 # get observation startegy
@@ -598,16 +598,15 @@ class SimulationFactory:
                 if replanner_type.lower() == 'broadcaster':
                     replanner = Broadcaster(logger)
 
-                # elif replanner_type.lower() == 'acbba': 
-                #     max_bundle_size = replanner_dict.get('bundle size', 3)
-                #     threshold = replanner_dict.get('threshold', 1)
-                #     horizon = replanner_dict.get('horizon', np.Inf)
+                elif replanner_type.lower() == 'acbba': 
+                    max_bundle_size = replanner_dict.get('bundle size', 3)
+                    threshold = replanner_dict.get('threshold', 1)
+                    horizon = replanner_dict.get('horizon', np.Inf)
 
-                #     replanner = ACBBAPlanner(reward_func, 
-                #                              max_bundle_size, 
-                #                              threshold, 
-                #                              horizon,
-                #                              logger)
+                    replanner = ACBBAPlanner(max_bundle_size, 
+                                             threshold, 
+                                             horizon,
+                                             logger)
                 
                 else:
                     raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')

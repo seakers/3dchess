@@ -56,7 +56,9 @@ class GridPoint(object):
         self.t_update = t_update
 
         # add to reward history
-        self.history.append((t_update, self.grid_index, self.gp_index, self.instrument, reward, len(self.observations), len(self.events)))
+        lat,lon,_ = self.target
+        t_update = t_update if not np.isnan(t_update) else -1
+        self.history.append((t_update, self.grid_index, self.gp_index, lat, lon, self.instrument, reward, len(self.observations), len(self.events)))
 
     def is_update_time_valid(self, t_update : float) -> bool:
         return t_update >= self.t_update or np.isnan(self.t_update)
@@ -143,16 +145,17 @@ class RewardGrid(object):
                    ]
         
         # return findings
-        match = matches.pop() if matches else (None,None)
+        if matches:
+            match = matches.pop() 
+        else:
+            raise ValueError(f'Could not find ground point indeces for coordinates ({lat}°,{lon}°,0.0)')
+        
         grid_index, gp_index = match
         
         # convert to integers
         grid_index = int(grid_index) if grid_index is not None else None
         gp_index = int(gp_index) if gp_index is not None else None
         
-        if grid_index is None or gp_index is None:
-            x = 1
-
         # return values
         return grid_index, gp_index 
         
@@ -170,14 +173,14 @@ class RewardGrid(object):
         for event in events: self.update_event(event, t)
 
         # update values for the entire grid
-        for grid_rewards in self.rewards:
-            for gp_rewards in grid_rewards:
-                for _, grid_point in gp_rewards.items():
-                    # estimate reward
-                    reward : float = self.propagate_reward(grid_point, t)
+        # for grid_rewards in self.rewards:
+        #     for gp_rewards in grid_rewards:
+        #         for _, grid_point in gp_rewards.items():
+        #             # estimate reward
+        #             reward : float = self.propagate_reward(grid_point, t)
 
-                    # update grid point reward
-                    grid_point.update_reward(reward, t)
+        #             # update grid point reward
+        #             grid_point.update_reward(reward, t)
 
     def update_observation(self, observation : ObservationAction, t : float) -> None:
         # get appropriate grid point object
@@ -193,8 +196,20 @@ class RewardGrid(object):
         # get corresponding grid point
         grid_point : GridPoint = self.rewards[grid_index][gp_index][observation.instrument_name]
         
+        # estimate current reward
+        reward : float = self.propagate_reward(grid_point, t)
+
+        # update current grid point reward
+        grid_point.update_reward(reward, t)
+
         # update grid point observation list
         grid_point.update_observations(observation, t)
+
+        # estimate reward
+        reward : float = self.propagate_reward(grid_point, t)
+
+        # update grid point reward
+        grid_point.update_reward(reward, t)
 
     def update_event(self, event : MeasurementRequest, t : float) -> None:
         # get appropriate grid point object
@@ -210,6 +225,12 @@ class RewardGrid(object):
             # get corresponding grid point
             grid_point : GridPoint = self.rewards[grid_index][gp_index][instrument]
             
+            # estimate current reward
+            reward : float = self.propagate_reward(grid_point, t)
+
+            # update current grid point reward
+            grid_point.update_reward(reward, t)
+
             # update grid point observation list
             grid_point.update_events(event, t)
 
@@ -229,7 +250,7 @@ class RewardGrid(object):
     def estimate_reward(self, observation : ObservationAction) -> float:
         lat,lon,_ = observation.target
         grid_index,gp_index = self.__get_target_indeces(lat,lon)
-        grid_point : GridPoint = self.grid_data[grid_index][gp_index][observation.instrument_name]
+        grid_point : GridPoint = self.rewards[grid_index][gp_index][observation.instrument_name]
 
         return self.propagate_reward(grid_point, observation.t_start)
     
@@ -241,14 +262,14 @@ class RewardGrid(object):
                 for _, grid_point in gp_rewards.items():
                     history.extend(grid_point.history)
 
-        history.sort(key=lambda a : a[0])
+        history.sort()
 
         return history
 
     def __str__(self) -> str:
         histories = self.get_history()
 
-        out = 't_update,grid_index,GP index,instrument,reward,n_observations,n_events\n'
+        out = 't_update,grid_index,GP index,lat,lon,instrument,reward,n_observations,n_events\n'
         for t_update, grid_index, gp_index, instrument, reward, n_observations, n_events in histories:
             out += f'{t_update},{grid_index},{gp_index},{instrument},{reward},{n_observations},{n_events}\n'
         

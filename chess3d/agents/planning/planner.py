@@ -11,6 +11,7 @@ from dmas.utils import runtime_tracker
 
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.orbitdata import OrbitData, TimeInterval
+from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -29,11 +30,11 @@ class AbstractPlanner(ABC):
             raise ValueError(f'`logger` must be of type `Logger`. Is of type `{type(logger)}`.')
 
         # initialize attributes
-        self.known_reqs = set()                 # set of known measurement requests
-        self.pending_reqs_to_broadcast = set()  # set of observation requests that have not been broadcasted
-        self.pending_relays = set()             # set of relay messages to be broadcasted
-        self.completed_broadcasts = set()       # set of completed broadcasts
-        self.stats = {}                         # collector for runtime performance statistics
+        self.known_reqs : set[MeasurementRequest] = set()                   # set of known measurement requests
+        self.pending_reqs_to_broadcast : set[MeasurementRequest] = set()    # set of observation requests that have not been broadcasted
+        self.pending_relays : set[SimulationMessage] = set()                # set of relay messages to be broadcasted
+        self.completed_broadcasts = set()                                   # set of completed broadcasts
+        self.stats = {}                                                     # collector for runtime performance statistics
         
         # set attribute parameters
         self._logger = logger               # logger for debugging
@@ -637,6 +638,7 @@ class AbstractPreplanner(AbstractPlanner):
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         specs : object,
+                        reward_grid : RewardGrid,
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
                     ) -> Plan:
@@ -789,6 +791,7 @@ class AbstractReplanner(AbstractPlanner):
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         specs : object,
+                        reward_grid : RewardGrid,
                         current_plan : Plan,
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,

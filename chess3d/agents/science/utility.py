@@ -110,9 +110,9 @@ def event_driven(
         return reward
 
     # find latest event
-    events : list[MeasurementRequest] = list(events)
-    events.sort(key=lambda a : a.t_end)
-    latest_event = events.pop() if events else None
+    latest_events : list[MeasurementRequest] = [event for event in events if event.t_start <= t]
+    latest_events.sort(key=lambda a : a.t_end)
+    latest_event : MeasurementRequest = events.pop() if latest_events else None
 
     # find latest observations
     observations : list[ObservationAction] = list(observations)
@@ -123,7 +123,7 @@ def event_driven(
         # an event exists for this ground point
         assert latest_event.t_start <= t
 
-        if latest_event.t_start <= t <= latest_event.t_end: # event is current
+        if t <= latest_event.t_end: # event is current
             # count previous observations
             latest_observations = [observation for observation in observations
                                    if latest_event.t_start <= observation.t_start <= latest_event.t_end]

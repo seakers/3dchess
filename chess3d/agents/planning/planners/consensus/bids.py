@@ -3,6 +3,8 @@ import asyncio
 from enum import Enum
 from typing import Any, Union
 
+import numpy as np
+
 from chess3d.agents.science.requests import MeasurementRequest
 
 class BidComparisonResults(Enum):
@@ -46,6 +48,7 @@ class Bid(ABC):
                     bid: Union[float, int] = 0, 
                     winner: str = NONE, 
                     t_img: Union[float, int] = -1, 
+                    th_img : Union[float, int] = np.NAN,
                     t_update: Union[float, int] = -1, 
                     performed : bool = False,
                     ) -> object:
@@ -63,15 +66,17 @@ class Bid(ABC):
             - dt_converge (`float` or `int`): time interval after which local convergence is assumed to have been reached
             - performed (`bool`): indicates if the winner of this bid has performed the measurement request at hand
         """
+        # constants
         self.req_id = req_id
         self.main_measurement = main_measurement
 
+        # variables
         self.bidder = bidder
         self.bid = bid
         self.winner = winner
         self.t_img = t_img
+        self.th_img = th_img
         self.t_update = t_update
-
         self.performed = performed
 
     """
@@ -182,6 +187,7 @@ class Bid(ABC):
         if other.performed and not self.performed:
             # update and rebroadcast
             return BidComparisonResults.UPDATE, True
+        
         if other.bidder == self.bidder:
             if other.t_update > self.t_update:
                 # update & rebroadcast other's bid
@@ -411,6 +417,7 @@ class Bid(ABC):
             self.bid = other.bid
             self.winner = other.winner
             self.t_img = other.t_img
+            self.th_img = other.th_img
 
             self.t_update = t
             self.performed = other.performed if not self.performed else True # Check if this hold true for all values
@@ -426,6 +433,7 @@ class Bid(ABC):
         self.bid = 0
         self.winner = self.NONE
         self.t_img = -1
+        self.th_img = np.NAN
         self.t_update = t_update
 
     def _leave(self, _, **__) -> None:
@@ -463,7 +471,7 @@ class Bid(ABC):
         else:
             return bid2
 
-    def set(self, new_bid : Union[int, float], t_img : Union[int, float], t_update : Union[int, float]) -> None:
+    def set(self, new_bid : Union[int, float], t_img : Union[int, float], th_img : Union[int, float], t_update : Union[int, float]) -> None:
         """
         Sets new values for this bid
 
@@ -475,6 +483,7 @@ class Bid(ABC):
         self.bid = new_bid
         self.winner = self.bidder
         self.t_img = t_img
+        self.th_img = th_img
         self.t_update = t_update
 
     def __str__(self) -> str:

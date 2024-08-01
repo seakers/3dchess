@@ -90,7 +90,15 @@ class TestACBBAReplanner(unittest.TestCase):
                             "@type" : "naive"
                         },
                         "replanner" : {
-                            "@type" : "broadcaster"
+                            "@type" : "acbba"
+                        },
+                        "rewardGrid":{
+                            "reward_function" : 'event',
+                            'initial_reward' : 1.0,
+                            'min_reward' : 1.0,
+                            'unobserved_reward_rate' : 2.0, # pts/hrs
+                            'max_unobserved_reward' : 10.0,
+                            'event_reward' : 10.0
                         }
                     },
                     "science" : {
@@ -168,8 +176,15 @@ class TestACBBAReplanner(unittest.TestCase):
                             "@type" : "naive"
                         },
                         "replanner" : {
-                            "@type" : "acbba",
-                            "utility" : "fixed"
+                            "@type" : "acbba"
+                        },
+                        "rewardGrid":{
+                            "reward_function" : 'event',
+                            'initial_reward' : 1.0,
+                            'min_reward' : 1.0,
+                            'unobserved_reward_rate' : 2.0, # pts/hrs
+                            'max_unobserved_reward' : 10.0,
+                            'event_reward' : 10.0
                         }
                     },
                     "science" : {
@@ -247,8 +262,15 @@ class TestACBBAReplanner(unittest.TestCase):
                             "@type" : "naive"
                         },
                         "replanner" : {
-                            "@type" : "acbba",
-                            "utility" : "fixed"
+                            "@type" : "acbba"
+                        },
+                        "rewardGrid":{
+                            "reward_function" : 'event',
+                            'initial_reward' : 1.0,
+                            'min_reward' : 1.0,
+                            'unobserved_reward_rate' : 2.0, # pts/hrs
+                            'max_unobserved_reward' : 10.0,
+                            'event_reward' : 10.0
                         }
                     },
                     "science" : {
@@ -326,8 +348,15 @@ class TestACBBAReplanner(unittest.TestCase):
                             "@type" : "naive"
                         },
                         "replanner" : {
-                            "@type" : "acbba",
-                            "utility" : "fixed"
+                            "@type" : "acbba"
+                        },
+                        "rewardGrid":{
+                            "reward_function" : 'event',
+                            'initial_reward' : 1.0,
+                            'min_reward' : 1.0,
+                            'unobserved_reward_rate' : 2.0, # pts/hrs
+                            'max_unobserved_reward' : 10.0,
+                            'event_reward' : 10.0
                         }
                     },
                     "science" : {

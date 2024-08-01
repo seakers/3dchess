@@ -98,7 +98,7 @@ class TestNaivePlanner(unittest.TestCase):
                             "@type" : "broadcaster"
                         },
                         "rewardGrid":{
-                            "reward" : 'event',
+                            "reward_function" : 'event',
                             'initial_reward' : 1.0,
                             'min_reward' : 1.0,
                             'unobserved_reward_rate' : 2.0, # pts/hrs
