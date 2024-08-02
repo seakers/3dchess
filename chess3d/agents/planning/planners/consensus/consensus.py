@@ -194,15 +194,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # perform consesus phase
         # ---------------------------------
         # DEBUGGING OUTPUTS 
-        self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        print(f'length of bundle: {len(self.bundle)}\nbids to rebroadcast: {len(self.bids_to_rebroadcasts)}')
-        print(f'bundle:')
-        for req, subtask_index, bid in self.bundle:
-            req : MeasurementRequest
-            bid : Bid
-            id_short = req.id.split('-')[0]
-            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        print('')
+        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
+        # print(f'length of bundle: {len(self.bundle)}\nbids to rebroadcast: {len(self.bids_to_rebroadcasts)}')
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        # print('')
         # ---------------------------------
 
         self.results, self.bundle, \
@@ -214,19 +214,21 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.bids_to_rebroadcasts.extend(bids_to_rebroadcasts)
         
         path = self.path_from_bundle(self.bundle)
+        if not self.is_task_path_valid(state, specs, path, orbitdata):
+            x = 1
         assert self.is_task_path_valid(state, specs, path, orbitdata)
         
         # ---------------------------------
         # DEBUGGING OUTPUTS 
-        self.log_results('CONSENSUS PHASE', state, self.results)
-        print(f'length of bundle: {len(self.bundle)}\nbids to rebroadcast: {len(self.bids_to_rebroadcasts)}')
-        print(f'bundle:')
-        for req, subtask_index, bid in self.bundle:
-            req : MeasurementRequest
-            bid : Bid
-            id_short = req.id.split('-')[0]
-            print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        print('')
+        # self.log_results('CONSENSUS PHASE', state, self.results)
+        # print(f'length of bundle: {len(self.bundle)}\nbids to rebroadcast: {len(self.bids_to_rebroadcasts)}')
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     id_short = req.id.split('-')[0]
+        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        # print('')
         # ---------------------------------
 
         # check if relevant changes were made to the results
@@ -286,7 +288,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # for req, subtask_index, bid in self.bundle:
         #     req : MeasurementRequest
         #     bid : Bid
-        #     print(f'\t{req.id.split('-')[0]}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        #     req_id_short = req.id.split('-')[0]
+        #     print(f'\t{req_id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
         # print('')
         # -------------------------------
 
@@ -303,7 +306,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         waits : list = self._schedule_waits(state)
         
         # compile and generate plan
-        self.plan = Replan(observations, broadcasts, maneuvers, waits, t=state.t, t_next=self.preplan.t_next)
+        self.plan = Replan(maneuvers, waits, observations, broadcasts, t=state.t, t_next=self.preplan.t_next)
 
         return self.plan.copy()
     
@@ -336,6 +339,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         proposed_observations = [ObservationAction(main_measurement, req.target, th_img, t_img)
                                 for req, main_measurement, t_img, th_img, _ in path
                                 if isinstance(req,MeasurementRequest)]
+        proposed_observations_bckp = [observation for observation in proposed_observations]
         proposed_observations.sort(key=lambda a : a.t_start)
 
         # check for if the right number of measurements was created
@@ -430,15 +434,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # check if compiled observations path is valid
         assert self.is_observation_path_valid(state, specs, observations)
 
+        # ensure all proposed actions are in the final plan
+        assert all([observation in observations for observation in proposed_observations_bckp])
+
         # return compiled observations path
-
-        planned_observations = [action for action in self.preplan
-                                if isinstance(action, ObservationAction)]
-        planned_observations.sort(key=lambda a : a.t_start)
-
-        if len(planned_observations) > len(observations):
-            x = 1
-
         return observations
     
     @runtime_tracker
@@ -599,46 +598,47 @@ class AbstractConsensusReplanner(AbstractReplanner):
             action : ObservationAction
 
             # check if observation was performed to respond to a measurement request
-            completed_req : MeasurementRequest = self._get_completed_request(results, action)
+            for completed_req in self._get_completed_request(results, action):
+                completed_req : MeasurementRequest
+                if action.instrument_name not in completed_req.observation_types:
+                    # observation was not performed to respond to a measurement request; ignore
+                    continue
+                
+                # set bid as completed           
+                bid : Bid = results[completed_req.id][action.instrument_name]
+                updated_bid : Bid = bid.copy()
+                updated_bid._perform(state.t)
+                results[completed_req.id][action.instrument_name] = updated_bid
 
-            if (completed_req is None 
-                or action.instrument_name not in completed_req.observation_types):
-                # observation was not performed to respond to a measurement request; ignore
-                continue
-            
-            # set bid as completed           
-            bid : Bid = results[completed_req.id][action.instrument_name]
-            updated_bid : Bid = bid.copy()
-            updated_bid._perform(state.t)
-            results[completed_req.id][action.instrument_name] = updated_bid
-
-            # add to changes and rebroadcast lists
-            changes.append(updated_bid.copy())
-            rebroadcasts.append(updated_bid.copy())
+                # add to changes and rebroadcast lists
+                changes.append(updated_bid.copy())
+                rebroadcasts.append(updated_bid.copy())
 
         # check for task completion in bundle
         for task in [(req, instrument_name, current_bid)
                     for req, instrument_name, current_bid in bundle
                     if results[req.id][instrument_name].performed]:
             ## remove all completed tasks from bundle
-            self.bundle.remove(task)
+            bundle.remove(task)
         
         return results, bundle, changes, rebroadcasts
     
     def _get_completed_request(self,
                                results : dict, 
-                               action : ObservationAction
-                               ) -> MeasurementRequest:
+                               observation : ObservationAction
+                               ) -> list:
         reqs : list[MeasurementRequest] = list({req 
                                                 for req in self.known_reqs
                                                 if isinstance(req, MeasurementRequest)
                                                 and req.id in results
-                                                and abs(req.target[0] - action.target[0]) <= 1e-3
-                                                and abs(req.target[1] - action.target[1]) <= 1e-3
-                                                and abs(req.target[2] - action.target[2]) <= 1e-3
+                                                and abs(req.target[0] - observation.target[0]) <= 1e-3
+                                                and abs(req.target[1] - observation.target[1]) <= 1e-3
+                                                and abs(req.target[2] - observation.target[2]) <= 1e-3
+                                                and observation.instrument_name in req.observation_types
                                                 })
-        reqs.sort(key=lambda a : a.t_start)
-        return reqs.pop() if reqs else None
+        return reqs
+        # reqs.sort(key=lambda a : a.t_start)
+        # return reqs.pop() if reqs else None
 
     def _get_matching_request(self, id : list) -> MeasurementRequest:
         reqs = {req for req in self.known_reqs if req.id == id}
@@ -775,7 +775,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     measurement_req, subtask_index, current_bid = bundle.pop(outbid_index)
 
                     # reset bid results
-                    current_bid : Bid; measurement_req : MeasurementRequest
+                    measurement_req : MeasurementRequest; current_bid : Bid
                     if bundle_index > outbid_index:
                         reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
                         results[measurement_req.id][subtask_index] = reset_bid

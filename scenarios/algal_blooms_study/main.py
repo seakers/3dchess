@@ -37,18 +37,19 @@ if __name__ == "__main__":
     # fovs = list(params['fov (deg)'])
     # fors = list(params['for (deg)'])
     # agility = list(params['agility (deg/s)'])
+    num_planes = list(params['num_planes']); num_planes.sort()
+    num_sats_per_plane = list(params['num_sats_per_plane']); num_sats_per_plane.sort()
+
+    # set agent parameters manually
     fovs = [5]
     fors = [60]
     agility = [1.0]
-    n_sats_min = 1
-    # num_planes = list(params['num_planes']); num_planes.sort()
-    # num_sats_per_plane = list(params['num_sats_per_plane']); num_sats_per_plane.sort()
-    num_planes = [1]
-    num_sats_per_plane = [3*i for i in range(2,3)]
+    n_sats_min = 12
+    # num_planes = [i for i in range(1,6)]
+    # num_sats_per_plane = [3*i for i in range(2,5)]
     ta_spacing = 'even'
 
-    # set agent parameters
-    duration = 6 / 24
+    duration = 24 / 24
     max_torque = 0.0
         
     instruments = [
@@ -60,9 +61,8 @@ if __name__ == "__main__":
                    'thermal' : 'therm', 
                    'sar' : 'sar'}
     preplanners = [
-                    'naive'
-                    # 'nadir'
-                    
+                    'naive',
+                    'nadir'                    
                     ]
     replanners = [
                   'broadcaster', 
@@ -71,12 +71,12 @@ if __name__ == "__main__":
     bundle_sizes = [
                     1,
                     # 2, 
-                    # 3 
+                    3 
                     # 5
                     ]
     utility = 'fixed'
 
-    # set results paramters
+    # set results parameters
     overwrite = False
 
     # count number of runs to be made

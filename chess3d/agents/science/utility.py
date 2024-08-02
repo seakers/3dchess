@@ -110,13 +110,15 @@ def event_driven(
         return reward
 
     # find latest event
-    latest_events : list[MeasurementRequest] = [event for event in events if event.t_start <= t]
+    latest_events : list[MeasurementRequest] = [event 
+                                                for event in events 
+                                                if event.t_start <= t]
     latest_events.sort(key=lambda a : a.t_end)
-    latest_event : MeasurementRequest = events.pop() if latest_events else None
+    latest_event : MeasurementRequest = latest_events.pop() if latest_events else None
 
     # find latest observations
     observations : list[ObservationAction] = list(observations)
-    observations.sort(key= lambda a : a.t_start)
+    observations.sort(key= lambda a : a.t_end)
     
     # calculate utility
     if latest_event:

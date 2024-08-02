@@ -167,8 +167,11 @@ class Plan(ABC):
 
             else:
                 self.actions.insert(0, action)
-            
+
         finally:
+            # sort actions chronollogically 
+            self.actions.sort(key=lambda a : a.t_start)
+            
             # update latest update time
             self.t = t  
 
@@ -176,6 +179,7 @@ class Plan(ABC):
                 # check plan feasibility
                 self.__is_feasible(self.actions)
             except ValueError as e:
+                self.__is_feasible(self.actions)
                 raise RuntimeError(f"Cannot place action in plan. {e} \n {str(self)}\ncurrent plan:\n{str(self)}")
 
     def update_action_completion(   self, 

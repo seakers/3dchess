@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 0.5,
+    "duration": 1.0,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -76,7 +76,7 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 0
                 }
             },
             "planner": {
@@ -84,14 +84,21 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba",
-                    "utility": "fixed",
+                    "@type": "broadcaster",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms/resources/events.csv"
             }
         },
         {
@@ -156,7 +163,7 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 0
                 }
             },
             "planner": {
@@ -164,14 +171,21 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba",
-                    "utility": "fixed",
+                    "@type": "broadcaster",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms/resources/events.csv"
             }
         },
         {
@@ -236,7 +250,7 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 0
                 }
             },
             "planner": {
@@ -244,14 +258,21 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba",
-                    "utility": "fixed",
+                    "@type": "broadcaster",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms/resources/events.csv"
             }
         },
         {
@@ -316,7 +337,7 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 0
                 }
             },
             "planner": {
@@ -324,14 +345,21 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba",
-                    "utility": "fixed",
+                    "@type": "broadcaster",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms/resources/events.csv"
             }
         },
         {
@@ -396,7 +424,7 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 0
                 }
             },
             "planner": {
@@ -404,14 +432,21 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba",
-                    "utility": "fixed",
+                    "@type": "broadcaster",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms/resources/events.csv"
             }
         },
         {
@@ -476,7 +511,7 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 0
                 }
             },
             "planner": {
@@ -484,21 +519,28 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba",
-                    "utility": "fixed",
+                    "@type": "broadcaster",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
-                "@type": "ORACLE",
-                "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms/resources/events.csv"
             }
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/algal_bloom/resources/points.csv"
+            "covGridFilePath": "./scenarios/algal_blooms/resources/points.csv"
         }
     ],
     "scenario": {
@@ -506,16 +548,16 @@
         "utility": "LINEAR",
         "events": {
             "@type": "PREDEF",
-            "eventsPath": "./scenarios/algal_bloom/resources/events.csv"
+            "eventsPath": "./scenarios/algal_blooms/resources/events.csv"
         },
         "clock": {
             "@type": "EVENT"
         },
-        "scenarioPath": "./scenarios/algal_bloom/",
-        "name": "naive_acbba_1"
+        "scenarioPath": "./scenarios/algal_blooms/",
+        "name": "naive_broadcaster"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir": "./scenarios/algal_bloom/orbit_data"
+        "outDir": "./scenarios/algal_blooms/orbit_data"
     }
 }

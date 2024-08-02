@@ -1,0 +1,14 @@
+routine,t_avg,t_std,t_med,n
+check_action_statuses,0.001,0.006,0.0,3022
+update_state,0.0,0.0,0.0,3022
+sense_environment,0.106,0.062,0.098,3021
+update_state_environment,0.001,0.008,0.0,3021
+get_environment_broadcasts,0.01,0.018,0.0,3021
+get_agent_broadcasts,0.04,0.059,0.0,3021
+sense,0.159,0.082,0.149,3021
+think,0.289,1.354,0.221,3021
+perform_broadcast,0.004,0.015,0.0,1065
+do,0.095,0.093,0.07,3021
+perform_wait_for_messages,0.094,0.103,0.059,1956
+perform_state_change,0.078,0.073,0.055,754
+perform_observation,0.094,0.069,0.077,1064

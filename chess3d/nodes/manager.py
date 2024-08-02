@@ -59,7 +59,7 @@ class SimulationManager(AbstractManager):
         try:
             t_0_sim = time.perf_counter()
 
-            desc = f'{self.name}: Simulating for {delay}[s]'
+            desc = f'{self.name}: Simulating'
             if isinstance(self._clock_config, AcceleratedRealTimeClockConfig):
                 for _ in tqdm (range (10), desc=desc):
                     await asyncio.sleep(delay/10)

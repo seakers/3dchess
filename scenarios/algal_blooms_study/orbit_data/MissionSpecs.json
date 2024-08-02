@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 0.25,
+    "duration": 1.0,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -81,12 +81,20 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naivenadir"
                 },
                 "replanner": {
                     "@type": "broadcaster",
                     "utility": "fixed",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
@@ -161,12 +169,20 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naivenadir"
                 },
                 "replanner": {
                     "@type": "broadcaster",
                     "utility": "fixed",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
@@ -241,12 +257,20 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naivenadir"
                 },
                 "replanner": {
                     "@type": "broadcaster",
                     "utility": "fixed",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
@@ -321,12 +345,20 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naivenadir"
                 },
                 "replanner": {
                     "@type": "broadcaster",
                     "utility": "fixed",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
@@ -401,12 +433,20 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naivenadir"
                 },
                 "replanner": {
                     "@type": "broadcaster",
                     "utility": "fixed",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
@@ -481,12 +521,900 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naivenadir"
                 },
                 "replanner": {
                     "@type": "broadcaster",
                     "utility": "fixed",
                     "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "vis_sat_0_2",
+            "name": "vis_sat_0_2",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "visual",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "vis1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 0.0,
+                    "aop": 0.0,
+                    "ta": 0.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "therm_sat_0_2",
+            "name": "therm_sat_0_2",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "thermal",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "therm1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 0.0,
+                    "aop": 0.0,
+                    "ta": 0.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "vis_sat_1_0",
+            "name": "vis_sat_1_0",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "visual",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "vis1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 180.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "therm_sat_1_0",
+            "name": "therm_sat_1_0",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "thermal",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "therm1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 180.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "sar_sat_1_0",
+            "name": "sar_sat_1_0",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "sar",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "sar1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 180.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "vis_sat_1_1",
+            "name": "vis_sat_1_1",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "visual",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "vis1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 180.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "therm_sat_1_1",
+            "name": "therm_sat_1_1",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "thermal",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "therm1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 180.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "sar_sat_1_1",
+            "name": "sar_sat_1_1",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "sar",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "sar1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 180.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "vis_sat_1_2",
+            "name": "vis_sat_1_2",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "visual",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "vis1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 180.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
+                }
+            },
+            "science": {
+                "@type": "lookup",
+                "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
+            }
+        },
+        {
+            "@id": "therm_sat_1_2",
+            "name": "therm_sat_1_2",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "components": {
+                    "adcs": {
+                        "maxTorque": 0.0,
+                        "maxRate": 1.0
+                    }
+                }
+            },
+            "instrument": {
+                "name": "thermal",
+                "mass": 10,
+                "volume": 12.45,
+                "dataRate": 40,
+                "bitsPerPixel": 8,
+                "power": 12,
+                "snr": 33,
+                "spatial_res": 50,
+                "spectral_res": 7e-09,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 5.0,
+                    "angleWidth": 5.0
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -30.0,
+                    "A_rollMax": 30.0
+                },
+                "@id": "therm1",
+                "@type": "Basic Sensor"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 7078,
+                    "ecc": 0.01,
+                    "inc": 67,
+                    "raan": 180.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            },
+            "planner": {
+                "preplanner": {
+                    "@type": "naivenadir"
+                },
+                "replanner": {
+                    "@type": "broadcaster",
+                    "utility": "fixed",
+                    "bundle size": 1
+                },
+                "rewardGrid": {
+                    "reward_function": "event",
+                    "initial_reward": 1.0,
+                    "min_reward": 1.0,
+                    "unobserved_reward_rate": 2.0,
+                    "max_unobserved_reward": 10.0,
+                    "event_reward": 10.0
                 }
             },
             "science": {
@@ -520,7 +1448,7 @@
             "@type": "EVENT"
         },
         "scenarioPath": "./scenarios/algal_blooms_study/",
-        "name": "algal_blooms_study_1_6_5_60_1_naive_broadcaster"
+        "name": "algal_blooms_study_2_8_5_60_1_naivenadir_broadcaster"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",

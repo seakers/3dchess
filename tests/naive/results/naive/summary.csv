@@ -1,13 +1,14 @@
 stat_name,val
-t_start,2020-01-01 00:00:00+00:00
-t_end,2020-01-01 02:24:00+00:00
-n_gps_obs,510
-n_obs,796
-n_events,99
-n_events_detected,3
-n_unique_event_obs,3
-n_total_event_obs,3
-n_co_obs,0
-n_event_partially_co_obs,0
-n_events_fully_co_obs,0
-t_runtime,47.475
+Simulation Start Date,2020-01-01 00:00:00+00:00
+Simulation End Date,2020-01-01 02:24:00+00:00
+GPs Observed,510
+Observations,796
+Events,99
+Events Detected,3
+Unique Event Observations,3
+Total Event Observations,3
+Events Co-observed,0
+Events Partially Co-observed,0
+Events Fully Co-observed,0
+Total Event Co-observations,0
+Total Runtime [s],22.609

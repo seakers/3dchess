@@ -10,7 +10,7 @@ from chess3d.utils import print_welcome
 
 if __name__ == "__main__":
     # set scenario name
-    scenario_name = 'algal_bloom'
+    scenario_name = 'algal_blooms'
     
     # load base scenario json file
     scenario_file = os.path.join('./scenarios', scenario_name, 'MissionSpecs.json')
@@ -18,11 +18,14 @@ if __name__ == "__main__":
         template_specs : dict = json.load(scenario_file)
 
     # set parameters
-    duration = 1
+    duration = 24 / 24
     n_planes = 1
     n_sats_per_plane = 6
+    # spacing = 360 / n_sats_per_plane
+    spacing = 5
+
     raans = [360 * j / n_planes for j in range(n_planes)]
-    tas = [360 * i / n_sats_per_plane for i in range(n_sats_per_plane)]
+    tas = [spacing * i for i in range(n_sats_per_plane)]
     
     max_slew_rate = 1
     max_torque = 1
@@ -38,18 +41,21 @@ if __name__ == "__main__":
     field_of_view = 5
     field_of_regard = 45
 
-    preplanners = ['nadir']
+    preplanners = [
+                    # 'nadir',
+                    'naive'
+                ]
     replanners = [
                 #   'broadcaster', 
                   'acbba'
                   ]
     bundle_sizes = [
-                    # 1
+                    1,
                     # 2, 
                     3
                     # 5
                     ]
-    utility = 'fixed'
+    reward_function = "event"
 
     n_runs = len(preplanners) * ((len(replanners) - 1) * len(bundle_sizes) + 1)
 
@@ -100,9 +106,11 @@ if __name__ == "__main__":
 
                         # set replanner
                         sat['planner']['replanner']['@type'] = replanner
-                        sat['planner']['replanner']['utility'] = utility
                         sat['planner']['replanner']['bundle size'] = bundle_size
                         
+                        # set reward grid reward
+                        sat['planner']['rewardGrid']['reward_function'] = reward_function
+
                         # add to list of sats
                         sats.append(sat)
 

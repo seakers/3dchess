@@ -111,6 +111,10 @@ class MeasurementRequest(object):
                              and all([observation in other.observation_types for observation in self.observation_types]))
         same_time = abs(self.t_end - other.t_end) <= 1e-3
         same_decorrelation = abs(self.t_corr - other.t_corr) <= 1e-3
+
+        if not (same_target and same_severity and same_time):
+            x = 1
+
         return (
                 same_target
                 and same_severity

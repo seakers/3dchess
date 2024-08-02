@@ -471,8 +471,9 @@ class SimulationEnvironment(EnvironmentNode):
             # count observations performed
             # n_events, n_unique_event_obs, n_total_event_obs,
             n_events, n_unique_event_obs, n_total_event_obs, \
-                 n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected \
-                    = self.count_observations(observations_performed)
+                 n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected, \
+                    n_total_event_co_obs \
+                        = self.count_observations(observations_performed)
 
             # calculate coverage
             n_gps, n_gps_accessible, n_gps_access_ptg = self.calc_coverage_metrics()
@@ -485,21 +486,22 @@ class SimulationEnvironment(EnvironmentNode):
             # Generate summary
             summary_headers = ['stat_name', 'val']
             summary_data = [
-                        ['t_start', self._clock_config.start_date], 
-                        ['t_end', self._clock_config.end_date], 
+                        ['Simulation Start Date', self._clock_config.start_date], 
+                        ['Simulation End Date', self._clock_config.end_date], 
                         # ['n_gps', n_gps],
                         # ['n_gps_accessible', n_gps_accessible],
                         # ['n_gps_access_ptg', n_gps_access_ptg],
-                        ['n_gps_obs', n_gps_observed],
-                        ['n_obs', n_obs],
-                        ['n_events', n_events],
-                        ['n_events_detected', n_events_detected],
-                        ['n_unique_event_obs', n_unique_event_obs],
-                        ['n_total_event_obs', n_total_event_obs],
-                        ['n_co_obs', n_events_fully_co_obs + n_events_partially_co_obs],
-                        ['n_event_partially_co_obs', n_events_partially_co_obs],
-                        ['n_events_fully_co_obs', n_events_fully_co_obs],
-                        ['t_runtime', round(self.t_f - self.t_0,3)]
+                        ['GPs Observed', n_gps_observed],
+                        ['Observations', n_obs],
+                        ['Events', n_events],
+                        ['Events Detected', n_events_detected],
+                        ['Unique Event Observations', n_unique_event_obs],
+                        ['Total Event Observations', n_total_event_obs],
+                        ['Events Co-observed', n_events_fully_co_obs + n_events_partially_co_obs],
+                        ['Events Partially Co-observed', n_events_partially_co_obs],
+                        ['Events Fully Co-observed', n_events_fully_co_obs],
+                        ['Total Event Co-observations', n_total_event_co_obs],
+                        ['Total Runtime [s]', round(self.t_f - self.t_0, 3)]
                     ]
 
             summary_df = DataFrame(summary_data, columns=summary_headers)
@@ -607,6 +609,7 @@ class SimulationEnvironment(EnvironmentNode):
             # count number of co-observed events 
             n_events_partially_co_obs = 0
             n_events_fully_co_obs = 0
+            n_total_event_co_obs = 0
             for matching_observations in events_observed:
                 # ge required measurements for a given event
                 *_,observations_req = matching_observations[-1]
@@ -622,6 +625,8 @@ class SimulationEnvironment(EnvironmentNode):
                     elif len(observations) > 1:
                         n_events_partially_co_obs += 1
 
+                n_total_event_co_obs += max(len(matching_observations) - 1, 0)
+
             # count number of events detected
             n_events_detected = len(events_detected)
 
@@ -633,7 +638,7 @@ class SimulationEnvironment(EnvironmentNode):
             n_events_fully_co_obs = 0
             n_events_detected = 0   
 
-        return n_events, n_unique_event_obs, n_total_event_obs, n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected
+        return n_events, n_unique_event_obs, n_total_event_obs, n_events_partially_co_obs, n_events_fully_co_obs, n_events_detected, n_total_event_co_obs
 
     def calc_coverage_metrics(self) -> tuple:
         # TODO improve performance or load precomputed vals
