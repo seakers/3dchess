@@ -441,6 +441,18 @@ class AbstractPlanner(ABC):
             cross_track_fovs[instrument.name] = max(cross_track_fov)
 
         return cross_track_fovs
+
+    def collect_agility_specs(self, specs : Spacecraft) -> tuple:
+        adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
+        if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
+
+        max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
+        if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
+
+        max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
+        if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
+
+        return max_slew_rate, max_torque
         
     @runtime_tracker
     def is_observation_path_valid(self, 
@@ -644,7 +656,7 @@ class AbstractPreplanner(AbstractPlanner):
                     ) -> Plan:
         
         # schedule observations
-        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata)
+        observations : list = self._schedule_observations(state, specs, reward_grid, clock_config, orbitdata)
         assert self.is_observation_path_valid(state, specs, observations)
 
         # schedule broadcasts to be perfomed
@@ -664,7 +676,7 @@ class AbstractPreplanner(AbstractPlanner):
         return self.plan.copy()
         
     @abstractmethod
-    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData = None) -> list:
+    def _schedule_observations(self, state : SimulationAgentState, specs : object, reward_grid : RewardGrid, clock_config : ClockConfig, orbitdata : OrbitData = None) -> list:
         """ Creates a list of observation actions to be performed by the agent """    
 
     @abstractmethod
