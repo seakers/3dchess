@@ -710,7 +710,7 @@ class AbstractPreplanner(AbstractPlanner):
         return [WaitForMessages(t_wait_start, t_next)]
     
     @runtime_tracker
-    def calculate_access_times(self, 
+    def calculate_access_opportunities(self, 
                                state : SimulationAgentState, 
                                specs : Spacecraft,
                                orbitdata : OrbitData
@@ -726,9 +726,10 @@ class AbstractPreplanner(AbstractPlanner):
         raw_coverage_data = [(t_index*orbitdata.time_step, *_)
                              for t_index, *_ in orbitdata.gp_access_data.values
                              if t_index_start <= t_index <= t_index_end]
-                
+        raw_coverage_data.sort(key=lambda a : a[0])
+
         # initiate accestimes 
-        access_times = {}
+        access_opportunities = {}
         ground_points = {}
         
         for data in raw_coverage_data:
@@ -741,17 +742,17 @@ class AbstractPreplanner(AbstractPlanner):
             look_angle = data[orbitdata_columns.index('look angle [deg]')]
             
             # initialize dictionaries if needed
-            if grid_index not in access_times:
-                access_times[grid_index] = {}
+            if grid_index not in access_opportunities:
+                access_opportunities[grid_index] = {}
                 ground_points[grid_index] = {}
-            if gp_index not in access_times[grid_index]:
-                access_times[grid_index][gp_index] = {instr.name : [] 
+            if gp_index not in access_opportunities[grid_index]:
+                access_opportunities[grid_index][gp_index] = {instr.name : [] 
                                                         for instr in specs.instrument}
                 ground_points[grid_index][gp_index] = (lat, lon)
 
             # compile time interval information 
             found = False
-            for interval, t, th in access_times[grid_index][gp_index][instrument]:
+            for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
                 interval : TimeInterval
                 t : list
                 th : list
@@ -765,18 +766,18 @@ class AbstractPreplanner(AbstractPlanner):
                     break                        
 
             if not found:
-                access_times[grid_index][gp_index][instrument].append([TimeInterval(t_img, t_img), [t_img], [look_angle]])
+                access_opportunities[grid_index][gp_index][instrument].append([TimeInterval(t_img, t_img), [t_img], [look_angle]])
 
         # convert to `list`
-        access_times = [    (grid_index, gp_index, instrument, interval, t, th)
-                            for grid_index in access_times
-                            for gp_index in access_times[grid_index]
-                            for instrument in access_times[grid_index][gp_index]
-                            for interval, t, th in access_times[grid_index][gp_index][instrument]
-                        ]
+        access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)
+                                    for grid_index in access_opportunities
+                                    for gp_index in access_opportunities[grid_index]
+                                    for instrument in access_opportunities[grid_index][gp_index]
+                                    for interval, t, th in access_opportunities[grid_index][gp_index][instrument]
+                                ]
                 
         # return access times and grid information
-        return access_times, ground_points
+        return access_opportunities, ground_points
 
 class AbstractReplanner(AbstractPlanner):
     """ Repairs plans previously constructed by another planner """

@@ -161,14 +161,14 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             raise ValueError(f'`specs` needs to be of type `{Spacecraft}` for agents with states of type `{SatelliteAgentState}`')
 
         # compile access times for this planning horizon
-        access_opportunities, ground_points = self.calculate_access_times(state, specs, orbitdata)
+        access_opportunities, ground_points = self.calculate_access_opportunities(state, specs, orbitdata)
         access_opportunities : list; ground_points : dict
 
         # sort by observation time
         access_opportunities.sort(key=lambda a: a[3])
 
         # TEMP: 
-        access_opportunities = access_opportunities[:15]
+        # access_opportunities = access_opportunities[:15]
 
         # compile list of instruments available in payload
         payload : dict = {instrument.name: instrument for instrument in specs.instrument}
@@ -184,7 +184,8 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         th_imgs = [np.NAN for _ in access_opportunities]
         rewards = [0.0 for _ in access_opportunities]
         commulative_rewards = [0.0 for _ in access_opportunities]
-        adjancency = [[0 for _ in access_opportunities] for _ in access_opportunities]
+        preceeding_observations = [np.NAN for _ in access_opportunities]
+        adjancency = [[False for _ in access_opportunities] for _ in access_opportunities]
 
         # create adjancency matrix
         for j in range(len(access_opportunities)):
@@ -192,36 +193,85 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             curr_opportunity : tuple = access_opportunities[j]
 
             # get any possibly prior observation
-            prev_opportunities : list[tuple] = [prev_observation for prev_observation in access_opportunities
-                                                if prev_observation[3].end <= curr_opportunity[3].end
-                                                and prev_observation != curr_opportunity]
+            prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
+                                                if prev_opportunity[3].end <= curr_opportunity[3].end
+                                                and prev_opportunity != curr_opportunity]
 
-            # find time of observation and adjancency 
+            # construct adjacency matrix
             for prev_opportunity in prev_opportunities:
                 prev_opportunity : tuple
                 i = access_opportunities.index(prev_opportunity)
 
-                if np.isnan(t_imgs[i]):
-                    # no time has been set for the previous observation opportunities
+                # Step 1: check if manevuer can be performed between observation opportunities
+                valid_indeces = [k for k in range(len(curr_opportunity[4]))
+                                if (      curr_opportunity[4][k] - prev_opportunity[4][0]
+                                    >= abs(curr_opportunity[5][k] - prev_opportunity[5][0])*max_slew_rate - 1e-6)
+                                or abs( (curr_opportunity[4][k] - prev_opportunity[4][0]) 
+                                      - abs(curr_opportunity[5][k] - prev_opportunity[5][0])*max_slew_rate) 
+                                    < 1e-6]
 
-                    # ignore and set earliest time and reward
-                    lat,lon = ground_points[curr_opportunity[0]][curr_opportunity[1]]
-                    observation = ObservationAction(curr_opportunity[2], 
-                                                     [lat,lon,0.0], 
-                                                     curr_opportunity[5][0],
-                                                     curr_opportunity[4][0])
+                adjancency[i][j] = len(valid_indeces) > 0
 
-                    t_imgs[j] = observation.t_start
-                    th_imgs[j] = observation.look_angle
-                    rewards[j] = reward_grid.estimate_reward(observation)
-                else:
-                    # time has been already set for the previous observation
-                    x = 1
-                    pass
+        # update results
+        for j in range(len(access_opportunities)):
+            # get any possibly prior observation
+            prev_opportunities : list[tuple] = [prev_observation for prev_observation in access_opportunities
+                                                if adjancency[access_opportunities.index(prev_observation)][j]]
 
+            if not prev_opportunities:
+                t_imgs[j] = curr_opportunity[4][0]
+                th_imgs[j] = curr_opportunity[5][0]
 
+            for prev_opportunity in prev_opportunities:
+                prev_opportunity : tuple
+                i = access_opportunities.index(prev_opportunity)
+                x  = 1
 
-            x = 1
+                # rewards[j] = reward_grid.estimate_reward(observation)
+                
+                # if commulative_rewards[i] + rewards[j] > commulative_rewards[j]:
+                #     commulative_rewards[j] += commulative_rewards[i]
+                #     preceeding_observations[j] = i
+
+            # # find time of observation and adjancency to previous observation opportunities            
+            # for prev_opportunity in prev_opportunities:
+            #     prev_opportunity : tuple
+            #     i = access_opportunities.index(prev_opportunity)
+
+            #     # check for previous arrival time
+            #     if np.isnan(t_imgs[i]): # no time has been set for the previous observation opportunities
+
+            #         # ignore previous observation and set earliest time and look angle
+                    # t_imgs[j] = curr_opportunity[4][0]
+                    # th_imgs[j] = curr_opportunity[5][0]
+                    
+            #     else: # an observation time has been already set for the previous observation
+                    
+                    # # Step 1: check if manevuer can be performed between observation opportunities
+                    
+                    # # calculate maneuver time
+                    # dt_maneuver = abs(curr_opportunity[5][0] - prev_opportunity[5][-1]) / max_slew_rate
+                    # dt_intervals = curr_opportunity[4][0] - prev_opportunity[4][-1]
+
+                    # if dt_maneuver < dt_intervals: # interval can be performed between observation opportunities
+            #             # set earliest observation time and look angle 
+            #             t_imgs[j] = curr_opportunity[4][0]
+            #             th_imgs[j] = curr_opportunity[5][0]
+
+            #         else:
+            #             pass
+                    
+            #         x = 1
+
+            # update results
+            # for prev_opportunity in prev_opportunities:
+            #     rewards[j] = reward_grid.estimate_reward(observation)
+                
+            #     if commulative_rewards[i] + rewards[j] > commulative_rewards[j]:
+            #         commulative_rewards[j] += commulative_rewards[i]
+            #         preceeding_observations[j] = i
+
+        x = 1
 
         # observations = [ObservationOpportunity(grid_index, gp_index, instrument, t_interval, th_interval)
         #                 for grid_index, gp_index, instrument, _, t_interval, th_interval in access_opportunities]
