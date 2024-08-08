@@ -334,7 +334,7 @@ class PlanningModule(InternalModule):
                     # check if there is a need to construct a new plan
                     if self.preplanner.needs_planning(state, 
                                                       self.parent_agent_specs, 
-                                                      plan):     
+                                                      plan):  
                         # initialize plan      
                         plan : Plan = self.preplanner.generate_plan(state, 
                                                                     self.parent_agent_specs,
@@ -348,7 +348,7 @@ class PlanningModule(InternalModule):
                         self.plan_history.append((state.t, plan_copy))
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 

@@ -160,6 +160,9 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         elif not isinstance(specs, Spacecraft):
             raise ValueError(f'`specs` needs to be of type `{Spacecraft}` for agents with states of type `{SatelliteAgentState}`')
 
+        t_0 = time.perf_counter()
+        t_prev = t_0
+
         # compile access times for this planning horizon
         access_opportunities, ground_points = self.calculate_access_opportunities(state, specs, orbitdata)
         access_opportunities : list; ground_points : dict
@@ -167,19 +170,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # sort by observation time
         access_opportunities.sort(key=lambda a: a[3])
 
-        # TEMP: 
-        # access_opportunities = access_opportunities[:15]
-
-        # compile list of instruments available in payload
-        payload : dict = {instrument.name: instrument for instrument in specs.instrument}
-        
-        # compile instrument field of view specifications   
-        cross_track_fovs : dict = self.collect_fov_specs(specs)
-        
-        # get pointing agility specifications
-        max_slew_rate, max_torque = self.collect_agility_specs(specs)
-
-        # create results arrays
+        # initiate results arrays
         t_imgs = [np.NAN for _ in access_opportunities]
         th_imgs = [np.NAN for _ in access_opportunities]
         rewards = [0.0 for _ in access_opportunities]
@@ -187,10 +178,15 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         preceeding_observations = [np.NAN for _ in access_opportunities]
         adjancency = [[False for _ in access_opportunities] for _ in access_opportunities]
 
+        t_1 = time.perf_counter() - t_prev
+        t_prev = time.perf_counter()
+
         # create adjancency matrix
         for j in range(len(access_opportunities)):
             # get current observation
             curr_opportunity : tuple = access_opportunities[j]
+            lat_curr,lon_curr = ground_points[curr_opportunity[0]][curr_opportunity[1]]
+            curr_target = [lat_curr,lon_curr,0.0]
 
             # get any possibly prior observation
             prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
@@ -201,85 +197,122 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             # construct adjacency matrix
             for prev_opportunity in prev_opportunities:
                 prev_opportunity : tuple
-                i = access_opportunities.index(prev_opportunity)
 
-                # Step 1: check if manevuer can be performed between observation opportunities
-                valid_indeces = [k for k in range(len(curr_opportunity[4]))
-                                if (      curr_opportunity[4][k] - prev_opportunity[4][0]
-                                    >= abs(curr_opportunity[5][k] - prev_opportunity[5][0])*max_slew_rate - 1e-6)
-                                or abs( (curr_opportunity[4][k] - prev_opportunity[4][0]) 
-                                      - abs(curr_opportunity[5][k] - prev_opportunity[5][0])*max_slew_rate) 
-                                    < 1e-6]
+                # get previous observation opportunity's target 
+                lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
+                prev_target = [lat_prev,lon_prev,0.0]
 
-                adjancency[i][j] = len(valid_indeces) > 0
+                # assume earliest observation time from previous observation
+                earliest_prev_observation = ObservationAction(prev_opportunity[2], 
+                                                              prev_target, 
+                                                              prev_opportunity[5][0], 
+                                                              prev_opportunity[4][0])
+                
+                # check if observation can be reached from previous observation
+                adjacent = any([self.is_observation_path_valid(state, 
+                                                               specs, 
+                                                               [earliest_prev_observation,
+                                                                ObservationAction(curr_opportunity[2], 
+                                                                                  curr_target, 
+                                                                                  curr_opportunity[5][k], 
+                                                                                  curr_opportunity[4][k])])
+                                for k in range(len(curr_opportunity[4]))
+                                ])                               
+
+                # update adjacency matrix
+                adjancency[access_opportunities.index(prev_opportunity)][j] = adjacent
+
+        t_2 = time.perf_counter() - t_prev
+        t_prev = time.perf_counter()
 
         # update results
         for j in range(len(access_opportunities)): 
-            # get current observation
+            # get current observation opportunity
             curr_opportunity : tuple = access_opportunities[j]
             lat,lon = ground_points[curr_opportunity[0]][curr_opportunity[1]]
-            target = [lat,lon,0.0]
+            curr_target = [lat,lon,0.0]
 
             # get any possibly prior observation
             prev_opportunities : list[tuple] = [prev_observation for prev_observation in access_opportunities
                                                 if adjancency[access_opportunities.index(prev_observation)][j]]
 
-            if not prev_opportunities:
-                t_prev = state.t
-                th_prev = state.attitude[0]
+            # calculate all possible observation actionss for this observation opportunity
+            possible_observations = [ObservationAction(curr_opportunity[2], 
+                                                            curr_target, 
+                                                            curr_opportunity[5][k], 
+                                                            curr_opportunity[4][k])
+                                         for k in range(len(curr_opportunity[4]))]
 
-                valid_indeces = [k for k in range(len(curr_opportunity[4]))
-                                if (      curr_opportunity[4][k] - t_prev
-                                    >= abs(curr_opportunity[5][k] - th_prev)*max_slew_rate - 1e-6)
-                                or abs( (curr_opportunity[4][k] - prev_opportunity[4][0]) 
-                                      - abs(curr_opportunity[5][k] - th_prev)*max_slew_rate) 
-                                    < 1e-6]
+            # update observation time and look angle
+            if not prev_opportunities: # there are no previous possible observations
+                possible_observations = [possible_observation for possible_observation in possible_observations
+                                         if self.is_observation_path_valid(state, specs, [possible_observation])]
 
-                if valid_indeces:
-                    k = valid_indeces[0]
-                    t_imgs[j] = curr_opportunity[4][k]
-                    th_imgs[j] = curr_opportunity[5][k]
+                if possible_observations:
+                    t_imgs[j] = possible_observations[0].t_start
+                    th_imgs[j] = possible_observations[0].look_angle
+                    rewards[j] = reward_grid.estimate_reward(possible_observations[0])
 
-                    observation = ObservationAction(curr_opportunity[2], target, curr_opportunity[5][k], curr_opportunity[4][k])
-                    rewards[j] = reward_grid.estimate_reward(observation)
-
-                continue 
             
-            # 
-            for prev_opportunity in prev_opportunities:
+            for prev_opportunity in prev_opportunities: # there are previous possible observations
+                # get previous observation opportunity
                 prev_opportunity : tuple
                 i = access_opportunities.index(prev_opportunity)
 
-                t_prev = t_imgs[i]
-                th_prev = th_imgs[i]
+                # check if previous opportunity has been checked yet
+                if np.isnan(th_imgs[i]):
 
-                valid_indeces = [k for k in range(len(curr_opportunity[4]))
-                                if (      curr_opportunity[4][k] - t_prev
-                                    >= abs(curr_opportunity[5][k] - th_prev)*max_slew_rate - 1e-6)
-                                or abs( (curr_opportunity[4][k] - prev_opportunity[4][0]) 
-                                      - abs(curr_opportunity[5][k] - th_prev)*max_slew_rate) 
-                                    < 1e-6]
+                    # get possible observation actions from the current observation opportuinty
+                    possible_observations = [possible_observation for possible_observation in possible_observations
+                                         if self.is_observation_path_valid(state, specs, [possible_observation])]
 
-                if valid_indeces:
-                    k = valid_indeces[0]
-                    t_imgs[j] = curr_opportunity[4][k]
-                    th_imgs[j] = curr_opportunity[5][k]
+                else:
+                    # create previous observation action using known information 
+                    lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
+                    prev_target = [lat_prev,lon_prev,0.0]
 
-                    observation = ObservationAction(curr_opportunity[2], target, curr_opportunity[5][k], curr_opportunity[4][k])
-                    rewards[j] = reward_grid.estimate_reward(observation)
+                    prev_observation = ObservationAction(prev_opportunity[2], 
+                                                        prev_target, 
+                                                        th_imgs[i], 
+                                                        t_imgs[i])
+                    
+                    # get possible observation actions from the current observation opportuinty
+                    possible_observations = [possible_observation for possible_observation in possible_observations
+                                            if self.is_observation_path_valid(state, specs, [prev_observation, possible_observation])]
 
-                if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j]:
-                    cumulative_rewards[j] += cumulative_rewards[i]
-                    preceeding_observations[j] = i
+                if possible_observations: # an observation is possible
+                    # update imaging time, look angle, and reward
+                    t_imgs[j] = possible_observations[0].t_start
+                    th_imgs[j] = possible_observations[0].look_angle
+                    rewards[j] = reward_grid.estimate_reward(possible_observations[0])
 
+                    # update results
+                    if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j] and not np.isnan(t_imgs[i]):
+                        cumulative_rewards[j] += cumulative_rewards[i] + rewards[j]
+                        preceeding_observations[j] = i
+
+        t_3 = time.perf_counter() - t_prev
+        t_prev = time.perf_counter()
+
+        # extract sequence of observations from results
+        visited_observation_opportunities = set()
         while np.isnan(preceeding_observations[-1]):
             preceeding_observations.pop()
-        observation_sequence = [preceeding_observations.pop()]
+        observation_sequence = [len(preceeding_observations)-1]
         
         while not np.isnan(preceeding_observations[observation_sequence[-1]]):
-            observation_sequence.append(preceeding_observations[observation_sequence[-1]])
+            prev_observation_index = preceeding_observations[observation_sequence[-1]]
+            
+            if prev_observation_index in visited_observation_opportunities:
+                raise AssertionError('invalid sequence of observations generated by DP. Cycle detected.')
+            
+            visited_observation_opportunities.add(prev_observation_index)
+            observation_sequence.append(prev_observation_index)
 
-        observation_sequence.sort(reverse=True)
+        observation_sequence.sort()
+
+        t_4 = time.perf_counter() - t_prev
+        t_prev = time.perf_counter()
 
         observations = []
         for j in observation_sequence:
@@ -289,11 +322,11 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             observation = ObservationAction(instrument_name, target, th_imgs[j], t_imgs[j])
             observations.append(observation)
         
-        if self.is_observation_path_valid(state, specs, observations):
-            x=1
-        else:
+        if not self.is_observation_path_valid(state, specs, observations):
             x = 1
 
+        t_5 = time.perf_counter() - t_prev
+        t_f = time.perf_counter() - t_0
         return observations
 
     def is_adjacent(self,

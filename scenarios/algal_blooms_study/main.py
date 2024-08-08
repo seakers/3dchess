@@ -34,9 +34,9 @@ if __name__ == "__main__":
     
     # get agent parameters from previous study
     params = {c: scenarios_df[c].unique() for c in scenarios_df}
-    # fovs = list(params['fov (deg)'])
-    # fors = list(params['for (deg)'])
-    # agility = list(params['agility (deg/s)'])
+    fovs = list(params['fov (deg)'])
+    fors = list(params['for (deg)'])
+    agility = list(params['agility (deg/s)'])
     num_planes = list(params['num_planes']); num_planes.sort()
     num_sats_per_plane = list(params['num_sats_per_plane']); num_sats_per_plane.sort()
 

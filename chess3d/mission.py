@@ -579,8 +579,11 @@ class SimulationFactory:
                     preplanner = NadirPointingPlaner(horizon, period, logger)
 
                 elif preplanner_type.lower() == "dynamic":
-                    period = preplanner_dict.get('period', 100)
+                    period = preplanner_dict.get('period', 500)
                     horizon = preplanner_dict.get('horizon', 500)
+                    
+                    if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
+
                     sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
                     preplanner = DynamicProgrammingPlanner(sharing, horizon, period, logger)
                 
