@@ -183,7 +183,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         t_imgs = [np.NAN for _ in access_opportunities]
         th_imgs = [np.NAN for _ in access_opportunities]
         rewards = [0.0 for _ in access_opportunities]
-        commulative_rewards = [0.0 for _ in access_opportunities]
+        cumulative_rewards = [0.0 for _ in access_opportunities]
         preceeding_observations = [np.NAN for _ in access_opportunities]
         adjancency = [[False for _ in access_opportunities] for _ in access_opportunities]
 
@@ -195,7 +195,8 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             # get any possibly prior observation
             prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
                                                 if prev_opportunity[3].end <= curr_opportunity[3].end
-                                                and prev_opportunity != curr_opportunity]
+                                                and prev_opportunity != curr_opportunity
+                                                ]
 
             # construct adjacency matrix
             for prev_opportunity in prev_opportunities:
@@ -213,122 +214,87 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                 adjancency[i][j] = len(valid_indeces) > 0
 
         # update results
-        for j in range(len(access_opportunities)):
+        for j in range(len(access_opportunities)): 
+            # get current observation
+            curr_opportunity : tuple = access_opportunities[j]
+            lat,lon = ground_points[curr_opportunity[0]][curr_opportunity[1]]
+            target = [lat,lon,0.0]
+
             # get any possibly prior observation
             prev_opportunities : list[tuple] = [prev_observation for prev_observation in access_opportunities
                                                 if adjancency[access_opportunities.index(prev_observation)][j]]
 
             if not prev_opportunities:
-                t_imgs[j] = curr_opportunity[4][0]
-                th_imgs[j] = curr_opportunity[5][0]
+                t_prev = state.t
+                th_prev = state.attitude[0]
 
+                valid_indeces = [k for k in range(len(curr_opportunity[4]))
+                                if (      curr_opportunity[4][k] - t_prev
+                                    >= abs(curr_opportunity[5][k] - th_prev)*max_slew_rate - 1e-6)
+                                or abs( (curr_opportunity[4][k] - prev_opportunity[4][0]) 
+                                      - abs(curr_opportunity[5][k] - th_prev)*max_slew_rate) 
+                                    < 1e-6]
+
+                if valid_indeces:
+                    k = valid_indeces[0]
+                    t_imgs[j] = curr_opportunity[4][k]
+                    th_imgs[j] = curr_opportunity[5][k]
+
+                    observation = ObservationAction(curr_opportunity[2], target, curr_opportunity[5][k], curr_opportunity[4][k])
+                    rewards[j] = reward_grid.estimate_reward(observation)
+
+                continue 
+            
+            # 
             for prev_opportunity in prev_opportunities:
                 prev_opportunity : tuple
                 i = access_opportunities.index(prev_opportunity)
-                x  = 1
 
-                # rewards[j] = reward_grid.estimate_reward(observation)
-                
-                # if commulative_rewards[i] + rewards[j] > commulative_rewards[j]:
-                #     commulative_rewards[j] += commulative_rewards[i]
-                #     preceeding_observations[j] = i
+                t_prev = t_imgs[i]
+                th_prev = th_imgs[i]
 
-            # # find time of observation and adjancency to previous observation opportunities            
-            # for prev_opportunity in prev_opportunities:
-            #     prev_opportunity : tuple
-            #     i = access_opportunities.index(prev_opportunity)
+                valid_indeces = [k for k in range(len(curr_opportunity[4]))
+                                if (      curr_opportunity[4][k] - t_prev
+                                    >= abs(curr_opportunity[5][k] - th_prev)*max_slew_rate - 1e-6)
+                                or abs( (curr_opportunity[4][k] - prev_opportunity[4][0]) 
+                                      - abs(curr_opportunity[5][k] - th_prev)*max_slew_rate) 
+                                    < 1e-6]
 
-            #     # check for previous arrival time
-            #     if np.isnan(t_imgs[i]): # no time has been set for the previous observation opportunities
+                if valid_indeces:
+                    k = valid_indeces[0]
+                    t_imgs[j] = curr_opportunity[4][k]
+                    th_imgs[j] = curr_opportunity[5][k]
 
-            #         # ignore previous observation and set earliest time and look angle
-                    # t_imgs[j] = curr_opportunity[4][0]
-                    # th_imgs[j] = curr_opportunity[5][0]
-                    
-            #     else: # an observation time has been already set for the previous observation
-                    
-                    # # Step 1: check if manevuer can be performed between observation opportunities
-                    
-                    # # calculate maneuver time
-                    # dt_maneuver = abs(curr_opportunity[5][0] - prev_opportunity[5][-1]) / max_slew_rate
-                    # dt_intervals = curr_opportunity[4][0] - prev_opportunity[4][-1]
+                    observation = ObservationAction(curr_opportunity[2], target, curr_opportunity[5][k], curr_opportunity[4][k])
+                    rewards[j] = reward_grid.estimate_reward(observation)
 
-                    # if dt_maneuver < dt_intervals: # interval can be performed between observation opportunities
-            #             # set earliest observation time and look angle 
-            #             t_imgs[j] = curr_opportunity[4][0]
-            #             th_imgs[j] = curr_opportunity[5][0]
+                if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j]:
+                    cumulative_rewards[j] += cumulative_rewards[i]
+                    preceeding_observations[j] = i
 
-            #         else:
-            #             pass
-                    
-            #         x = 1
+        while np.isnan(preceeding_observations[-1]):
+            preceeding_observations.pop()
+        observation_sequence = [preceeding_observations.pop()]
+        
+        while not np.isnan(preceeding_observations[observation_sequence[-1]]):
+            observation_sequence.append(preceeding_observations[observation_sequence[-1]])
 
-            # update results
-            # for prev_opportunity in prev_opportunities:
-            #     rewards[j] = reward_grid.estimate_reward(observation)
-                
-            #     if commulative_rewards[i] + rewards[j] > commulative_rewards[j]:
-            #         commulative_rewards[j] += commulative_rewards[i]
-            #         preceeding_observations[j] = i
+        observation_sequence.sort(reverse=True)
 
-        x = 1
+        observations = []
+        for j in observation_sequence:
+            grid_index, gp_indx, instrument_name, *_ = access_opportunities[j]
+            lat,lon = ground_points[grid_index][gp_indx]
+            target = [lat,lon,0.0]
+            observation = ObservationAction(instrument_name, target, th_imgs[j], t_imgs[j])
+            observations.append(observation)
+        
+        if self.is_observation_path_valid(state, specs, observations):
+            x=1
+        else:
+            x = 1
 
-        # observations = [ObservationOpportunity(grid_index, gp_index, instrument, t_interval, th_interval)
-        #                 for grid_index, gp_index, instrument, _, t_interval, th_interval in access_opportunities]
-        # graph = ObservationOpportunity(t_img=state.t,th_img=state.attitude[0])
-
-        # assert all([len(obs.children) == 0 for obs in observations])
-
-        # queue = []
-        # queue.append(graph)
-
-        # while queue:
-        #     obs_i : ObservationOpportunity = queue.pop(0)
-            
-        #     # check if adjacent to nodes in the graph
-        #     adjacent_obs = [obs_j for obs_j in observations
-        #                     if obs_i.is_adjacent(obs_j, max_slew_rate, max_torque)]
-        #     adjacent_obs.sort(key=lambda a: a.ts[0])
-                        
-        #     # update adjacent observations
-        #     for obs_j in adjacent_obs:
-        #         obs_j : ObservationOpportunity
-
-        #         #calculate imaging times for adjacent observations
-        #         t_img_j = obs_i.t_img + obs_i.calc_manuever_time(obs_j, max_slew_rate)
-                
-        #         # update observation imaging time
-        #         t_img_j_prev = obs_j.t_img
-        #         obs_j.update_t(t_img_j)
-
-        #         # add observation to list of children in graph
-        #         obs_i.add_child(obs_j)
-
-        #         # add child to queue if time was updated and is not already in the queue
-        #         if (obs_j not in queue 
-        #             and (abs(t_img_j_prev - obs_j.t_img) > 1e-6
-        #                  or obs_i.is_root())
-        #             ): 
-        #             queue.append(obs_j)
-            
-        #     x = 1       
-
-        # queue = []
-        # queue.append(graph)
-
-        # while queue:      
-        #     obs_i : ObservationOpportunity = queue.pop(0)   
-
-        #     for obs_j in obs_i.children:
-        #         if obs_i.t_img > obs_j.t_img: 
-        #             x = 1
-
-
-        #     assert all([obs_i.t_img <= obs_j.t_img for obs_j in obs_i.children])
-
-        #     for obs_j in obs_i.children: queue.append(obs_j)
-
-        # x = 1
+        return observations
 
     def is_adjacent(self,
                     prev_observation : tuple,
