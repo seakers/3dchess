@@ -44,7 +44,7 @@ if __name__ == "__main__":
     fovs = [5]
     fors = [60]
     agility = [1.0]
-    n_sats_min = 12
+    n_sats_min = 6
     # num_planes = [i for i in range(1,6)]
     # num_sats_per_plane = [3*i for i in range(2,5)]
     ta_spacing = 'even'
@@ -61,8 +61,8 @@ if __name__ == "__main__":
                    'thermal' : 'therm', 
                    'sar' : 'sar'}
     preplanners = [
-                    'naive',
-                    'nadir'                    
+                    'naive'
+                    # 'nadir'                    
                     ]
     replanners = [
                   'broadcaster', 
@@ -197,7 +197,7 @@ if __name__ == "__main__":
 
                                                 # set orbit
                                                 sat['orbitState']['state']['raan'] = raans[j]
-                                                sat['orbitState']['state']['ta'] = tas[j]
+                                                sat['orbitState']['state']['ta'] = tas[i]
 
                                                 # set preplanner
                                                 sat['planner']['preplanner']['@type'] = preplanner

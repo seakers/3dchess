@@ -28,9 +28,10 @@ if __name__  == "__main__":
     }
 
     coobservations = {
-        "Co-observations" : [],
-        "Partial Co-observations" : [],
-        "Full Co-observations" : []
+        "Events Co-observed" : [],
+        "Events Partially Co-observed" : [],
+        "Events Fully Co-observed" : [],
+        "Total Event Co-observations" : []
     }
 
     # Scatter plots
@@ -41,9 +42,10 @@ if __name__  == "__main__":
                                     "Events Detected" : [],
                                     "Total Event Observations" : [],
                                     "Unique Event Observations" : [],
-                                    "Co-observations" : [],
-                                    "Partial Co-observations" : [],
-                                    "Full Co-observations" : []
+                                    "Events Co-observed" : [],
+                                    "Events Partially Co-observed" : [],
+                                    "Events Fully Co-observed" : [],
+                                    "Total Event Co-observations" : []
                                     } 
                         for planner in ['naive_fifo', 'acbba-1', 'acbba-3']
                     }
@@ -68,28 +70,30 @@ if __name__  == "__main__":
         # observations : pd.DataFrame = pd.read_csv(observations_path)
 
         # collect data for plots
-        n_events = [int(val) for key,val in summary.values if key == 'n_events'][0] if n_events is None else n_events
+        n_events = [int(val) for key,val in summary.values if key == 'Events'][0] if n_events is None else n_events
 
-        events['Events Detected'].append([int(val) for key,val in summary.values if key == 'n_events_detected'][0])
-        events['Total Event Observations'].append([int(val) for key,val in summary.values if key == 'n_total_event_obs'][0])
-        events['Unique Event Observations'].append([int(val) for key,val in summary.values if key == 'n_unique_event_obs'][0])
+        events['Events Detected'].append([int(val) for key,val in summary.values if key == 'Events Detected'][0])
+        events['Unique Event Observations'].append([int(val) for key,val in summary.values if key == 'Unique Event Observations'][0])
+        events['Total Event Observations'].append([int(val) for key,val in summary.values if key == 'Total Event Observations'][0])
 
-        coobservations['Co-observations'].append([int(val) for key,val in summary.values if key == 'n_co_obs'][0])
-        coobservations['Partial Co-observations'].append([int(val) for key,val in summary.values if key == 'n_event_partially_co_obs'][0])
-        coobservations['Full Co-observations'].append([int(val) for key,val in summary.values if key == 'n_events_fully_co_obs'][0])
+        coobservations['Events Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Co-observed'][0])
+        coobservations['Events Partially Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Partially Co-observed'][0])
+        coobservations['Events Fully Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Fully Co-observed'][0])
+        coobservations['Total Event Co-observations'].append([int(val) for key,val in summary.values if key == 'Total Event Co-observations'][0])
 
         planner = replanner if 'acbba' in replanner else 'naive_fifo'
         scatter_metrics[planner]['N sats'].append(n_planes*n_sats_per_plane)
         scatter_metrics[planner]['N planes'].append(n_planes)
         scatter_metrics[planner]['N sats per plane'].append(n_sats_per_plane)
 
-        scatter_metrics[planner]['Events Detected'].append([int(val) for key,val in summary.values if key == 'n_events_detected'][0])
-        scatter_metrics[planner]['Total Event Observations'].append([int(val) for key,val in summary.values if key == 'n_total_event_obs'][0])
-        scatter_metrics[planner]['Unique Event Observations'].append([int(val) for key,val in summary.values if key == 'n_unique_event_obs'][0])
+        scatter_metrics[planner]['Events Detected'].append([int(val) for key,val in summary.values if key == 'Events Detected'][0])
+        scatter_metrics[planner]['Unique Event Observations'].append([int(val) for key,val in summary.values if key == 'Unique Event Observations'][0])
+        scatter_metrics[planner]['Total Event Observations'].append([int(val) for key,val in summary.values if key == 'Total Event Observations'][0])
 
-        scatter_metrics[planner]['Co-observations'].append([int(val) for key,val in summary.values if key == 'n_co_obs'][0])
-        scatter_metrics[planner]['Partial Co-observations'].append([int(val) for key,val in summary.values if key == 'n_event_partially_co_obs'][0])
-        scatter_metrics[planner]['Full Co-observations'].append([int(val) for key,val in summary.values if key == 'n_events_fully_co_obs'][0])
+        scatter_metrics[planner]['Events Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Co-observed'][0])
+        scatter_metrics[planner]['Events Partially Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Partially Co-observed'][0])
+        scatter_metrics[planner]['Events Fully Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Fully Co-observed'][0])
+        scatter_metrics[planner]['Total Event Co-observations'].append([int(val) for key,val in summary.values if key == 'Total Event Co-observations'][0])
 
     # ---- BAR PLOTS ----
     # set x-axis
@@ -136,7 +140,15 @@ if __name__  == "__main__":
     # if save_plots: plt.savefig('./plots/observations.png')
 
     # ---- SCATTER PLOTS ----
-    titles = ['Events Detected', 'Total Event Observations', 'Unique Event Observations', 'Co-observations', 'Partial Co-observations', 'Full Co-observations']
+    titles = [
+               "Events Detected",
+               "Total Event Observations",
+               "Unique Event Observations",
+               "Events Co-observed",
+               "Events Partially Co-observed",
+               "Events Fully Co-observed",
+               "Total Event Co-observations"
+              ]
     counter = 1
     for title in titles:
         # create plot

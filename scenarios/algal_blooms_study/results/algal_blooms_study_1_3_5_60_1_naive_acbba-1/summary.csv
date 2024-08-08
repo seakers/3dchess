@@ -1,0 +1,14 @@
+stat_name,val
+Simulation Start Date,2020-01-01 00:00:00+00:00
+Simulation End Date,2020-01-02 00:00:00+00:00
+GPs Observed,2712
+Observations,5449
+Events,1000
+Events Detected,75
+Unique Event Observations,75
+Total Event Observations,124
+Events Co-observed,17
+Events Partially Co-observed,0
+Events Fully Co-observed,17
+Total Event Co-observations,49
+Total Runtime [s],2527.802

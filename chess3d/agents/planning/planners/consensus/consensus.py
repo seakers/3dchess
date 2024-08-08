@@ -772,16 +772,19 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 # remove all subsequent bids
                 for bundle_index in range(outbid_index, len(bundle)):
                     # remove from bundle
-                    measurement_req, subtask_index, current_bid = bundle.pop(outbid_index)
+                    measurement_req, main_measurement, current_bid = bundle.pop(outbid_index)
 
                     # reset bid results
                     measurement_req : MeasurementRequest; current_bid : Bid
                     if bundle_index > outbid_index:
-                        reset_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
-                        results[measurement_req.id][subtask_index] = reset_bid
+                        # reset bid
+                        current_bid : Bid; current_bid._reset(state.t)
 
-                        rebroadcasts.append(reset_bid)
-                        changes.append(reset_bid)
+                        # update results
+                        results[measurement_req.id][main_measurement] = current_bid
+
+                        rebroadcasts.append(current_bid)
+                        changes.append(current_bid)
 
         return results, bundle, changes, rebroadcasts
 

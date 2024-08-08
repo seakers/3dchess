@@ -81,12 +81,12 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -164,17 +164,17 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 180.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -252,17 +252,17 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 360.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -340,17 +340,17 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 540.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -428,17 +428,17 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 720.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -516,17 +516,17 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 900.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -604,17 +604,17 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 1080.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -692,17 +692,17 @@
                     "inc": 67,
                     "raan": 0.0,
                     "aop": 0.0,
-                    "ta": 0.0
+                    "ta": 1260.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -780,17 +780,17 @@
                     "inc": 67,
                     "raan": 180.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 0.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -873,12 +873,12 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -956,17 +956,17 @@
                     "inc": 67,
                     "raan": 180.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 360.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -1044,17 +1044,17 @@
                     "inc": 67,
                     "raan": 180.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 540.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -1132,17 +1132,17 @@
                     "inc": 67,
                     "raan": 180.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 720.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -1220,17 +1220,17 @@
                     "inc": 67,
                     "raan": 180.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 900.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -1308,17 +1308,17 @@
                     "inc": 67,
                     "raan": 180.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 1080.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -1396,17 +1396,17 @@
                     "inc": 67,
                     "raan": 180.0,
                     "aop": 0.0,
-                    "ta": 180.0
+                    "ta": 1260.0
                 }
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naivenadir"
+                    "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "utility": "fixed",
-                    "bundle size": 1
+                    "bundle size": 3
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -1433,22 +1433,14 @@
         "connectivity": "FULL",
         "utility": "LINEAR",
         "events": {
-            "@type": "random",
-            "numberOfEvents": 1000,
-            "duration": 10800,
-            "minSeverity": 0.0,
-            "maxSeverity": 100,
-            "measurements": [
-                "sar",
-                "visual",
-                "thermal"
-            ]
+            "@type": "PREDEF",
+            "eventsPath": "./scenarios/algal_blooms_study/resources/random_events.csv"
         },
         "clock": {
             "@type": "EVENT"
         },
         "scenarioPath": "./scenarios/algal_blooms_study/",
-        "name": "algal_blooms_study_2_8_5_60_1_naivenadir_broadcaster"
+        "name": "algal_blooms_study_2_8_5_60_1_naive_acbba-3"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
