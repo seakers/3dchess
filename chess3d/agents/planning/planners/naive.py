@@ -30,7 +30,7 @@ class NaivePlanner(AbstractPreplanner):
             raise ValueError(f'`specs` needs to be of type `{Spacecraft}` for agents with states of type `{SatelliteAgentState}`')
 
         # compile access times for this planning horizon
-        access_times, ground_points = self.calculate_access_times(state, specs, orbitdata)
+        access_times, ground_points = self.calculate_access_opportunities(state, specs, orbitdata)
         access_times : list; ground_points : dict
 
         # sort by observation time
