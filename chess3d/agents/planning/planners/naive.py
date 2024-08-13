@@ -21,7 +21,8 @@ class NaivePlanner(AbstractPreplanner):
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
                                specs : object,
-                               _: ClockConfig, 
+                               _, 
+                               __,
                                orbitdata: OrbitData = None
                                ) -> list:
         if not isinstance(state, SatelliteAgentState):

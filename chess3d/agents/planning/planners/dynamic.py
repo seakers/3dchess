@@ -2,6 +2,9 @@ from logging import Logger
 from queue import Queue
 from numpy import Inf
 from orbitpy.util import Spacecraft
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+import concurrent.futures
 
 from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
@@ -17,123 +20,6 @@ from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.messages import *
-
-class ObservationOpportunity:
-    def __init__(self, 
-                 grid_index : int, 
-                 gp_index : int, 
-                 instrument : str, 
-                 interval : TimeInterval, 
-                 ts : list, 
-                 ths : list,
-                 prev_observations : list,
-                #  grid_index : int = -1,
-                #  gp_index : int = -1,
-                #  instrument : str = None,
-                 t_img : float = None,
-                 th_img : float = None,
-                 reward : float = None,
-                 commulative_reward : float = None
-                #  children : set = None,
-                #  parent : object = None, 
-                 ) -> None:
-        
-        self.grid_index = grid_index
-        self.gp_index = gp_index
-        self.instrument = instrument
-
-        self.ts = ts
-        self.ths = ths
-
-        if t_img is not None:
-            self.t_img = t_img
-        elif ts is not None:
-            self.t_img = ts[0]
-        else:
-            self.t_img = None
-        assert (self.ts is None
-                or self.t_img is None 
-                or self.ts[0] <= self.t_img <= self.ts[-1])
-        
-        if th_img is not None:
-            self.th_img = th_img
-        elif ths is not None:
-            self.th_img = ths[0]
-        else:
-            self.th_img = None
-        assert (self.ths is None 
-                or self.th_img is None 
-                or min(self.ths) <= self.th_img <= max(self.ths))
-        
-        # self.parent = parent
-        # self.children = children if children is not None else set()
-    
-    def is_root(self) -> bool:
-        return (self.grid_index == -1 
-                and self.gp_index == -1 
-                and self.instrument is None
-                and self.ts is None
-                and self.ths is None)
-
-    def add_child(self, __other : object) -> None:
-        self.children.add(__other)
-
-    def calc_manuever_time(self, __other : object, max_slew_rate : float) -> float:
-        assert isinstance(__other, ObservationOpportunity)
-        return abs(__other.th_img - self.th_img) / max_slew_rate
-    
-    def is_adjacent(self, __other : object, max_slew_rate : float, max_torque : float) -> bool:
-        assert isinstance(__other, ObservationOpportunity)
-                
-        if __other.ts[-1] < self.t_img:
-            return False
-        if __other is self:
-            return False
-        
-        dt_maneuver = self.calc_manuever_time(__other, max_slew_rate)
-
-        slew_constraint = (self.t_img + dt_maneuver) <= __other.ts[-1]
-        torque_constraint = True
-
-        return  slew_constraint and torque_constraint
-    
-    def update_t(self, t_img : float) -> None:
-        assert not self.is_root()
-
-        # only update if its the latest anyone can reach me        
-        if (self.ts[0] <= t_img <= self.ts[-1]
-            and self.t_img < t_img):
-
-            self.t_img = t_img
-            self.th_img = np.interp(t_img, self.ts, self.ths)
-                        
-            # # update subsequent observations
-            # children_to_remove = set()
-            # for obs_j in self.children:
-            #     obs_j : ObservationOpportunity
-            #     t_img_j = self.t_img+self.calc_manuever_time(obs_j, max_slew_rate) 
-
-            #     # update observation imaging time
-            #     if t_img_j <= obs_j.t_interval[-1]:
-            #         obs_j.update_t(t_img_j)
-            #     else:
-            #         children_to_remove.add(obs_j)
-            
-            # for obs_j in children_to_remove: self.children.remove(obs_j)
-
-        assert t_img <= self.t_img
-
-        assert (self.ts is None
-                or self.t_img is None 
-                or self.ts[0] <= self.t_img <= self.ts[-1])
-        
-        assert (self.ths is None 
-                or self.th_img is None 
-                or min(self.ths) <= self.th_img <= max(self.ths))
-        
-
-    def __repr__(self) -> str:
-        return f'ObservationOpportunity_{self.grid_index}_{self.gp_index}_{self.ts[0]}-{self.ts[-1]}'
 
 class DynamicProgrammingPlanner(AbstractPreplanner):
     def __init__(self, 
@@ -181,8 +67,12 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         t_1 = time.perf_counter() - t_prev
         t_prev = time.perf_counter()
 
-        # create adjancency matrix
-        for j in range(len(access_opportunities)):
+        # create adjancency matrix            
+        # for j in range(len(access_opportunities)):
+        for j in tqdm(range(len(access_opportunities)), 
+                      desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix',
+                      leave=False):
+            
             # get current observation
             curr_opportunity : tuple = access_opportunities[j]
             lat_curr,lon_curr = ground_points[curr_opportunity[0]][curr_opportunity[1]]
@@ -204,18 +94,18 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
 
                 # assume earliest observation time from previous observation
                 earliest_prev_observation = ObservationAction(prev_opportunity[2], 
-                                                              prev_target, 
-                                                              prev_opportunity[5][0], 
-                                                              prev_opportunity[4][0])
+                                                            prev_target, 
+                                                            prev_opportunity[5][0], 
+                                                            prev_opportunity[4][0])
                 
                 # check if observation can be reached from previous observation
                 adjacent = any([self.is_observation_path_valid(state, 
-                                                               specs, 
-                                                               [earliest_prev_observation,
+                                                            specs, 
+                                                            [earliest_prev_observation,
                                                                 ObservationAction(curr_opportunity[2], 
-                                                                                  curr_target, 
-                                                                                  curr_opportunity[5][k], 
-                                                                                  curr_opportunity[4][k])])
+                                                                                curr_target, 
+                                                                                curr_opportunity[5][k], 
+                                                                                curr_opportunity[4][k])])
                                 for k in range(len(curr_opportunity[4]))
                                 ])                               
 
@@ -225,22 +115,29 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         t_2 = time.perf_counter() - t_prev
         t_prev = time.perf_counter()
 
-        # update results
-        for j in range(len(access_opportunities)): 
+        # calculate optimal path and update results
+        n_prev_opp = []
+        for j in tqdm(range(len(access_opportunities)), 
+                      desc=f'{state.agent_name}-PLANNER: Calculating Optimal Path',
+                      leave=False):
+            
             # get current observation opportunity
             curr_opportunity : tuple = access_opportunities[j]
             lat,lon = ground_points[curr_opportunity[0]][curr_opportunity[1]]
             curr_target = [lat,lon,0.0]
 
             # get any possibly prior observation
-            prev_opportunities : list[tuple] = [prev_observation for prev_observation in access_opportunities
-                                                if adjancency[access_opportunities.index(prev_observation)][j]]
+            prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
+                                                if adjancency[access_opportunities.index(prev_opportunity)][j]
+                                                and not np.isnan(th_imgs[access_opportunities.index(prev_opportunity)])
+                                                ]
+            n_prev_opp.append(len(prev_opportunities))
 
             # calculate all possible observation actionss for this observation opportunity
-            possible_observations = [ObservationAction(curr_opportunity[2], 
-                                                            curr_target, 
-                                                            curr_opportunity[5][k], 
-                                                            curr_opportunity[4][k])
+            possible_observations = [ObservationAction( curr_opportunity[2], 
+                                                        curr_target, 
+                                                        curr_opportunity[5][k], 
+                                                        curr_opportunity[4][k])
                                          for k in range(len(curr_opportunity[4]))]
 
             # update observation time and look angle
@@ -252,35 +149,27 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                     t_imgs[j] = possible_observations[0].t_start
                     th_imgs[j] = possible_observations[0].look_angle
                     rewards[j] = reward_grid.estimate_reward(possible_observations[0])
-
             
             for prev_opportunity in prev_opportunities: # there are previous possible observations
                 # get previous observation opportunity
                 prev_opportunity : tuple
                 i = access_opportunities.index(prev_opportunity)
 
-                # check if previous opportunity has been checked yet
-                if np.isnan(th_imgs[i]):
+                # create previous observation action using known information 
+                lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
+                prev_target = [lat_prev,lon_prev,0.0]
 
-                    # get possible observation actions from the current observation opportuinty
-                    possible_observations = [possible_observation for possible_observation in possible_observations
-                                         if self.is_observation_path_valid(state, specs, [possible_observation])]
+                prev_observation = ObservationAction(prev_opportunity[2], 
+                                                    prev_target, 
+                                                    th_imgs[i], 
+                                                    t_imgs[i])
+                
+                # get possible observation actions from the current observation opportuinty
+                possible_observations = [possible_observation for possible_observation in possible_observations
+                                        if self.is_observation_path_valid(state, specs, [prev_observation, possible_observation])]
 
-                else:
-                    # create previous observation action using known information 
-                    lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
-                    prev_target = [lat_prev,lon_prev,0.0]
-
-                    prev_observation = ObservationAction(prev_opportunity[2], 
-                                                        prev_target, 
-                                                        th_imgs[i], 
-                                                        t_imgs[i])
-                    
-                    # get possible observation actions from the current observation opportuinty
-                    possible_observations = [possible_observation for possible_observation in possible_observations
-                                            if self.is_observation_path_valid(state, specs, [prev_observation, possible_observation])]
-
-                if possible_observations: # an observation is possible
+                # check if an observation is possible
+                if possible_observations: 
                     # update imaging time, look angle, and reward
                     t_imgs[j] = possible_observations[0].t_start
                     th_imgs[j] = possible_observations[0].look_angle
@@ -290,17 +179,18 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                     if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j] and not np.isnan(t_imgs[i]):
                         cumulative_rewards[j] += cumulative_rewards[i] + rewards[j]
                         preceeding_observations[j] = i
-
+            
         t_3 = time.perf_counter() - t_prev
         t_prev = time.perf_counter()
 
         # extract sequence of observations from results
         visited_observation_opportunities = set()
-        while np.isnan(preceeding_observations[-1]):
+
+        while preceeding_observations and np.isnan(preceeding_observations[-1]):
             preceeding_observations.pop()
-        observation_sequence = [len(preceeding_observations)-1]
+        observation_sequence = [len(preceeding_observations)-1] if preceeding_observations else []
         
-        while not np.isnan(preceeding_observations[observation_sequence[-1]]):
+        while preceeding_observations and not np.isnan(preceeding_observations[observation_sequence[-1]]):
             prev_observation_index = preceeding_observations[observation_sequence[-1]]
             
             if prev_observation_index in visited_observation_opportunities:

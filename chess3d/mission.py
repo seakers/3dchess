@@ -580,7 +580,7 @@ class SimulationFactory:
 
                 elif preplanner_type.lower() == "dynamic":
                     period = preplanner_dict.get('period', 500)
-                    horizon = preplanner_dict.get('horizon', 500)
+                    horizon = preplanner_dict.get('horizon', period)
                     
                     if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
 

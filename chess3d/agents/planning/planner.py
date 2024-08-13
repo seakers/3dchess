@@ -328,13 +328,11 @@ class AbstractPlanner(ABC):
         if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
 
         # initialize maneuver list
-        maneuvers = []
+        maneuvers : list[ManeuverAction] = []
 
         for i in range(len(observations)):
             action_sequence_i = []
-
             curr_observation : ObservationAction = observations[i]
-            t_img = curr_observation.t_start
                         
             # estimate previous state
             if i == 0:
@@ -343,17 +341,20 @@ class AbstractPlanner(ABC):
                 
             else:
                 prev_observation : ObservationAction = observations[i-1]
-                t_prev = prev_observation.t_end if prev_observation is not None else state.t
-                prev_state : SatelliteAgentState = state.propagate(t_prev)          
 
                 prev_maneuvers = [maneuver for maneuver in maneuvers
                                   if isinstance(maneuver, ManeuverAction)]
                 
                 if prev_maneuvers:
                     prev_maneuvers.sort(key=lambda a: a.t_start)
-                    last_maneuver : ManeuverAction = prev_maneuvers[-1]
-                    prev_state.attitude = [th for th in last_maneuver.final_attitude]
-                # prev_state.attitude = [prev_observation.look_angle, 0.0, 0.0]      
+                    latest_maneuver = prev_maneuvers[-1]
+
+                    prev_state : SatelliteAgentState = state.propagate(latest_maneuver.t_end)          
+                    prev_state.attitude = [th for th in latest_maneuver.final_attitude]
+
+                else:
+                    t_prev = prev_observation.t_end if prev_observation is not None else state.t
+                    prev_state : SatelliteAgentState = state.propagate(t_prev)         
 
             # maneuver to point to target
             t_maneuver_end = None
@@ -370,58 +371,72 @@ class AbstractPlanner(ABC):
                     # maneuver needed
                     th_f = curr_observation.look_angle
 
-                    # TODO make efficient maneuvers
-                    # th_f_sign = abs(curr_observation.look_angle)/curr_observation.look_angle
-                    # th_f = abs(curr_observation.look_angle)- cross_track_fov / 2.0
-                    # th_f *= th_f_sign
-
                 dt = abs(th_f - prev_state.attitude[0]) / max_slew_rate
                     
-                # t_maneuver_start = prev_state.t
-                # t_maneuver_end = t_maneuver_start + dt
+                t_maneuver_start = curr_observation.t_start - dt
                 t_maneuver_end = curr_observation.t_start
-                t_maneuver_start = t_maneuver_end - dt
 
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
                     action_sequence_i.append(ManeuverAction([th_f, 0, 0], 
                                                             t_maneuver_start, 
                                                             t_maneuver_end))   
-                else:
-                    t_maneuver_end = None
-
-            # move to target
-            # t_move_start = t_prev if t_maneuver_end is None else t_maneuver_end
-            t_move_start = t_prev
-            # t_move_end = t_img
-            t_move_end = t_img if t_maneuver_end is None else t_maneuver_start
-            future_state : SatelliteAgentState = state.propagate(t_move_end)
-            final_pos = future_state.pos
-            
-            # quantize travel maneuver times if needed
-            if isinstance(clock_config, FixedTimesStepClockConfig):
-                dt = clock_config.dt
-                if t_move_start < np.Inf:
-                    t_move_start = dt * math.floor(t_move_start/dt)
-                if t_move_end < np.Inf:
-                    t_move_end = dt * math.ceil(t_move_end/dt)
-            
-            # add travel maneuver if required
-            if abs(t_move_start - t_move_end) >= 1e-3:
-                
-                if t_move_end < t_move_start:
-                    x = 1
-
-                move_action = TravelAction(final_pos, t_move_start, t_move_end)
-                # action_sequence_i.append(move_action)
-            
-            # wait for measurement action to start
-            # if t_move_end < t_img:
-            #     action_sequence_i.append( WaitForMessages(t_move_end, t_img) )
 
             maneuvers.extend(action_sequence_i)
 
         maneuvers.sort(key=lambda a: a.t_start)
+
+        assert self.is_maneuver_path_valid(state, specs, observations, maneuvers, max_slew_rate, cross_track_fovs)
+
         return maneuvers
+    
+    def is_maneuver_path_valid(self, 
+                               state : SimulationAgentState, 
+                               specs : object, 
+                               observations : list, 
+                               maneuvers : list,
+                               max_slew_rate : float,
+                               cross_track_fovs : dict
+                               ) -> bool:
+
+        for observation in observations:
+            observation : ObservationAction
+
+            # get fov for this observation's instrument
+            cross_track_fov : float = cross_track_fovs[observation.instrument_name]
+
+            # check if previous maneuvers were performed
+            prev_maneuvers = [maneuver for maneuver in maneuvers
+                              if maneuver.t_start <= observation.t_start]
+            prev_maneuvers.sort(key=lambda a : a.t_start)
+
+            if prev_maneuvers: # there was a maneuver performed before this observation
+                # get latest maneuver
+                latest_maneuver : ManeuverAction = prev_maneuvers.pop()
+
+                # check status of completion of this maneuver
+                if latest_maneuver.t_end < observation.t_start: # maneuver ended before observation started
+                    # compare to final state after meneuver
+                    dth = abs(observation.look_angle - latest_maneuver.final_attitude[0])
+
+                else: # maneuver was being performed during meneuver
+                    if prev_maneuvers:
+                        prev_maneuver : ManeuverAction = prev_maneuvers.pop()
+                        th_0 = prev_maneuver.final_attitude[0]
+                    else:
+                        th_0 = state.attitude[0]
+
+                    dth = abs(observation.look_angle - th_0) - max_slew_rate * (observation.t_start - latest_maneuver.t_start) 
+
+            else: # there were no maneuvers performed before this observation
+                # compare to initial state
+                dth = abs(observation.look_angle - state.attitude[0])
+
+            if dth > cross_track_fov / 2.0 and abs(dth - cross_track_fov / 2.0) >= 1e-6:
+                # latest state does not point towards the target at the intended look angle
+                return False
+        
+        return True
+
     
     def collect_fov_specs(self, specs : Spacecraft) -> dict:
         # compile instrument field of view specifications   
