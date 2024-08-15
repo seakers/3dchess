@@ -93,7 +93,7 @@ class TestDynamicProgrammingPlanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "dynamic",
-                            "period" : 500,     # s
+                            "period" : 200,     # s
                         },
                         "replanner" : {
                             "@type" : "broadcaster"

@@ -1,8 +1,8 @@
 from abc import ABC
+import copy
 import uuid
 import numpy as np
 
-from chess3d.agents.actions import AgentAction
 from chess3d.agents.actions import *
 
 
@@ -124,48 +124,89 @@ class Plan(ABC):
                                    for interrupted_action in self.actions
                                    if isinstance(interrupted_action, AgentAction)
                                    and interrupted_action.t_start < action.t_start < interrupted_action.t_end]
+            
+            # check if another action is schduled during this action
+            concurrent_actions = [concurrent_action 
+                                  for concurrent_action in self.actions
+                                  if isinstance(concurrent_action, AgentAction)
+                                  and action.t_start < concurrent_action.t_start
+                                  and concurrent_action.t_end < action.t_end
+                                  ]
+            concurrent_actions.sort(key=lambda a : a.t_start)
+
+            # check if action occurs after another action was completed 
+            previous_actions = [completed_action 
+                                for completed_action in self.actions
+                                if completed_action.t_end <= action.t_start]
+
             if interrupted_actions:
-                interrupted_action : AgentAction = interrupted_actions.pop(0)
-                if (    isinstance(interrupted_action, ObservationAction) 
-                    or  isinstance(interrupted_action, BroadcastMessageAction)
+                earliest_interrupted_action : AgentAction = interrupted_actions.pop(0)
+                if (    isinstance(earliest_interrupted_action, ObservationAction) 
+                    or  isinstance(earliest_interrupted_action, BroadcastMessageAction)
                     ):
                     # interrupted action has no duration, schedule broadcast for right after
-                    self.actions.insert(self.actions.index(interrupted_action) + 1, action)
+                    self.actions.insert(self.actions.index(earliest_interrupted_action) + 1, action)
                     
                 else:
                     # interrupted action has a non-zero duration; split interrupted action into two 
-                    i_plan = self.actions.index(interrupted_action)
+                    i_plan = self.actions.index(earliest_interrupted_action)
 
                     # create duplciate of interrupted action with a new ID
-                    continued_action : AgentAction = action_from_dict(**interrupted_action.to_dict())
+                    continued_action : AgentAction = action_from_dict(**earliest_interrupted_action.to_dict())
                     continued_action.id = str(uuid.uuid1())
 
                     # modify interrupted action
-                    if isinstance(interrupted_action, TravelAction):
+                    if isinstance(earliest_interrupted_action, TravelAction):
                         ## change start and end positions TODO
                         pass
 
                     ## change start and end times for the interrupted and continued actions
-                    interrupted_action.t_end = action.t_start
+                    earliest_interrupted_action.t_end = action.t_start
                     continued_action.t_start = action.t_end
 
                     # place action in between the two split parts
-                    self.actions[i_plan] = interrupted_action
+                    self.actions[i_plan] = earliest_interrupted_action
                     self.actions.insert(i_plan + 1, continued_action)
                     self.actions.insert(i_plan + 1, action)
-                
-                return
 
-            ## check if access occurs after an action was completed 
-            completed_actions = [completed_action for completed_action in self.actions
-                                 if completed_action.t_end <= action.t_start]
+            elif concurrent_actions:
+                # split action between concurent actions
+                for concurrent_action in concurrent_actions:
+                    if type(concurrent_action) == type(action):
+                        raise RuntimeError(f"Another action of the same type is being performed concurrently to another.")
+                    elif abs(concurrent_action.t_end - concurrent_action.t_start) > 1e-6:
+                        raise RuntimeError(f"Another action of non-zero is being performed concurrently to another.")
+
+                    # create a copy of the action and assign it to start after concurrent action
+                    shortened_action : AgentAction = copy.copy(action)
+                    shortened_action.t_end = concurrent_action.t_start
+
+                    # check if new action has a non-zero time duration
+                    if abs(shortened_action.t_end - shortened_action.t_start) >= 1e-6:   
+                        # update current action's end time
+                        action.t_start = concurrent_action.t_end
+                        
+                        # add new action to plan
+                        self.actions.insert(self.actions.index(concurrent_action), shortened_action)
+                    else:
+                        x = 1
+
+                # check if there is still time left in the action
+                if abs(action.t_end - action.t_start) >= 1e-6:   
+                    # place action after last concurrent_action 
+                    latest_action : AgentAction = concurrent_actions[-1]
+                    self.actions.insert(self.actions.index(latest_action) + 1, action) 
+                else:
+                    # action is too short after splitting; do not add to plan
+                    pass
             
-            if completed_actions:
-                # place action after action ends
-                completed_action : AgentAction = completed_actions.pop()
-                self.actions.insert(self.actions.index(completed_action) + 1, action)
+            elif previous_actions:
+                # place action after latest action ends
+                latest_action : AgentAction = previous_actions[-1]
+                self.actions.insert(self.actions.index(latest_action) + 1, action)
 
             else:
+                # place action at the start of the plan
                 self.actions.insert(0, action)
 
         finally:
@@ -179,7 +220,7 @@ class Plan(ABC):
                 # check plan feasibility
                 self.__is_feasible(self.actions)
             except ValueError as e:
-                self.__is_feasible(self.actions)
+                # self.__is_feasible(self.actions)
                 raise RuntimeError(f"Cannot place action in plan. {e} \n {str(self)}\ncurrent plan:\n{str(self)}")
 
     def update_action_completion(   self, 
