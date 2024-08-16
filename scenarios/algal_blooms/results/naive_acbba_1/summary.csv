@@ -1,14 +1,29 @@
 stat_name,val
 Simulation Start Date,2020-01-01 00:00:00+00:00
-Simulation End Date,2020-01-02 00:00:00+00:00
-GPs Observed,1375
-Observations,8909
-Events,790
-Events Detected,7
-Unique Event Observations,8
-Total Event Observations,25
+Simulation End Date,2020-01-01 06:00:00+00:00
+Ground Points,5001
+Ground Points Observed,107
+Observations,648
+Events,217
+Events Detected,1
+Events Observed,1
+Total Event Observations,2
+Events Re-observed,1
+Total Event Re-observations,2
 Events Co-observed,1
-Events Partially Co-observed,1
-Events Fully Co-observed,0
-Total Event Co-observations,17
-Total Runtime [s],863.799
+Events Partially Co-observed,0
+Events Fully Co-observed,1
+Total Event Co-observations,2
+P(Event Detected),0.005
+P(Event Observed),0.005
+P(Event Re-observed),0.005
+P(Event Co-observed),0.005
+P(Event Partially Co-observed),0.0
+P(Event Fully Co-observed),0.005
+P(Event at a GP),0.018
+P(Event Observed | Event Detected),1.0
+P(Event Re-oberved | Event Detected),1.0
+P(Event Co-observed | Event Detected),1.0
+P(Event Co-observed Partially | Event Detected),0.0
+P(Event Co-observed Fully | Event Detected),1.0
+Total Runtime [s],62.045

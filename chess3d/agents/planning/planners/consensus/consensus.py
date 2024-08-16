@@ -112,7 +112,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                         and abs(completed_observation.target[1] - preplanned_action.target[1]) <= 1e-3
                                         and abs(completed_observation.target[2] - preplanned_action.target[2]) <= 1e-3]
             
-            # remove from plan
+            # remove fromself.preplan plan
             for preplanned_observation in preplanned_observations:
                 preplanned_observation : ObservationAction
                 self.preplan.actions.remove(preplanned_observation)
@@ -236,7 +236,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
             return True
         
         if (len(self.bundle) < self.max_bundle_size # there is room in the bundle
-            and self.my_completed_observations      # and I just performed an observation  
+            and (self.my_completed_observations      # and I just performed an observation  
+                or self.preplan == current_plan)     # or I just received a new preplan
             ):
         # if len(self.bundle) < self.max_bundle_size:
             available_reqs : list = self._get_available_requests(state, specs, self.results, self.bundle, orbitdata)
@@ -1075,6 +1076,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             t_arrivals = [t_img*orbitdata.time_step 
                           for t_img,_,_,lat,lon,*_,instrument,_ in orbitdata.gp_access_data.values
                           if req.t_start <= t_img*orbitdata.time_step <= req.t_end
+                          and t_img <= self.preplan.t_next
                           and instrument in req.observation_types
                           and abs(lat - req.target[0]) <= 1e-3
                           and abs(lon - req.target[1]) <= 1e-3

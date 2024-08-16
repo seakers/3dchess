@@ -81,7 +81,8 @@
             },
             "planner" : {
                 "preplanner" : {
-                    "@type" : "naive"
+                    "@type" : "naive", 
+                    "period" : 1000
                 },
                 "replanner" : {
                     "@type" : "broadcaster"

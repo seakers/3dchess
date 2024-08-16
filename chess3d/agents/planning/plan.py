@@ -330,7 +330,7 @@ class Plan(ABC):
             if action not in __value.actions:
                 return False
             
-        return self.t == __value.t_update
+        return self.t == __value.t
 
     def __str__(self) -> str:
         out = f't_plan = {self.t}[s]\n'

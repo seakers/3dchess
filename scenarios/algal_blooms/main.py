@@ -18,7 +18,7 @@ if __name__ == "__main__":
         template_specs : dict = json.load(scenario_file)
 
     # set parameters
-    duration = 24 / 24
+    duration = 6 / 24
     n_planes = 1
     n_sats_per_plane = 6
     # spacing = 360 / n_sats_per_plane
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     bundle_sizes = [
                     1,
                     # 2, 
-                    3
+                    # 3
                     # 5
                     ]
     reward_function = "event"

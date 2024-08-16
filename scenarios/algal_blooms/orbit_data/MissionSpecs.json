@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 1.0,
+    "duration": 0.25,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -81,10 +81,11 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 1000
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "bundle size": 1
                 },
                 "rewardGrid": {
@@ -168,10 +169,11 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 1000
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "bundle size": 1
                 },
                 "rewardGrid": {
@@ -255,10 +257,11 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 1000
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "bundle size": 1
                 },
                 "rewardGrid": {
@@ -342,10 +345,11 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 1000
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "bundle size": 1
                 },
                 "rewardGrid": {
@@ -429,10 +433,11 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 1000
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "bundle size": 1
                 },
                 "rewardGrid": {
@@ -516,10 +521,11 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 1000
                 },
                 "replanner": {
-                    "@type": "broadcaster",
+                    "@type": "acbba",
                     "bundle size": 1
                 },
                 "rewardGrid": {
@@ -554,7 +560,7 @@
             "@type": "EVENT"
         },
         "scenarioPath": "./scenarios/algal_blooms/",
-        "name": "naive_broadcaster"
+        "name": "naive_acbba_1"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",

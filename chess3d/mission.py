@@ -569,7 +569,7 @@ class SimulationFactory:
                 if preplanner_type is None: raise ValueError(f'preplanner type within planner module not specified in input file.')
 
                 period = preplanner_dict.get('period', np.Inf)
-                horizon = preplanner_dict.get('horizon', np.Inf)
+                horizon = preplanner_dict.get('horizon', period)
 
                 # initialize preplanner
                 if preplanner_type.lower() == "naive":
