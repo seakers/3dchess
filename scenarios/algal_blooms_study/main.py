@@ -25,8 +25,8 @@ if __name__ == "__main__":
 
     # set event parameters
     event_type = 'random'
-    number_of_events = [1000]
-    event_durations = [3600 * 3]
+    number_of_events = [500, 1000, 2500]
+    event_durations = [3600 * i for i in range(1,5)]
     min_severity = 0.0
     max_severity = 100
     measurement_list = ['sar', 'visual', 'thermal']
@@ -62,7 +62,7 @@ if __name__ == "__main__":
                    }
     preplanners = [
                     'naive',
-                    'milp'
+                    'dynamic'
                     # 'nadir'                    
                     ]
     periods = [
@@ -95,7 +95,7 @@ if __name__ == "__main__":
                        * len(num_planes) * len(num_sats_per_plane) 
                        * len(fovs) * len(fors) * len(agility)
                        * len(preplanners) * len(periods) * len(horizons)
-                       * ((len(replanners) - 1) * len(bundle_sizes) + 1)
+                       * len(replanners) * len(bundle_sizes)
                        
                     #    - n_sats_min
                     #    * len(fovs) * len(fors) * len(agility)
@@ -123,14 +123,6 @@ if __name__ == "__main__":
                         ta_spacing = 360 / n_sats_per_plane if ta_spacing == 'even' else ta_spacing
                         tas = [ta_spacing * i for i in range(n_sats_per_plane)]
 
-                        # check if number of sats does not meet min
-                        if n_planes * n_sats_per_plane < n_sats_min:
-                            # skip
-                            pbar.update(len(fovs) * len(fors) * len(agility) 
-                                        * len(preplanner) * len(periods) * len(horizons)
-                                        * len(replanners) * len(bundle_sizes))
-                            continue
-
                         for field_of_view in fovs:
 
                             for field_of_regard in fors:
@@ -142,25 +134,32 @@ if __name__ == "__main__":
                                             
                                         for period in periods:
 
-                                            if preplanner == 'np' and period == np.Inf:
-                                                # skip
-                                                pbar.update(len(horizons) * len(replanners) * len(bundle_sizes))
-                                                continue
-
                                             for horizon in horizons:
-
-                                                if preplanner == 'np' and horizon == np.Inf:
-                                                    # skip
-                                                    pbar.update(len(replanners) * len(bundle_sizes))
-                                                    continue
 
                                                 for replanner in replanners:
 
                                                     for bundle_size in bundle_sizes:
 
+                                                        # check simulation requirements
+                                                        if n_planes * n_sats_per_plane < n_sats_min:
+                                                            # skip
+                                                            pbar.update(1)
+                                                            continue
+
                                                         if replanner == 'broadcaster' and bundle_size > 1:
+                                                            # skip
                                                             pbar.update(1)
                                                             break
+
+                                                        if preplanner == 'np' and horizon == np.Inf:
+                                                            # skip
+                                                            pbar.update(1)
+                                                            continue
+
+                                                        if preplanner == 'naive' and (horizon < np.Inf or period < np.Inf):
+                                                            # skip
+                                                            pbar.update(1)
+                                                            continue
 
                                                         scenario_specs : dict = copy.deepcopy(template_specs)
 
@@ -253,12 +252,11 @@ if __name__ == "__main__":
                                                         scenario_specs['scenario']['name'] = scenario_name
 
                                                         # check overwrite toggle
-                                                        if not overwrite:
-                                                            results_summary_path = os.path.join('./scenarios',parent_scenario_name, 'results', scenario_name, 'summary.csv')
-                                                            if os.path.exists(results_summary_path):
-                                                                # scenario already ran; skip to avoid overwrite
-                                                                pbar.update(1)
-                                                                continue
+                                                        results_dir = os.path.join('./scenarios',parent_scenario_name, 'results', scenario_name)
+                                                        if not overwrite and os.path.exists(os.path.join(results_dir, 'summary.csv')):
+                                                            # scenario already ran; skip to avoid overwrite
+                                                            pbar.update(1)
+                                                            continue
 
                                                         # initialize mission
                                                         mission : Mission = Mission.from_dict(scenario_specs)
@@ -269,6 +267,11 @@ if __name__ == "__main__":
                                                         # execute mission
                                                         mission.execute()
 
+                                                        # # jump mission specifications into json file
+                                                        # with open(os.path.join(results_dir,'MissionSpecs.json'), 'w') as mission_specs:
+                                                        #     json.dump(scenario_specs, mission_specs, indent=4)
+                                                        #     # mission_specs.write()
+                                                            
                                                         # update progress bad
                                                         pbar.update(1)
 

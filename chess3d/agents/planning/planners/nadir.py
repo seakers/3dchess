@@ -25,10 +25,20 @@ class NadirPointingPlaner(NaivePlanner):
     
     def _schedule_maneuvers(self, state: SimulationAgentState, specs: object, observations: list, clock_config: ClockConfig, orbitdata: OrbitData = None) -> list:
         # schedule all travel maneuvers
-        maneuvers = super()._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
+        maneuvers = []
 
-        # ensure no attitude manuvers exist in plan
-        assert all([not isinstance(action, ManeuverAction) for action in maneuvers])
+        # compile instrument field of view specifications   
+        cross_track_fovs = self.collect_fov_specs(specs)
+
+        # get pointing agility specifications
+        adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
+        if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
+
+        max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
+        if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
+
+        # ensure no attitude manuvers are required in plan
+        assert self.is_maneuver_path_valid(state, specs, observations, maneuvers, max_slew_rate, cross_track_fovs)
 
         # return travel manuvers
         return maneuvers

@@ -33,6 +33,57 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # toggle for sharing plans
         self.sharing = sharing 
 
+    def populate_adjacency_matrix(self, 
+                                  state : SimulationAgentState, 
+                                  specs : object,
+                                  access_opportunities : list, 
+                                  ground_points : dict,
+                                  adjacency : list,
+                                  j : int,
+                                  pbar : tqdm = None):
+               
+        # get current observation
+        curr_opportunity : tuple = access_opportunities[j]
+        lat_curr,lon_curr = ground_points[curr_opportunity[0]][curr_opportunity[1]]
+        curr_target = [lat_curr,lon_curr,0.0]
+
+        # get any possibly prior observation
+        prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
+                                            if prev_opportunity[3].end <= curr_opportunity[3].end
+                                            and prev_opportunity != curr_opportunity
+                                            ]
+
+        # construct adjacency matrix
+        for prev_opportunity in prev_opportunities:
+            prev_opportunity : tuple
+
+            # get previous observation opportunity's target 
+            lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
+            prev_target = [lat_prev,lon_prev,0.0]
+
+            # assume earliest observation time from previous observation
+            earliest_prev_observation = ObservationAction(prev_opportunity[2], 
+                                                        prev_target, 
+                                                        prev_opportunity[5][0], 
+                                                        prev_opportunity[4][0])
+            
+            # check if observation can be reached from previous observation
+            adjacent = any([self.is_observation_path_valid(state, 
+                                                        specs, 
+                                                        [earliest_prev_observation,
+                                                            ObservationAction(curr_opportunity[2], 
+                                                                            curr_target, 
+                                                                            curr_opportunity[5][k], 
+                                                                            curr_opportunity[4][k])])
+                            for k in range(len(curr_opportunity[4]))
+                            ])                               
+
+            # update adjacency matrix
+            adjacency[access_opportunities.index(prev_opportunity)][j] = adjacent
+
+            # update progress bar
+            if pbar is not None: pbar.update(1)
+
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
                                specs: object, 
@@ -67,51 +118,14 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         t_1 = time.perf_counter() - t_prev
         t_prev = time.perf_counter()
 
-        # create adjancency matrix            
-        # for j in range(len(access_opportunities)):
-        for j in tqdm(range(len(access_opportunities)), 
-                      desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix',
-                      leave=False):
-            
-            # get current observation
-            curr_opportunity : tuple = access_opportunities[j]
-            lat_curr,lon_curr = ground_points[curr_opportunity[0]][curr_opportunity[1]]
-            curr_target = [lat_curr,lon_curr,0.0]
-
-            # get any possibly prior observation
-            prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
-                                                if prev_opportunity[3].end <= curr_opportunity[3].end
-                                                and prev_opportunity != curr_opportunity
-                                                ]
-
-            # construct adjacency matrix
-            for prev_opportunity in prev_opportunities:
-                prev_opportunity : tuple
-
-                # get previous observation opportunity's target 
-                lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
-                prev_target = [lat_prev,lon_prev,0.0]
-
-                # assume earliest observation time from previous observation
-                earliest_prev_observation = ObservationAction(prev_opportunity[2], 
-                                                            prev_target, 
-                                                            prev_opportunity[5][0], 
-                                                            prev_opportunity[4][0])
-                
-                # check if observation can be reached from previous observation
-                adjacent = any([self.is_observation_path_valid(state, 
-                                                            specs, 
-                                                            [earliest_prev_observation,
-                                                                ObservationAction(curr_opportunity[2], 
-                                                                                curr_target, 
-                                                                                curr_opportunity[5][k], 
-                                                                                curr_opportunity[4][k])])
-                                for k in range(len(curr_opportunity[4]))
-                                ])                               
-
-                # update adjacency matrix
-                adjancency[access_opportunities.index(prev_opportunity)][j] = adjacent
-
+        # create adjancency matrix      
+        with tqdm(total=len(access_opportunities), 
+                    desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix', 
+                    leave=False) as pbar:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                for j in range(len(access_opportunities)): 
+                    executor.submit(self.populate_adjacency_matrix, state, specs, access_opportunities, ground_points, adjancency, j, pbar)
+               
         t_2 = time.perf_counter() - t_prev
         t_prev = time.perf_counter()
 
@@ -213,44 +227,13 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             observations.append(observation)
         
         if not self.is_observation_path_valid(state, specs, observations):
+            y = self.is_observation_path_valid(state, specs, observations)
             x = 1
 
         t_5 = time.perf_counter() - t_prev
         t_f = time.perf_counter() - t_0
         return observations
-
-    def is_adjacent(self,
-                    prev_observation : tuple,
-                    curr_observation : tuple) -> bool:
-        pass
-
-    # def can_travel(self, 
-    #                observation_i : tuple, 
-    #                observation_j : tuple,
-    #                state : SimulationAgentState,
-    #                specs : object,
-    #                ground_points : list
-    #                ) -> bool:
-    #     grid_i,gp_i,instrument_i,interval_i,th_i,t_i = observation_i
-    #     grid_j,gp_j,instrument_j,interval_j,th_j,t_j = observation_j
-
-    #     # if interval_i == interval_j:
-    #     #     # avoid doing the same observation after 
-    #     #     return False
-        
-    #     if t_i > t_j:
-    #         # cannot travel to the past
-    #         return False
-        
-    #     lat_i,lon_i = ground_points[grid_i][gp_i]
-    #     lat_j,lon_j = ground_points[grid_j][gp_j]
-
-    #     observations = [
-    #                     ObservationAction(instrument_i, [lat_i,lon_i,0], th_i, t_i),
-    #                     ObservationAction(instrument_j, [lat_j,lon_j,0], th_j, t_j)
-    #                     ]
-    #     return self.is_observation_path_valid(state, specs, observations)
-
+    
     def _schedule_broadcasts(self, state: SimulationAgentState, observations: list, orbitdata: OrbitData) -> list:
         broadcasts =  super()._schedule_broadcasts(state, observations, orbitdata)
 

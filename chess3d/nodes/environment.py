@@ -767,11 +767,18 @@ class SimulationEnvironment(EnvironmentNode):
         p_event_co_obs_partial_and_detected = n_events_partially_co_obs_and_detected / n_events
 
         # calculate conditional probabilities
-        p_event_observed_if_detected = p_event_observed_and_detected / p_event_detected
-        p_event_re_obs_if_detected = p_event_re_obs_and_detected / p_event_detected
-        p_event_co_obs_if_detected = p_event_co_obs_and_detected / p_event_detected
-        p_event_co_obs_fully_if_detected = p_event_co_obs_fully_and_detected / p_event_detected
-        p_event_co_obs_partial_if_detected = p_event_co_obs_partial_and_detected / p_event_detected
+        if p_event_detected > 0.0:
+            p_event_observed_if_detected = p_event_observed_and_detected / p_event_detected
+            p_event_re_obs_if_detected = p_event_re_obs_and_detected / p_event_detected
+            p_event_co_obs_if_detected = p_event_co_obs_and_detected / p_event_detected
+            p_event_co_obs_fully_if_detected = p_event_co_obs_fully_and_detected / p_event_detected
+            p_event_co_obs_partial_if_detected = p_event_co_obs_partial_and_detected / p_event_detected
+        else:
+            p_event_observed_if_detected = np.NaN
+            p_event_re_obs_if_detected = np.NaN
+            p_event_co_obs_if_detected = np.NaN
+            p_event_co_obs_fully_if_detected = np.NaN
+            p_event_co_obs_partial_if_detected = np.NaN
 
         return p_event_detected, p_event_observed, p_event_re_obs, \
                 p_event_co_obs, p_event_co_obs_partial, p_event_co_obs_fully, \

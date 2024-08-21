@@ -236,8 +236,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
             return True
         
         if (len(self.bundle) < self.max_bundle_size # there is room in the bundle
-            and (self.my_completed_observations      # and I just performed an observation  
-                or self.preplan == current_plan)     # or I just received a new preplan
+            and (self.my_completed_observations     # and I just performed an observation  
+                # or self.preplan == current_plan     # or I just received a new preplan
+                )     
             ):
         # if len(self.bundle) < self.max_bundle_size:
             available_reqs : list = self._get_available_requests(state, specs, self.results, self.bundle, orbitdata)

@@ -1,6 +1,7 @@
 
 import math
 import queue
+from typing import Dict
 
 from instrupy.base import Instrument, BasicSensorModel
 from instrupy.util import ViewGeometry, SphericalGeometry
@@ -8,6 +9,7 @@ from orbitpy.util import Spacecraft
 
 from dmas.modules import *
 from dmas.utils import runtime_tracker
+from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.orbitdata import OrbitData, TimeInterval
@@ -123,7 +125,11 @@ class AbstractPlanner(ABC):
             # find best path for broadcasts at the current time
             path, t_start = self._create_broadcast_path(state, orbitdata, state.t)
 
-            for req in pending_reqs_to_broadcast:
+            for req in tqdm(pending_reqs_to_broadcast,
+                            desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
+                            leave=False):
+
+            # for req in pending_reqs_to_broadcast:
                 req : MeasurementRequest
                 
                 # calculate broadcast start time
@@ -169,6 +175,7 @@ class AbstractPlanner(ABC):
         # return scheduled broadcasts
         return broadcasts 
     
+    @runtime_tracker
     def _create_broadcast_path(self, 
                                state : SimulationAgentState, 
                                orbitdata : OrbitData = None,
@@ -330,10 +337,12 @@ class AbstractPlanner(ABC):
         # initialize maneuver list
         maneuvers : list[ManeuverAction] = []
 
-        for i in range(len(observations)):
-            action_sequence_i = []
+        for i in tqdm(range(len(observations)), 
+                      desc=f'{state.agent_name}-PLANNER: Scheduling Maneuvers', 
+                      leave=False):
+
             curr_observation : ObservationAction = observations[i]
-                        
+
             # estimate previous state
             if i == 0:
                 t_prev = state.t
@@ -341,47 +350,30 @@ class AbstractPlanner(ABC):
                 
             else:
                 prev_observation : ObservationAction = observations[i-1]
-
-                prev_maneuvers = [maneuver for maneuver in maneuvers
-                                  if isinstance(maneuver, ManeuverAction)]
-                
-                if prev_maneuvers:
-                    prev_maneuvers.sort(key=lambda a: a.t_start)
-                    latest_maneuver = prev_maneuvers[-1]
-
-                    prev_state : SatelliteAgentState = state.propagate(latest_maneuver.t_end)          
-                    prev_state.attitude = [th for th in latest_maneuver.final_attitude]
-
-                else:
-                    t_prev = prev_observation.t_end if prev_observation is not None else state.t
-                    prev_state : SatelliteAgentState = state.propagate(t_prev)         
+                t_prev = prev_observation.t_end
+                prev_state : SimulationAgentState = state.propagate(t_prev)
+                prev_state.attitude = [prev_observation.look_angle, 0.0, 0.0]
 
             # maneuver to point to target
-            t_maneuver_end = None
             if isinstance(state, SatelliteAgentState):
                 prev_state : SatelliteAgentState
                 
-                dth = abs(curr_observation.look_angle - prev_state.attitude[0])
-                cross_track_fov = cross_track_fovs[curr_observation.instrument_name]
+                dth_req = abs(curr_observation.look_angle - prev_state.attitude[0])
+                dth_max = (curr_observation.t_start - prev_state.t) * max_slew_rate
 
-                if dth <= cross_track_fov / 2.0:
-                    # no need to maneuver
-                    th_f = prev_state.attitude[0]
-                else:
-                    # maneuver needed
-                    th_f = curr_observation.look_angle
-
-                dt = abs(th_f - prev_state.attitude[0]) / max_slew_rate
+                if dth_req > dth_max and abs(dth_req - dth_max) >= 1e-6: 
+                    # maneuver impossible within timeframe
+                    raise ValueError(f'Cannot schedule maneuver. Not enough time between observations')\
                     
+                th_f = curr_observation.look_angle
+                dt = abs(th_f - prev_state.attitude[0]) / max_slew_rate
                 t_maneuver_start = curr_observation.t_start - dt
                 t_maneuver_end = curr_observation.t_start
 
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
-                    action_sequence_i.append(ManeuverAction([th_f, 0, 0], 
+                    maneuvers.append(ManeuverAction([th_f, 0, 0], 
                                                             t_maneuver_start, 
-                                                            t_maneuver_end))   
-
-            maneuvers.extend(action_sequence_i)
+                                                            t_maneuver_end)) 
 
         maneuvers.sort(key=lambda a: a.t_start)
 
@@ -434,9 +426,9 @@ class AbstractPlanner(ABC):
             if dth > cross_track_fov / 2.0 and abs(dth - cross_track_fov / 2.0) >= 1e-6:
                 # latest state does not point towards the target at the intended look angle
                 return False
-        
-        return True
 
+        # all maneuvers passed checks; path is valid        
+        return True
     
     def collect_fov_specs(self, specs : Spacecraft) -> dict:
         # compile instrument field of view specifications   
@@ -476,7 +468,7 @@ class AbstractPlanner(ABC):
                                   observations : list
                                   ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
-        
+
         if isinstance(state, SatelliteAgentState) and isinstance(specs, Spacecraft):
 
             # get pointing agility specifications
@@ -494,13 +486,19 @@ class AbstractPlanner(ABC):
 
             # check if every observation can be reached from the prior measurement
             for j in range(len(observations)):
-                i = j - 1
 
-                # check if there was an observation performed previously
-                if i >= 0: # there was a prior observation performed
+                # estimate the state of the agent at the given measurement
+                observation_j : ObservationAction = observations[j]
+                th_j = observation_j.look_angle
+                t_j = observation_j.t_start
+                # fov = cross_track_fovs[observation_j.instrument_name]
+
+                # compare to prior measurements
+                
+                if j > 0: # there was a prior observation performed
 
                     # estimate the state of the agent at the prior mesurement
-                    observation_i : ObservationAction = observations[i]
+                    observation_i : ObservationAction = observations[j-1]
                     th_i = observation_i.look_angle
                     t_i = observation_i.t_end
 
@@ -508,12 +506,7 @@ class AbstractPlanner(ABC):
 
                     # use agent's current state as previous state
                     th_i = state.attitude[0]
-                    t_i = state.t
-
-                # estimate the state of the agent at the given measurement
-                observation_j : ObservationAction = observations[j]
-                th_j = observation_j.look_angle
-                t_j = observation_j.t_start
+                    t_i = state.t                
 
                 # check if desired instrument is contained within the satellite's specifications
                 if observation_j.instrument_name not in [instrument.name for instrument in specs.instrument]:
@@ -522,11 +515,7 @@ class AbstractPlanner(ABC):
                 assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
 
                 # estimate maneuver time betweem states
-                fov = cross_track_fovs[observation_j.instrument_name]
-                if abs(th_j - th_i) <= fov / 2.0:
-                    dt_maneuver = 0.0
-                else:
-                    dt_maneuver = abs(th_j - th_i) / max_slew_rate
+                dt_maneuver = abs(th_j - th_i) / max_slew_rate
 
                 # calculate time between measuremnets
                 dt_measurements = t_j - t_i
@@ -538,7 +527,7 @@ class AbstractPlanner(ABC):
                 # Slewing constraint: check if there's enough time to maneuver from one observation to another
                 if dt_maneuver > dt_measurements and abs(dt_maneuver - dt_measurements) > 1e-6:
                     # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
-                    return False
+                    return False              
                 
                 # Torque constraint:
                 # TODO check if the agent has enough torque in its reaction wheels to perform the maneuver

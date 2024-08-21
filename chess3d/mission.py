@@ -55,7 +55,9 @@ class Mission:
 
     def execute(self, plot_results : bool = False, save_plot : bool = False) -> None:
         """ executes the simulation """
-        with concurrent.futures.ThreadPoolExecutor(len(self.agents) + 3) as pool:
+        # n_pools = 4
+        n_pools = len(self.agents) + 3
+        with concurrent.futures.ThreadPoolExecutor(n_pools) as pool:
             pool.submit(self.monitor.run, *[])
             pool.submit(self.manager.run, *[])
             pool.submit(self.environment.run, *[])

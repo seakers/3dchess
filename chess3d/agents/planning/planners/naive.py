@@ -57,7 +57,7 @@ class NaivePlanner(AbstractPreplanner):
         observations : list[ObservationAction] = []
 
         with tqdm(total=len(access_times), 
-                      desc=f'{state.agent_name}-PLANNER: Generating Preplan', 
+                      desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 
                       leave=False) as pbar:
 
             while access_times:
@@ -88,7 +88,8 @@ class NaivePlanner(AbstractPreplanner):
                                 if self.is_observation_feasible(state, t[i], th[i], t_prev, th_prev, 
                                                                 max_slew_rate, max_torque, 
                                                                 cross_track_fovs[instrument])]
-                
+                feasible_obs.sort(key=lambda a : a[0])
+
                 if feasible_obs:
                     # is feasible; create observation action
                     t_img, th_img = feasible_obs[0]
@@ -120,24 +121,20 @@ class NaivePlanner(AbstractPreplanner):
                                 fov : float
                                 ) -> bool:
         """ compares previous observation """
+        
         # calculate inteval between observations
         dt_obs = t_img - t_prev
 
-        # estimate maneuver time
-        if abs(th_img - th_prev) <= fov / 2.0:
-            # observations within the field-of-view of the instrument; no need to maneuver
-            dth_img = 0
-        else:
-            # maneuver needed
-            # dth_img = abs(th_img - th_prev)
-            dth_img = abs(th_img - th_prev) + fov
+        # calculate maneuver angle 
+        dth_img = abs(th_img - th_prev) 
 
+        # estimate maneuver time
         dt_maneuver = dth_img / max_slew_rate
 
-        # check feasibility
-        return dt_maneuver <= dt_obs
+        # check slew constraint
+        return dt_maneuver <= dt_obs or abs(dt_maneuver - dt_obs) <= 1e-6
     
-        #TODO implement torque constraint
+        #TODO check torque constraint
 
     
     def no_redundant_observations(self, 
@@ -193,8 +190,12 @@ class NaivePlanner(AbstractPreplanner):
                 broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
                 
                 # add action performance broadcast to plan
-                for action_dict in plan_out:
-                    path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end'])
+                for action_dict in tqdm(plan_out, 
+                      desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
+                      leave=False):
+
+                    # path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end']) # TODO improve runtime when simulatin dynamic network
+                    t_start = action_dict['t_end'] # TODO temp solution
                     msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
                     if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
 
