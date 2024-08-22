@@ -603,7 +603,7 @@ class PlanningModule(InternalModule):
         df.to_csv(f"{self.results_path}/{self.get_parent_name()}/reward_grid_history.csv", index=False)
 
         # log performance stats
-        n_decimals = 3
+        n_decimals = 5
         headers = ['routine','t_avg','t_std','t_med','n']
         data = []
 

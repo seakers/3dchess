@@ -5,6 +5,7 @@ import time
 from typing import Any, Callable
 from numpy import Inf
 import pandas as pd
+from tqdm import tqdm
 from traitlets import Callable
 
 from dmas.utils import runtime_tracker
@@ -319,23 +320,24 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                bundle : list, 
                                orbitdata : OrbitData) -> list:
         """ compiles and merges lists of measurement actions to be performed by the agent """
-        try:
-            # generate plan from path        
-            path : list = self.path_from_bundle(bundle)
-            
-            # merge with preplanned observations
-            observations : list[ObservationAction] = self.merge_plans(state, specs, path)
-            
-            # return observations
-            return observations
+
+        # generate plan from path        
+        path : list = self.path_from_bundle(bundle)
+
+        # ensure path given was valid
+        assert self.is_task_path_valid(state, specs, path, orbitdata)
         
-        finally:
-            # ensure path given was valid
-            assert self.is_task_path_valid(state, specs, path, orbitdata)
+        # merge with preplanned observations
+        observations : list[ObservationAction] = self.merge_plans(state, specs, path)
+        
+        # ensure resulting plan is valid
+        assert self.is_observation_path_valid(state, specs, observations)
+        
+        # return observations
+        return observations
 
-            # ensure resulting plan is valid
-            assert self.is_observation_path_valid(state, specs, observations)
 
+    @runtime_tracker
     def merge_plans(self, state : SimulationAgentState, specs : object, path : list) -> list:
         # generate proposed observation actions
         proposed_observations = [ObservationAction(main_measurement, req.target, th_img, t_img)
@@ -596,16 +598,14 @@ class AbstractConsensusReplanner(AbstractReplanner):
         rebroadcasts = []
 
         # update results using incoming messages
-        for action in completed_measurements:
+        for action in tqdm(completed_measurements,
+                           desc=f'{state.agent_name}-CONSENSUS: Updating completed bids\' status',
+                           leave=False):
             action : ObservationAction
 
             # check if observation was performed to respond to a measurement request
             for completed_req in self._get_completed_request(results, action):
-                completed_req : MeasurementRequest
-                if action.instrument_name not in completed_req.observation_types:
-                    # observation was not performed to respond to a measurement request; ignore
-                    continue
-                
+                completed_req : MeasurementRequest                
                 # set bid as completed           
                 bid : Bid = results[completed_req.id][action.instrument_name]
                 updated_bid : Bid = bid.copy()
@@ -629,19 +629,20 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                results : dict, 
                                observation : ObservationAction
                                ) -> list:
-        reqs : list[MeasurementRequest] = list({req 
-                                                for req in self.known_reqs
-                                                if isinstance(req, MeasurementRequest)
-                                                and req.id in results
-                                                and abs(req.target[0] - observation.target[0]) <= 1e-3
-                                                and abs(req.target[1] - observation.target[1]) <= 1e-3
-                                                and abs(req.target[2] - observation.target[2]) <= 1e-3
-                                                and observation.instrument_name in req.observation_types
-                                                })
+        reqs : list[MeasurementRequest] = [ req 
+                                            for req in self.known_reqs
+                                            if isinstance(req, MeasurementRequest)
+                                            and req.id in results
+                                            and abs(req.target[0] - observation.target[0]) <= 1e-3
+                                            and abs(req.target[1] - observation.target[1]) <= 1e-3
+                                            and abs(req.target[2] - observation.target[2]) <= 1e-3
+                                            and observation.instrument_name in req.observation_types
+                                            ]
         return reqs
         # reqs.sort(key=lambda a : a.t_start)
         # return reqs.pop() if reqs else None
 
+    @runtime_tracker
     def _get_matching_request(self, id : list) -> MeasurementRequest:
         reqs = {req for req in self.known_reqs if req.id == id}
         if not reqs:
@@ -681,7 +682,11 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # if task has expired, release from bundle and path with all subsequent tasks
         if task_to_remove is not None:
             expired_index = bundle.index(task_to_remove)
-            for _ in range(expired_index, len(bundle)):
+            
+            for _ in tqdm(range(expired_index, len(bundle)),
+                           desc=f'{state.agent_name}-CONSENSUS: Releasing expired tasks from bundle',
+                           leave=False):
+
                 # remove from bundle
                 measurement_req, instrument_name, current_bid = bundle.pop(expired_index)
 
@@ -716,7 +721,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
         changes = []
         rebroadcasts = []
 
-        for their_bid in bids_received:
+        for their_bid in tqdm(bids_received,
+                              desc=f'{state.agent_name}-CONSENSUS: Comparing bids',
+                              leave=False):
             their_bid : Bid            
             
             # get matching request
@@ -888,6 +895,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             # check if path is valid
             assert self.is_task_path_valid(state, specs, path, orbitdata)
         
+    @runtime_tracker
     def _generate_path(self, 
                        state :SimulationAgentState, 
                        specs : object, 
@@ -910,79 +918,91 @@ class AbstractConsensusReplanner(AbstractReplanner):
         max_path_utility = 0.0
 
         # start tree search
-        while not queue.empty():
-            # update counter
-            n_visited += 1 
-            
-            # get next path on the queue
-            path_i : list = queue.get()
+        with tqdm(total=n_max, 
+                    desc=f'{state.agent_name}-PLANNER: Generating Bundle', 
+                    leave=False) as pbar:
 
-            # create potential bids for observations in the path
-            path_bids : list[Bid] = [Bid(req.id, 
-                                         main_measurement, 
-                                         state.agent_name, 
-                                         u_exp, 
-                                         t_img=t_img, 
-                                         th_img=th_img)
-                                     for req,main_measurement,t_img,th_img,u_exp in path_i
-                                     if isinstance(req,MeasurementRequest)]
+            while not queue.empty():
+                # update progress bar
+                pbar.update(1)
+
+                # update counter
+                n_visited += 1 
                 
-            # check if it out-performs the current best path
-            if any([results[bid.req_id][bid.main_measurement] >= bid
-                    for bid in path_bids]):
-                # at least one proposed bid is outbid by existing bid; ignore path
-                continue
-            
-            # calculate path utility 
-            path_utility : float = self.calc_path_utility(state, specs, path_i, reward_grid)
+                # get next path on the queue
+                path_i : list = queue.get()
 
-            # check if it outbids competitors
-            if (path_utility > max_path_utility                             # path utility is increased
-                and all([results[bid.req_id][bid.main_measurement] < bid    # all new bids outbid competitors
-                         for bid in path_bids])
-                ):
-                # outbids competitors; set new max utility path
-                max_path = [path_element for path_element in path_i]
-                max_path_utility = path_utility
-
-            # check if there is room to be added to the bundle
-            if len(path_i) >= self.max_bundle_size:
-                continue
-
-            # add available requests to the path and place it in the queue
-            path_reqs = [(req, main_measurement) 
-                         for req,main_measurement,*_ in path_i]
-            reqs_to_add = [(req, main_measurement) 
-                        for req, main_measurement in available_reqs
-                        if (req, main_measurement) not in path_reqs
-                        ]
-            
-            for req, main_measurement in reqs_to_add:
-                req : MeasurementRequest                
-                # copy current path
-                path_j = [path_element_i for path_element_i in path_i]
+                # create potential bids for observations in the path
+                path_bids : list[Bid] = [Bid(req.id, 
+                                            main_measurement, 
+                                            state.agent_name, 
+                                            u_exp, 
+                                            t_img=t_img, 
+                                            th_img=th_img)
+                                        for req,main_measurement,t_img,th_img,u_exp in path_i
+                                        if isinstance(req,MeasurementRequest)]
+                    
+                # check if it out-performs the current best path
+                if any([results[bid.req_id][bid.main_measurement] >= bid
+                        for bid in path_bids]):
+                    # at least one proposed bid is outbid by existing bid; ignore path
+                    continue
                 
-                # add request to path
-                path_j.append((req, main_measurement, -1, -1))
+                # calculate path utility 
+                path_utility : float = self.calc_path_utility(state, specs, path_i, reward_grid)
+
+                # check if it outbids competitors
+                if (path_utility > max_path_utility                             # path utility is increased
+                    and all([results[bid.req_id][bid.main_measurement] < bid    # all new bids outbid competitors
+                            for bid in path_bids])
+                    ):
+                    # outbids competitors; set new max utility path
+                    max_path = [path_element for path_element in path_i]
+                    max_path_utility = path_utility
+
+                # check if there is room to be added to the bundle
+                if len(path_i) >= self.max_bundle_size:
+                    continue
+
+                # add available requests to the path and place it in the queue
+                path_reqs = [(req, main_measurement) 
+                            for req,main_measurement,*_ in path_i]
+                reqs_to_add = [(req, main_measurement) 
+                            for req, main_measurement in available_reqs
+                            if (req, main_measurement) not in path_reqs
+                            ]
                 
-                # estimate observation time and look angle
-                t_img,th_img = self.calc_imaging_time(state, specs, path_j, req, main_measurement, orbitdata)
-                
-                # check if imaging time was found
-                if t_img < 0.0: continue # skip
+                for req, main_measurement in reqs_to_add:
+                    req : MeasurementRequest                
+                    # copy current path
+                    path_j = [path_element_i for path_element_i in path_i]
+                    
+                    # add request to path
+                    path_j.append((req, main_measurement, -1, -1))
+                    
+                    # estimate observation time and look angle
+                    t_img,th_img = self.calc_imaging_time(state, specs, path_j, req, main_measurement, orbitdata)
+                    
+                    # check if imaging time was found
+                    if t_img < 0.0: continue # skip
 
-                # calculate performance
-                observation = ObservationAction(main_measurement, req.target, th_img, t_img)
-                u_exp = reward_grid.estimate_reward(observation)
+                    # calculate performance
+                    observation = ObservationAction(main_measurement, req.target, th_img, t_img)
+                    u_exp = reward_grid.estimate_reward(observation)
 
-                # update values
-                path_j[-1] = (req, main_measurement, t_img, th_img, u_exp)
+                    # update values
+                    path_j[-1] = (req, main_measurement, t_img, th_img, u_exp)
 
-                # only add to queue if the path can be performed
-                if self.is_task_path_valid(state, specs, path_j, orbitdata): queue.put(path_j)
-        
+                    # only add to queue if the path can be performed
+                    if self.is_task_path_valid(state, specs, path_j, orbitdata): queue.put(path_j)
+
+            # update progress bar with remaining nodes
+            pbar.update(n_max-n_visited)
+
+        # return path of maximum utility
         return max_path
     
+    @runtime_tracker
     def calc_path_utility(self, 
                           state : SimulationAgentState, 
                           specs : object, 
@@ -1028,9 +1048,9 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 if self.__request_has_been_performed(results, req, main_measurement, state.t):
                     continue
 
-                # check if the task can be placed in the bundle:
-                if not self._can_add_to_bundle(bundle, req, main_measurement):
-                    continue
+                # # check if the task can be placed in the bundle:
+                # if not self._can_add_to_bundle(bundle, req, main_measurement):
+                #     continue
 
                 biddable_reqs.append((req, main_measurement))  
 
@@ -1059,14 +1079,15 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # return sorted list of access times
         return [(req,main_measurement) for *_,req,main_measurement in biddable_reqs_accesses]
         
-    def _can_add_to_bundle(self, bundle : list, req : MeasurementRequest, main_measurement : str) -> bool:
-        # TODO
-        return True
+    # def _can_add_to_bundle(self, bundle : list, req : MeasurementRequest, main_measurement : str) -> bool:
+    #     # TODO
+    #     return True
 
     @abstractmethod
     def is_task_path_valid(self, state : SimulationAgentState, specs : object, path : list, orbitdata : OrbitData) -> bool:
         pass
    
+    @runtime_tracker
     def _can_access( self, 
                      state : SimulationAgentState, 
                      req : MeasurementRequest,

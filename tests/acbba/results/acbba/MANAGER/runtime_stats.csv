@@ -1,8 +1,0 @@
-routine,t_avg,t_std,t_med,n
-ENVIRONMENT_wait,-1.0,0.0,-1.0,0
-img_0_wait,1.972,5.522,0.141,11
-sar_0_wait,1.963,5.524,0.129,11
-sar_1_wait,1.966,5.527,0.128,11
-thermal_0_wait,1.961,5.518,0.13,11
-clock_wait,1.983,5.522,0.145,11
-sim_runtime,21.812,0.0,21.812,1

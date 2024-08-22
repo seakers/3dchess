@@ -24,6 +24,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
         super().__init__(max_bundle_size, replan_threshold, planning_horizon, logger)
         self.prev_bundle = []
 
+    @runtime_tracker    
     def _generate_bids_from_request(self, 
                                     req: MeasurementRequest, 
                                     state: SimulationAgentState
@@ -31,6 +32,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
         return [Bid(req.id, observation_type, state.agent_name) 
                 for observation_type in req.observation_types]
 
+    @runtime_tracker
     def _compare_bundles(self, bundle_1 : list, bundle_2 : list) -> bool:
         """ Compares two bundles. Returns true if they are equal and false if not. """
         if len(bundle_1) == len(bundle_2):
@@ -39,14 +41,8 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                     return False
             return True
         return False
-        
-    def __sum_path_utility(self, path : list) -> float:
-        """ Gives the total utility of a proposed observations sequence """
-        if -1 in [t_img for _,_,t_img,_,_ in path]:
-            return 0.0
-        
-        return sum([u for _,_,_,u in path])  
-    
+            
+    @runtime_tracker
     def log_results(self, dsc : str, state : SimulationAgentState, results : dict, 
                     level=logging.DEBUG) -> None:
         """
@@ -100,6 +96,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
 
         print(out)
 
+    @runtime_tracker
     def _can_bid(self, 
                 state : SimulationAgentState, 
                 specs : object,
@@ -178,6 +175,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
         # no valid path was found
         return -1, np.NAN
 
+    @runtime_tracker
     def is_task_path_valid(self, state : SimulationAgentState, specs : object, path : list, orbitdata : OrbitData) -> bool:
         if isinstance(state, SatelliteAgentState):
             # check if no suitable time was found for this observation

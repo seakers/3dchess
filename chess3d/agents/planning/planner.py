@@ -480,10 +480,7 @@ class AbstractPlanner(ABC):
 
             max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
             if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
-
-            # compile instrument field of view specifications   
-            cross_track_fovs : dict = self.collect_fov_specs(specs)
-
+            
             # check if every observation can be reached from the prior measurement
             for j in range(len(observations)):
 

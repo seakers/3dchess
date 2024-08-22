@@ -97,7 +97,7 @@ class TestNaivePlanner(unittest.TestCase):
                             "horizon": 1000,
                         },
                         "replanner" : {
-                            "@type" : "acbba"
+                            "@type" : "broadcaster"
                         },
                         "rewardGrid":{
                             "reward_function" : 'event',
