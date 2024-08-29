@@ -19,7 +19,7 @@ class TestDynamicProgrammingPlanner(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 0.1,
+            "duration": 90.0 / 60.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -92,14 +92,23 @@ class TestDynamicProgrammingPlanner(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "naive"
+                            "@type" : "dynamic",
+                            "period" : 200,     # s
                         },
                         "replanner" : {
                             "@type" : "broadcaster"
+                        },
+                        "rewardGrid":{
+                            "reward_function" : 'event',
+                            'initial_reward' : 1.0,
+                            'min_reward' : 1.0,
+                            'unobserved_reward_rate' : 2.0, # pts/hrs
+                            'max_unobserved_reward' : 10.0,
+                            'event_reward' : 10.0
                         }
                     },
                     "science" : {
-                        "@type": "ORACLE", 
+                        "@type": "lookup", 
                         "eventsPath" : "./tests/dynamic/resources/events.csv"
                     }
                 }

@@ -82,8 +82,9 @@ class TimeInterval:
     
     def __repr__(self) -> str:
         return f'TimeInterval({self.start},{self.end})'
-
-
+    
+    def __hash__(self) -> int:
+        return hash(str(self))
 
 class OrbitData:
     """
@@ -107,6 +108,7 @@ class OrbitData:
         self.time_step = time_data['time step']
         self.epoc_type = time_data['epoc type']
         self.epoc = time_data['epoc']
+        self.duration = time_data['duration']
 
         # agent position and eclipse information
         self.eclipse_data = eclipse_data.sort_values(by=['start index'])
@@ -445,10 +447,13 @@ class OrbitData:
                 epoc = float(epoc)
                 _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
                 time_step = float(time_step)
+                _, _, _, _, duration = time_data.at[2,time_data.axes[1][0]].split(' ')
+                duration = float(duration)
 
                 time_data = { "epoc": epoc, 
                             "epoc type": epoc_type, 
-                            "time step": time_step }
+                            "time step": time_step,
+                            "duration" : duration }
 
                 # load inter-satellite link data
                 isl_data = dict()
@@ -745,7 +750,7 @@ class OrbitData:
                 mission_specs.write(json.dumps(scenario_specs, indent=4))
 
         return data_dir
-
+    
     def _check_changes_to_scenario(scenario_dict : dict, orbitdata_dir : str) -> bool:
         """ 
         Checks if the scenario has already been pre-computed 

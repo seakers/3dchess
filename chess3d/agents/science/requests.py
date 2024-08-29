@@ -22,7 +22,7 @@ class MeasurementRequest(object):
                  target : list,
                  severity : float,
                  observation_types : list,
-                 t_start: Union[float, int] = 0.0, 
+                 t_start: Union[float, int], 
                  t_end: Union[float, int] = np.Inf, 
                  t_corr: Union[float, int] = np.Inf, 
                  id: str = None, 
@@ -111,6 +111,10 @@ class MeasurementRequest(object):
                              and all([observation in other.observation_types for observation in self.observation_types]))
         same_time = abs(self.t_end - other.t_end) <= 1e-3
         same_decorrelation = abs(self.t_corr - other.t_corr) <= 1e-3
+
+        if not (same_target and same_severity and same_time):
+            x = 1
+
         return (
                 same_target
                 and same_severity

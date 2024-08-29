@@ -1,0 +1,5 @@
+routine,t_avg,t_std,t_med,n
+sar_sat_0_0,0.012,0.004,0.012,1205
+therm_sat_0_0,0.013,0.007,0.012,1131
+vis_sat_0_0,0.013,0.005,0.012,1205
+query_measurement_data,0.009,0.001,0.008,814

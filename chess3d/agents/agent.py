@@ -220,7 +220,7 @@ class SimulationAgent(Agent):
             else:
                 senses_dict.append(sense.to_dict())
 
-        senses_msg = SensesMessage( self.get_element_name(), 
+        senses_msg = SenseMessage( self.get_element_name(), 
                                     self.get_element_name(),
                                     state_dict, 
                                     senses_dict)
@@ -257,11 +257,11 @@ class SimulationAgent(Agent):
 
         # perform each action and record action status
         statuses = []
-        for action in [action_from_dict(**action_dict) for action_dict in actions]:
-            action : AgentAction
+        for action_dict in actions:
+            action : AgentAction = action_from_dict(**action_dict)
 
             # check action start time
-            if (action.t_start - self.get_current_time()) > np.finfo(np.float32).eps:
+            if (action.t_start - self.get_current_time()) > 1e-6:
                 self.log(f"action of type {action.action_type} has NOT started yet (start time {action.t_start}[s]). waiting for start time...", level=logging.ERROR)
                 action.status = AgentAction.PENDING
                 statuses.append((action, action.status))
@@ -269,7 +269,7 @@ class SimulationAgent(Agent):
                 raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action.action_type} before it started (start time {action.t_start}[s]) at time {self.get_current_time()}[s]")
             
             # check action end time
-            if (self.get_current_time() - action.t_end) > np.finfo(np.float32).eps:
+            if (self.get_current_time() - action.t_end) > 1e-6:
                 self.log(f"action of type {action.action_type} has already occureed (start/end times {action.t_start}[s], {action.t_end}[s]). could not perform task before...", level=logging.ERROR)
                 action.status = AgentAction.ABORTED
                 statuses.append((action, action.status))
@@ -454,6 +454,16 @@ class SimulationAgent(Agent):
           TEARDOWN       
     --------------------
     """
+    async def _publish_deactivate(self) -> None:
+        # notify monitor
+        await super()._publish_deactivate()
+
+        # notify manager
+        manager_message = NodeDeactivatedMessage(self.get_element_name(), SimulationElementRoles.MANAGER.value)
+        await self._send_manager_msg(manager_message, zmq.PUB)
+
+        x = 1
+
     async def teardown(self) -> None:
         # TODO log agent capabilities
 
@@ -481,7 +491,7 @@ class SimulationAgent(Agent):
             data.append(line_data)
         
         state_df = DataFrame(data,columns=headers)
-        self.log(f'\nPayload: {self.state.payload}\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
+        self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
         state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
         # log performance stats

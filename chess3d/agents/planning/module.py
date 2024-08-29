@@ -1,3 +1,6 @@
+import copy
+import traceback
+from typing import Callable
 import pandas as pd
 
 from orbitpy.util import Spacecraft
@@ -9,6 +12,7 @@ from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.agents.planning.planner import AbstractReplanner
 from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -18,6 +22,7 @@ class PlanningModule(InternalModule):
                 results_path : str, 
                 parent_agent_specs : object,
                 parent_network_config: NetworkConfig, 
+                reward_grid : RewardGrid,
                 preplanner : AbstractPreplanner = None,
                 replanner : AbstractReplanner = None,
                 orbitdata : OrbitData = None,
@@ -49,14 +54,15 @@ class PlanningModule(InternalModule):
                     }
         self.agent_state : SimulationAgentState = None
         self.other_modules_exist : bool = False
-        
-        # set parameters
+
+        # set attributes
         self.results_path = results_path
         self.parent_agent_specs = parent_agent_specs
         self.parent_name = parent_name
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
         self.orbitdata : OrbitData = orbitdata
+        self.reward_grid = reward_grid
 
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
         """ Sets up network configuration for intra-agent module communication """
@@ -117,19 +123,15 @@ class PlanningModule(InternalModule):
             listener_task = asyncio.create_task(self.listener(), name='listener()')
             planner_task = asyncio.create_task(self.planner(), name='planner()')
             
-            tasks = [listener_task, planner_task]
+            tasks : list[asyncio.Task] = [listener_task, planner_task]
 
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
         finally:
-            for task in done:
-                self.log(f'`{task.get_name()}` task finalized! Terminating all other tasks...')
-
-            for task in pending:
-                task : asyncio.Task
+            for task in tasks:
                 if not task.done():
                     task.cancel()
-                    await task
+                    await task           
 
     """
     -----------------
@@ -159,7 +161,7 @@ class PlanningModule(InternalModule):
                     self.log(f"received senses from parent agent!", level=logging.DEBUG)
 
                     # unpack message 
-                    senses_msg : SensesMessage = SensesMessage(**content)
+                    senses_msg : SenseMessage = SenseMessage(**content)
 
                     # sort agent senses to be processed
                     senses = [senses_msg.state]
@@ -170,56 +172,8 @@ class PlanningModule(InternalModule):
                         # unpack message
                         msg : SimulationMessage = message_from_dict(**sense)
 
-                        # check relay path
-                        if msg.path:
-                            # message contains relay path; forward message copy
-                            await self.relay_inbox.put(message_from_dict(**sense))
-
-                        # check type of message being received
-                        if isinstance(msg, AgentActionMessage):
-                            # agent action received
-                            self.log(f"received agent action of status {msg.status}!")
-                            
-                            # send to planner
-                            await self.action_status_inbox.put(msg)
-
-                        elif isinstance(msg, AgentStateMessage):
-                            # agent state received
-                            self.log(f"received agent state message!")
-                            
-                            # unpack state
-                            state : SimulationAgentState = SimulationAgentState.from_dict(msg.state)                                                          
-                            
-                            # send to planner
-                            await self.states_inbox.put(state)
-
-                        elif isinstance(msg, MeasurementRequestMessage):
-                            # measurement request message received
-                            self.log(f"received measurement request message!")
-
-                            # unapack measurement request
-                            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
-                            
-                            # send to planner
-                            await self.req_inbox.put(req)
-
-                        elif isinstance(msg, ObservationResultsMessage):
-                            # observation data from another agent was received
-                            self.log(f"received observation data from agent!")
-
-                            # send to planner
-                            await self.observations_inbox.put(msg)
-
-                        # TODO support down-linked information processing
-                        ## elif isinstance(msg, DOWNLINKED MESSAGE CONFIRMATION):
-                        ##     pass
-
-                        else:
-                            # other type of message was received
-                            self.log(f"received some other kind of message!")
-
-                            # send to planner
-                            await self.misc_inbox.put(msg)
+                        # place in correct inbox
+                        await self.categorize_messages(msg)
 
                 else:
                     if not self.other_modules_exist:
@@ -227,16 +181,86 @@ class PlanningModule(InternalModule):
                         self.other_modules_exist = True
                         
                     if content['msg_type'] == 'HANDSHAKE':
-                        continue
+                        pass
 
-                    # unpack message
-                    msg : SimulationMessage = message_from_dict(**content)
+                    elif content['msg_type'] == SimulationMessageTypes.BUS.value:
+                        # received bus message containing other messages
+                        self.log(f"received bus message!", level=logging.DEBUG)
 
-                    # send to planner
-                    await self.internal_inbox.put(msg)
+                        # unpack bus message 
+                        bus_msg : BusMessage = BusMessage(**content)
+
+                        # process agent senses
+                        for msg_dict in bus_msg.msgs:
+                            # unpack message
+                            msg : SimulationMessage = message_from_dict(**msg_dict)
+
+                            # send to planner
+                            await self.internal_inbox.put(msg)
+                    else:
+                        # received an internal message
+                        self.log(f"received bus message!", level=logging.DEBUG)
+
+                        # unpack message
+                        msg : SimulationMessage = message_from_dict(**content)
+
+                        # send to planner
+                        await self.internal_inbox.put(msg)
 
         except asyncio.CancelledError:
             return
+        
+    async def categorize_messages(self, msg : SimulationMessage) -> None:
+        # check relay path
+        if msg.path:
+            # message contains relay path; forward message copy
+            await self.relay_inbox.put(copy.deepcopy(msg))
+
+        # check type of message being received
+        if isinstance(msg, AgentActionMessage):
+            # agent action received
+            self.log(f"received agent action of status {msg.status}!")
+            
+            # send to planner
+            await self.action_status_inbox.put(msg)
+
+        elif isinstance(msg, AgentStateMessage):
+            # agent state received
+            self.log(f"received agent state message!")
+            
+            # unpack state
+            state : SimulationAgentState = SimulationAgentState.from_dict(msg.state)                                                          
+            
+            # send to planner
+            await self.states_inbox.put(state)
+
+        elif isinstance(msg, MeasurementRequestMessage):
+            # measurement request message received
+            self.log(f"received measurement request message!")
+
+            # unapack measurement request
+            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
+            
+            # send to planner
+            await self.req_inbox.put(req)
+
+        elif isinstance(msg, ObservationResultsMessage):
+            # observation data from another agent was received
+            self.log(f"received observation data from agent!")
+
+            # send to planner
+            await self.observations_inbox.put(msg)
+
+        # TODO support down-linked information processing
+        ## elif isinstance(msg, DOWNLINKED MESSAGE CONFIRMATION):
+        ##     pass
+
+        else:
+            # other type of message was received
+            self.log(f"received some other kind of message!")
+
+            # send to planner
+            await self.misc_inbox.put(msg)
         
     """
     -----------------
@@ -278,6 +302,16 @@ class PlanningModule(InternalModule):
                                                 self.get_current_time()
                                             )
                 
+                # compile measurements performed by myself or other agents
+                observations = [action for action in completed_actions
+                                if isinstance(action, ObservationAction)]
+                observations.extend([action_from_dict(**msg.observation_action) 
+                                    for msg in misc_messages
+                                    if isinstance(msg, ObservationPerformedMessage)])
+                
+                # update reward grid
+                self.reward_grid.update(state.t, observations, incoming_reqs)
+                
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_actions(completed_actions, aborted_actions, pending_actions)
                 # -------------------------------------
@@ -300,10 +334,11 @@ class PlanningModule(InternalModule):
                     # check if there is a need to construct a new plan
                     if self.preplanner.needs_planning(state, 
                                                       self.parent_agent_specs, 
-                                                      plan):     
+                                                      plan):  
                         # initialize plan      
                         plan : Plan = self.preplanner.generate_plan(state, 
                                                                     self.parent_agent_specs,
+                                                                    self.reward_grid,
                                                                     self._clock_config,
                                                                     self.orbitdata
                                                                     )
@@ -313,7 +348,7 @@ class PlanningModule(InternalModule):
                         self.plan_history.append((state.t, plan_copy))
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
@@ -345,6 +380,7 @@ class PlanningModule(InternalModule):
                         # Modify current Plan      
                         plan : Plan = self.replanner.generate_plan(state, 
                                                                    self.parent_agent_specs,    
+                                                                   self.reward_grid,
                                                                    plan,
                                                                    self._clock_config,
                                                                    self.orbitdata
@@ -383,6 +419,11 @@ class PlanningModule(InternalModule):
 
         except asyncio.CancelledError:
             return
+        
+        except Exception as e:
+            # traceback.format_exc()
+            print(e)
+            raise e
                 
     @runtime_tracker
     async def __check_action_completion(self, level : int = logging.DEBUG) -> tuple:
@@ -429,19 +470,20 @@ class PlanningModule(InternalModule):
             generated_reqs 
             misc_messages
         """
-        requests = []
-        while not self.req_inbox.empty():
-            requests.append(await self.req_inbox.get())
-
+        # compile incoming observations
         incoming_obsevations = []
         while not self.observations_inbox.empty():
             incoming_obsevations.append(await self.observations_inbox.get())
 
-        if (self.other_modules_exist                # science module exists within the parent agent
-            and len(incoming_obsevations) > 0       # some agent just performed an observation
-            ):
+        # compile incoming requests
+        requests = []
+        while not self.req_inbox.empty():
+            requests.append(await self.req_inbox.get())
 
-            while True:
+        # process internal messages
+        if self.other_modules_exist:                
+            # check if the parent agent just performed an observation
+            while len(incoming_obsevations) > 0:    
                 # wait for science module to send their assesment of the observation 
                 internal_msg = await self.internal_inbox.get()
 
@@ -455,8 +497,6 @@ class PlanningModule(InternalModule):
                         # event was detected and an observation was requested
                         requests.append(request)
 
-                    # give science module time to send any remaining measurement requests
-                    await asyncio.sleep(1e-6)
                 else:
                     # the science module generated a different response; process later
                     await self.misc_inbox.put(internal_msg)
@@ -465,16 +505,39 @@ class PlanningModule(InternalModule):
                 if self.internal_inbox.empty():
                     # no more messages from the science module; stop wait
                     break
+            
+            # process internal messages
+            while not self.internal_inbox.empty():
+                # get next internal message
+                internal_msg = await self.internal_inbox.get()
 
+                # classify message
+                if isinstance(internal_msg, MeasurementRequestMessage):
+                    # the science module analized out latest observation(s)
+                    request : MeasurementRequest = MeasurementRequest.from_dict(internal_msg.req)
+                    
+                    # check if outlier was deteced
+                    if request.severity > 0.0:
+                        # event was detected and an observation was requested
+                        requests.append(request)
+
+                else:
+                    # the science module generated a different response; process later
+                    await self.misc_inbox.put(internal_msg)
+
+        # compile incoming relay messages
         relay_messages= []
         while not self.relay_inbox.empty():
             relay_messages.append(await self.relay_inbox.get())
 
+        # compile miscellaneous messages
         misc_messages = []
         while not self.misc_inbox.empty():
             misc_messages.append(await self.misc_inbox.get())
 
+        # return classified messages
         return requests, relay_messages, misc_messages
+    
     
     def __log_actions(self, completed_actions : list, aborted_actions : list, pending_actions : list) -> None:
         all_actions = [action for action in completed_actions]
@@ -490,23 +553,27 @@ class PlanningModule(InternalModule):
             self.log(out, logging.WARNING)
 
     def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
-        out = f'\n{title}\n'
+        try:
+            out = f'\n{title}\n'
 
-        if isinstance(plan, Plan):
-            out += str(plan)
-        else:
-            for action in plan:
-                if isinstance(action, AgentAction):
-                    out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
-                elif isinstance(action, dict):
-                    out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
-        
+            if isinstance(plan, Plan):
+                out += str(plan)
+            else:
+                for action in plan:
+                    if isinstance(action, AgentAction):
+                        out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+                    elif isinstance(action, dict):
+                        out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+            
 
-        self.log(out, level)
+            self.log(out, level)
+        except Exception as e:
+            print(e)
+            raise e
                
     async def teardown(self) -> None:
         # log plan history
-        headers = ['plan_index', 't_plan', 'req_id', 'subtask_index', 't_img', 'u_exp']
+        headers = ['plan_index', 't_plan', 'instrument', 't_img']
         data = []
         
         for i in range(len(self.plan_history)):
@@ -517,13 +584,10 @@ class PlanningModule(InternalModule):
                 if not isinstance(action, ObservationAction):
                     continue
 
-                req : MeasurementRequest = MeasurementRequest.from_dict(action.measurement_req)
                 line_data = [   i,
                                 np.round(t_plan,3),
-                                req.id.split('-')[0],
-                                action.subtask_index,
-                                np.round(action.t_start,3 ),
-                                np.round(action.u_exp,3)
+                                action.instrument_name,
+                                np.round(action.t_start,3 )
                 ]
                 data.append(line_data)
 
@@ -531,8 +595,15 @@ class PlanningModule(InternalModule):
         self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
         df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
 
+        # log reward grid history
+        headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
+        data = self.reward_grid.get_history()
+        df = pd.DataFrame(data, columns=headers)
+        self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
+        df.to_csv(f"{self.results_path}/{self.get_parent_name()}/reward_grid_history.csv", index=False)
+
         # log performance stats
-        n_decimals = 3
+        n_decimals = 5
         headers = ['routine','t_avg','t_std','t_med','n']
         data = []
 

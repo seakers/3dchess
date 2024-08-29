@@ -1,0 +1,48 @@
+{
+    "epoch": {
+        "@type": "GREGORIAN_UT1",
+        "year": 2020,
+        "month": 1,
+        "day": 1,
+        "hour": 0,
+        "minute": 0,
+        "second": 0
+    },
+    "duration": 0.1,
+    "propagator": {
+        "@type": "J2 ANALYTICAL PROPAGATOR",
+        "stepSize": 10
+    },
+    "spacecraft": [],
+    "grid": [
+        {
+            "@type": "customGrid",
+            "covGridFilePath": "./tests/events/resources/points.csv"
+        }
+    ],
+    "scenario": {
+        "connectivity": "FULL",
+        "utility": "LINEAR",
+        "events": {
+            "@type": "random",
+            "numberOfEvents": 1000,
+            "duration": 3600,
+            "minSeverity": 0.0,
+            "maxSeverity": 100,
+            "measurements": [
+                "sar",
+                "visual",
+                "thermal"
+            ]
+        },
+        "clock": {
+            "@type": "EVENT"
+        },
+        "scenarioPath": "./tests/events/",
+        "name": "events"
+    },
+    "settings": {
+        "coverageType": "GRID COVERAGE",
+        "outDir": "./tests/events/orbit_data"
+    }
+}
