@@ -7,13 +7,14 @@ Observations,1106
 Events,99
 Events Detected,1
 Events Observed,1
-Total Event Observations,2
+Observations,1106
+Event Observations,2
 Events Re-observed,1
-Total Event Re-observations,2
+Event Re-observations,2
 Events Co-observed,1
 Events Partially Co-observed,0
 Events Fully Co-observed,1
-Total Event Co-observations,2
+Event Co-observations,2
 P(Event Detected),0.01
 P(Event Observed),0.01
 P(Event Re-observed),0.01
@@ -21,9 +22,10 @@ P(Event Co-observed),0.01
 P(Event Partially Co-observed),0.0
 P(Event Fully Co-observed),0.01
 P(Event at a GP),0.013
+P(Event Observation | Observation),0.001
 P(Event Observed | Event Detected),1.0
 P(Event Re-oberved | Event Detected),1.0
 P(Event Co-observed | Event Detected),1.0
 P(Event Co-observed Partially | Event Detected),0.0
 P(Event Co-observed Fully | Event Detected),1.0
-Total Runtime [s],28.299
+Total Runtime [s],27.153

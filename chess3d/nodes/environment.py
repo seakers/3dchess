@@ -481,15 +481,16 @@ class SimulationEnvironment(EnvironmentNode):
             n_gps, n_events, n_events_detected, n_events_observed, \
                 n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
                     n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                        n_total_event_co_obs \
+                        n_total_event_co_obs, n_observations \
                             = self.count_observations(observations_performed)
             
             # count probabilities of observations performed
-            p_event_detected, p_event_observed, p_event_reobserved, \
-                p_event_coobserved, p_event_coobserved_partial, p_event_coobserbed_fully, \
-                    p_event_at_gp, p_event_observed_if_detected, p_event_reobserved_if_detected, \
-                        p_event_coobserved_if_detected, p_event_coobserved_partial_if_detected, p_event_coobserbed_fully_if_detected \
-                            = self.calc_event_probabilities(observations_performed)
+            p_event_detected, p_event_observed, p_event_re_obs, \
+                p_event_co_obs, p_event_co_obs_partial, p_event_obs_if_obs, \
+                    p_event_co_obs_fully, p_event_at_gp, p_event_observed_if_detected, \
+                        p_event_re_obs_if_detected, p_event_co_obs_if_detected, p_event_co_obs_partial_if_detected, \
+                            p_event_co_obs_fully_if_detected \
+                                = self.calc_event_probabilities(observations_performed)
 
             # calculate coverage
             # n_gps, n_gps_accessible, n_gps_access_ptg = self.calc_coverage_metrics()
@@ -497,7 +498,6 @@ class SimulationEnvironment(EnvironmentNode):
             # count number of GPs observed
             gps_observed : set = {(lat,lon) for _,_,lat,lon,*_ in observations_performed.values}
             n_gps_observed = len(gps_observed)
-            n_obs = len(observations_performed.values)
 
             # commpile
             broadcasts_performed : pd.DataFrame = self.compile_broadcasts()
@@ -509,38 +509,43 @@ class SimulationEnvironment(EnvironmentNode):
             # Generate summary
             summary_headers = ['stat_name', 'val']
             summary_data = [
+                        # Dates
                         ['Simulation Start Date', self._clock_config.start_date], 
                         ['Simulation End Date', self._clock_config.end_date], 
 
+                        # Coverage Metrics #TODO add more
                         ['Ground Points', n_gps],
-                        ['Ground Points Observed', n_gps_observed],
-                        ['Observations', n_obs],
+                        ['Ground Points Observed', n_gps_observed]
 
+                        # Counters
                         ['Events', n_events],
                         ['Events Detected', n_events_detected],
                         ['Events Observed', n_events_observed],
-                        ['Total Event Observations', n_total_event_obs],
+                        ['Observations', n_observations],
+                        ['Event Observations', n_total_event_obs],
                         ['Events Re-observed', n_events_reobserved],
-                        ['Total Event Re-observations', n_total_event_re_obs],
+                        ['Event Re-observations', n_total_event_re_obs],
                         ['Events Co-observed', n_events_co_obs],
                         ['Events Partially Co-observed', n_events_partially_co_obs],
                         ['Events Fully Co-observed', n_events_fully_co_obs],
-                        ['Total Event Co-observations', n_total_event_co_obs],
+                        ['Event Co-observations', n_total_event_co_obs],
 
+                        # probabilities
                         ['P(Event Detected)', np.round(p_event_detected,n_decimals)],
                         ['P(Event Observed)', np.round(p_event_observed,n_decimals)],
-                        ['P(Event Re-observed)', np.round(p_event_reobserved,n_decimals)],
-                        ['P(Event Co-observed)', np.round(p_event_coobserved,n_decimals)],
-                        ['P(Event Partially Co-observed)', np.round(p_event_coobserved_partial,n_decimals)],
-                        ['P(Event Fully Co-observed)', np.round(p_event_coobserbed_fully,n_decimals)],
-                        ['P(Event at a GP)', np.round(p_event_at_gp,3)],
+                        ['P(Event Re-observed)', np.round(p_event_re_obs,n_decimals)],
+                        ['P(Event Co-observed)', np.round(p_event_co_obs,n_decimals)],
+                        ['P(Event Partially Co-observed)', np.round(p_event_co_obs_partial,n_decimals)],
+                        ['P(Event Fully Co-observed)', np.round(p_event_co_obs_fully,n_decimals)],
+                        ['P(Event at a GP)', np.round(p_event_at_gp,n_decimals)],
+                        ['P(Event Observation | Observation)', np.round(p_event_obs_if_obs,n_decimals)],
                         ['P(Event Observed | Event Detected)', np.round(p_event_observed_if_detected,n_decimals)],
-                        ['P(Event Re-oberved | Event Detected)', np.round(p_event_reobserved_if_detected,n_decimals)],
-                        ['P(Event Co-observed | Event Detected)', np.round(p_event_coobserved_if_detected,n_decimals)],
-                        ['P(Event Co-observed Partially | Event Detected)', np.round(p_event_coobserved_partial_if_detected,n_decimals)],
-                        ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_coobserbed_fully_if_detected,n_decimals)],
+                        ['P(Event Re-oberved | Event Detected)', np.round(p_event_re_obs_if_detected,n_decimals)],
+                        ['P(Event Co-observed | Event Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
+                        ['P(Event Co-observed Partially | Event Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
+                        ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
 
-                        ['Total Runtime [s]', round(self.t_f - self.t_0, 3)]
+                        ['Total Runtime [s]', round(self.t_f - self.t_0, n_decimals)]
                     ]
 
             summary_df = DataFrame(summary_data, columns=summary_headers)
@@ -711,11 +716,12 @@ class SimulationEnvironment(EnvironmentNode):
         n_events_fully_co_obs = len(events_co_obs_fully)
         n_events_partially_co_obs = len(events_co_obs_partially)
         n_total_event_co_obs = sum([len(observations) for _,observations in events_co_obs.items()])
+        n_observations = len(observations_performed)
 
         return n_gps, n_events, n_events_detected, n_events_observed, \
                 n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
                     n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                        n_total_event_co_obs
+                        n_total_event_co_obs, n_observations
                     
     
     def calc_event_probabilities(self, observations_performed : pd.DataFrame) -> tuple:
@@ -728,7 +734,7 @@ class SimulationEnvironment(EnvironmentNode):
         n_gps, n_events, n_events_detected, n_events_observed, \
             n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
                 n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                    n_total_event_co_obs \
+                    n_total_event_co_obs, n_observations \
                         = self.count_observations(observations_performed)
                     
         # count number of groundpoints with events
@@ -758,6 +764,7 @@ class SimulationEnvironment(EnvironmentNode):
         p_event_co_obs = n_events_co_obs / n_events
         p_event_co_obs_fully = n_events_fully_co_obs / n_events
         p_event_co_obs_partial = n_events_partially_co_obs / n_events
+        p_event_obs_if_obs = n_events_observed / n_observations
 
         # calculate joint probabilities
         p_event_observed_and_detected = n_events_detected_and_observed / n_events
@@ -781,9 +788,10 @@ class SimulationEnvironment(EnvironmentNode):
             p_event_co_obs_partial_if_detected = np.NaN
 
         return p_event_detected, p_event_observed, p_event_re_obs, \
-                p_event_co_obs, p_event_co_obs_partial, p_event_co_obs_fully, \
-                    p_event_at_gp, p_event_observed_if_detected, p_event_re_obs_if_detected, \
-                        p_event_co_obs_if_detected, p_event_co_obs_partial_if_detected, p_event_co_obs_fully_if_detected
+                p_event_co_obs, p_event_co_obs_partial, p_event_obs_if_obs, \
+                    p_event_co_obs_fully, p_event_at_gp, p_event_observed_if_detected, \
+                        p_event_re_obs_if_detected, p_event_co_obs_if_detected, p_event_co_obs_partial_if_detected, \
+                            p_event_co_obs_fully_if_detected
 
     def calc_coverage_metrics(self) -> tuple:
         # TODO improve performance or load precomputed vals

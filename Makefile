@@ -20,7 +20,8 @@ all: bare install
 
 install: 
 	-X=`pwd`; \
-	cd $$X; pip install -e .
+	cd $$X; pip install -e .; \
+	pip install skyfield
 
 docs: docs_clean #Build the documentation
 	-X=`pwd`; \
