@@ -20,8 +20,9 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                  max_bundle_size: int = 1, 
                  replan_threshold: int = 1,
                  planning_horizon: float = np.Inf, 
+                 debug : bool = False,
                  logger: Logger = None) -> None:
-        super().__init__(max_bundle_size, replan_threshold, planning_horizon, logger)
+        super().__init__(max_bundle_size, replan_threshold, planning_horizon, debug, logger)
         self.prev_bundle = []
 
     @runtime_tracker    

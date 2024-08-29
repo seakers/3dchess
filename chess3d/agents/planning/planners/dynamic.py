@@ -25,10 +25,11 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
     def __init__(self, 
                  sharing : bool = False,
                  horizon: float = np.Inf, 
-                 period: float = np.Inf, 
+                 period : float = np.Inf, 
+                 debug : bool = False,
                  logger: Logger = None
                  ) -> None:
-        super().__init__(horizon, period, logger)
+        super().__init__(horizon, period, debug, logger)
 
         # toggle for sharing plans
         self.sharing = sharing 

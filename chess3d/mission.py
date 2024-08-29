@@ -853,13 +853,14 @@ class SimulationElementsFactory:
 
                 period = preplanner_dict.get('period', np.Inf)
                 horizon = preplanner_dict.get('horizon', period)
+                debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
                 # initialize preplanner
                 if preplanner_type.lower() == "naive":
-                    preplanner = NaivePlanner(horizon, period, logger)
+                    preplanner = NaivePlanner(horizon, period, debug, logger)
 
                 elif preplanner_type.lower() == 'nadir':
-                    preplanner = NadirPointingPlaner(horizon, period, logger)
+                    preplanner = NadirPointingPlaner(horizon, period, debug, logger)
 
                 elif preplanner_type.lower() == "dynamic":
                     period = preplanner_dict.get('period', 500)
@@ -868,7 +869,7 @@ class SimulationElementsFactory:
                     if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
 
                     sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
-                    preplanner = DynamicProgrammingPlanner(sharing, horizon, period, logger)
+                    preplanner = DynamicProgrammingPlanner(sharing, horizon, period, debug, logger)
                 
                 # elif... # add more planners here
                 
@@ -882,9 +883,10 @@ class SimulationElementsFactory:
             if isinstance(replanner_dict, dict):
                 replanner_type : str = replanner_dict.get('@type', None)
                 if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
+                debug = bool(preplanner_dict.get('debug', 'true').lower() in ['true', 't'])
 
                 if replanner_type.lower() == 'broadcaster':
-                    replanner = Broadcaster(logger)
+                    replanner = Broadcaster(debug, logger)
 
                 elif replanner_type.lower() == 'acbba': 
                     max_bundle_size = replanner_dict.get('bundle size', 3)
@@ -894,6 +896,7 @@ class SimulationElementsFactory:
                     replanner = ACBBAPlanner(max_bundle_size, 
                                              threshold, 
                                              horizon,
+                                             debug,
                                              logger)
                 
                 else:

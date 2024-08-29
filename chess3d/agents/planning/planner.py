@@ -23,6 +23,7 @@ class AbstractPlanner(ABC):
     Describes a generic planner that, given a new set of percepts, decides whether to generate a new plan
     """
     def __init__(self, 
+                 debug : bool = False,
                  logger : logging.Logger = None) -> None:
         # initialize object
         super().__init__()
@@ -39,6 +40,7 @@ class AbstractPlanner(ABC):
         self.stats = {}                                                     # collector for runtime performance statistics
         
         # set attribute parameters
+        self._debug = debug                 # toggles debugging features
         self._logger = logger               # logger for debugging
 
     @abstractmethod
@@ -602,6 +604,7 @@ class AbstractPreplanner(AbstractPlanner):
     def __init__(   self, 
                     horizon : float = np.Inf,
                     period : float = np.Inf,
+                    debug : bool = False,
                     logger: logging.Logger = None
                 ) -> None:
         """
@@ -615,7 +618,7 @@ class AbstractPreplanner(AbstractPlanner):
             - logger (`logging.Logger`) : debugging logger
         """
         # initialize planner
-        super().__init__(logger)    
+        super().__init__(debug, logger)    
 
         # set parameters
         self.horizon = horizon                               # planning horizon

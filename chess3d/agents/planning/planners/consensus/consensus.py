@@ -27,9 +27,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
                  max_bundle_size : int = 1,
                  replan_threshold : int = 1,
                  planning_horizon : float = np.Inf,
+                 debug : bool = False,
                  logger: logging.Logger = None
                  ) -> None:
-        super().__init__(logger=logger)
+        super().__init__(debug, logger)
 
         # initialize variables
         self.bundle = []
@@ -140,11 +141,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
             # remove from pre-plan
             for observation in matching_planned_observations: 
                 self.preplan.actions.remove(observation)
-
-        if incoming_reqs:
-            x = 1
-        elif self.incoming_bids:
-            x = 1
         
     def _compile_completed_observations(self, 
                                         completed_actions : list, 
@@ -215,9 +211,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
         self.bids_to_rebroadcasts.extend(bids_to_rebroadcasts)
         
         path = self.path_from_bundle(self.bundle)
-        if not self.is_task_path_valid(state, specs, path, orbitdata):
-            x = 1
-        assert self.is_task_path_valid(state, specs, path, orbitdata)
+
+        if self._debug: assert self.is_task_path_valid(state, specs, path, orbitdata)
         
         # ---------------------------------
         # DEBUGGING OUTPUTS 
@@ -325,13 +320,13 @@ class AbstractConsensusReplanner(AbstractReplanner):
         path : list = self.path_from_bundle(bundle)
 
         # ensure path given was valid
-        assert self.is_task_path_valid(state, specs, path, orbitdata)
+        if self._debug: assert self.is_task_path_valid(state, specs, path, orbitdata)
         
         # merge with preplanned observations
         observations : list[ObservationAction] = self.merge_plans(state, specs, path)
         
         # ensure resulting plan is valid
-        assert self.is_observation_path_valid(state, specs, observations)
+        if self._debug: assert self.is_observation_path_valid(state, specs, observations)
         
         # return observations
         return observations
@@ -1019,37 +1014,17 @@ class AbstractConsensusReplanner(AbstractReplanner):
                                 orbitdata : OrbitData
                                 ) -> list:
         """ Returns a list of known requests that can be performed within the current planning horizon """
-        
+        reqs_from_id = {req_id : self._get_matching_request(req_id) for req_id in results}
+
         # find requests that can be bid on
-        biddable_reqs = []        
-        for req_id in results:
-            req = None
-            for main_measurement in results[req_id]:
-                bid : Bid = results[req_id][main_measurement]
-
-                if req is None: req = self._get_matching_request(bid.req_id)
-
-                # check if the agent can bid on the tasks
-                if not self._can_bid(state, specs, results, req, main_measurement):
-                    continue
-
-                # check if the agent can access the task
-                if not self._can_access(state, req, orbitdata):
-                    continue 
-                
-                # check if the task is already in the bundle
-                if (req, main_measurement, bid) in bundle:
-                    continue
-
-                # check if the task has already been performed
-                if self.__request_has_been_performed(results, req, main_measurement, state.t):
-                    continue
-
-                # # check if the task can be placed in the bundle:
-                # if not self._can_add_to_bundle(bundle, req, main_measurement):
-                #     continue
-
-                biddable_reqs.append((req, main_measurement))  
+        biddable_reqs = [(reqs_from_id[req_id], main_measurement)
+                         for req_id in results
+                         for main_measurement in results[req_id]
+                         if self._can_bid(state, specs, results, reqs_from_id[req_id], main_measurement)
+                         and self._can_access(state, reqs_from_id[req_id], orbitdata)
+                         and (reqs_from_id[req_id], main_measurement, results[req_id][main_measurement]) not in bundle
+                         and not self.__request_has_been_performed(results, reqs_from_id[req_id], main_measurement, state.t)
+                         ]
 
         # sort biddable requests by earliest access times
         biddable_reqs_accesses = []
@@ -1076,10 +1051,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # return sorted list of access times
         return [(req,main_measurement) for *_,req,main_measurement in biddable_reqs_accesses]
         
-    # def _can_add_to_bundle(self, bundle : list, req : MeasurementRequest, main_measurement : str) -> bool:
-    #     # TODO
-    #     return True
-
     @abstractmethod
     def is_task_path_valid(self, state : SimulationAgentState, specs : object, path : list, orbitdata : OrbitData) -> bool:
         pass
