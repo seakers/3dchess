@@ -38,19 +38,21 @@ monitoring system.
 
 
 ## Installation
-> **Requirements:** Python version 3.8, `gfortran`, `make`
-
 1. Install the [`dmas`](https://github.com/seakers/DMASpy) library and all of its dependencies is required for running these scenarios.
 
 2. Run `make` from the root repo directory.
 
-## Running DMAS - 3DCHESS
+## Running a Simulation
+
+Define 
+
+<!-- ## Running DMAS - 3DCHESS
 
 Open a terminal in this directory and run `main.py` by entering the following command:
 
     python main.py <scenario name>
 
-To create a scenario, see `scenarios/README.md`.
+To create a scenario, see `scenarios/README.md`. -->
 
 ## Acknowledgments
 
