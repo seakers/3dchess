@@ -22,7 +22,7 @@ monitoring system.
 ## Directory structure
 ```
 ├───.temp (To be determined, temporary folder with old files)
-├───docs (sphinx and other documentation)
+├───docs (sphinx and other project-related documentation)
 ├───scenarios (folder with the input and results files for simulations)
 ├───tests (unit tests)
 └───chess3d (folder with main source code)
@@ -40,22 +40,20 @@ monitoring system.
 ## Installation
 1. Install the [`dmas`](https://github.com/seakers/DMASpy) library and all of its dependencies is required for running these scenarios.
 
-2. Run `make` from the root repo directory.
+2. Install `chess3d` library.
+```
+make 
+```
 
-## Running a Simulation
+3. **Optional:** Confirm installation.
+```
+make runtest
+```
 
-Define 
-
-<!-- ## Running DMAS - 3DCHESS
-
-Open a terminal in this directory and run `main.py` by entering the following command:
-
-    python main.py <scenario name>
-
-To create a scenario, see `scenarios/README.md`. -->
+## Creating and Running a 3D-CHESS Simulation
+See [`scenarios`](./scenarios/README.md) directory for further details.
 
 ## Acknowledgments
-
 This work has been funded by grants from the National Aeronautics and Space Administration (NASA) Earth Science Technology Office (ESTO) through the Advanced Information Systems Technology (AIST) Program.
 
 ## Contact 
