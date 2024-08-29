@@ -5,7 +5,6 @@ import time
 from typing import Any, Callable, Dict
 import numpy as np
 import pandas as pd
-from pandas import DataFrame
 from zmq import asyncio as azmq
 
 from instrupy.base import Instrument
@@ -475,83 +474,19 @@ class SimulationEnvironment(EnvironmentNode):
             self.log(f"MEASUREMENTS RECEIVED:\n{len(observations_performed.values)}\n\n", level=logging.WARNING)
             observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
             
-            # TODO: move this section to external results compiler script -------------
-            # count observations performed
-            # n_events, n_unique_event_obs, n_total_event_obs,
-            n_gps, n_events, n_events_detected, n_events_observed, \
-                n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
-                    n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                        n_total_event_co_obs, n_observations \
-                            = self.count_observations(observations_performed)
-            
-            # count probabilities of observations performed
-            p_event_detected, p_event_observed, p_event_re_obs, \
-                p_event_co_obs, p_event_co_obs_partial, p_event_obs_if_obs, \
-                    p_event_co_obs_fully, p_event_at_gp, p_event_observed_if_detected, \
-                        p_event_re_obs_if_detected, p_event_co_obs_if_detected, p_event_co_obs_partial_if_detected, \
-                            p_event_co_obs_fully_if_detected \
-                                = self.calc_event_probabilities(observations_performed)
-
-            # calculate coverage
-            # n_gps, n_gps_accessible, n_gps_access_ptg = self.calc_coverage_metrics()
-            
-            # count number of GPs observed
-            gps_observed : set = {(lat,lon) for _,_,lat,lon,*_ in observations_performed.values}
-            n_gps_observed = len(gps_observed)
-
-            # commpile
+            # commpile list of broadcasts performed
             broadcasts_performed : pd.DataFrame = self.compile_broadcasts()
 
             # log and save results
             self.log(f"BROADCASTS RECEIVED:\n{len(broadcasts_performed.values)}\n\n", level=logging.WARNING)
             broadcasts_performed.to_csv(f"{self.results_path}/broadcasts.csv", index=False)
-            
-            # Generate summary
-            summary_headers = ['stat_name', 'val']
-            summary_data = [
-                        # Dates
-                        ['Simulation Start Date', self._clock_config.start_date], 
-                        ['Simulation End Date', self._clock_config.end_date], 
 
-                        # Coverage Metrics #TODO add more
-                        ['Ground Points', n_gps],
-                        ['Ground Points Observed', n_gps_observed]
+            # compile list of measurement requests 
+            measurement_reqs : pd.DataFrame = self.compile_requests()
 
-                        # Counters
-                        ['Events', n_events],
-                        ['Events Detected', n_events_detected],
-                        ['Events Observed', n_events_observed],
-                        ['Observations', n_observations],
-                        ['Event Observations', n_total_event_obs],
-                        ['Events Re-observed', n_events_reobserved],
-                        ['Event Re-observations', n_total_event_re_obs],
-                        ['Events Co-observed', n_events_co_obs],
-                        ['Events Partially Co-observed', n_events_partially_co_obs],
-                        ['Events Fully Co-observed', n_events_fully_co_obs],
-                        ['Event Co-observations', n_total_event_co_obs],
-
-                        # probabilities
-                        ['P(Event Detected)', np.round(p_event_detected,n_decimals)],
-                        ['P(Event Observed)', np.round(p_event_observed,n_decimals)],
-                        ['P(Event Re-observed)', np.round(p_event_re_obs,n_decimals)],
-                        ['P(Event Co-observed)', np.round(p_event_co_obs,n_decimals)],
-                        ['P(Event Partially Co-observed)', np.round(p_event_co_obs_partial,n_decimals)],
-                        ['P(Event Fully Co-observed)', np.round(p_event_co_obs_fully,n_decimals)],
-                        ['P(Event at a GP)', np.round(p_event_at_gp,n_decimals)],
-                        ['P(Event Observation | Observation)', np.round(p_event_obs_if_obs,n_decimals)],
-                        ['P(Event Observed | Event Detected)', np.round(p_event_observed_if_detected,n_decimals)],
-                        ['P(Event Re-oberved | Event Detected)', np.round(p_event_re_obs_if_detected,n_decimals)],
-                        ['P(Event Co-observed | Event Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
-                        ['P(Event Co-observed Partially | Event Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
-                        ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
-
-                        ['Total Runtime [s]', round(self.t_f - self.t_0, n_decimals)]
-                    ]
-
-            summary_df = DataFrame(summary_data, columns=summary_headers)
-            self.log(f"\nSIMULATION RESULTS SUMMARY:\n{str(summary_df)}\n\n", level=logging.WARNING)
-            summary_df.to_csv(f"{self.results_path}/../summary.csv", index=False)
-            # --------------------------------------------------------------------
+            # log and save results
+            self.log(f"MEASUREMENT REQUESTS RECEIVED:\n{len(measurement_reqs.values)}\n\n", level=logging.WARNING)
+            measurement_reqs.to_csv(f"{self.results_path}/requests.csv", index=False)
 
             # log performance stats
             columns = ['routine','t_avg','t_std','t_med','n']
@@ -602,7 +537,7 @@ class SimulationEnvironment(EnvironmentNode):
                 obs['observer'] = observer
                 data.append([obs[key] for key in columns])
 
-        return DataFrame(data=data, columns=columns)
+        return pd.DataFrame(data=data, columns=columns)
     
     def compile_broadcasts(self) -> pd.DataFrame:
         columns = ['t_msg', 'Sender', 'Message Type', 
@@ -618,180 +553,22 @@ class SimulationEnvironment(EnvironmentNode):
                         #  json.dumps(msg)
                          ]) 
             
-
-        return DataFrame(data=data, columns=columns)
+        return pd.DataFrame(data=data, columns=columns)
     
-    def classify_observations(self, observations_performed : pd.DataFrame) -> tuple:
-               
-        # count event presense, detections, and observations
-        events_per_gp : Dict[tuple, list] = {}
-        events_detected : Dict[tuple, list] = {}
-        events_observed : Dict[tuple, list] = {}
+    def compile_requests(self) -> pd.DataFrame:
+        columns = ['ID', 'Requester', 'lat [deg]', 'lon [deg]', 'Severity', 't start', 't end', 't corr', 'Measurment Types']
+        data = [[req.id,
+                 req.requester,
+                 req.target[0],
+                 req.target[1],
+                 req.severity,
+                 req.t_start,
+                 req.t_end,
+                 req.t_corr,
+                 req.observation_types] 
+                 for req in self.measurement_reqs]
 
-        for event in self.events.values:
-            # unpackage event
-            event = tuple(event)
-            lat,lon,t_start,duration,severity,observations_req = event
-            
-            # classify events by their target groundpoint
-            if (lat,lon) not in events_per_gp:
-                events_per_gp[(lat,lon)] = []
-                
-            events_per_gp[(lat,lon)].append([t_start,duration,severity,observations_req])
-
-            # find measurement requests that match this event
-            matching_requests = [   req
-                                    for req in self.measurement_reqs
-                                    if isinstance(req, MeasurementRequest)
-                                    and abs(lat - req.target[0]) < 1e-3 
-                                    and abs(lon - req.target[1]) < 1e-3
-                                    and t_start <= req.t_start <= req.t_end <= t_start+duration
-                                    and all([instrument in observations_req for instrument in req.observation_types])
-                                ]
-            if matching_requests:
-                events_detected[event] = matching_requests
-
-            # find observations that overlooked a given event's location
-            matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
-                                        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
-                                        if abs(lat - lat_img) < 1e-3 
-                                    and abs(lon - lon_img) < 1e-3
-                                    and t_start <= t_img <= t_start+duration
-                                    and instrument in observations_req  #TODO include better reasoning!
-                                        ]  
-            if matching_observations:
-                events_observed[event] = matching_observations
-        
-        # find reobserved events
-        events_re_obs = {event: observations 
-                                for event,observations in events_observed.items()
-                                if len(observations) > 1}
-        
-        # find coobserved events
-        events_co_obs : Dict[tuple, list] = {}
-        events_co_obs_fully : Dict[tuple, list] = {}
-        events_co_obs_partially : Dict[tuple, list] = {}
-
-        for event,observations in events_observed.items():
-            # get required measurements for a given event
-            *_,observations_req = observations[-1]
-            observations_req : str 
-            observations_req = observations_req.replace('[','')
-            observations_req = observations_req.replace(']','')
-            observations_req = observations_req.split(',')
-
-            valid_observations = list({(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req) 
-                                        for lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req in observations
-                                        if instrument in observations_req})
-            
-            if valid_observations:
-                if len(valid_observations) == len(observations_req):
-                    events_co_obs_fully[event] = valid_observations
-
-                elif len(valid_observations) > 1:
-                    events_co_obs_partially[event] = valid_observations
-
-                events_co_obs[event] = valid_observations
-
-        return events_per_gp, events_detected, events_observed, events_re_obs, events_co_obs, events_co_obs_fully, events_co_obs_partially
-
-    def count_observations(self, observations_performed : pd.DataFrame) -> tuple:
-        _, events_detected, events_observed, \
-            events_re_obs, events_co_obs, events_co_obs_fully, \
-                events_co_obs_partially = self.classify_observations(observations_performed)
-        
-        # count number of groundpoints
-        for _,agent_orbitdata in self.orbitdata.items():
-            agent_orbitdata : OrbitData
-            n_gps = sum([len(gps.values) for gps in agent_orbitdata.grid_data])
-            break
-
-        n_events = len(self.events.values)
-        n_events_detected = len(events_detected)
-        n_events_observed = len(events_observed)
-        n_total_event_obs = sum([len(observations) for _,observations in events_observed.items()])
-        n_events_reobserved = len(events_re_obs)
-        n_total_event_re_obs = sum([len(observations) for _,observations in events_re_obs.items()])
-        n_events_co_obs = len(events_co_obs)
-        n_events_fully_co_obs = len(events_co_obs_fully)
-        n_events_partially_co_obs = len(events_co_obs_partially)
-        n_total_event_co_obs = sum([len(observations) for _,observations in events_co_obs.items()])
-        n_observations = len(observations_performed)
-
-        return n_gps, n_events, n_events_detected, n_events_observed, \
-                n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
-                    n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                        n_total_event_co_obs, n_observations
-                    
-    
-    def calc_event_probabilities(self, observations_performed : pd.DataFrame) -> tuple:
-        # classify performed observations
-        events_per_gp, events_detected, events_observed, \
-            events_re_obs, events_co_obs, events_co_obs_fully, \
-                events_co_obs_partially = self.classify_observations(observations_performed)
-    
-        # count observations by type
-        n_gps, n_events, n_events_detected, n_events_observed, \
-            n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
-                n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                    n_total_event_co_obs, n_observations \
-                        = self.count_observations(observations_performed)
-                    
-        # count number of groundpoints with events
-        n_gps_with_events = len(events_per_gp)
-
-        # count number of detected events
-        n_events_detected_and_observed = len([event for event in events_detected
-                                                if event in events_observed])
-            
-        # count number of observed events
-        n_event_re_obs_and_detected = len([event for event in events_detected
-                                                if event in events_re_obs])
-
-        # count number of co-observed events 
-        n_events_co_obs_and_detected = len([event for event in events_detected
-                                                if event in events_co_obs])
-        n_events_fully_co_obs_and_detected = len([event for event in events_detected
-                                                if event in events_co_obs_fully])
-        n_events_partially_co_obs_and_detected = len([event for event in events_detected
-                                                    if event in events_co_obs_partially])
-
-        # calculate probabilities
-        p_event_at_gp = n_gps_with_events / n_gps
-        p_event_detected = n_events_detected / n_events
-        p_event_observed = n_events_observed / n_events
-        p_event_re_obs = n_events_reobserved / n_events
-        p_event_co_obs = n_events_co_obs / n_events
-        p_event_co_obs_fully = n_events_fully_co_obs / n_events
-        p_event_co_obs_partial = n_events_partially_co_obs / n_events
-        p_event_obs_if_obs = n_events_observed / n_observations
-
-        # calculate joint probabilities
-        p_event_observed_and_detected = n_events_detected_and_observed / n_events
-        p_event_re_obs_and_detected = n_event_re_obs_and_detected / n_events
-        p_event_co_obs_and_detected = n_events_co_obs_and_detected / n_events
-        p_event_co_obs_fully_and_detected = n_events_fully_co_obs_and_detected / n_events
-        p_event_co_obs_partial_and_detected = n_events_partially_co_obs_and_detected / n_events
-
-        # calculate conditional probabilities
-        if p_event_detected > 0.0:
-            p_event_observed_if_detected = p_event_observed_and_detected / p_event_detected
-            p_event_re_obs_if_detected = p_event_re_obs_and_detected / p_event_detected
-            p_event_co_obs_if_detected = p_event_co_obs_and_detected / p_event_detected
-            p_event_co_obs_fully_if_detected = p_event_co_obs_fully_and_detected / p_event_detected
-            p_event_co_obs_partial_if_detected = p_event_co_obs_partial_and_detected / p_event_detected
-        else:
-            p_event_observed_if_detected = np.NaN
-            p_event_re_obs_if_detected = np.NaN
-            p_event_co_obs_if_detected = np.NaN
-            p_event_co_obs_fully_if_detected = np.NaN
-            p_event_co_obs_partial_if_detected = np.NaN
-
-        return p_event_detected, p_event_observed, p_event_re_obs, \
-                p_event_co_obs, p_event_co_obs_partial, p_event_obs_if_obs, \
-                    p_event_co_obs_fully, p_event_at_gp, p_event_observed_if_detected, \
-                        p_event_re_obs_if_detected, p_event_co_obs_if_detected, p_event_co_obs_partial_if_detected, \
-                            p_event_co_obs_fully_if_detected
+        return pd.DataFrame(data=data, columns=columns)
 
     def calc_coverage_metrics(self) -> tuple:
         # TODO improve performance or load precomputed vals

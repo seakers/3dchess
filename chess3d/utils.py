@@ -3,6 +3,12 @@ from enum import Enum
 import logging
 import os
 import shutil
+from typing import Dict
+
+import numpy as np
+import pandas as pd
+
+from chess3d.agents.science.requests import MeasurementRequest
 
 class CoordinateTypes(Enum):
     """
@@ -122,3 +128,14 @@ def arg_parser() -> tuple:
     level = levels.get(args.level)
 
     return scenario_name, plot_results, save_plot, no_graphic, level
+
+def str_to_list(lst_string : str, list_type : type = str) -> list:
+    """ reverts a list that has been printed into a string back into a list """
+    
+    # remove printed list brackets and quotes
+    lst = lst_string.replace('[','')
+    lst = lst.replace(']','')
+    lst = lst.replace('\'','')
+
+    # convert into a string
+    return [list_type(val) for val in lst.split(',')]
