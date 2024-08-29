@@ -732,9 +732,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
             # check bids are for new requests
             is_new_req : bool = their_bid.req_id not in results
 
-            if req is None:
-                x= 1
-
             if is_new_req:
                 # create a new blank bid and save it to results
                 bids : list[Bid] = self._generate_bids_from_request(req, state)
