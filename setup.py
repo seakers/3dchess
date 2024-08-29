@@ -6,7 +6,7 @@ def readme():
 
 setup(
     name='3DCHESS',
-    version='1.0.0',
+    version='1.1.0',
     description='Decentralized, Distributed, Dynamic, and Context-aware Heterogeneous Sensor Systems',
     author='SEAK Lab',
     author_email='aguilaraj15@tamu.edu',

@@ -5,6 +5,7 @@ from datetime import timedelta
 import logging
 import os
 import random
+from typing import Any
 import zmq
 import numpy as np
 import pandas as pd
@@ -102,10 +103,10 @@ class Mission:
         orbitdata_dir = OrbitData.precompute(mission_specs) if spacecraft_dict is not None else None
 
         # load simulation clock configuration
-        clock_config : ClockConfig = SimulationFactory.generate_clock(mission_specs, spacecraft_dict, orbitdata_dir)
+        clock_config : ClockConfig = SimulationElementsFactory.generate_clock(mission_specs, spacecraft_dict, orbitdata_dir)
         
         # load events
-        events_path = SimulationFactory.load_events(scenario_dict, grid_dict, clock_config)
+        events_path = SimulationElementsFactory.load_events(scenario_dict, grid_dict, clock_config)
 
         # ------------------------------------
         # initialize manager
@@ -137,7 +138,7 @@ class Mission:
         agent_port = port + 6
         if isinstance(spacecraft_dict, list):
             for spacecraft in spacecraft_dict:
-                agent = SimulationFactory.generate_agent(
+                agent = SimulationElementsFactory.generate_agent(
                                                     scenario_name, 
                                                     results_path,
                                                     orbitdata_dir,
@@ -199,14 +200,14 @@ class Mission:
         # return initialized mission
         return Mission(manager, environment, agents, monitor)
 
-class SimulationFactory:
+class SimulationElementsFactory:
     """
     Generates simulation elements according to input file
     """
 
     def generate_agent(     scenario_name : str, 
                             results_path : str,
-                            orbitdata_dir : str,
+                            orbitdata_dir : Any,
                             agent_dict : dict, 
                             agent_index : int,
                             manager_network_config : NetworkConfig, 
@@ -228,7 +229,7 @@ class SimulationFactory:
 
         # create agent network config
         agent_network_config : NetworkConfig \
-            = SimulationFactory.create_agent_network_config(manager_network_config, 
+            = SimulationElementsFactory.create_agent_network_config(manager_network_config, 
                                                             scenario_name, 
                                                             port)
 
@@ -247,14 +248,14 @@ class SimulationFactory:
                                      if instruments_dict else []
 
         # load science module
-        science = SimulationFactory.load_science_module(science_dict,
+        science = SimulationElementsFactory.load_science_module(science_dict,
                                                         results_path,
                                                         agent_name,
                                                         agent_network_config,
                                                         logger)
 
         # load planner module
-        planner = SimulationFactory.load_planner_module(planner_dict,
+        planner = SimulationElementsFactory.load_planner_module(planner_dict,
                                                         results_path,
                                                         agent_specs,
                                                         agent_network_config,

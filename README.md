@@ -38,7 +38,7 @@ monitoring system.
 
 
 ## Installation
-> **Requires:** Unix-like operating system (Linux (Ubuntu, CentOS...), Mac, WSL), `python 3.8`, `pip`, `gfortran`, `make`
+> **Requirements:** Python version 3.8, `gfortran`, `make`
 
 1. Install the [`dmas`](https://github.com/seakers/DMASpy) library and all of its dependencies is required for running these scenarios.
 
