@@ -385,7 +385,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     planned_observations.pop(0)
         
         # check if compiled observations path is valid
-        assert self.is_observation_path_valid(state, specs, observations)
+        if self._debug: assert self.is_observation_path_valid(state, specs, observations)
 
         # check if there are still proposed observations to be added to the path
         while proposed_observations:
@@ -404,7 +404,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 observations.pop()
 
         # check if compiled observations path is valid
-        assert self.is_observation_path_valid(state, specs, observations)
+        if self._debug: assert self.is_observation_path_valid(state, specs, observations)
 
         while planned_observations:
             # get next actions in the lists
@@ -431,10 +431,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 planned_observations.pop(0)
 
         # check if compiled observations path is valid
-        assert self.is_observation_path_valid(state, specs, observations)
+        if self._debug: assert self.is_observation_path_valid(state, specs, observations)
 
         # ensure all proposed actions are in the final plan
-        assert all([observation in observations for observation in proposed_observations_bckp])
+        if self._debug: assert all([observation in observations for observation in proposed_observations_bckp])
 
         # return compiled observations path
         return observations
@@ -885,7 +885,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
             path = self.path_from_bundle(bundle)
 
             # check if path is valid
-            assert self.is_task_path_valid(state, specs, path, orbitdata)
+            if self._debug: assert self.is_task_path_valid(state, specs, path, orbitdata)
         
     @runtime_tracker
     def _generate_path(self, 
