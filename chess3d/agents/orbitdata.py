@@ -713,7 +713,7 @@ class OrbitData:
                         grid_dict['@type'] = 'customgrid'
                         grid_dict['covGridFilePath'] = grid_path
                         
-                    elif grid_type.lower() == 'cluster':
+                    elif grid_type.lower() in ['cluster', 'clustered']:
                         # create clustered grid
                         n_clusters          = grid_dict.get('n_clusters', 100)
                         n_cluster_points    = grid_dict.get('n_cluster_points', 1)
@@ -836,7 +836,7 @@ class OrbitData:
                         for lon in np.linspace(-180, 180, int(360/lon_spacing)+1)
                         if lon < 180
                         ]
-        
+                
         # create datagrame
         df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
 
@@ -867,7 +867,7 @@ class OrbitData:
         df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
 
         # save to csv
-        grid_path : str = os.path.join(scenario_dir, 'resources', f'cluster_grid{grid_index}.csv')
+        grid_path : str = os.path.join(scenario_dir, 'resources', f'clustered_grid{grid_index}.csv')
         df.to_csv(grid_path,index=False)
 
         # return address

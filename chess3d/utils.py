@@ -40,7 +40,6 @@ def setup_results_directory(scenario_path : str, scenario_name : str, agent_name
 
     else:
         # clear results in case it already exists
-        results_path
         for filename in os.listdir(results_path):
             file_path = os.path.join(results_path, filename)
             try:
@@ -139,3 +138,10 @@ def str_to_list(lst_string : str, list_type : type = str) -> list:
 
     # convert into a string
     return [list_type(val) for val in lst.split(',')]
+
+LEVELS = {  'DEBUG' : logging.DEBUG, 
+            'INFO' : logging.INFO, 
+            'WARNING' : logging.WARNING, 
+            'CRITICAL' : logging.CRITICAL, 
+            'ERROR' : logging.ERROR
+        }

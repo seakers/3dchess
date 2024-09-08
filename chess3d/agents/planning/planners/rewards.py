@@ -148,6 +148,10 @@ class RewardGrid(object):
         if matches:
             match = matches.pop() 
         else:
+            for grid_datum in self.grid_data:
+                for gp_lat,gp_lon,grid_index,gp_index in grid_datum.values:
+                    if abs(gp_lat - lat) <= 1e-1 and abs(gp_lon - lon) <= 1e-1:
+                        x = 1
             raise ValueError(f'Could not find ground point indeces for coordinates ({lat}°,{lon}°,0.0)')
         
         grid_index, gp_index = match

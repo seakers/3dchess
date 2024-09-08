@@ -151,6 +151,18 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             }
+        },
+        {
+            "name": "PARAMETRIC STUDY",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/scenarios/parametric_study/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
         }
     ],
     "compounds": [
