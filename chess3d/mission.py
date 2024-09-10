@@ -20,6 +20,7 @@ from dmas.clocks import *
 from dmas.network import NetworkConfig
 from dmas.clocks import *
 
+from chess3d.agents.planning.planners.consensus.dynamic import DynamicProgrammingACBBAReplanner
 from chess3d.agents.planning.planners.dynamic import DynamicProgrammingPlanner
 from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.nodes.manager import SimulationManager
@@ -898,6 +899,16 @@ class SimulationElementsFactory:
                                              horizon,
                                              debug,
                                              logger)
+                elif replanner_type.lower() == 'acbba-dp': 
+                    max_bundle_size = replanner_dict.get('bundle size', 3)
+                    threshold = replanner_dict.get('threshold', 1)
+                    horizon = replanner_dict.get('horizon', np.Inf)
+
+                    replanner = DynamicProgrammingACBBAReplanner(max_bundle_size, 
+                                                                threshold, 
+                                                                horizon,
+                                                                debug,
+                                                                logger)
                 
                 else:
                     raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')

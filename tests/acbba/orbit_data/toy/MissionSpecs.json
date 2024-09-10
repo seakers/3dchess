@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 0.1,
+    "duration": 0.041666666666666664,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -79,7 +79,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba"
+                    "@type": "acbba-dp"
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -165,7 +165,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba"
+                    "@type": "acbba-dp"
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -251,7 +251,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba"
+                    "@type": "acbba-dp"
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -337,7 +337,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba"
+                    "@type": "acbba-dp"
                 },
                 "rewardGrid": {
                     "reward_function": "event",

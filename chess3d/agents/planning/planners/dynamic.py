@@ -1,17 +1,12 @@
 from logging import Logger
-from queue import Queue
-from numpy import Inf
 from orbitpy.util import Spacecraft
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import concurrent.futures
 
 from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from chess3d.agents.orbitdata import OrbitData, TimeInterval
-from chess3d.agents.planning.plan import Plan
 from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
@@ -34,6 +29,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # toggle for sharing plans
         self.sharing = sharing 
 
+    @runtime_tracker
     def populate_adjacency_matrix(self, 
                                   state : SimulationAgentState, 
                                   specs : object,
@@ -85,6 +81,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             # update progress bar
             if pbar is not None: pbar.update(1)
 
+    @runtime_tracker
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
                                specs: object, 
@@ -148,7 +145,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                                                 ]
             n_prev_opp.append(len(prev_opportunities))
 
-            # calculate all possible observation actionss for this observation opportunity
+            # calculate all possible observation actions for this observation opportunity
             possible_observations = [ObservationAction( curr_opportunity[2], 
                                                         curr_target, 
                                                         curr_opportunity[5][k], 
@@ -235,6 +232,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         t_f = time.perf_counter() - t_0
         return observations
     
+    @runtime_tracker
     def _schedule_broadcasts(self, state: SimulationAgentState, observations: list, orbitdata: OrbitData) -> list:
         broadcasts =  super()._schedule_broadcasts(state, observations, orbitdata)
 

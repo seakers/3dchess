@@ -1,6 +1,5 @@
 from logging import Logger
 import logging
-from typing import Callable
 import numpy as np
 
 from orbitpy.util import Spacecraft
@@ -23,7 +22,6 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                  debug : bool = False,
                  logger: Logger = None) -> None:
         super().__init__(max_bundle_size, replan_threshold, planning_horizon, debug, logger)
-        self.prev_bundle = []
 
     @runtime_tracker    
     def _generate_bids_from_request(self, 
@@ -186,9 +184,6 @@ class ACBBAPlanner(AbstractConsensusReplanner):
             observations = [ObservationAction(main_measurement, req.target, th_img, t_img)
                             for req, main_measurement, t_img, th_img, _ in path
                             if isinstance(req,MeasurementRequest)]
-            
-            if not self.is_observation_path_valid(state, specs, observations):
-                x = 1
 
             return self.is_observation_path_valid(state, specs, observations)
         

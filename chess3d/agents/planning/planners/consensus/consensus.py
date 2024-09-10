@@ -1,12 +1,7 @@
 import itertools
 import logging
 from queue import Queue
-import time
-from typing import Any, Callable
-from numpy import Inf
-import pandas as pd
 from tqdm import tqdm
-from traitlets import Callable
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
@@ -993,7 +988,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # return path of maximum utility
         return max_path
-    
+        
     @runtime_tracker
     def calc_path_utility(self, 
                           state : SimulationAgentState, 

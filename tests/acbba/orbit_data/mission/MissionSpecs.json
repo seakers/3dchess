@@ -8,7 +8,7 @@
         "minute": 0,
         "second": 0
     },
-    "duration": 0.1,
+    "duration": 0.125,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
         "stepSize": 10
@@ -81,7 +81,8 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 100
                 },
                 "replanner": {
                     "@type": "acbba"
@@ -167,7 +168,8 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 100
                 },
                 "replanner": {
                     "@type": "acbba"
@@ -253,7 +255,8 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive"
+                    "@type": "naive",
+                    "period": 100
                 },
                 "replanner": {
                     "@type": "acbba"

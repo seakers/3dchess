@@ -204,6 +204,8 @@ class ScienceModule(InternalModule):
                     if any([measurement_req.same_event(req) for req in self.known_reqs]):
                         # another request has been made for this same event; ignore
                         measurement_req.severity = 0.0
+                    elif severity > 0:
+                        self.known_reqs.add(measurement_req)
                     
                     # send request to all internal agent modules
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 

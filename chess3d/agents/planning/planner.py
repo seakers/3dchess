@@ -814,4 +814,3 @@ class AbstractReplanner(AbstractPlanner):
                         orbitdata : OrbitData,
                     ) -> Plan:
         pass
-        
