@@ -883,7 +883,7 @@ class SimulationElementsFactory:
             if isinstance(replanner_dict, dict):
                 replanner_type : str = replanner_dict.get('@type', None)
                 if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
-                debug = bool(preplanner_dict.get('debug', 'true').lower() in ['true', 't'])
+                debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
                 if replanner_type.lower() == 'broadcaster':
                     replanner = Broadcaster(debug, logger)

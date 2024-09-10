@@ -216,10 +216,8 @@ class ScienceModule(InternalModule):
                     measurement_req = MeasurementRequest(self.get_parent_name(),
                                                          [-1,-1,0.0],
                                                          0.0,
-                                                         observations_required,
-                                                         t_start,
-                                                         t_end,
-                                                         t_corr)
+                                                         [],
+                                                         -1)
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 
                                                         self.get_parent_name(), 
                                                         measurement_req.to_dict())

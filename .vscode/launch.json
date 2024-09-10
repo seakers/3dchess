@@ -163,7 +163,12 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             }
+            // "args": [
+            //     "-l", "0",
+            //     "-u", "1"
+            // ]
         }
+        
     ],
     "compounds": [
         //{
