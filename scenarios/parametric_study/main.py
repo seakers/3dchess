@@ -26,7 +26,7 @@ def main(lower_bound : int, upper_bound : int, level : int):
     # read scenario parameters file
     scenarios_file = os.path.join(scenario_dir, 'resources', 'lhs_scenarios.csv')
     scenarios_df : pd.DataFrame = pd.read_csv(scenarios_file)
-    scenarios_df = scenarios_df.sort_values(by=['num_planes','num_sats_per_plane'])
+    # scenarios_df = scenarios_df.sort_values(by=['num_planes','num_sats_per_plane'], ascending=False)
 
     # check if bounds are valid
     assert 0 <= lower_bound <= upper_bound
@@ -42,10 +42,10 @@ def main(lower_bound : int, upper_bound : int, level : int):
                         'dynamic'
                         # 'nadir'                    
                         ]
-    preplanner_settings = [
-        (100, 100),         # period[s], horizon [s]
-        (500, 500),
-        (np.Inf, np.Inf)
+    preplanner_settings = [ # (period[s], horizon [s])
+        (np.Inf, np.Inf),
+        (100, 100),         
+        (500, 500)
     ]
     replanners = [
                     'broadcaster', 
@@ -104,8 +104,8 @@ def main(lower_bound : int, upper_bound : int, level : int):
             # run cases
             pregenerated_events = False
             for preplanner in preplanners:
-                for period, horizon in preplanner_settings:
-                    for replanner in replanners:
+                for replanner in replanners:
+                    for period, horizon in preplanner_settings:
                         for bundle_size in bundle_sizes:
                             # check simulation requirements
                             if replanner == 'broadcaster' and bundle_size > 1 and len(bundle_sizes) > 1:
@@ -119,6 +119,9 @@ def main(lower_bound : int, upper_bound : int, level : int):
 
                             if preplanner == 'naive' and replanner == 'broadcaster':
                                 continue # skip
+
+                            if preplanner == 'acbba' and horizon < np.Inf:
+                                preplanner += '-dp'
 
                             # create specs from template
                             scenario_specs : dict = copy.deepcopy(template_specs)
@@ -392,6 +395,8 @@ if __name__ == "__main__":
     lower_bound = args.lower_bound
     upper_bound = args.upper_bound
     level = LEVELS.get(args.level)
+
+    lower_bound = 20
 
     # run simulation
     main(lower_bound, upper_bound, level)
