@@ -223,10 +223,10 @@ def main(lower_bound : int, upper_bound : int, level : int):
                             print_welcome(scenario_name)
 
                             # initialize mission
-                            mission : Mission = Mission.from_dict(scenario_specs)
+                            # mission : Mission = Mission.from_dict(scenario_specs)
 
-                            # # execute mission
-                            mission.execute()
+                            # # # execute mission
+                            # mission.execute()
                                 
                             # update progress bad
                             pbar.update(1)
@@ -263,6 +263,8 @@ def create_uniform_grid(scenario_dir : str, scenario_i : str, n_events : int, la
     groundpoints : list = random.sample(all_groundpoints, n_events)
     groundpoints.sort()
     
+    assert len(groundpoints) == n_events
+
     # create dataframe
     df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
 
@@ -298,6 +300,8 @@ def create_clustered_grid(scenario_dir : str, scenario_i : str, n_events : int, 
             lat = random.normalvariate(lat_cluster, std)
             lon = random.normalvariate(lon_cluster, std)
             groundpoints.append((lat,lon))
+
+    assert len(groundpoints) == n_events
 
     # create datagrame
     df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
@@ -401,7 +405,7 @@ if __name__ == "__main__":
     upper_bound = args.upper_bound
     level = LEVELS.get(args.level)
 
-    lower_bound = 3
+    lower_bound = 0
 
     # run simulation
     main(lower_bound, upper_bound, level)

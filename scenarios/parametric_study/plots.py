@@ -2,10 +2,17 @@
 Compiles results and creates plots
 """
 
+import math
 import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+
+from mpl_toolkits.basemap import Basemap
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
 if __name__  == "__main__":
@@ -25,6 +32,19 @@ if __name__  == "__main__":
     }
 
     # organize data
+    metrics = [
+               "Strategy",
+               "Preplanner", 
+               "Period", 
+               "Horizon",
+               "Replanner",
+               "Num Events",
+               "Event Distribution",
+               "Num Planes",
+               "Num Sats Per Plane",
+               "Num Sats"
+               ]
+    data = []
     for run_name in run_names:
         # load results summary
         summary_path = os.path.join(results_path, run_name, 'summary.csv')
@@ -32,7 +52,9 @@ if __name__  == "__main__":
 
         # get run parameters
         *_,experiment_id,preplanner,replanner = run_name.split('_')
+        
         experiment_id = int(experiment_id)
+
         preplanner,period,horizon = preplanner.split('-')
         if 'acbba-dp' in replanner:
             replanner,_,bundle_size = replanner.split('-')
@@ -42,7 +64,112 @@ if __name__  == "__main__":
         field_of_regard,fov,agility,event_duration, \
             num_events,distribution,num_planes,sats_per_plane \
                 = parameters[f'updated_experiment_{experiment_id}']
-        x = 1
+        
+        if 'dynamic' in preplanner and 'acbba' in replanner:
+            strategy = 'periodic-reactive'
+        elif 'dynamic' in preplanner:
+            strategy = 'periodic'
+        elif 'acbba' in replanner:
+            strategy = 'reactive'
+        else:
+            strategy = 'non-reactive'
+
+        # collect datum
+        datum = [strategy, preplanner, period, horizon, replanner, num_events, distribution, num_planes, sats_per_plane, num_planes*sats_per_plane]
+        
+        for key,value in summary.values:
+            key : str; value : str
+
+            if key not in metrics: metrics.append(key)           
+
+            if not isinstance(value, float) and value.isdigit():
+                value = float(value)  
+                if math.isnan(value) : continue
+        
+            datum.append(value)
+
+        # add to data
+        data.append(datum)
+    df = pd.DataFrame(data=data, columns=metrics)
+
+    # create plots directory if necessary
+    if not os.path.isdir('./plots'): os.mkdir('./plots')
+
+    # density histograms
+    histogram_path = os.path.join('./plots', 'histograms')
+    if not os.path.isdir(histogram_path): os.mkdir(histogram_path)
+
+    for metric in tqdm(metrics, desc='Histogram Plots'):
+        if 'obs' not in metric.lower() and 'events' not in metric.lower(): continue
+        if 'Strategy' in metric: continue
+        if 'P(' in metric : continue
+
+        # create histogram
+        sns.displot(df, x=metric, hue='Strategy', kind="kde", warn_singular=False)
+        plt.xlim(left=0)
+        plt.grid(visible=True)
+        
+        # save or show graph
+        if show_plots: plt.show()
+        if save_plots: 
+            plot_path = os.path.join(histogram_path, f'{metric}.png')
+            plt.savefig(plot_path)
+
+        # close plot
+        plt.close()
+
+    # grid layouts
+    grids_path = os.path.join('./plots', 'grids')
+    if not os.path.isdir(grids_path): os.mkdir(grids_path)
+
+    grid_names = list({grid_name.replace('.csv','') for grid_name in os.listdir('./resources')
+                 if 'grid' in grid_name})
+    grid_names.sort()
+
+    for grid_name in tqdm(grid_names, desc='Coverage Grid Plots'):
+        # load grid
+        grid_path = os.path.join('./resources', f'{grid_name}.csv')
+        grid : pd.DataFrame = pd.read_csv(grid_path)
+
+        # get lats and lons
+        lats = [lat for lat,_ in grid.values]
+        lons = [lon for _,lon in grid.values]
+
+        # get grid info
+        *_,grid_i = grid_name.split('_')
+        field_of_regard,fov,agility,event_duration, \
+            num_events,distribution,num_planes,sats_per_plane \
+                = parameters[f'updated_experiment_{grid_i}']
+
+        # plot ground points
+        fig, ax = plt.subplots()
+        m = Basemap(projection='cyl',llcrnrlat=-90,urcrnrlat=90,\
+                    llcrnrlon=-180,urcrnrlon=180,resolution='c',ax=ax)
+        
+        x, y = m(lons,lats)
+        m.drawmapboundary(fill_color='#99ffff')
+        m.fillcontinents(color='#cc9966',lake_color='#99ffff')
+        m.scatter(x,y,3,marker='o',color='r')
+
+        m.drawcoastlines()
+        # m.fillcontinents(color='coral',lake_color='aqua')
+        # draw parallels and meridians.
+        m.drawparallels(np.arange(-90.,91.,30.))
+        m.drawmeridians(np.arange(-180.,181.,60.))
+        m.drawmapboundary(fill_color='aqua') 
+
+        # set title
+        plt.title(f"{distribution} distribution (n={num_events})")
+        
+        # save or show graph
+        if show_plots: plt.show()
+        if save_plots: 
+            plot_path = os.path.join(grids_path, f'{distribution}_grid_{grid_i}.png')
+            plt.savefig(plot_path)
+        
+        # close plot
+        plt.close()
+
     x = 1
 
     # # initialize metrics
