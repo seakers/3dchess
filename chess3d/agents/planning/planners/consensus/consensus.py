@@ -682,7 +682,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
                 # reset bid results
                 current_bid : Bid; measurement_req : MeasurementRequest
-                resetted_bid : Bid = current_bid.update(None, BidComparisonResults.RESET, state.t)
+                current_bid._reset(state.t)
+                resetted_bid = current_bid
                 results[measurement_req.id][instrument_name] = resetted_bid
 
                 rebroadcasts.append(resetted_bid)
