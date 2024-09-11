@@ -39,7 +39,7 @@ def main(lower_bound : int, upper_bound : int, level : int):
     sim_duration = 24.0 / 24.0 # in days
     preplanners = [
                         'naive',
-                        'dynamic'
+                        # 'dynamic'
                         # 'nadir'                    
                         ]
     preplanner_settings = [ # (period[s], horizon [s])
@@ -49,7 +49,7 @@ def main(lower_bound : int, upper_bound : int, level : int):
     ]
     replanners = [
                     'broadcaster', 
-                    'acbba',
+                    # 'acbba',
                     ]
     bundle_sizes = [
                     # 1,
@@ -117,11 +117,11 @@ def main(lower_bound : int, upper_bound : int, level : int):
                             if preplanner == 'naive' and horizon != np.Inf:
                                 continue # skip
 
-                            if preplanner == 'naive' and replanner == 'broadcaster':
-                                continue # skip
+                            # if preplanner == 'naive' and replanner == 'broadcaster':
+                            #     continue # skip
 
-                            if preplanner == 'acbba' and horizon < np.Inf:
-                                preplanner += '-dp'
+                            if replanner == 'acbba' and horizon != np.Inf:
+                                replanner += '-dp'
 
                             # create specs from template
                             scenario_specs : dict = copy.deepcopy(template_specs)
@@ -272,22 +272,27 @@ def create_uniform_grid(scenario_dir : str, scenario_i : str, n_events : int, la
     # return address
     return grid_path
 
-def create_clustered_grid(scenario_dir : str, scenario_i : str, n_events : int, variance : float = 1.0, n_clusters : float = 100) -> str:
+def create_clustered_grid(scenario_dir : str, scenario_i : str, n_events : int, variance : float = 1.0, n_clusters : float = 100, lat_spacing : float = 0.1, lon_spacing : float = 0.1) -> str:
     # set grid name
     grid_path : str = os.path.join(scenario_dir, 'resources', f'random_grid_{scenario_i}.csv')
     
     # check if grid already exists
     if os.path.isfile(grid_path): return grid_path
     
+    # generate cluster grid
+    all_clusters = [(lat, lon) 
+                        for lat in np.linspace(-90, 90, int(180/lat_spacing)+1)
+                        for lon in np.linspace(-180, 180, int(360/lon_spacing)+1)
+                        if lon < 180
+                        ]
+    clusters : list = random.sample(all_clusters, n_clusters)
+    clusters.sort()
+
     # create clustered grid of gound points
     std = np.sqrt(variance)
     groundpoints = []
 
-    for _ in tqdm.tqdm(range(n_clusters), desc='generating clustered grid', leave=False):
-        # find cluster center
-        lat_cluster = (90 - -90) * random.random() -90
-        lon_cluster = (180 - -180) * random.random() -180
-        
+    for lat_cluster,lon_cluster in tqdm.tqdm(clusters, desc='generating clustered grid', leave=False):
         for _ in range(int(n_events / n_clusters)):
             # sample groundpoint
             lat = random.normalvariate(lat_cluster, std)
@@ -396,7 +401,7 @@ if __name__ == "__main__":
     upper_bound = args.upper_bound
     level = LEVELS.get(args.level)
 
-    lower_bound = 20
+    lower_bound = 3
 
     # run simulation
     main(lower_bound, upper_bound, level)
