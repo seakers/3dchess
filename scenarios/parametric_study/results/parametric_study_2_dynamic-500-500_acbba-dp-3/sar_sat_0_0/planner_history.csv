@@ -1,0 +1,5 @@
+plan_index,t_plan,instrument,t_img
+1,500.0,sar,560.0
+1,500.0,sar,640.0
+1,500.0,sar,960.0
+2,810.0,sar,960.0

@@ -1,0 +1,6 @@
+t_msg,Sender,Message Type
+1190.0,sar_sat_0_0,MEASUREMENT_REQ
+1190.0,sar_sat_0_0,MEASUREMENT_BID
+1190.0,therm_sat_0_0,MEASUREMENT_BID
+1190.0,vis_sat_0_0,MEASUREMENT_BID
+1190.0,vis_sat_0_1,MEASUREMENT_BID

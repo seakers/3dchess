@@ -1,0 +1,12 @@
+routine,t_avg,t_std,t_med,n
+_read_incoming_messages,0.00017,0.00068,2e-05,2215
+__check_action_completion,6e-05,1e-05,6e-05,2215
+preplanner/update_percepts,6e-05,2e-05,6e-05,2215
+preplanner/needs_planning,0.0,0.0,0.0,2215
+preplanner/calculate_access_opportunities,0.00137,0.00219,0.00074,864
+preplanner/is_observation_path_valid,1e-05,1e-05,1e-05,2366
+preplanner/_schedule_maneuvers,0.00293,0.00392,0.00196,864
+preplanner/__schedule_periodic_replan,7e-05,0.00015,5e-05,864
+preplanner/generate_plan,0.02196,0.01468,0.01709,864
+replanner/needs_planning,0.0,0.0,0.0,2215
+replanner/_create_broadcast_path,0.00678,0.00035,0.00678,2

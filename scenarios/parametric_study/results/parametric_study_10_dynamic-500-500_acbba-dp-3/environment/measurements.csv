@@ -1,0 +1,4 @@
+observer,t_img,lat,lon,range,look,incidence,zenith,instrument_name
+vis_sat_0_0,650.0,36.383,-84.489,645.6,-1.02,1.13,,visual
+sar_sat_0_0,1180.0,-60.483,122.559,723.5,-2.5,2.78,52.29,sar
+sar_sat_0_0,1190.0,-60.675,123.02,723.3,-3.22,3.58,52.13,sar
