@@ -91,7 +91,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                                ) -> list:
         
         if not isinstance(state, SatelliteAgentState):
-            raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
+            raise NotImplementedError(f'Dynamic Programming planner not yet implemented for agents of type `{type(state)}.`')
         elif not isinstance(specs, Spacecraft):
             raise ValueError(f'`specs` needs to be of type `{Spacecraft}` for agents with states of type `{SatelliteAgentState}`')
 

@@ -163,7 +163,7 @@ cython_debug/
 ./tests/*/orbit_data/
 ./tests/*/results/
 ./scenarios/*/orbit_data/
-./scenarios/*/results/
+./scenarios/*/results/*
+./scenarios/*/results_archive/
 
 *.tar
-*.png
