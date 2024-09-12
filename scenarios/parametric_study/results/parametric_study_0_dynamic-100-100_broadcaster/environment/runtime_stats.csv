@@ -1,6 +1,0 @@
-routine,t_avg,t_std,t_med,n
-vis_sat_1_0,0.016,0.004,0.016,875
-therm_sat_1_0,0.016,0.002,0.016,871
-therm_sat_0_0,0.016,0.002,0.016,871
-vis_sat_0_0,0.016,0.002,0.016,871
-query_measurement_data,0.0,0.0,0.0,2

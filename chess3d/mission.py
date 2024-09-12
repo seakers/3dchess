@@ -6,6 +6,7 @@ import logging
 import os
 import random
 from typing import Any
+from tqdm import tqdm
 import zmq
 import numpy as np
 import pandas as pd
@@ -74,6 +75,7 @@ class Mission:
         # unpack scenario info
         scenario_dict : dict = mission_specs.get('scenario', None)
         grid_dict : dict = mission_specs.get('grid', None)
+        settings_dict : dict = mission_specs.get('settings', None)
         
         # load agent names
         agent_names = [SimulationElementRoles.ENVIRONMENT.value]
@@ -87,10 +89,11 @@ class Mission:
         
         # get scenario path and name
         scenario_path : str = scenario_dict.get('scenarioPath', None)
+        overwrite = bool(settings_dict.get('overwrite', 'false').lower() in ['true', 't'])
         if scenario_path is None: raise ValueError(f'`scenarioPath` not contained in input file.')
 
         # create results directory
-        results_path : str = setup_results_directory(scenario_path, scenario_name, agent_names)
+        results_path : str = setup_results_directory(scenario_path, scenario_name, agent_names, overwrite)
 
         # precompute orbit data
         orbitdata_dir = OrbitData.precompute(mission_specs) if spacecraft_dict is not None else None
@@ -205,19 +208,23 @@ class Mission:
                 agent : SimulationAgent
                 pool.submit(agent.run, *[])  
 
+    
+    def print_results(self, precission : int = 5) -> None:
+        # define file name
+        summary_path = os.path.join(f"{self.results_path}","summary.csv")
+
         # collect results
         orbitdata : dict = OrbitData.from_directory(self.orbitdata_dir) if self.orbitdata_dir is not None else None
         observations_performed = pd.read_csv((os.path.join(self.environment.results_path, 'measurements.csv')))
         events = self.environment.events
         measurement_reqs = pd.read_csv((os.path.join(self.environment.results_path, 'requests.csv')))
-        n_decimals = 5
 
         # summarize results
-        results_summary : pd.DataFrame = self.summarize_results(orbitdata, observations_performed, events, measurement_reqs, n_decimals)
+        results_summary : pd.DataFrame = self.summarize_results(orbitdata, observations_performed, events, measurement_reqs, precission)
 
         # log and save results summary
         print(f"\nSIMULATION RESULTS SUMMARY:\n{str(results_summary)}\n\n")
-        results_summary.to_csv(f"{self.results_path}/summary.csv", index=False)
+        results_summary.to_csv(summary_path, index=False)
 
     def summarize_results(self, 
                           orbitdata : dict,
@@ -241,6 +248,9 @@ class Mission:
                         p_event_co_obs_fully_if_detected \
                             = self.calc_event_probabilities(orbitdata, observations_performed, events, measurement_reqs)
         
+        # get event revisit times
+        t_reobservation = self.calc_event_coverage_metrics(observations_performed, events, measurement_reqs)
+
         # count number of GPs observed
         gps_observed : set = {(lat,lon) for _,_,lat,lon,*_ in observations_performed.values}
         n_gps_observed = len(gps_observed)
@@ -249,12 +259,15 @@ class Mission:
         summary_headers = ['stat_name', 'val']
         summary_data = [
                     # Dates
-                    ['Simulation Start Date', self.environment._clock_config.start_date], 
-                    ['Simulation End Date', self.environment._clock_config.end_date], 
+                    # ['Simulation Start Date', self.environment._clock_config.start_date], 
+                    # ['Simulation End Date', self.environment._clock_config.end_date], 
 
                     # Coverage Metrics #TODO add more
                     ['Ground Points', n_gps],
                     ['Ground Points Observed', n_gps_observed],
+                    ['Average Event Reobservation Time [s]', t_reobservation['mean']],
+                    ['Standard Deviation of Event Reobservation Time [s]', t_reobservation['std']],
+                    ['Median Event Reobservation Time [s]', t_reobservation['median']],
 
                     # Counters
                     ['Events', n_events],
@@ -269,7 +282,7 @@ class Mission:
                     ['Events Fully Co-observed', n_events_fully_co_obs],
                     ['Event Co-observations', n_total_event_co_obs],
 
-                    # probabilities
+                    # Probabilities
                     ['P(Event Detected)', np.round(p_event_detected,n_decimals)],
                     ['P(Event Observed)', np.round(p_event_observed,n_decimals)],
                     ['P(Event Re-observed)', np.round(p_event_re_obs,n_decimals)],
@@ -284,88 +297,12 @@ class Mission:
                     ['P(Event Co-observed Partially | Event Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
                     ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
 
-                    ['Total Runtime [s]', round(self.environment.t_f - self.environment.t_0, n_decimals)]
+                    # Simulation Runtime
+                    # ['Total Runtime [s]', round(self.environment.t_f - self.environment.t_0, n_decimals)]
                 ]
 
         return pd.DataFrame(summary_data, columns=summary_headers)
-
-    
-
-    def classify_observations(self, 
-                              observations_performed : pd.DataFrame,
-                              events : pd.DataFrame,
-                              measurement_reqs : pd.DataFrame
-                              ) -> tuple:
-               
-        # count event presense, detections, and observations
-        events_per_gp : Dict[tuple, list] = {}
-        events_detected : Dict[tuple, list] = {}
-        events_observed : Dict[tuple, list] = {}
-
-        for event in events.values:
-            # unpackage event
-            event = tuple(event)
-            lat,lon,t_start,duration,severity,observations_req = event
-            
-            # classify events by their target groundpoint
-            if (lat,lon) not in events_per_gp:
-                events_per_gp[(lat,lon)] = []
-                
-            events_per_gp[(lat,lon)].append([t_start,duration,severity,observations_req])
-
-            # find measurement requests that match this event
-            matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
-                                    for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
-                                    if  abs(lat - lat_req) < 1e-3 
-                                    and abs(lon - lon_req) < 1e-3
-                                    and t_start <= t_start_req <= t_end_req <= t_start+duration
-                                    and all([instrument in observations_req for instrument in str_to_list(observation_types)])
-                                ]          
-
-            if matching_requests:
-                events_detected[event] = matching_requests
-
-            # find observations that overlooked a given event's location
-            matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
-                                        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
-                                        if abs(lat - lat_img) < 1e-3 
-                                    and abs(lon - lon_img) < 1e-3
-                                    and t_start <= t_img <= t_start+duration
-                                    and instrument in observations_req  #TODO include better reasoning!
-                                        ]  
-            if matching_observations:
-                events_observed[event] = matching_observations
-        
-        # find reobserved events
-        events_re_obs = {event: observations 
-                                for event,observations in events_observed.items()
-                                if len(observations) > 1}
-        
-        # find coobserved events
-        events_co_obs : Dict[tuple, list] = {}
-        events_co_obs_fully : Dict[tuple, list] = {}
-        events_co_obs_partially : Dict[tuple, list] = {}
-
-        for event,observations in events_observed.items():
-            # get required measurements for a given event
-            *_,observations_req = observations[-1]
-            observations_req : list = str_to_list(observations_req)
-            
-            # check if valid observations match this event
-            valid_observations = list({(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req) 
-                                        for lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req in observations
-                                        if instrument in observations_req})
-            if valid_observations:
-                if len(valid_observations) == len(observations_req):
-                    events_co_obs_fully[event] = valid_observations
-
-                elif len(valid_observations) > 1:
-                    events_co_obs_partially[event] = valid_observations
-
-                events_co_obs[event] = valid_observations
-
-        return events_per_gp, events_detected, events_observed, events_re_obs, events_co_obs, events_co_obs_fully, events_co_obs_partially
-
+   
     def count_observations(self, 
                            orbitdata : dict, 
                            observations_performed : pd.DataFrame, 
@@ -401,6 +338,80 @@ class Mission:
                     n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
                         n_total_event_co_obs, n_observations
                     
+    def classify_observations(self, 
+                              observations_performed : pd.DataFrame,
+                              events : pd.DataFrame,
+                              measurement_reqs : pd.DataFrame
+                              ) -> tuple:
+               
+        # count event presense, detections, and observations
+        events_per_gp : Dict[tuple, list] = {}
+        events_detected : Dict[tuple, list] = {}
+        events_observed : Dict[tuple, list] = {}
+
+        for event in tqdm(events.values, desc='Calssifying event observations', leave=False):
+            # unpackage event
+            event = tuple(event)
+            lat,lon,t_start,duration,severity,observations_req = event
+            
+            # classify events by their target groundpoint
+            if (lat,lon) not in events_per_gp:
+                events_per_gp[(lat,lon)] = []
+                
+            events_per_gp[(lat,lon)].append([t_start,duration,severity,observations_req])
+
+            # find measurement requests that match this event
+            matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
+                                    for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
+                                    if  abs(lat - lat_req) < 1e-2 
+                                    and abs(lon - lon_req) < 1e-2
+                                    and t_start <= t_start_req <= t_end_req <= t_start+duration
+                                    and all([instrument in observations_req for instrument in str_to_list(observation_types)])
+                                ]          
+
+            if matching_requests:
+                events_detected[event] = matching_requests
+
+            # find observations that overlooked a given event's location
+            matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
+                                        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
+                                        if abs(lat - lat_img) < 1e-3 
+                                    and abs(lon - lon_img) < 1e-3
+                                    and t_start <= t_img <= t_start+duration
+                                    and instrument in observations_req  #TODO include better reasoning!
+                                        ]  
+            if matching_observations:
+                events_observed[event] = matching_observations
+        
+        # find reobserved events
+        events_re_obs = {event: observations 
+                                for event,observations in events_observed.items()
+                                if len(observations) > 1}
+        
+        # find coobserved events
+        events_co_obs : Dict[tuple, list] = {}
+        events_co_obs_fully : Dict[tuple, list] = {}
+        events_co_obs_partially : Dict[tuple, list] = {}
+
+        for event,observations in tqdm(events_observed.items(), desc='Calssifying observations', leave=False):
+            # get required measurements for a given event
+            *_,observations_req = observations[-1]
+            observations_req : list = str_to_list(observations_req)
+            
+            # check if valid observations match this event
+            valid_observations = list({(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req) 
+                                        for lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req in observations
+                                        if instrument in observations_req})
+            if valid_observations:
+                if len(valid_observations) == len(observations_req):
+                    events_co_obs_fully[event] = valid_observations
+
+                elif len(valid_observations) > 1:
+                    events_co_obs_partially[event] = valid_observations
+
+                events_co_obs[event] = valid_observations
+
+        return events_per_gp, events_detected, events_observed, events_re_obs, events_co_obs, events_co_obs_fully, events_co_obs_partially
     
     def calc_event_probabilities(self,
                                  orbitdata : dict, 
@@ -417,9 +428,9 @@ class Mission:
     
         # count observations by type
         n_gps, n_events, n_events_detected, n_events_observed, \
-            n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
+            _, n_events_reobserved, _, \
                 n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                    n_total_event_co_obs, n_observations \
+                    _, n_observations \
                         = self.count_observations(orbitdata,
                                                   observations_performed,
                                                   events,
@@ -480,6 +491,51 @@ class Mission:
                     p_event_co_obs_fully, p_event_at_gp, p_event_observed_if_detected, \
                         p_event_re_obs_if_detected, p_event_co_obs_if_detected, p_event_co_obs_partial_if_detected, \
                             p_event_co_obs_fully_if_detected
+
+    def calc_event_coverage_metrics(self,
+                                    observations_performed : pd.DataFrame, 
+                                    events : pd.DataFrame,
+                                    measurement_reqs : pd.DataFrame
+                                    ) -> tuple:
+        # classify performed observations
+        grouped_observations = {}
+        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values:
+            if (lat_img, lon_img) not in grouped_observations:
+                grouped_observations[(lat_img, lon_img)] = []
+
+            grouped_observations[(lat_img, lon_img)].append((observer,t_img,lat_img,lon_img,*_,instrument))
+
+        # event reobservation times
+        t_reobservations : list = []
+        for _,observations in grouped_observations.items():
+            prev_observation = None
+            for observation in observations:
+                if prev_observation is None:
+                    prev_observation = observation
+                    continue
+
+                # get observation times
+                _,t,*_ = observation
+                _,t_prev,*_ = prev_observation
+
+                # calculate revisit
+                t_reobservation = t-t_prev
+
+                # add to list
+                t_reobservations.append(t_reobservation)
+
+                # update previous observation
+                prev_observation = observation
+        
+        # compile statistical data
+        t_reobservation : dict = {
+            'mean' : np.average(t_reobservations),
+            'std' : np.std(t_reobservations),
+            'median' : np.median(t_reobservations),
+            'data' : t_reobservations
+        }
+
+        return t_reobservation
 
 class SimulationElementsFactory:
     """

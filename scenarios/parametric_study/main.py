@@ -17,6 +17,9 @@ def main(lower_bound : int, upper_bound : int, level : int):
     # set scenario name
     parent_scenario_name = 'parametric_study'
     scenario_dir = os.path.join('./scenarios', parent_scenario_name)
+
+    # check if orbitdata folder exists
+    if not os.path.isdir(os.path.join(scenario_dir, 'orbit_data')): os.mkdir(os.path.join(scenario_dir, 'orbit_data'))
     
     # load base scenario json file
     template_file = os.path.join(scenario_dir,'MissionSpecs.json')
@@ -26,7 +29,7 @@ def main(lower_bound : int, upper_bound : int, level : int):
     # read scenario parameters file
     scenarios_file = os.path.join(scenario_dir, 'resources', 'lhs_scenarios.csv')
     scenarios_df : pd.DataFrame = pd.read_csv(scenarios_file)
-    # scenarios_df = scenarios_df.sort_values(by=['num_planes','num_sats_per_plane'], ascending=False)
+    scenarios_df = scenarios_df.sort_values(by=['num_planes','num_sats_per_plane'], ascending=True)
 
     # check if bounds are valid
     assert 0 <= lower_bound <= upper_bound
@@ -44,12 +47,12 @@ def main(lower_bound : int, upper_bound : int, level : int):
                         ]
     preplanner_settings = [ # (period[s], horizon [s])
         (np.Inf, np.Inf),
-        (100, 100),         
-        (500, 500)
+        # (100, 100),         
+        # (500, 500)
     ]
     replanners = [
                     'broadcaster', 
-                    # 'acbba',
+                    'acbba',
                     ]
     bundle_sizes = [
                     # 1,
@@ -120,7 +123,7 @@ def main(lower_bound : int, upper_bound : int, level : int):
                             # if preplanner == 'naive' and replanner == 'broadcaster':
                             #     continue # skip
 
-                            if replanner == 'acbba' and horizon != np.Inf:
+                            if replanner == 'acbba':
                                 replanner += '-dp'
 
                             # create specs from template
@@ -139,10 +142,10 @@ def main(lower_bound : int, upper_bound : int, level : int):
 
                             # check overwrite toggle
                             results_dir = os.path.join('./scenarios', parent_scenario_name, 'results', scenario_name)
-                            if not overwrite and os.path.exists(os.path.join(results_dir, 'summary.csv')):
-                                # scenario already ran; skip to avoid overwrite
-                                pbar.update(1)
-                                continue
+                            # if not overwrite and os.path.exists(os.path.join(results_dir, 'summary.csv')):
+                            #     # scenario already ran; skip to avoid overwrite
+                            #     pbar.update(1)
+                            #     continue
 
                             # set simulation duration
                             scenario_specs['duration'] = sim_duration
@@ -223,10 +226,13 @@ def main(lower_bound : int, upper_bound : int, level : int):
                             print_welcome(scenario_name)
 
                             # initialize mission
-                            # mission : Mission = Mission.from_dict(scenario_specs)
+                            mission : Mission = Mission.from_dict(scenario_specs)
 
-                            # # # execute mission
+                            # execute mission
                             # mission.execute()
+
+                            # print results
+                            mission.print_results()
                                 
                             # update progress bad
                             pbar.update(1)

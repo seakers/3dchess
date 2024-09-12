@@ -1,3 +1,0 @@
-t_update,grid_index,GP index,lat [deg],log [deg],instrument,reward,n_observations,n_events
-1190.0,0,160,-60.67508453141233,123.0201180949566,thermal,1.661111111111111,0,0
-1190.0,0,160,-60.67508453141233,123.0201180949566,thermal,10.0,0,1

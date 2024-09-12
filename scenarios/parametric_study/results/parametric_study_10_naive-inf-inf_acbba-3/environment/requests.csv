@@ -1,2 +1,0 @@
-ID,Requester,lat [deg],lon [deg],Severity,t start,t end,t corr,Measurment Types
-e1b3cc1f-6f35-11ef-8972-0ade7690bf05,therm_sat_0_0,37.37320815378608,-126.7547121924,4.876750443087086,11070.0,11116.416706632304,46.41670663230434,['sar']

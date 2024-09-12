@@ -28,7 +28,7 @@ class ModuleTypes(Enum):
     SCIENCE = 'SCIENCE'
     ENGINEERING = 'ENGINEERING'
 
-def setup_results_directory(scenario_path : str, scenario_name : str, agent_names : list) -> str:
+def setup_results_directory(scenario_path : str, scenario_name : str, agent_names : list, overwrite : bool = True) -> str:
     """
     Creates an empty results directory within the current working directory
     """
@@ -38,7 +38,7 @@ def setup_results_directory(scenario_path : str, scenario_name : str, agent_name
         # create results directory if it doesn't exist
         os.makedirs(results_path)
 
-    else:
+    elif overwrite:
         # clear results in case it already exists
         for filename in os.listdir(results_path):
             file_path = os.path.join(results_path, filename)
@@ -49,6 +49,9 @@ def setup_results_directory(scenario_path : str, scenario_name : str, agent_name
                     shutil.rmtree(file_path)
             except Exception as e:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
+    else:
+        # path exists and no overwrite 
+        return results_path
 
     # create a results directory for all agents
     for agent_name in agent_names:

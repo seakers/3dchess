@@ -19,7 +19,7 @@ if __name__  == "__main__":
     # set params
     results_path = './results'
     show_plots = False
-    save_plots = True
+    save_plots = False
     
     # get run names
     run_names = list({run_name for run_name in os.listdir(results_path)
@@ -33,19 +33,21 @@ if __name__  == "__main__":
 
     # organize data
     metrics = [
+               "Experiment ID",
                "Strategy",
                "Preplanner", 
                "Period", 
                "Horizon",
                "Replanner",
                "Num Events",
+               "Event Duration [s]",
                "Event Distribution",
                "Num Planes",
                "Num Sats Per Plane",
                "Num Sats"
                ]
     data = []
-    for run_name in run_names:
+    for run_name in tqdm(run_names, desc='Compiling results', leave=False):
         # load results summary
         summary_path = os.path.join(results_path, run_name, 'summary.csv')
         summary : pd.DataFrame = pd.read_csv(summary_path)
@@ -67,30 +69,35 @@ if __name__  == "__main__":
         
         if 'dynamic' in preplanner and 'acbba' in replanner:
             strategy = 'periodic-reactive'
+            continue
         elif 'dynamic' in preplanner:
             strategy = 'periodic'
+            continue
         elif 'acbba' in replanner:
             strategy = 'reactive'
         else:
             strategy = 'non-reactive'
 
         # collect datum
-        datum = [strategy, preplanner, period, horizon, replanner, num_events, distribution, num_planes, sats_per_plane, num_planes*sats_per_plane]
+        datum = [experiment_id, strategy, preplanner, period, horizon, replanner, num_events, event_duration, distribution, num_planes, sats_per_plane, num_planes*sats_per_plane]
         
         for key,value in summary.values:
             key : str; value : str
 
             if key not in metrics: metrics.append(key)           
 
-            if not isinstance(value, float) and value.isdigit():
-                value = float(value)  
-                if math.isnan(value) : continue
+            if not isinstance(value, float):
+                try:
+                    value = float(value)  
+                except ValueError:
+                    pass
         
             datum.append(value)
 
         # add to data
         data.append(datum)
     df = pd.DataFrame(data=data, columns=metrics)
+    df.to_csv(os.path.join(results_path, 'summary.csv'))
 
     # create plots directory if necessary
     if not os.path.isdir('./plots'): os.mkdir('./plots')
@@ -102,11 +109,11 @@ if __name__  == "__main__":
     for metric in tqdm(metrics, desc='Histogram Plots'):
         if 'obs' not in metric.lower() and 'events' not in metric.lower(): continue
         if 'Strategy' in metric: continue
-        if 'P(' in metric : continue
 
         # create histogram
         sns.displot(df, x=metric, hue='Strategy', kind="kde", warn_singular=False)
         plt.xlim(left=0)
+        if 'P(' in metric: plt.xlim(right=1)
         plt.grid(visible=True)
         
         # save or show graph

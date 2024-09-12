@@ -126,6 +126,7 @@
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir" : "./scenarios/parametric_study/orbit_data"
+        "outDir" : "./scenarios/parametric_study/orbit_data",
+        "overwrite" : "False" 
     }
 }

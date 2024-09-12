@@ -1,5 +1,0 @@
-t_update,grid_index,GP index,lat [deg],log [deg],instrument,reward,n_observations,n_events
-27920.0,0,170,-62.2,-163.7,visual,1.0,1,0
-27920.0,0,170,-62.2,-163.7,visual,10.0,0,0
-27960.0,0,157,-63.7,-159.7,visual,1.0,1,0
-27960.0,0,157,-63.7,-159.7,visual,10.0,0,0
