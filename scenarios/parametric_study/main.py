@@ -13,7 +13,13 @@ from chess3d.mission import Mission
 from chess3d.utils import print_welcome, LEVELS
 
 
-def main(lower_bound : int, upper_bound : int, level : int):
+def main(
+         experiments_name : str,
+         lower_bound : int, 
+         upper_bound : int, 
+         level : int, 
+         overwrite : bool = True):
+    
     # set scenario name
     parent_scenario_name = 'parametric_study'
     scenario_dir = os.path.join('./scenarios', parent_scenario_name)
@@ -21,24 +27,25 @@ def main(lower_bound : int, upper_bound : int, level : int):
     # check if orbitdata folder exists
     if not os.path.isdir(os.path.join(scenario_dir, 'orbit_data')): os.mkdir(os.path.join(scenario_dir, 'orbit_data'))
     
+    # remove previous orbit data
+    if overwrite: clear_orbitdata(scenario_dir)
+    
     # load base scenario json file
     template_file = os.path.join(scenario_dir,'MissionSpecs.json')
     with open(template_file, 'r') as template_file:
         template_specs : dict = json.load(template_file)
 
     # read scenario parameters file
-    scenarios_file = os.path.join(scenario_dir, 'resources', 'lhs_scenarios.csv')
-    scenarios_df : pd.DataFrame = pd.read_csv(scenarios_file)
-    scenarios_df = scenarios_df.sort_values(by=['num_planes','num_sats_per_plane'], ascending=True)
+    experiments_file = os.path.join(scenario_dir, 'resources', 'experiments', f'{experiments_name}.csv')
+    experiments_df : pd.DataFrame = pd.read_csv(experiments_file)
+    # experiments_df = experiments_df.sort_values(by=['Number Planes','Number of Satellites per Plane'], ascending=True)
 
     # check if bounds are valid
     assert 0 <= lower_bound <= upper_bound
-    assert lower_bound <= len(scenarios_df) - 1
-    assert upper_bound <= len(scenarios_df) - 1 or np.isinf(upper_bound)
+    assert lower_bound <= len(experiments_df) - 1
+    assert upper_bound <= len(experiments_df) - 1 or np.isinf(upper_bound)
 
     # set fixed parameters
-    same_events = True
-    overwrite = False
     sim_duration = 24.0 / 24.0 # in days
     preplanners = [
                         'naive',
@@ -52,7 +59,7 @@ def main(lower_bound : int, upper_bound : int, level : int):
     ]
     replanners = [
                     'broadcaster', 
-                    'acbba',
+                    # 'acbba',
                     ]
     bundle_sizes = [
                     # 1,
@@ -62,26 +69,29 @@ def main(lower_bound : int, upper_bound : int, level : int):
                     ]   
 
     # count number of runs to be made
-    n_runs : int = min(len(scenarios_df), upper_bound-lower_bound) * 3 * (len(replanners)-1 + len(bundle_sizes))
+    n_runs : int = min(len(experiments_df), upper_bound-lower_bound) \
+                    * len(preplanners) * len(preplanner_settings) \
+                        * (len(replanners)-1 + len(bundle_sizes))
     print(F'NUMBER OF RUNS TO PERFORM: {n_runs}')
 
     # run simulation for each set of parameters
     with tqdm.tqdm(total=n_runs) as pbar:
-        for scenario_i,row in scenarios_df.iterrows():
-            if scenario_i < lower_bound:
+        for experiment_i,row in experiments_df.iterrows():
+            if experiment_i < lower_bound:
                 continue
-            elif upper_bound < scenario_i:
+            elif upper_bound < experiment_i:
                 break
 
-            # extract parameters
-            n_planes = row['num_planes']
-            sats_per_plane = row['num_sats_per_plane']
+            # extract constellation parameters
+            n_planes = row['Number Planes']
+            sats_per_plane = row['Number of Satellites per Plane']
             tas = [360 * i / sats_per_plane for i in range(sats_per_plane)]
             raans = [360 * j / n_planes for j in range(n_planes)]
 
-            field_of_regard = row['for (deg)']
-            field_of_view = row['fov (deg)']
-            agility = row['agility (deg/s)']
+            # extract satellite capability parameters
+            field_of_regard = row['Field of Regard (deg)']
+            field_of_view = row['Field of View (deg)']
+            agility = row['Maximum Slew Rate (deg/s)']
             max_torque = 0.0
             instruments = [
                             'visual', 
@@ -92,20 +102,9 @@ def main(lower_bound : int, upper_bound : int, level : int):
                             'visual' : 'vis', 
                             'thermal' : 'therm', 
                             'sar' : 'sar'
-                            }
-
-            event_duration = row['event_duration (s)']
-            n_events = row['num_events']
-            event_clustering = row['event_clustering']
-            min_severity = 0.0
-            max_severity = 100
-            measurement_list = ['sar', 'visual', 'thermal']
-
-            # remove previous orbit data
-            # clear_orbitdata(scenario_dir)
+                            }       
 
             # run cases
-            pregenerated_events = False
             for preplanner in preplanners:
                 for replanner in replanners:
                     for period, horizon in preplanner_settings:
@@ -130,44 +129,34 @@ def main(lower_bound : int, upper_bound : int, level : int):
                             scenario_specs : dict = copy.deepcopy(template_specs)
 
                             # create scenario name
-                            scenario_name = f'{parent_scenario_name}_{scenario_i}_{preplanner}-{period}-{horizon}_{replanner}'
-                            if replanner != 'broadcaster': scenario_name += f'-{bundle_size}'
+                            experiment_name = f"{row['Name']}_{preplanner}-{period}-{horizon}_{replanner}"
+                            if replanner != 'broadcaster': experiment_name += f'-{bundle_size}'
                             
                             # set scenario name
-                            scenario_specs['scenario']['name'] = scenario_name
+                            scenario_specs['scenario']['name'] = experiment_name
 
                             # set outdir
-                            orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', f'{parent_scenario_name}_{scenario_i}')
+                            orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', row['Name'])
                             scenario_specs['settings']['outDir'] = orbitdata_dir
 
                             # check overwrite toggle
-                            results_dir = os.path.join('./scenarios', parent_scenario_name, 'results', scenario_name)
-                            # if not overwrite and os.path.exists(os.path.join(results_dir, 'summary.csv')):
-                            #     # scenario already ran; skip to avoid overwrite
-                            #     pbar.update(1)
-                            #     continue
+                            results_dir = os.path.join('./scenarios', parent_scenario_name, 'results', experiments_name)
+                            if not overwrite and os.path.exists(os.path.join(results_dir, 'summary.csv')):
+                                # scenario already simulated and told not to overwrite; skip
+                                pbar.update(1)
+                                continue
 
                             # set simulation duration
                             scenario_specs['duration'] = sim_duration
 
-                            # set events
-                            if not (same_events and pregenerated_events):
-                                if event_clustering == 'uniform':
-                                    grid_path = create_uniform_grid(scenario_dir, scenario_i, n_events)
-                                elif event_clustering == 'clustered':
-                                    grid_path = create_clustered_grid(scenario_dir, scenario_i, n_events)
-                                else:
-                                    raise NotImplementedError(f'event clustering of type {event_clustering} not supported.')
-                                create_events(scenario_dir, scenario_i, grid_path, sim_duration, n_events, event_duration, min_severity, max_severity, measurement_list)
-                                pregenerated_events = True
-                                
+                            # set coverage grid and events 
                             scenario_specs['grid'] = [{
                                                         "@type": "customGrid",
-                                                        "covGridFilePath": os.path.join(scenario_dir, 'resources', f'random_grid_{scenario_i}.csv')
+                                                        "covGridFilePath": os.path.join(scenario_dir, 'resources', 'grids', 'hydrolakes_dataset.csv')
                                                     }]
                             scenario_specs['scenario']['events'] = {
                                                         "@type": "PREDEF", 
-                                                        "eventsPath" : os.path.join(scenario_dir, 'resources', f'random_events_{scenario_i}.csv')
+                                                        "eventsPath" : os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{row['Name']}_events.csv")
                                                     }
 
                             # set spacecraft specs
@@ -211,7 +200,7 @@ def main(lower_bound : int, upper_bound : int, level : int):
                                     sat['planner']['replanner']['bundle size'] = bundle_size
 
                                     # set science
-                                    sat['science']['eventsPath'] = os.path.join(scenario_dir, 'resources', f'random_events_{scenario_i}.csv')
+                                    sat['science']['eventsPath'] = os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{row['Name']}_events.csv")
                                     
                                     # add to list of sats
                                     sats.append(sat)
@@ -223,13 +212,13 @@ def main(lower_bound : int, upper_bound : int, level : int):
                             scenario_specs['spacecraft'] = sats
 
                             # print welcome message
-                            print_welcome(scenario_name)
+                            print_welcome(experiment_name)
 
                             # initialize mission
                             mission : Mission = Mission.from_dict(scenario_specs)
 
                             # execute mission
-                            # mission.execute()
+                            mission.execute()
 
                             # print results
                             mission.print_results()
@@ -383,6 +372,12 @@ if __name__ == "__main__":
                                      epilog='- TAMU')
     
     # set parser arguments
+    parser.add_argument('-s',
+                        '--experiments-name', 
+                        help='name of set of experiments being used to select the location of events',
+                        type=str,
+                        required=False,
+                        default='experiments_seed-1000')
     parser.add_argument('-l',
                         '--lower-bound', 
                         help='lower bound of simulation indeces to be run',
@@ -402,19 +397,25 @@ if __name__ == "__main__":
                         help='logging level',
                         required=False,
                         type=str) 
+    parser.add_argument('-o', 
+                        '--overwrite',
+                        default=False,
+                        help='results overwrite toggle',
+                        required=False,
+                        type=bool) 
     
     # parse arguments
     args = parser.parse_args()
     
     # extract arguments
+    scenario_name = args.experiments_name
     lower_bound = args.lower_bound
     upper_bound = args.upper_bound
     level = LEVELS.get(args.level)
-
-    lower_bound = 0
+    overwrite = args.overwrite
 
     # run simulation
-    main(lower_bound, upper_bound, level)
+    main(scenario_name, lower_bound, upper_bound, level, overwrite)
 
     # print DONE
     print(f'Sims {lower_bound}-{upper_bound} DONE')

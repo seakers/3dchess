@@ -285,7 +285,7 @@ class LookupTableScienceModule(ScienceModule):
         
         # query known events
         observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
-                            for lat_event,lon_event,t_start,duration,severity,measurements in self.events.values
+                            for _,lat_event,lon_event,t_start,duration,severity,measurements in self.events.values
                             # same location as the observation
                             if abs(lat - lat_event) <= 1e-3
                             and abs(lon - lon_event) <= 1e-3

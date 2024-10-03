@@ -104,7 +104,7 @@
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/parametric_study/resources/random_points.csv"
+            "covGridFilePath": "./scenarios/parametric_study/resources/grids/hydrolakes_dataset.csv"
         }
     ],
     "scenario": {   

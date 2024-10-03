@@ -125,8 +125,8 @@ class SimulationEnvironment(EnvironmentNode):
         # load events 
         events : pd.DataFrame = pd.read_csv(events_path)
         columns = events.columns
-        data = [(lat,lon,t_start,duration,severity,measurements)
-                for lat,lon,t_start,duration,severity,measurements in events.values
+        data = [(gp_idx,lat,lon,t_start,duration,severity,measurements)
+                for gp_idx,lat,lon,t_start,duration,severity,measurements in events.values
                 if t_start <= sim_duration]
         events = pd.DataFrame(data=data,columns=columns)
 

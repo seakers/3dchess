@@ -160,10 +160,11 @@ cython_debug/
 #.idea/
 
 # Data and Results
-./tests/*/orbit_data/
-./tests/*/results/
-./scenarios/*/orbit_data/
+./tests/*/orbit_data/*
+./tests/*/results/*
+./scenarios/*/orbit_data/*
 ./scenarios/*/results/*
-./scenarios/*/results_archive/
+./scenarios/*/results_archive/*
 
 *.tar
+*.tar*
