@@ -1,0 +1,30 @@
+stat_name,val
+Ground Points,5001.0
+Ground Points Observed,12.0
+Average Event Reobservation Time [s],
+Standard Deviation of Event Reobservation Time [s],
+Median Event Reobservation Time [s],
+Events,1488.0
+Events Detected,0.0
+Events Observed,0.0
+Observations,12.0
+Event Observations,0.0
+Events Re-observed,0.0
+Event Re-observations,0.0
+Events Co-observed,0.0
+Events Partially Co-observed,0.0
+Events Fully Co-observed,0.0
+Event Co-observations,0.0
+P(Event Detected),0.0
+P(Event Observed),0.0
+P(Event Re-observed),0.0
+P(Event Co-observed),0.0
+P(Event Partially Co-observed),0.0
+P(Event Fully Co-observed),0.0
+P(Event at a GP),0.29754
+P(Event Observation | Observation),0.0
+P(Event Observed | Event Detected),
+P(Event Re-oberved | Event Detected),
+P(Event Co-observed | Event Detected),
+P(Event Co-observed Partially | Event Detected),
+P(Event Co-observed Fully | Event Detected),

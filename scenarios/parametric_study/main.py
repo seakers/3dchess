@@ -18,7 +18,8 @@ def main(
          lower_bound : int, 
          upper_bound : int, 
          level : int, 
-         overwrite : bool = True):
+         overwrite : bool = True,
+         debug : bool = True):
     
     # set scenario name
     parent_scenario_name = 'parametric_study'
@@ -46,7 +47,7 @@ def main(
     assert upper_bound <= len(experiments_df) - 1 or np.isinf(upper_bound)
 
     # set fixed parameters
-    sim_duration = 24.0 / 24.0 # in days
+    sim_duration = 1.0 / 24.0 # in days
     preplanners = [
                         'naive',
                         # 'dynamic'
@@ -71,7 +72,8 @@ def main(
     # count number of runs to be made
     n_runs : int = min(len(experiments_df), upper_bound-lower_bound) \
                     * len(preplanners) * len(preplanner_settings) \
-                        * (len(replanners)-1 + len(bundle_sizes))
+                        * (len(replanners)-1 + len(bundle_sizes)) \
+                            if not debug else 1
     print(F'NUMBER OF RUNS TO PERFORM: {n_runs}')
 
     # run simulation for each set of parameters
@@ -225,6 +227,8 @@ def main(
                                 
                             # update progress bad
                             pbar.update(1)
+
+                            if debug: return
 
 def clear_orbitdata(scenario_dir : str) -> None:
     orbitdata_path = os.path.join(scenario_dir, 'orbit_data')
@@ -403,6 +407,12 @@ if __name__ == "__main__":
                         help='results overwrite toggle',
                         required=False,
                         type=bool) 
+    parser.add_argument('-debug', 
+                        '--debug',
+                        default=False,
+                        help='toggles to run just one experiment for debugging purposes',
+                        required=False,
+                        type=bool) 
     
     # parse arguments
     args = parser.parse_args()
@@ -413,9 +423,16 @@ if __name__ == "__main__":
     upper_bound = args.upper_bound
     level = LEVELS.get(args.level)
     overwrite = args.overwrite
+    debug = args.debug
 
     # run simulation
-    main(scenario_name, lower_bound, upper_bound, level, overwrite)
+    main(scenario_name, 
+         lower_bound, 
+         upper_bound, 
+         level, 
+         overwrite, 
+        #  debug
+         )
 
     # print DONE
     print(f'Sims {lower_bound}-{upper_bound} DONE')

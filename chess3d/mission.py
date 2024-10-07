@@ -207,7 +207,6 @@ class Mission:
             for agent in self.agents:                
                 agent : SimulationAgent
                 pool.submit(agent.run, *[])  
-
     
     def print_results(self, precission : int = 5) -> None:
         # define file name
@@ -352,7 +351,7 @@ class Mission:
         for event in tqdm(events.values, desc='Calssifying event observations', leave=False):
             # unpackage event
             event = tuple(event)
-            lat,lon,t_start,duration,severity,observations_req = event
+            _, lat,lon,t_start,duration,severity,observations_req = event
             
             # classify events by their target groundpoint
             if (lat,lon) not in events_per_gp:

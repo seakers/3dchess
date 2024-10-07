@@ -776,7 +776,7 @@ class OrbitData:
 
             if (
                     scenario_specs['epoch'] != orbitdata_dict['epoch']
-                or scenario_specs['duration'] != orbitdata_dict['duration']
+                or scenario_specs['duration'] > orbitdata_dict['duration']
                 or scenario_specs.get('groundStation', None) != orbitdata_dict.get('groundStation', None)
                 # or scenario_dict['grid'] != orbitdata_dict['grid']
                 # or scenario_dict['scenario']['connectivity'] != mission_dict['scenario']['connectivity']

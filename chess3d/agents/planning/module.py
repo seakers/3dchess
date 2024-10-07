@@ -403,7 +403,7 @@ class PlanningModule(InternalModule):
 
                 # --- Execute plan ---
                 # get next action to perform
-                plan_out : list = plan.get_next_actions(self.get_current_time())
+                plan_out : list = self.get_plan_out(plan)
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
@@ -424,6 +424,10 @@ class PlanningModule(InternalModule):
             # traceback.format_exc()
             print(e)
             raise e
+        
+    @runtime_tracker
+    def get_plan_out(self, plan : Plan) -> list:
+        return plan.get_next_actions(self.get_current_time())
                 
     @runtime_tracker
     async def __check_action_completion(self, level : int = logging.DEBUG) -> tuple:
@@ -604,7 +608,7 @@ class PlanningModule(InternalModule):
 
         # log performance stats
         n_decimals = 5
-        headers = ['routine','t_avg','t_std','t_med','n']
+        headers = ['routine','t_avg','t_std','t_med','n', 't_total']
         data = []
 
         for routine in self.stats:
@@ -612,13 +616,15 @@ class PlanningModule(InternalModule):
             t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
             t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
             t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+            t_total = t_avg * n
 
             line_data = [ 
                             routine,
                             t_avg,
                             t_std,
                             t_median,
-                            n
+                            n,
+                            t_total
                             ]
             data.append(line_data)
 
