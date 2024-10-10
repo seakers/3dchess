@@ -42,6 +42,7 @@ class SimulationEnvironment(EnvironmentNode):
                 gs_list : list,
                 env_network_config: NetworkConfig, 
                 manager_network_config: NetworkConfig, 
+                connectivity : str = 'full',
                 events_path : str = None,
                 level: int = logging.INFO, 
                 logger: logging.Logger = None) -> None:
@@ -91,6 +92,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.events : pd.DataFrame = self.load_events(events_path)
 
         # initialize parameters
+        self.connectivity = connectivity
         self.observation_history = []
         self.agent_connectivity = {}
         for src in agent_names:
@@ -162,88 +164,10 @@ class SimulationEnvironment(EnvironmentNode):
                     t_0 = time.perf_counter()
                     
                     if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
-                        # unpack message
-                        msg = ObservationResultsMessage(**content)
-                        self.log(f'received masurement data request from {msg.src}. quering measurement results...')
-                        agent_state = SimulationAgentState.from_dict(msg.agent_state)
-                        instrument = Instrument.from_dict(msg.instrument)
-
-                        # find/generate measurement results
-                        observation_data = self.query_measurement_data(agent_state, 
-                                                                       instrument)
-
-                        # repsond to request
-                        self.log(f'measurement results obtained! responding to request')
-                        resp : ObservationResultsMessage = copy.deepcopy(msg)
-                        resp.dst = resp.src
-                        resp.src = self.get_element_name()
-                        resp.observation_data = observation_data
-
-                        # save observation
-                        self.observation_history.append(resp)
-
-                        await self.respond_peer_message(resp) 
+                        resp = self.handle_observation(content)
 
                     elif content['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-                        # unpack message
-                        msg = AgentStateMessage(**content)
-                        self.log(f'state message received from {msg.src}. updating state tracker...')
-
-                        # initiate response
-                        resp_msgs = []
-
-                        # check current state
-                        updated_state = None
-                        if src in self.agents[self.SPACECRAFT]:
-                            # look up orbitdata
-                            current_state = SatelliteAgentState(**msg.state)
-                            data : OrbitData = self.orbitdata[src]
-                            pos, vel, eclipse = data.get_orbit_state(current_state.t)
-
-                            # update state
-                            updated_state = current_state
-                            updated_state.pos = pos
-                            updated_state.vel = vel
-                            updated_state.eclipse = int(eclipse)
-
-                        elif src in self.agents[self.UAV]:
-                            # Do NOT update
-                            updated_state = UAVAgentState(**msg.state)
-
-                        elif src in self.agents[self.GROUND_STATION]:
-                            # Do NOT update state
-                            updated_state = GroundStationAgentState(**msg.state)
-                        else:
-                            x = 1
-
-                        updated_state.t = max(self.get_current_time(), current_state.t)
-                        
-                        updated_state_msg = AgentStateMessage(self.get_element_name(), src, updated_state.to_dict())
-                        resp_msgs.append(updated_state_msg.to_dict())
-
-                        # check connectivity status
-                        for target_type in self.agents:
-                            for target in self.agents[target_type]:
-                                if target == src:
-                                    continue
-                                
-                                connected = self.check_agent_connectivity(src, target, target_type)
-                                
-                                if connected == 0 and self.agent_connectivity[src][target] == -1:
-                                    self.agent_connectivity[src][target] = connected
-                                    continue
-
-                                if self.agent_connectivity[src][target] != connected:
-                                    # only announce if changes to connectivity have been made
-                                    connectivity_update = AgentConnectivityUpdate(src, target, connected)
-                                    resp_msgs.append(connectivity_update.to_dict())
-                                    self.agent_connectivity[src][target] = connected
-
-                        # package response
-                        resp_msg = BusMessage(self.get_element_name(), src, resp_msgs)
-
-                        # send response
-                        await self.respond_peer_message(resp_msg)
+                        resp = self.handle_agent_state(content)
 
                     else:
                         # message is of an unsopported type. send blank response
@@ -252,10 +176,11 @@ class SimulationEnvironment(EnvironmentNode):
 
                         # respond to request
                         await self.respond_peer_message(resp)
-                    
+
+                    await self.respond_peer_message(resp)
+                                        
                     dt = time.perf_counter() - t_0
-                    if src not in self.stats:
-                        self.stats[src] = []
+                    if src not in self.stats: self.stats[src] = []
                     self.stats[src].append(dt)
 
                 elif agent_broadcasts in socks:
@@ -311,6 +236,124 @@ class SimulationEnvironment(EnvironmentNode):
             self.log(f'`live()` failed. {e}', level=logging.ERROR)
             raise e
 
+    @runtime_tracker
+    def handle_observation(self, content : dict) -> SimulationMessage:
+        # unpack message
+        msg = ObservationResultsMessage(**content)
+        self.log(f'received masurement data request from {msg.src}. quering measurement results...')
+        agent_state = SimulationAgentState.from_dict(msg.agent_state)
+        instrument = Instrument.from_dict(msg.instrument)
+
+        # find/generate measurement results
+        observation_data = self.query_measurement_data(agent_state, 
+                                                        instrument)
+
+        # repsond to request
+        self.log(f'measurement results obtained! responding to request')
+        resp : ObservationResultsMessage = copy.deepcopy(msg)
+        resp.dst = resp.src
+        resp.src = self.get_element_name()
+        resp.observation_data = observation_data
+
+        # save observation
+        self.observation_history.append(resp)
+
+        # return observation response
+        return resp
+    
+    @runtime_tracker
+    def handle_agent_state(self, content : dict) -> SimulationMessage:
+        # unpack message
+        msg = AgentStateMessage(**content)
+        self.log(f'state message received from {msg.src}. updating state tracker...')
+       
+        # update agent state
+        updated_state = self.update_agent_state(msg)
+        
+        # create state response message
+        updated_state_msg = AgentStateMessage(self.get_element_name(), msg.src, updated_state)
+        
+        # initiate response message list
+        resp_msgs = [updated_state_msg.to_dict()]
+
+        # update agent connectivity 
+        resp_msgs.extend(self.upadate_agent_connectivity(msg))
+
+        # send response
+        return  BusMessage(self.get_element_name(), msg.src, resp_msgs)
+
+
+    @runtime_tracker
+    def update_agent_state(self, msg : AgentStateMessage) -> dict:
+        # check if time has passed between state updates
+        if (msg.state['t'] - self.get_current_time()) < 1e-3: 
+            updated_state = msg.state
+
+        else:
+            # check current state
+            if msg.src in self.agents[self.SPACECRAFT]:
+                # unpack previous state
+                # current_state = SatelliteAgentState(**msg.state)
+
+                # look up orbit state
+                data : OrbitData = self.orbitdata[msg.src]
+                pos, vel, eclipse = data.get_orbit_state(self.get_current_time())
+
+                # update state
+                updated_state = msg.state
+                updated_state['pos'] = pos
+                updated_state['vel'] = vel
+                updated_state['eclipse'] = int(eclipse)
+
+            elif msg.src in self.agents[self.UAV]:
+                # Do NOT update
+                updated_state = msg.state
+
+            elif msg.src in self.agents[self.GROUND_STATION]:
+                # Do NOT update state
+                updated_state = msg.state
+
+            else:
+                raise ValueError(f'Unrecognized agent performed an update state request. Agent {msg.src} is not part of this simulation.')
+
+        updated_state['t'] = max(self.get_current_time(), updated_state['t'])
+
+        return updated_state
+    
+    @runtime_tracker
+    def upadate_agent_connectivity(self, msg : SimulationMessage) -> list:
+        # initiate update list
+        resp_msgs = []
+
+        # check connectivity status
+        for target_type in self.agents:
+            for target in self.agents[target_type]:
+                # do not compare to self
+                if target == msg.src: continue
+                
+                # check updated connectivity
+                connected = self.check_agent_connectivity(msg.src, target, target_type)
+                
+                # check if it changes from previously known connectivity state
+                if connected == 0 and self.agent_connectivity[msg.src][target] == -1:
+                    # no change found; do not announce
+                    pass
+
+                    # update internal state
+                    self.agent_connectivity[msg.src][target] = connected
+                    continue
+
+                if self.agent_connectivity[msg.src][target] != connected:
+                    # change found; make announcement 
+                    connectivity_update = AgentConnectivityUpdate(msg.src, target, connected)
+                    resp_msgs.append(connectivity_update.to_dict())
+
+                    # update internal state
+                    self.agent_connectivity[msg.src][target] = connected
+
+        return resp_msgs
+    
+    @runtime_tracker
     def check_agent_connectivity(self, src : str, target : str, target_type : str) -> bool:
         """
         Checks if an agent is in communication range with another agent
@@ -323,6 +366,8 @@ class SimulationEnvironment(EnvironmentNode):
         #### Returns:
             - connected (`int`): binary value representing if the `src` and `target` are connected
         """
+        if self.connectivity == 'FULL': return True
+
         connected = False
         if target_type == self.SPACECRAFT:
             if src in self.agents[self.SPACECRAFT]:
@@ -489,7 +534,7 @@ class SimulationEnvironment(EnvironmentNode):
             measurement_reqs.to_csv(f"{self.results_path}/requests.csv", index=False)
 
             # log performance stats
-            columns = ['routine','t_avg','t_std','t_med','n']
+            columns = ['routine','t_avg','t_std','t_med','n','t_total']
             data = []
 
             for routine in self.stats:
@@ -497,13 +542,15 @@ class SimulationEnvironment(EnvironmentNode):
                 t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
                 t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
                 t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_total = n * t_avg
 
                 line_data = [ 
                                 routine,
                                 t_avg,
                                 t_std,
                                 t_median,
-                                n
+                                n,
+                                t_total
                                 ]
                 data.append(line_data)
 

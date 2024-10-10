@@ -30,7 +30,6 @@ from chess3d.nodes.environment import SimulationEnvironment
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulationAgent
-from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.planning.planners.broadcaster import Broadcaster
 from chess3d.agents.planning.planners.consensus.acbba import ACBBAPlanner
@@ -182,6 +181,7 @@ class Mission:
                                                 })
         
         ## initialize environment
+        connectivity = scenario_dict.get('connectivity','full').upper()
         environment = SimulationEnvironment(results_path, 
                                             orbitdata_dir,
                                             spacecraft_dict,
@@ -189,6 +189,7 @@ class Mission:
                                             gstation_dict,
                                             env_network_config, 
                                             manager_network_config,
+                                            connectivity,
                                             events_path,
                                             level,
                                             logger)

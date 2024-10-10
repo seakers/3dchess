@@ -258,32 +258,14 @@ class OrbitData:
         t_u = t_u/self.time_step
         t_l = t_l/self.time_step
 
-        data = self.position_data.query('@t_l < `time index` < @t_u')
-
-        dt_min = None
-        touple_min = None
-        for _, row in data.iterrows():
-            t_row = row['time index']
-            dt = np.abs(t_row - t)
-
-            x = row['x [km]']
-            y = row['y [km]']
-            z = row['z [km]']
-            pos = [x, y, z]
-
-            vx = row['vx [km/s]']
-            vy = row['vy [km/s]']
-            vz = row['vz [km/s]']
-            vel = [vx, vy, vz]
-            
-            if dt_min is None or dt < dt_min:
-                touple_min = (pos, vel, is_eclipse)
-                dt_min = dt            
+        data = [(t_i,x,y,z,vx,vy,vz) 
+                for t_i,x,y,z,vx,vy,vz in self.position_data.values
+                if t_l < t_i < t_u]
         
-        if touple_min is None:
-            return (None, None, None)
-        else:
-            return touple_min
+        _,x,y,z,vx,vy,vz = data.pop(0)
+        pos = [x, y, z]
+        vel = [vx, vy, vz]
+        return (pos, vel, is_eclipse)
 
     def get_ground_point_accesses_future(self, 
                                          lat: float, 

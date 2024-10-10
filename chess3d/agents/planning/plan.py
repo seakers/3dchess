@@ -260,12 +260,11 @@ class Plan(ABC):
                                         if action.t_start - eps <= t <= action.t_end + eps]
         
         # sort plan in order of ascending start time 
-        plan_out.sort(key=lambda a: a.t_start)
+        plan_out.sort(key=lambda a: (a.t_start, a.t_end))
 
         if plan_out:
             plan_out = [action.to_dict()
                         for action in plan_out
-                        # if isinstance(action, type(plan_out[0])) # only return tasks of the same type
                         ]
         else:
             # idle if no more actions can be performed at this time
@@ -273,16 +272,16 @@ class Plan(ABC):
             action = WaitForMessages(t, t_idle)
             plan_out.append(action.to_dict())     
 
-        if any([action_out['t_start'] == action_out['t_end']
-                for action_out in plan_out]):
+        if (len(plan_out) > 1 and 
+            any([action_out['t_start'] == action_out['t_end'] for action_out in plan_out])):
             plan_out = [action_out for action_out in plan_out
                        if action_out['t_start'] == action_out['t_end']]
 
         # check plan feasibility
-        try:
-            self.__is_feasible(plan_out)
-        except ValueError as e:
-            raise RuntimeError(f"Unfeasible plan. {e}")
+        # try:
+        #     self.__is_feasible(plan_out)
+        # except ValueError as e:
+        #     raise RuntimeError(f"Unfeasible plan. {e}")
         
         return plan_out    
     

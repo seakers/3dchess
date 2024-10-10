@@ -634,13 +634,15 @@ class PlanningModule(InternalModule):
                 t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
                 t_std = np.round(np.std(self.preplanner.stats[routine]),n_decimals) if n > 0 else 0.0
                 t_median = np.round(np.median(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                t_total = t_avg * n
 
                 line_data = [ 
                                 f"preplanner/{routine}",
                                 t_avg,
                                 t_std,
                                 t_median,
-                                n
+                                n,
+                                t_total
                                 ]
                 data.append(line_data)
 
@@ -650,13 +652,15 @@ class PlanningModule(InternalModule):
                 t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
                 t_std = np.round(np.std(self.replanner.stats[routine]),n_decimals) if n > 0 else 0.0
                 t_median = np.round(np.median(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                t_total = t_avg * n
 
                 line_data = [ 
                                 f"replanner/{routine}",
                                 t_avg,
                                 t_std,
                                 t_median,
-                                n
+                                n,
+                                t_total
                                 ]
                 data.append(line_data)
 

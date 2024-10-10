@@ -495,7 +495,7 @@ class SimulationAgent(Agent):
         state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
         # log performance stats
-        headers = ['routine','t_avg','t_std','t_med','n']
+        headers = ['routine','t_avg','t_std','t_med','n', 't_total']
         data = []
 
         for routine in self.stats:
@@ -503,13 +503,15 @@ class SimulationAgent(Agent):
             t_std = np.std(self.stats[routine])
             t_median = np.median(self.stats[routine])
             n = len(self.stats[routine])
+            t_total = n * t_avg
 
             line_data = [ 
                             routine,
                             np.round(t_avg,n_decimals),
                             np.round(t_std,n_decimals),
                             np.round(t_median,n_decimals),
-                            n
+                            n,
+                            t_total
                             ]
             data.append(line_data)
 
