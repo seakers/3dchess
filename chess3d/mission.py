@@ -529,9 +529,9 @@ class Mission:
         
         # compile statistical data
         t_reobservation : dict = {
-            'mean' : np.average(t_reobservations),
-            'std' : np.std(t_reobservations),
-            'median' : np.median(t_reobservations),
+            'mean' : np.average(t_reobservations) if t_reobservations else -1,
+            'std' : np.std(t_reobservations) if t_reobservations else 0.0,
+            'median' : np.median(t_reobservations) if t_reobservations else -1,
             'data' : t_reobservations
         }
 

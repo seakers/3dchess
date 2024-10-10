@@ -1,13 +1,13 @@
 stat_name,val
 Ground Points,5001.0
-Ground Points Observed,11.0
-Average Event Reobservation Time [s],
-Standard Deviation of Event Reobservation Time [s],
-Median Event Reobservation Time [s],
+Ground Points Observed,14.0
+Average Event Reobservation Time [s],-1.0
+Standard Deviation of Event Reobservation Time [s],0.0
+Median Event Reobservation Time [s],-1.0
 Events,10000.0
 Events Detected,0.0
 Events Observed,0.0
-Observations,11.0
+Observations,14.0
 Event Observations,0.0
 Events Re-observed,0.0
 Event Re-observations,0.0

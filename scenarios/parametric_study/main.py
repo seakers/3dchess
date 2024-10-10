@@ -47,7 +47,7 @@ def main(
     assert upper_bound <= len(experiments_df) - 1 or np.isinf(upper_bound)
 
     # set fixed parameters
-    sim_duration = 1.0 / 10.0 / 24.0 # in days
+    sim_duration = 10 / 60 / 24.0 # in days
     preplanners = [
                         'naive',
                         # 'dynamic'
