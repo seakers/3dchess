@@ -129,6 +129,7 @@ class ManeuverAction(AgentAction):
     """
     def __init__(self,
                 final_attitude : list, 
+                attitude_rates : list,
                 t_start : Union[float, int],
                 t_end : Union[float, int] = np.Inf,
                 status : str = 'PENDING',
@@ -142,6 +143,7 @@ class ManeuverAction(AgentAction):
 
         # set parameters
         self.final_attitude = [th for th in final_attitude]
+        self.attitude_rates = [dth for dth in attitude_rates]
 
 class BroadcastMessageAction(AgentAction):
     """

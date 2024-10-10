@@ -419,27 +419,31 @@ class SatelliteAgentState(SimulationAgentState):
             #     return self.engineering_module.perform_action(action, t)
 
             # chose new angular velocity
-            max_rate = 1                    # in degrees
-            attitude_rates = []             # in degrees per second
+            self.attitude_rates = action.attitude_rates
+
+            # estimate remaining time for completion
             dts = []
             for i in range(len(self.attitude)):
-                if   action.final_attitude[i] - self.attitude[i] > 0:
-                    dth = max_rate
-                elif action.final_attitude[i] - self.attitude[i] == 0:
-                    dts.append(0)
-                    attitude_rates.append(0)
-                    continue
-                elif action.final_attitude[i] - self.attitude[i] < 0:
-                    dth = - max_rate
-                attitude_rates.append(dth)
-                
-                dt = (action.final_attitude[i] - self.attitude[i]) / dth
-                dts.append(dt)
-                
-            self.attitude_rates = attitude_rates
+                # check if final attitude has been reached
+                if abs(action.final_attitude[i] - self.attitude[i]) < 1e-3:
+                    self.attitude_rates[i] = 0.0
+                    dts.append(0.0)
 
-            # else, wait until position is reached
+                # check if attitude is being changed
+                elif self.attitude_rates[i] < 1e-3:
+                    dts.append(np.Inf)
+
+                # estimate completion time 
+                else:
+                    dt = (action.final_attitude[i] - self.attitude[i]) / self.attitude_rates[i]
+                    assert dt >= 0.0
+
+                    dts.append(dt)                
+
+            # get completion time
             dt = max(dts) if max(dts) < action.t_end - t else action.t_end - t
+
+            # return status
             return action.PENDING, dt
             
     def __calc_eps(self, init_pos : list):

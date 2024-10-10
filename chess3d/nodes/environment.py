@@ -1,11 +1,10 @@
 import copy
-import csv
 import os
 import time
-from typing import Any, Callable, Dict
 import numpy as np
 import pandas as pd
 from zmq import asyncio as azmq
+import concurrent.futures
 
 from instrupy.base import Instrument
 from instrupy.base import BasicSensorModel
@@ -13,7 +12,7 @@ from instrupy.util import SphericalGeometry, ViewGeometry
 
 from chess3d.agents.science.requests import *
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.states import GroundStationAgentState, UAVAgentState, SatelliteAgentState
+from chess3d.agents.states import *
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import *
 
@@ -152,81 +151,102 @@ class SimulationEnvironment(EnvironmentNode):
             poller.register(manager_socket, zmq.POLLIN)
             poller.register(agent_socket, zmq.POLLIN)
             poller.register(agent_broadcasts, zmq.POLLIN)
-            
+
+            # with concurrent.futures.ThreadPoolExecutor(4) as pool:
+            #     # pool.submit(self.monitor.run, *[])
+            #     # pool.submit(self.manager.run, *[])
+            #     # pool.submit(self.environment.run, *[])
+
             # track agent and simulation states
             while True:
+                # get list of sockets with incoming messages or requests
                 socks = dict(await poller.poll())
 
-                if agent_socket in socks:
-                    # read message from agents
-                    dst, src, content = await self.listen_peer_message()
+                # handle incoming messages or requests
+                req_status : bool = await self.handle_request(socks, agent_socket, agent_broadcasts, manager_socket)
+                
+                # check if request was processed correctly
+                if not req_status: return                    
+            
+            # # track agent and simulation states
+            # while True:
+            #     socks = dict(await poller.poll())
 
-                    t_0 = time.perf_counter()
+            #     if len(socks) > 1:
+            #         x = 1
+            #     if agent_socket in socks and socks[agent_socket] > 1:
+            #         x =1
+
+            #     if agent_socket in socks:
+            #         # read message from agents
+            #         dst, src, content = await self.listen_peer_message()
+
+            #         t_0 = time.perf_counter()
                     
-                    if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
-                        resp = self.handle_observation(content)
+            #         if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
+            #             resp = self.handle_observation(content)
 
-                    elif content['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-                        resp = self.handle_agent_state(content)
+            #         elif content['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
+            #             resp = self.handle_agent_state(content)
 
-                    else:
-                        # message is of an unsopported type. send blank response
-                        self.log(f"received message of type {content['msg_type']}. ignoring message...")
-                        resp = NodeReceptionIgnoredMessage(self.get_element_name(), src)
+            #         else:
+            #             # message is of an unsopported type. send blank response
+            #             self.log(f"received message of type {content['msg_type']}. ignoring message...")
+            #             resp = NodeReceptionIgnoredMessage(self.get_element_name(), src)
 
-                        # respond to request
-                        await self.respond_peer_message(resp)
+            #             # respond to request
+            #             await self.respond_peer_message(resp)
 
-                    await self.respond_peer_message(resp)
+            #         await self.respond_peer_message(resp)
                                         
-                    dt = time.perf_counter() - t_0
-                    if src not in self.stats: self.stats[src] = []
-                    self.stats[src].append(dt)
+            #         dt = time.perf_counter() - t_0
+            #         if src not in self.stats: self.stats[src] = []
+            #         self.stats[src].append(dt)
 
-                elif agent_broadcasts in socks:
-                    # check if agents broadcast any information
-                    dst, src, content = await self.listen_peer_broadcast()
+            #     elif agent_broadcasts in socks:
+            #         # check if agents broadcast any information
+            #         dst, src, content = await self.listen_peer_broadcast()
 
-                    if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
-                        # some agent broadcasted a measurement request
-                        req_msg = MeasurementRequestMessage(**content)
-                        measurement_req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
+            #         if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
+            #             # some agent broadcasted a measurement request
+            #             req_msg = MeasurementRequestMessage(**content)
+            #             measurement_req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
 
-                        # add to list of received measurement requests 
-                        self.measurement_reqs.append(measurement_req)
+            #             # add to list of received measurement requests 
+            #             self.measurement_reqs.append(measurement_req)
 
-                    # add to list of received broadcasts
-                    content['t_msg'] = self.get_current_time()
-                    self.broadcasts_history.append(content)
+            #         # add to list of received broadcasts
+            #         content['t_msg'] = self.get_current_time()
+            #         self.broadcasts_history.append(content)
 
-                elif manager_socket in socks:
-                    # check if manager message is received:
-                    dst, src, content = await self.listen_manager_broadcast()
+            #     elif manager_socket in socks:
+            #         # check if manager message is received:
+            #         dst, src, content = await self.listen_manager_broadcast()
 
-                    if (dst in self.name 
-                        and SimulationElementRoles.MANAGER.value in src 
-                        and content['msg_type'] == ManagerMessageTypes.SIM_END.value
-                        ):
-                        # sim end message received
-                        self.log(f"received message of type {content['msg_type']}. ending simulation...")
-                        return
+            #         if (dst in self.name 
+            #             and SimulationElementRoles.MANAGER.value in src 
+            #             and content['msg_type'] == ManagerMessageTypes.SIM_END.value
+            #             ):
+            #             # sim end message received
+            #             self.log(f"received message of type {content['msg_type']}. ending simulation...")
+            #             return
 
-                    elif content['msg_type'] == ManagerMessageTypes.TOC.value:
-                        # toc message received
+            #         elif content['msg_type'] == ManagerMessageTypes.TOC.value:
+            #             # toc message received
 
-                        # unpack message
-                        msg = TocMessage(**content)
+            #             # unpack message
+            #             msg = TocMessage(**content)
 
-                        # update internal clock
-                        self.log(f"received message of type {content['msg_type']}. updating internal clock to {msg.t}[s]...")
-                        await self.update_current_time(msg.t)
+            #             # update internal clock
+            #             self.log(f"received message of type {content['msg_type']}. updating internal clock to {msg.t}[s]...")
+            #             await self.update_current_time(msg.t)
 
-                        # wait for all agent's to send their updated states
-                        self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
+            #             # wait for all agent's to send their updated states
+            #             self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
                     
-                    else:
-                        # ignore message
-                        self.log(f"received message of type {content['msg_type']}. ignoring message...")
+            #         else:
+            #             # ignore message
+            #             self.log(f"received message of type {content['msg_type']}. ignoring message...")
 
         except asyncio.CancelledError:
             self.log(f'`live()` interrupted. {e}', level=logging.DEBUG)
@@ -235,6 +255,103 @@ class SimulationEnvironment(EnvironmentNode):
         except Exception as e:
             self.log(f'`live()` failed. {e}', level=logging.ERROR)
             raise e
+    
+    @runtime_tracker
+    async def handle_request(self, 
+                             socks : dict, 
+                             agent_socket : zmq.Socket, 
+                             agent_broadcasts : zmq.Socket, 
+                             manager_socket : zmq.Socket
+                             ) -> bool:
+        
+        # read message from agents
+        if agent_socket in socks:
+            return await self.handle_agent_request()
+
+        # check if agents broadcast any information
+        elif agent_broadcasts in socks:
+            return await self.handle_agent_broadcast()
+
+        # check if manager message is received
+        elif manager_socket in socks:
+            return await self.handle_manager_broadcast()
+
+    @runtime_tracker
+    async def handle_agent_request(self) -> bool:
+        _, src, content = await self.listen_peer_message()
+
+        t_0 = time.perf_counter()
+        
+        if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
+            resp = self.handle_observation(content)
+
+        elif content['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
+            resp = self.handle_agent_state(content)
+
+        else:
+            # message is of an unsopported type. send blank response
+            self.log(f"received message of type {content['msg_type']}. ignoring message...")
+            resp = NodeReceptionIgnoredMessage(self.get_element_name(), src)
+
+            # respond to request
+            await self.respond_peer_message(resp)
+
+        await self.respond_peer_message(resp)
+                            
+        dt = time.perf_counter() - t_0
+        if src not in self.stats: self.stats[src] = []
+        self.stats[src].append(dt)
+
+        return True
+
+    @runtime_tracker
+    async def handle_agent_broadcast(self) -> bool:
+        *_, content = await self.listen_peer_broadcast()
+
+        if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
+            # some agent broadcasted a measurement request
+            req_msg = MeasurementRequestMessage(**content)
+            measurement_req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
+
+            # add to list of received measurement requests 
+            self.measurement_reqs.append(measurement_req)
+
+        # add to list of received broadcasts
+        content['t_msg'] = self.get_current_time()
+        self.broadcasts_history.append(content)
+
+        return True
+
+    @runtime_tracker
+    async def handle_manager_broadcast(self) -> bool:
+        dst, src, content = await self.listen_manager_broadcast()
+
+        if (dst in self.name 
+            and SimulationElementRoles.MANAGER.value in src 
+            and content['msg_type'] == ManagerMessageTypes.SIM_END.value
+            ):
+            # sim end message received
+            self.log(f"received message of type {content['msg_type']}. ending simulation...")
+            return False
+
+        elif content['msg_type'] == ManagerMessageTypes.TOC.value:
+            # toc message received
+
+            # unpack message
+            msg = TocMessage(**content)
+
+            # update internal clock
+            self.log(f"received message of type {content['msg_type']}. updating internal clock to {msg.t}[s]...")
+            await self.update_current_time(msg.t)
+
+            # wait for all agent's to send their updated states
+            self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
+        
+        else:
+            # ignore message
+            self.log(f"received message of type {content['msg_type']}. ignoring message...")
+
+        return True
 
     @runtime_tracker
     def handle_observation(self, content : dict) -> SimulationMessage:
@@ -245,8 +362,7 @@ class SimulationEnvironment(EnvironmentNode):
         instrument = Instrument.from_dict(msg.instrument)
 
         # find/generate measurement results
-        observation_data = self.query_measurement_data(agent_state, 
-                                                        instrument)
+        observation_data = self.query_measurement_data(agent_state, instrument)
 
         # repsond to request
         self.log(f'measurement results obtained! responding to request')
@@ -465,12 +581,13 @@ class SimulationEnvironment(EnvironmentNode):
                                     ]
                 
                 if not raw_coverage_data and raw_coverage_data_no_fov:
-                    # for data in raw_coverage_data_no_fov:
-                    #     look_angle_index = orbitdata_columns.index('look angle [deg]')
-                    #     look_angle = data[look_angle_index]
-                    #     pointing_angle = satellite_off_axis_angle
+                    for data in raw_coverage_data_no_fov:
+                        look_angle_index = orbitdata_columns.index('look angle [deg]')
+                        look_angle = data[look_angle_index]
+                        pointing_angle = satellite_off_axis_angle
 
-                    #     in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
+                        in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
+                        x= 1
                     x = 1
 
                 # compile data

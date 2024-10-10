@@ -336,6 +336,9 @@ class AbstractPlanner(ABC):
         max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
         if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
 
+        if state.agent_name == 'vis_sat_1_0':
+            x = 1
+
         # initialize maneuver list
         maneuvers : list[ManeuverAction] = []
 
@@ -368,14 +371,16 @@ class AbstractPlanner(ABC):
                     raise ValueError(f'Cannot schedule maneuver. Not enough time between observations')\
                     
                 th_f = curr_observation.look_angle
+                slew_rate = (curr_observation.look_angle - prev_state.attitude[0]) / dth_req * max_slew_rate
                 dt = abs(th_f - prev_state.attitude[0]) / max_slew_rate
                 t_maneuver_start = curr_observation.t_start - dt
                 t_maneuver_end = curr_observation.t_start
 
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
                     maneuvers.append(ManeuverAction([th_f, 0, 0], 
-                                                            t_maneuver_start, 
-                                                            t_maneuver_end)) 
+                                                    [slew_rate, 0, 0],
+                                                    t_maneuver_start, 
+                                                    t_maneuver_end)) 
 
         maneuvers.sort(key=lambda a: a.t_start)
 
