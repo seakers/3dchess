@@ -208,37 +208,36 @@ class OrbitData:
             return False 
 
         t = t/self.time_step
-        nrows, _ = self.isl_data[target].query('`start index` <= @t & @t <= `end index`').shape
-               
-        return bool(nrows > 0)
+
+        return any([t_start <= t <= t_end for t_start,t_end in self.isl_data[target].values])
 
     def is_accessing_ground_station(self, target : str, t: float) -> bool:
         t = t/self.time_step
         nrows, _ = self.gs_access_data.query('`start index` <= @t & @t <= `end index` & `gndStn name` == @target').shape
         return bool(nrows > 0)
 
-    def is_accessing_ground_point(self, lat: float, lon: float, t: float):
-        t = t/self.time_step
-        t_u = t + 1
-        t_l = t - 1
+    # def is_accessing_ground_point(self, lat: float, lon: float, t: float):
+    #     t = t/self.time_step
+    #     t_u = t + 1
+    #     t_l = t - 1
 
-        grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
+    #     grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
 
-        access_data = self.gp_access_data \
-                            .query('@t_l < `time index` < @t_u & `grid index` == @grid_index & `GP index` == @gp_index') \
-                            .sort_values(by=['time index'])
+    #     access_data = self.gp_access_data \
+    #                         .query('@t_l < `time index` < @t_u & `grid index` == @grid_index & `GP index` == @gp_index') \
+    #                         .sort_values(by=['time index'])
 
-        nrows, _ = access_data.shape
+    #     nrows, _ = access_data.shape
 
-        for _, row in access_data.iterrows():
-            return bool(np.absolute(row['time index'] - t) <= 1e-6)
-        return False
+    #     for _, row in access_data.iterrows():
+    #         return bool(np.absolute(row['time index'] - t) <= 1e-6)
+    #     return False
 
     def is_eclipse(self, t: float):
-        t = t/self.time_step
-        nrows, _ = self.eclipse_data.query('`start index` <= @t & @t <= `end index`').shape
+        """ checks if a satellite is currently in eclise at time `t`. """
+        t_e = t / self.time_step
 
-        return bool(nrows > 0)
+        return any([t_start <= t_e <= t_end for t_start,t_end in self.eclipse_data.values])
 
     def get_position(self, t: float):
         pos, _, _ = self.get_orbit_state(t)
@@ -251,146 +250,143 @@ class OrbitData:
     def get_orbit_state(self, t: float):
         is_eclipse = self.is_eclipse(t)
 
-        t_u = t + self.time_step
-        t_l = t - self.time_step
-
-        t = t/self.time_step
-        t_u = t_u/self.time_step
-        t_l = t_l/self.time_step
+        t = t / self.time_step
+        t_u = t + 0.5
+        t_l = t - 0.5
 
         data = [(t_i,x,y,z,vx,vy,vz) 
                 for t_i,x,y,z,vx,vy,vz in self.position_data.values
-                if t_l < t_i < t_u]
+                if t_l < t_i <= t_u]
         
-        _,x,y,z,vx,vy,vz = data.pop(0)
+        _,x,y,z,vx,vy,vz = data[0]
         pos = [x, y, z]
         vel = [vx, vy, vz]
         return (pos, vel, is_eclipse)
 
-    def get_ground_point_accesses_future(self, 
-                                         lat: float, 
-                                         lon: float, 
-                                         instrument : str, 
-                                         t: float, 
-                                         t_end : float = np.Inf,
-                                         grid_index = None,
-                                         gp_index = None
-                                        ) -> pd.DataFrame:
-        t = t/self.time_step
-        t_end = t_end/self.time_step
+    # def get_ground_point_accesses_future(self, 
+    #                                      lat: float, 
+    #                                      lon: float, 
+    #                                      instrument : str, 
+    #                                      t: float, 
+    #                                      t_end : float = np.Inf,
+    #                                      grid_index = None,
+    #                                      gp_index = None
+    #                                     ) -> pd.DataFrame:
+    #     t = t/self.time_step
+    #     t_end = t_end/self.time_step
 
-        if grid_index is None or gp_index is None:
-            grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
+    #     if grid_index is None or gp_index is None:
+    #         grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
 
-        access_data = self.gp_access_data \
-                            .query('@t < `time index` & `time index` <= @t_end & `grid index` == @grid_index & `GP index` == @gp_index & `instrument` == @instrument') \
-                            .sort_values(by=['time index'])
+    #     access_data = self.gp_access_data \
+    #                         .query('@t < `time index` & `time index` <= @t_end & `grid index` == @grid_index & `GP index` == @gp_index & `instrument` == @instrument') \
+    #                         .sort_values(by=['time index'])
 
-        return access_data
+    #     return access_data
     
-    def can_acess_ground_point(self, 
-                               lat: float, 
-                               lon: float, 
-                               instrument : str, 
-                               t: float, 
-                               t_end : float = np.Inf,
-                               grid_index = None, 
-                               gp_index = None
-                               ) -> bool:
-        access_data : pd.DataFrame = self.get_ground_point_accesses_future(lat, lon, instrument, t, t_end, grid_index, gp_index)
-        return not access_data.empty
+    # def can_acess_ground_point(self, 
+    #                            lat: float, 
+    #                            lon: float, 
+    #                            instrument : str, 
+    #                            t: float, 
+    #                            t_end : float = np.Inf,
+    #                            grid_index = None, 
+    #                            gp_index = None
+    #                            ) -> bool:
+    #     access_data : pd.DataFrame = self.get_ground_point_accesses_future(lat, lon, instrument, t, t_end, grid_index, gp_index)
+    #     return not access_data.empty
 
-    def get_groundpoint_access_data(self, 
-                                    lat : float, 
-                                    lon : float, 
-                                    instrument : str, 
-                                    t : float,
-                                    grid_index = None,
-                                    gp_index = None
-                                    ) -> dict:
-        t = t/self.time_step
-        t_u = t + 1
-        t_l = t - 1
+    # def get_groundpoint_access_data(self, 
+    #                                 lat : float, 
+    #                                 lon : float, 
+    #                                 instrument : str, 
+    #                                 t : float,
+    #                                 grid_index = None,
+    #                                 gp_index = None
+    #                                 ) -> dict:
+    #     t = t/self.time_step
+    #     t_u = t + 1
+    #     t_l = t - 1
 
-        if grid_index is None or gp_index is None:
-            grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
+    #     if grid_index is None or gp_index is None:
+    #         grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
 
-        access_data : pd.DataFrame = self.gp_access_data \
-                                    .query('@t_l < `time index` < @t_u & `grid index` == @grid_index & `GP index` == @gp_index') \
-                                    .sort_values(by=['time index'])
+    #     access_data : pd.DataFrame = self.gp_access_data \
+    #                                 .query('@t_l < `time index` < @t_u & `grid index` == @grid_index & `GP index` == @gp_index') \
+    #                                 .sort_values(by=['time index'])
 
-        for _, row in access_data.iterrows():
-            if np.absolute(row['time index'] - t) <= 1e-6:
-                return {header : row[header] for header in access_data.columns}
+    #     for _, row in access_data.iterrows():
+    #         if np.absolute(row['time index'] - t) <= 1e-6:
+    #             return {header : row[header] for header in access_data.columns}
 
-        out = {header : None for header in access_data.columns}
-        out['lat [deg]'] = lat
-        out['lon [deg]'] = lon
-        out['grid index'] = grid_index
-        out['GP index'] = gp_index
-        out['instrument'] = instrument
+    #     out = {header : None for header in access_data.columns}
+    #     out['lat [deg]'] = lat
+    #     out['lon [deg]'] = lon
+    #     out['grid index'] = grid_index
+    #     out['GP index'] = gp_index
+    #     out['instrument'] = instrument
         
-        return out
+    #     return out
     
-    def find_gp_access(self, instrument : str, look_angle : float, field_of_view : float, t : float) -> tuple:
-        """ returns the information of the ground point(s) being observed by an instrument at a given time """
+    # def find_gp_access(self, instrument : str, look_angle : float, field_of_view : float, t : float) -> tuple:
+    #     """ returns the information of the ground point(s) being observed by an instrument at a given time """
 
-        raise NotImplementedError('Whoops, still need to develop this')
+    #     raise NotImplementedError('Whoops, still need to develop this')
         
-        t = t/self.time_step
-        t_u = t + 1
-        t_l = t - 1
+    #     t = t/self.time_step
+    #     t_u = t + 1
+    #     t_l = t - 1
 
-        access_data : pd.DataFrame = self.gp_access_data \
-                                    .query('@t_l < `time index` < @t_u & abs(@look_angle `look angle [deg]`) <= @field_of_regard & `instrument` == @instrument') \
-                                    .sort_values(by=['time index'])
+    #     access_data : pd.DataFrame = self.gp_access_data \
+    #                                 .query('@t_l < `time index` < @t_u & abs(@look_angle `look angle [deg]`) <= @field_of_regard & `instrument` == @instrument') \
+    #                                 .sort_values(by=['time index'])
         
-        x = 1
+    #     x = 1
     
-    def find_gp_index(self, lat: float, lon: float) -> tuple:
-        """
-        Returns the ground point and grid index to the point closest to the latitude and longitude given.
+    # def find_gp_index(self, lat: float, lon: float) -> tuple:
+    #     """
+    #     Returns the ground point and grid index to the point closest to the latitude and longitude given.
 
-        lat, lon must be given in degrees
-        """
-        grid_compiled = None
-        for grid in self.grid_data:
-            grid : pd.DataFrame
+    #     lat, lon must be given in degrees
+    #     """
+    #     grid_compiled = None
+    #     for grid in self.grid_data:
+    #         grid : pd.DataFrame
         
-            perfect_match = grid.query('`lat [deg]` == @lat & `lon [deg]` == @lon')
-            for _, row in perfect_match.iterrows():
-                grid_index = row['grid index']
-                gp_index = row['GP index']
-                gp_lat = row['lat [deg]']
-                gp_lon = row['lon [deg]']
+    #         perfect_match = grid.query('`lat [deg]` == @lat & `lon [deg]` == @lon')
+    #         for _, row in perfect_match.iterrows():
+    #             grid_index = row['grid index']
+    #             gp_index = row['GP index']
+    #             gp_lat = row['lat [deg]']
+    #             gp_lon = row['lon [deg]']
 
-                return grid_index, gp_index, gp_lat, gp_lon
+    #             return grid_index, gp_index, gp_lat, gp_lon
             
-            if grid_compiled is None:
-                grid_compiled = grid
-            else:
-                grid_compiled = pd.concat([grid_compiled, grid])
+    #         if grid_compiled is None:
+    #             grid_compiled = grid
+    #         else:
+    #             grid_compiled = pd.concat([grid_compiled, grid])
             
-        grid_compiled['dr'] = np.sqrt( 
-                                        np.power(np.cos( grid_compiled['lat [deg]'] * np.pi / 360 ) * np.cos( grid_compiled['lon [deg]'] * np.pi / 360 ) \
-                                                - np.cos( lat * np.pi / 360 ) * np.cos( lon * np.pi / 360 ), 2) \
-                                        + np.power(np.cos( grid_compiled['lat [deg]'] * np.pi / 360 ) * np.sin( grid_compiled['lon [deg]'] * np.pi / 360 ) \
-                                                - np.cos( lat * np.pi / 360 ) * np.sin( lon * np.pi / 360 ), 2) \
-                                        + np.power(np.sin( grid_compiled['lat [deg]'] * np.pi / 360 ) \
-                                                - np.sin( lat * np.pi / 360 ), 2)
-                                    )
-        min_dist = grid_compiled['dr'].min()
-        min_rows = grid_compiled.query('dr == @min_dist')
+    #     grid_compiled['dr'] = np.sqrt( 
+    #                                     np.power(np.cos( grid_compiled['lat [deg]'] * np.pi / 360 ) * np.cos( grid_compiled['lon [deg]'] * np.pi / 360 ) \
+    #                                             - np.cos( lat * np.pi / 360 ) * np.cos( lon * np.pi / 360 ), 2) \
+    #                                     + np.power(np.cos( grid_compiled['lat [deg]'] * np.pi / 360 ) * np.sin( grid_compiled['lon [deg]'] * np.pi / 360 ) \
+    #                                             - np.cos( lat * np.pi / 360 ) * np.sin( lon * np.pi / 360 ), 2) \
+    #                                     + np.power(np.sin( grid_compiled['lat [deg]'] * np.pi / 360 ) \
+    #                                             - np.sin( lat * np.pi / 360 ), 2)
+    #                                 )
+    #     min_dist = grid_compiled['dr'].min()
+    #     min_rows = grid_compiled.query('dr == @min_dist')
 
-        for _, row in min_rows.iterrows():
-            grid_index = row['grid index']
-            gp_index = row['GP index']
-            gp_lat = row['lat [deg]']
-            gp_lon = row['lon [deg]']
+    #     for _, row in min_rows.iterrows():
+    #         grid_index = row['grid index']
+    #         gp_index = row['GP index']
+    #         gp_lat = row['lat [deg]']
+    #         gp_lon = row['lon [deg]']
 
-            return grid_index, gp_index, gp_lat, gp_lon
+    #         return grid_index, gp_index, gp_lat, gp_lon
 
-        return -1, -1, -1, -1
+    #     return -1, -1, -1, -1
 
     """
     LOAD FROM PRE-COMPUTED DATA

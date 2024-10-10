@@ -100,6 +100,7 @@ class SimulationEnvironment(EnvironmentNode):
                     self.agent_connectivity[src] = {}    
                 
                 self.agent_connectivity[src][target] = -1
+        self.agent_state_update_times = {}
 
         self.measurement_reqs = []
         self.stats = {}
@@ -152,11 +153,6 @@ class SimulationEnvironment(EnvironmentNode):
             poller.register(agent_socket, zmq.POLLIN)
             poller.register(agent_broadcasts, zmq.POLLIN)
 
-            # with concurrent.futures.ThreadPoolExecutor(4) as pool:
-            #     # pool.submit(self.monitor.run, *[])
-            #     # pool.submit(self.manager.run, *[])
-            #     # pool.submit(self.environment.run, *[])
-
             # track agent and simulation states
             while True:
                 # get list of sockets with incoming messages or requests
@@ -167,86 +163,6 @@ class SimulationEnvironment(EnvironmentNode):
                 
                 # check if request was processed correctly
                 if not req_status: return                    
-            
-            # # track agent and simulation states
-            # while True:
-            #     socks = dict(await poller.poll())
-
-            #     if len(socks) > 1:
-            #         x = 1
-            #     if agent_socket in socks and socks[agent_socket] > 1:
-            #         x =1
-
-            #     if agent_socket in socks:
-            #         # read message from agents
-            #         dst, src, content = await self.listen_peer_message()
-
-            #         t_0 = time.perf_counter()
-                    
-            #         if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
-            #             resp = self.handle_observation(content)
-
-            #         elif content['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-            #             resp = self.handle_agent_state(content)
-
-            #         else:
-            #             # message is of an unsopported type. send blank response
-            #             self.log(f"received message of type {content['msg_type']}. ignoring message...")
-            #             resp = NodeReceptionIgnoredMessage(self.get_element_name(), src)
-
-            #             # respond to request
-            #             await self.respond_peer_message(resp)
-
-            #         await self.respond_peer_message(resp)
-                                        
-            #         dt = time.perf_counter() - t_0
-            #         if src not in self.stats: self.stats[src] = []
-            #         self.stats[src].append(dt)
-
-            #     elif agent_broadcasts in socks:
-            #         # check if agents broadcast any information
-            #         dst, src, content = await self.listen_peer_broadcast()
-
-            #         if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
-            #             # some agent broadcasted a measurement request
-            #             req_msg = MeasurementRequestMessage(**content)
-            #             measurement_req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
-
-            #             # add to list of received measurement requests 
-            #             self.measurement_reqs.append(measurement_req)
-
-            #         # add to list of received broadcasts
-            #         content['t_msg'] = self.get_current_time()
-            #         self.broadcasts_history.append(content)
-
-            #     elif manager_socket in socks:
-            #         # check if manager message is received:
-            #         dst, src, content = await self.listen_manager_broadcast()
-
-            #         if (dst in self.name 
-            #             and SimulationElementRoles.MANAGER.value in src 
-            #             and content['msg_type'] == ManagerMessageTypes.SIM_END.value
-            #             ):
-            #             # sim end message received
-            #             self.log(f"received message of type {content['msg_type']}. ending simulation...")
-            #             return
-
-            #         elif content['msg_type'] == ManagerMessageTypes.TOC.value:
-            #             # toc message received
-
-            #             # unpack message
-            #             msg = TocMessage(**content)
-
-            #             # update internal clock
-            #             self.log(f"received message of type {content['msg_type']}. updating internal clock to {msg.t}[s]...")
-            #             await self.update_current_time(msg.t)
-
-            #             # wait for all agent's to send their updated states
-            #             self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
-                    
-            #         else:
-            #             # ignore message
-            #             self.log(f"received message of type {content['msg_type']}. ignoring message...")
 
         except asyncio.CancelledError:
             self.log(f'`live()` interrupted. {e}', level=logging.DEBUG)
@@ -393,27 +309,34 @@ class SimulationEnvironment(EnvironmentNode):
         resp_msgs = [updated_state_msg.to_dict()]
 
         # update agent connectivity 
-        resp_msgs.extend(self.upadate_agent_connectivity(msg))
+        resp_msgs.extend(self.update_agent_connectivity(msg))
 
         # send response
-        return  BusMessage(self.get_element_name(), msg.src, resp_msgs)
+        return BusMessage(self.get_element_name(), msg.src, resp_msgs)
 
+    @runtime_tracker
+    def get_current_time(self) -> float:
+        return super().get_current_time()
 
     @runtime_tracker
     def update_agent_state(self, msg : AgentStateMessage) -> dict:
+        # 
+        if msg.src not in self.agent_state_update_times: 
+            self.agent_state_update_times[msg.src] = -1.0
+        
         # check if time has passed between state updates
-        if (msg.state['t'] - self.get_current_time()) < 1e-3: 
+        sat_orbitdata : OrbitData = self.orbitdata[msg.src]
+        t_state_update = round(self.agent_state_update_times[msg.src] / sat_orbitdata.time_step)
+        t_curr = round(self.get_current_time() / sat_orbitdata.time_step)
+
+        if abs(t_state_update - t_curr) < 1 and self.agent_state_update_times[msg.src] >= 0.0: 
             updated_state = msg.state
 
         else:
             # check current state
             if msg.src in self.agents[self.SPACECRAFT]:
-                # unpack previous state
-                # current_state = SatelliteAgentState(**msg.state)
-
                 # look up orbit state
-                data : OrbitData = self.orbitdata[msg.src]
-                pos, vel, eclipse = data.get_orbit_state(self.get_current_time())
+                pos, vel, eclipse = self.get_updated_orbit_state(sat_orbitdata, self.get_current_time())
 
                 # update state
                 updated_state = msg.state
@@ -432,12 +355,18 @@ class SimulationEnvironment(EnvironmentNode):
             else:
                 raise ValueError(f'Unrecognized agent performed an update state request. Agent {msg.src} is not part of this simulation.')
 
-        updated_state['t'] = max(self.get_current_time(), updated_state['t'])
+            updated_state['t'] = max(self.get_current_time(), updated_state['t'])
+            self.agent_state_update_times[msg.src] = updated_state['t']
 
         return updated_state
     
     @runtime_tracker
-    def upadate_agent_connectivity(self, msg : SimulationMessage) -> list:
+    def get_updated_orbit_state(self, orbitdata : OrbitData, t : float) -> tuple:
+        # look up orbit state
+        return orbitdata.get_orbit_state(t)
+    
+    @runtime_tracker
+    def update_agent_connectivity(self, msg : SimulationMessage) -> list:
         # initiate update list
         resp_msgs = []
 
@@ -580,15 +509,15 @@ class SimulationEnvironment(EnvironmentNode):
                                     and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
                                     ]
                 
-                if not raw_coverage_data and raw_coverage_data_no_fov:
-                    for data in raw_coverage_data_no_fov:
-                        look_angle_index = orbitdata_columns.index('look angle [deg]')
-                        look_angle = data[look_angle_index]
-                        pointing_angle = satellite_off_axis_angle
+                # if not raw_coverage_data and raw_coverage_data_no_fov:
+                #     for data in raw_coverage_data_no_fov:
+                #         look_angle_index = orbitdata_columns.index('look angle [deg]')
+                #         look_angle = data[look_angle_index]
+                #         pointing_angle = satellite_off_axis_angle
 
-                        in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
-                        x= 1
-                    x = 1
+                #         in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
+                #         x= 1
+                #     x = 1
 
                 # compile data
                 for data in raw_coverage_data:                    

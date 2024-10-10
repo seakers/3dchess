@@ -50,7 +50,12 @@ class SimulationManager(AbstractManager):
     async def setup(self) -> None:
         # nothing to set-up
         return
+    
+    @runtime_tracker
+    async def _execute(self) -> None:
+        return await super()._execute()
 
+    @runtime_tracker
     async def sim_wait(self, delay: float) -> None:
         """
         Waits for the total number of seconds in the simulation.
@@ -248,7 +253,7 @@ class SimulationManager(AbstractManager):
     async def teardown(self) -> None:
         # log performance stats
         n_decimals = 3
-        headers = ['routine','t_avg','t_std','t_med','n']
+        headers = ['routine','t_avg','t_std','t_med','n', 't_total']
         data = []
 
         for routine in self.stats:
@@ -256,19 +261,21 @@ class SimulationManager(AbstractManager):
             t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
             t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
             t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+            t_total = n * t_avg
 
             line_data = [ 
                             routine,
                             t_avg,
                             t_std,
                             t_median,
-                            n
+                            n,
+                            t_total
                             ]
             data.append(line_data)
 
         stats_df = pd.DataFrame(data, columns=headers)
         self.log(f'\nMANAGER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-        results_dir = f"{self.results_path}/{self.get_element_name()}/" 
+        results_dir = f"{self.results_path}/{self.get_element_name().lower()}/" 
 
-        os.mkdir(results_dir)
+        if not os.path.isdir(results_dir): os.mkdir(results_dir)
         stats_df.to_csv(f"{results_dir}/runtime_stats.csv", index=False)

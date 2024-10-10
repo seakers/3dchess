@@ -62,7 +62,7 @@ class PlanningModule(InternalModule):
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
         self.orbitdata : OrbitData = orbitdata
-        self.reward_grid = reward_grid
+        self.reward_grid : RewardGrid = reward_grid
 
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
         """ Sets up network configuration for intra-agent module communication """
@@ -296,21 +296,17 @@ class PlanningModule(InternalModule):
                     = await self.__check_action_completion(level)
                 
                 # remove aborted or completed actions from plan
-                plan.update_action_completion(  completed_actions, 
-                                                aborted_actions, 
-                                                pending_actions, 
-                                                self.get_current_time()
-                                            )
+                self.update_action_completion(plan, completed_actions, aborted_actions, pending_actions)
                 
                 # compile measurements performed by myself or other agents
-                observations = [action for action in completed_actions
-                                if isinstance(action, ObservationAction)]
-                observations.extend([action_from_dict(**msg.observation_action) 
+                observations = {action for action in completed_actions
+                                if isinstance(action, ObservationAction)}
+                observations.update({action_from_dict(**msg.observation_action) 
                                     for msg in misc_messages
-                                    if isinstance(msg, ObservationPerformedMessage)])
+                                    if isinstance(msg, ObservationPerformedMessage)})
                 
                 # update reward grid
-                self.reward_grid.update(state.t, observations, incoming_reqs)
+                self.reward_grid.update(self.get_current_time(), observations, incoming_reqs)
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_actions(completed_actions, aborted_actions, pending_actions)
@@ -424,45 +420,7 @@ class PlanningModule(InternalModule):
             # traceback.format_exc()
             print(e)
             raise e
-        
-    @runtime_tracker
-    def get_plan_out(self, plan : Plan) -> list:
-        return plan.get_next_actions(self.get_current_time())
                 
-    @runtime_tracker
-    async def __check_action_completion(self, level : int = logging.DEBUG) -> tuple:
-        """
-        Checks incoming messages from agent to check which actions from its plan have been completed, aborted, or are still pending
-
-        ### Arguments:
-            - level (`int`): logging level
-
-        ### Returns:
-            - `tuple` of action lists `completed_actions, aborted_actions, pending_actions`
-        """
-
-        # collect all action statuses from inbox
-        actions = []
-        while not self.action_status_inbox.empty():
-            action_msg : AgentActionMessage = await self.action_status_inbox.get()
-            actions.append(action_from_dict(**action_msg.action))
-
-        # classify by action completion
-        completed_actions = [action for action in actions
-                            if isinstance(action, AgentAction)
-                            and action.status == AgentAction.COMPLETED] # planned action completed
-                
-        aborted_actions = [action for action in actions 
-                           if isinstance(action, AgentAction)
-                           and action.status == AgentAction.ABORTED]    # planned action aborted
-                
-        pending_actions = [action for action in actions
-                           if isinstance(action, AgentAction)
-                           and action_msg.status == AgentAction.PENDING] # planned action wasn't completed
-
-        # return classified lists
-        return completed_actions, aborted_actions, pending_actions
-    
     @runtime_tracker
     async def _read_incoming_messages(self) -> tuple:
         """
@@ -541,7 +499,57 @@ class PlanningModule(InternalModule):
 
         # return classified messages
         return requests, relay_messages, misc_messages
+
+    @runtime_tracker
+    async def __check_action_completion(self, level : int = logging.DEBUG) -> tuple:
+        """
+        Checks incoming messages from agent to check which actions from its plan have been completed, aborted, or are still pending
+
+        ### Arguments:
+            - level (`int`): logging level
+
+        ### Returns:
+            - `tuple` of action lists `completed_actions, aborted_actions, pending_actions`
+        """
+
+        # collect all action statuses from inbox
+        actions = []
+        while not self.action_status_inbox.empty():
+            action_msg : AgentActionMessage = await self.action_status_inbox.get()
+            actions.append(action_from_dict(**action_msg.action))
+
+        # classify by action completion
+        completed_actions = [action for action in actions
+                            if isinstance(action, AgentAction)
+                            and action.status == AgentAction.COMPLETED] # planned action completed
+                
+        aborted_actions = [action for action in actions 
+                           if isinstance(action, AgentAction)
+                           and action.status == AgentAction.ABORTED]    # planned action aborted
+                
+        pending_actions = [action for action in actions
+                           if isinstance(action, AgentAction)
+                           and action_msg.status == AgentAction.PENDING] # planned action wasn't completed
+
+        # return classified lists
+        return completed_actions, aborted_actions, pending_actions
     
+    @runtime_tracker
+    def update_action_completion(self, 
+                                 plan : Plan, 
+                                 completed_actions : list, 
+                                 aborted_actions : list, 
+                                 pending_actions : list
+                                 ) -> None:
+        plan.update_action_completion(  completed_actions, 
+                                        aborted_actions, 
+                                        pending_actions, 
+                                        self.get_current_time()
+                                    )             
+        
+    @runtime_tracker
+    def get_plan_out(self, plan : Plan) -> list:
+        return plan.get_next_actions(self.get_current_time())
     
     def __log_actions(self, completed_actions : list, aborted_actions : list, pending_actions : list) -> None:
         all_actions = [action for action in completed_actions]
@@ -656,6 +664,24 @@ class PlanningModule(InternalModule):
 
                 line_data = [ 
                                 f"replanner/{routine}",
+                                t_avg,
+                                t_std,
+                                t_median,
+                                n,
+                                t_total
+                                ]
+                data.append(line_data)
+
+        if self.reward_grid:
+            for routine in self.reward_grid.stats:
+                n = len(self.reward_grid.stats[routine])
+                t_avg = np.round(np.mean(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.reward_grid.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                t_total = t_avg * n
+
+                line_data = [ 
+                                f"reward_grid/{routine}",
                                 t_avg,
                                 t_std,
                                 t_median,

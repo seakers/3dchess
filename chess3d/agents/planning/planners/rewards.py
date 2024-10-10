@@ -5,6 +5,8 @@ import pandas as pd
 
 from orbitpy.util import Spacecraft
 
+from dmas.utils import runtime_tracker
+
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.science.requests import MeasurementRequest
 
@@ -98,13 +100,16 @@ class RewardGrid(object):
         self.grid_data : list[pd.DataFrame] = grid_data
 
         # ensure no repeats on grid indeces
-        assert all([len([int(gp_index) for _,_,_,gp_index in grid_datum.values]) == len({int(gp_index) for _,_,_,gp_index in grid_datum.values})
+        assert all([len([int(gp_index) for _,_,_,gp_index in grid_datum.values]) \
+                    == len({int(gp_index) for _,_,_,gp_index in grid_datum.values})
                    for grid_datum in self.grid_data])
         
         # save additional parameters
         self.specs = specs
         self.initial_reward = initial_reward
         self.grid_params : dict = grid_params
+
+        self.stats = {}
 
         # initiate reward grid vectors
         if isinstance(specs, Spacecraft):
@@ -115,7 +120,7 @@ class RewardGrid(object):
                                                            int(gp_index),
                                                            initial_reward) 
                                for instrument in specs.instrument} 
-                            for lat,lon,grid_index,gp_index in grid_datum.values] 
+                              for lat,lon,grid_index,gp_index in grid_datum.values] 
                             for grid_datum in self.grid_data]
         elif isinstance(specs, dict):
             self.rewards = [ [{instrument['name'] : GridPoint(instrument['name'], 
@@ -129,46 +134,64 @@ class RewardGrid(object):
                             for grid_datum in self.grid_data]
         else:
             raise ValueError(f'`specs` of type {type(specs)} not supported.')
+        
+        # create coordinates to indeces map
+        self.n_decimals = self.count_decimals(grid_data)
+        self.coordinate_map = {(round(lat, self.n_decimals),round(lon, self.n_decimals)) : (int(grid_index),int(gp_index))
+                               for grid_datum in self.grid_data
+                               for lat,lon,grid_index,gp_index in grid_datum.values}
 
         # update previous observations and events (if they exist)
         prev_observations = grid_params.get('prev_observations', [])
         prev_events = grid_params.get('prev_events', [])
         self.update(np.NAN, prev_observations, prev_events)
 
+    def count_decimals(self, grid_data : list) -> None:
+        decimals = []
+        for grid_datum in grid_data:
+            grid_datum : pd.DataFrame
+            for lat,lon,*_ in grid_datum.values:
+                lat_decimals =  len(str(lat).split(".")[1])
+                lon_decimals =  len(str(lon).split(".")[1])
+                decimals.append(max(lat_decimals,lon_decimals))
+        
+        return min(max(decimals), 3)
+
+    @runtime_tracker
     def __get_target_indeces(self, lat : float, lon : float) -> tuple:
-        # find ground points with matching latitude and longitude
-        matches = [(grid_index,gp_index)
+        # look for indeces in look-up table
+        lat_round,lon_round = round(lat,self.n_decimals), round(lon,self.n_decimals)
+        if (lat_round,lon_round) in self.coordinate_map:
+            # values found; return indeces
+            return self.coordinate_map[(lat_round, lon_round)]
+        
+        # search ground points with matching latitude and longitude
+        matches = [(int(grid_index),int(gp_index))
                    for grid_datum in self.grid_data
                    for gp_lat,gp_lon,grid_index,gp_index in grid_datum.values
-                   if abs(gp_lat - lat) <= 1e-3
-                   and abs(gp_lon - lon) <= 1e-3
+                   if abs(gp_lat - lat) <= 10**-self.n_decimals
+                   and abs(gp_lon - lon) <= 10**-self.n_decimals
                    ]
         
-        # return findings
         if matches:
-            match = matches.pop() 
+            # values found; return incedes
+            return matches.pop() 
         else:
+            # values not found; raise exception
             for grid_datum in self.grid_data:
                 for gp_lat,gp_lon,grid_index,gp_index in grid_datum.values:
                     if abs(gp_lat - lat) <= 1e-1 and abs(gp_lon - lon) <= 1e-1:
-                        x = 1
+                        x = (grid_index,gp_index)
             raise ValueError(f'Could not find ground point indeces for coordinates ({lat}°,{lon}°,0.0)')
         
-        grid_index, gp_index = match
-        
-        # convert to integers
-        grid_index = int(grid_index) if grid_index is not None else None
-        gp_index = int(gp_index) if gp_index is not None else None
-        
-        # return values
-        return grid_index, gp_index 
-        
+    @runtime_tracker
     def reset(self) -> None:
         for grid_rewards in self.rewards:
             for gp_rewards in grid_rewards:
                 for _, grid_point in gp_rewards.items():
                     grid_point.reset()
 
+    @runtime_tracker
     def update(self, t : float, observations : list = [], events : list = []) -> None:
         # update observations
         for observation in observations: self.update_observation(observation, t)
@@ -186,6 +209,7 @@ class RewardGrid(object):
         #             # update grid point reward
         #             grid_point.update_reward(reward, t)
 
+    @runtime_tracker
     def update_observation(self, observation : ObservationAction, t : float) -> None:
         # get appropriate grid point object
         lat,lon,_ = observation.target
@@ -215,6 +239,7 @@ class RewardGrid(object):
         # update grid point reward
         grid_point.update_reward(reward, t)
 
+    @runtime_tracker
     def update_event(self, event : MeasurementRequest, t : float) -> None:
         # get appropriate grid point object
         lat,lon,_ = event.target
@@ -244,6 +269,7 @@ class RewardGrid(object):
             # update grid point reward
             grid_point.update_reward(reward, t)
        
+    @runtime_tracker
     def propagate_reward(self, grid_point : GridPoint, t : float) -> float:
         params = grid_point.to_dict()
         params.update(self.grid_params)
@@ -251,6 +277,7 @@ class RewardGrid(object):
 
         return self.reward_function(**params)
     
+    @runtime_tracker
     def estimate_reward(self, observation : ObservationAction) -> float:
         lat,lon,_ = observation.target
         grid_index,gp_index = self.__get_target_indeces(lat,lon)
@@ -258,6 +285,7 @@ class RewardGrid(object):
 
         return self.propagate_reward(grid_point, observation.t_start)
     
+    @runtime_tracker
     def get_history(self) -> list:
         history = []
 
