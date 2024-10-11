@@ -369,14 +369,22 @@ class AbstractPlanner(ABC):
                 if dth_req > dth_max and abs(dth_req - dth_max) >= 1e-6: 
                     # maneuver impossible within timeframe
                     raise ValueError(f'Cannot schedule maneuver. Not enough time between observations')\
-                    
+                
+                # check if attitude maneuver is required
+                if abs(dth_req) <= 1e-3: continue # already pointing in the same direction; ignore maneuver
+
+                # calculate attitude duration    
                 th_f = curr_observation.look_angle
                 slew_rate = (curr_observation.look_angle - prev_state.attitude[0]) / dth_req * max_slew_rate
                 dt = abs(th_f - prev_state.attitude[0]) / max_slew_rate
+
+                # calculate maneuver time
                 t_maneuver_start = curr_observation.t_start - dt
                 t_maneuver_end = curr_observation.t_start
 
+                # check if mnaeuver time is non-zero
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
+                    # maneuver has non-zero duration; perform maneuver
                     maneuvers.append(ManeuverAction([th_f, 0, 0], 
                                                     [slew_rate, 0, 0],
                                                     t_maneuver_start, 

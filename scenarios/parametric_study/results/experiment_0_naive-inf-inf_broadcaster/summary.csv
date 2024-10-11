@@ -1,30 +1,30 @@
 stat_name,val
 Ground Points,5001.0
-Ground Points Observed,14.0
-Average Event Reobservation Time [s],-1.0
-Standard Deviation of Event Reobservation Time [s],0.0
-Median Event Reobservation Time [s],-1.0
+Ground Points Observed,2425.0
+Average Event Reobservation Time [s],27100.638945233266
+Standard Deviation of Event Reobservation Time [s],18589.60452093839
+Median Event Reobservation Time [s],27690.0
 Events,10000.0
-Events Detected,0.0
-Events Observed,0.0
-Observations,14.0
-Event Observations,0.0
-Events Re-observed,0.0
-Event Re-observations,0.0
-Events Co-observed,0.0
-Events Partially Co-observed,0.0
-Events Fully Co-observed,0.0
-Event Co-observations,0.0
-P(Event Detected),0.0
-P(Event Observed),0.0
-P(Event Re-observed),0.0
-P(Event Co-observed),0.0
-P(Event Partially Co-observed),0.0
-P(Event Fully Co-observed),0.0
+Events Detected,869.0
+Events Observed,938.0
+Observations,3411.0
+Event Observations,987.0
+Events Re-observed,47.0
+Event Re-observations,96.0
+Events Co-observed,938.0
+Events Partially Co-observed,2.0
+Events Fully Co-observed,44.0
+Event Co-observations,986.0
+P(Event Detected),0.0869
+P(Event Observed),0.0938
+P(Event Re-observed),0.0047
+P(Event Co-observed),0.0938
+P(Event Partially Co-observed),0.0002
+P(Event Fully Co-observed),0.0044
 P(Event at a GP),0.9786
-P(Event Observation | Observation),0.0
-P(Event Observed | Event Detected),
-P(Event Re-oberved | Event Detected),
-P(Event Co-observed | Event Detected),
-P(Event Co-observed Partially | Event Detected),
-P(Event Co-observed Fully | Event Detected),
+P(Event Observation | Observation),0.27499
+P(Event Observed | Event Detected),1.0
+P(Event Re-oberved | Event Detected),0.04833
+P(Event Co-observed | Event Detected),1.0
+P(Event Co-observed Partially | Event Detected),0.0023
+P(Event Co-observed Fully | Event Detected),0.04488

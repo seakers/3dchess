@@ -1,0 +1,8 @@
+routine,t_avg,t_std,t_med,n,t_total
+check_action_statuses,0.0,0.0,0.0,1,1.7450001905672252e-06
+update_state,0.0,0.0,0.0,1,2.1918000129517168e-05
+sense_environment,0.045,0.0,0.045,1,0.04481785000098171
+update_state_environment,0.001,0.0,0.001,1,0.0006266100026550703
+get_environment_broadcasts,0.0,0.0,0.0,1,1.4641002053394914e-05
+get_agent_broadcasts,0.0,0.0,0.0,1,1.155399513663724e-05
+sense,0.046,0.0,0.046,1,0.04557070400187513

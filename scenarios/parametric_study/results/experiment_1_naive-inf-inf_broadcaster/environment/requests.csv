@@ -1,0 +1,2 @@
+ID,Requester,lat [deg],lon [deg],Severity,t start,t end,t corr,Measurment Types
+bfa6da06-8763-11ef-a3fe-c4731e2ba886,vis_sat_0_0,35.30795200000006,-95.35793699999994,13.371433575924662,37900.0,40038.177460675535,2138.1774606755353,['sar']

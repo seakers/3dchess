@@ -39,7 +39,7 @@ def main(
     # read scenario parameters file
     experiments_file = os.path.join(scenario_dir, 'resources', 'experiments', f'{experiments_name}.csv')
     experiments_df : pd.DataFrame = pd.read_csv(experiments_file)
-    # experiments_df = experiments_df.sort_values(by=['Number Planes','Number of Satellites per Plane'], ascending=True)
+    experiments_df = experiments_df.sort_values(by=['Number Planes','Number of Satellites per Plane'], ascending=True)
 
     # check if bounds are valid
     assert 0 <= lower_bound <= upper_bound
@@ -47,7 +47,7 @@ def main(
     assert upper_bound <= len(experiments_df) - 1 or np.isinf(upper_bound)
 
     # set fixed parameters
-    sim_duration = 10 / 60 / 24.0 # in days
+    sim_duration = 1.0 / 24.0 if debug else 1.0 # in days
     preplanners = [
                         'naive',
                         # 'dynamic'
@@ -431,7 +431,7 @@ if __name__ == "__main__":
          upper_bound, 
          level, 
          overwrite, 
-        #  debug
+         debug
          )
 
     # print DONE
