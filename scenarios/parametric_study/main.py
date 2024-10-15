@@ -78,8 +78,11 @@ def main(
 
     # run simulation for each set of parameters
     with tqdm.tqdm(total=n_runs) as pbar:
-        for experiment_i,row in experiments_df.iterrows():
+        experiment_i = 0
+        for _,row in experiments_df.iterrows():           
+
             if experiment_i < lower_bound:
+                experiment_i += 1
                 continue
             elif upper_bound < experiment_i:
                 break
@@ -105,6 +108,8 @@ def main(
                             'thermal' : 'therm', 
                             'sar' : 'sar'
                             }       
+            
+            print(experiment_i, row['Name'], n_planes, sats_per_plane)
 
             # run cases
             for preplanner in preplanners:
@@ -213,20 +218,23 @@ def main(
                             # update list of satellites
                             scenario_specs['spacecraft'] = sats
 
-                            # print welcome message
-                            print_welcome(experiment_name)
+                            # # print welcome message
+                            # print_welcome(experiment_name)
 
-                            # initialize mission
-                            mission : Mission = Mission.from_dict(scenario_specs)
+                            # # initialize mission
+                            # mission : Mission = Mission.from_dict(scenario_specs)
 
-                            # execute mission
-                            mission.execute()
+                            # # execute mission
+                            # mission.execute()
 
-                            # print results
-                            mission.print_results()
+                            # # print results
+                            # mission.print_results()
                                 
                             # update progress bad
                             pbar.update(1)
+
+                            # update experiment index
+                            experiment_i += 1
 
                             if debug: return
 
