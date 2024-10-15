@@ -1,8 +1,0 @@
-routine,t_avg,t_std,t_med,n,t_total
-check_action_statuses,0.0,0.0,0.0,1,1.644002622924745e-06
-update_state,0.0,0.0,0.0,1,1.8913000531028956e-05
-sense_environment,0.689,0.0,0.689,1,0.6894868069939548
-update_state_environment,0.001,0.0,0.001,1,0.0006222930023795925
-get_environment_broadcasts,0.0,0.0,0.0,1,1.518800127087161e-05
-get_agent_broadcasts,0.0,0.0,0.0,1,1.1408999853301793e-05
-sense,0.69,0.0,0.69,1,0.6902331070014043
