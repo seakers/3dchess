@@ -110,7 +110,7 @@ def main(
                             'sar' : 'sar'
                             }       
             
-            print(experiment_i, row['Name'], n_planes, sats_per_plane)
+            # print(experiment_i, row['Name'], n_planes, sats_per_plane)
 
             # run cases
             for preplanner in preplanners:
@@ -144,7 +144,7 @@ def main(
                             scenario_specs['scenario']['name'] = experiment_name
 
                             # set outdir
-                            orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', row['Name'])
+                            orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', f'{n_planes}_{sats_per_plane}_{field_of_regard}_{field_of_view}')
                             scenario_specs['settings']['outDir'] = orbitdata_dir
 
                             # check overwrite toggle
@@ -225,11 +225,11 @@ def main(
                             # initialize mission
                             mission : Mission = Mission.from_dict(scenario_specs)
 
-                            # execute mission
-                            mission.execute()
+                            # # execute mission
+                            # mission.execute()
 
-                            # print results
-                            mission.print_results()
+                            # # print results
+                            # mission.print_results()
                                 
                             # update progress bad
                             pbar.update(1)
