@@ -84,7 +84,8 @@ def main(
             if experiment_i < lower_bound:
                 experiment_i += 1
                 continue
-            elif upper_bound < experiment_i:
+
+            elif upper_bound <= experiment_i:
                 break
 
             # extract constellation parameters
@@ -218,17 +219,17 @@ def main(
                             # update list of satellites
                             scenario_specs['spacecraft'] = sats
 
-                            # # print welcome message
-                            # print_welcome(experiment_name)
+                            # print welcome message
+                            print_welcome(experiment_name)
 
-                            # # initialize mission
-                            # mission : Mission = Mission.from_dict(scenario_specs)
+                            # initialize mission
+                            mission : Mission = Mission.from_dict(scenario_specs)
 
-                            # # execute mission
-                            # mission.execute()
+                            # execute mission
+                            mission.execute()
 
-                            # # print results
-                            # mission.print_results()
+                            # print results
+                            mission.print_results()
                                 
                             # update progress bad
                             pbar.update(1)
@@ -392,13 +393,13 @@ if __name__ == "__main__":
                         default='experiments_seed-1000')
     parser.add_argument('-l',
                         '--lower-bound', 
-                        help='lower bound of simulation indeces to be run',
+                        help='lower bound of simulation indeces to be run (inclusive)',
                         type=int,
                         required=False,
                         default=0)
     parser.add_argument('-u',
                         '--upper-bound', 
-                        help='upper bound of simulation indeces to be run',
+                        help='upper bound of simulation indeces to be run (non-inclusive)',
                         type=int,
                         required=False,
                         default=np.Inf)
