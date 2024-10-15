@@ -39,7 +39,7 @@ def main(
     # read scenario parameters file
     experiments_file = os.path.join(scenario_dir, 'resources', 'experiments', f'{experiments_name}.csv')
     experiments_df : pd.DataFrame = pd.read_csv(experiments_file)
-    experiments_df = experiments_df.sort_values(by=['Number Planes','Number of Satellites per Plane'], ascending=True)
+    # experiments_df = experiments_df.sort_values(by=['Number Planes','Number of Satellites per Plane'], ascending=True)
 
     # check if bounds are valid
     assert 0 <= lower_bound <= upper_bound
