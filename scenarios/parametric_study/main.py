@@ -225,11 +225,11 @@ def main(
                             # initialize mission
                             mission : Mission = Mission.from_dict(scenario_specs)
 
-                            # # execute mission
-                            # mission.execute()
+                            # execute mission
+                            mission.execute()
 
-                            # # print results
-                            # mission.print_results()
+                            # print results
+                            mission.print_results()
                                 
                             # update progress bad
                             pbar.update(1)
