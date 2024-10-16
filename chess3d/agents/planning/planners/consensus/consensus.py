@@ -997,8 +997,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
                           path : list, 
                           reward_grid : RewardGrid
                           ) -> float:
-        # merge current path with 
+        # merge current path with preplan
         observations : list[ObservationAction] = self.merge_plans(state, specs, path)
+
+        # sum estimated rewards
         return sum([reward_grid.estimate_reward(observation) for observation in observations])
 
     @runtime_tracker

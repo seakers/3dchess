@@ -157,7 +157,12 @@ def event_driven(
         reward = (t - t_init) * unobserved_reward_rate / 3600  + min_reward
         reward = min(reward, max_unobserved_reward)
 
-    return reward
+    # time penalty
+    # day = 24 * 3600
+    # rho = max(1 - t / day, 0.0)
+    rho = 1
+
+    return reward * rho
 
 utility_function = {
     "none" : no_utility,

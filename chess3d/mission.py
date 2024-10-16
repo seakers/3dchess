@@ -955,6 +955,7 @@ class SimulationElementsFactory:
                                              horizon,
                                              debug,
                                              logger)
+                    
                 elif replanner_type.lower() == 'acbba-dp': 
                     max_bundle_size = replanner_dict.get('bundle size', 3)
                     threshold = replanner_dict.get('threshold', 1)

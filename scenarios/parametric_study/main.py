@@ -47,7 +47,7 @@ def main(
     assert upper_bound <= len(experiments_df) - 1 or np.isinf(upper_bound)
 
     # set fixed parameters
-    sim_duration = 1.0 / 24.0 if debug else 1.0 # in days
+    sim_duration = 4.0 / 24.0 if debug else 1.0 # in days
     preplanners = [
                         'naive',
                         # 'dynamic'
@@ -59,8 +59,8 @@ def main(
         # (500, 500)
     ]
     replanners = [
-                    'broadcaster', 
-                    # 'acbba',
+                    # 'broadcaster', 
+                    'acbba',
                     ]
     bundle_sizes = [
                     # 1,
@@ -110,8 +110,6 @@ def main(
                             'sar' : 'sar'
                             }       
             
-            # print(experiment_i, row['Name'], n_planes, sats_per_plane)
-
             # run cases
             for preplanner in preplanners:
                 for replanner in replanners:
@@ -122,16 +120,12 @@ def main(
                                 break # skip
 
                             if preplanner == 'dynamic' and horizon == np.Inf:
+                                pbar.update(1)
                                 continue # skip
 
                             if preplanner == 'naive' and horizon != np.Inf:
+                                pbar.update(1)
                                 continue # skip
-
-                            # if preplanner == 'naive' and replanner == 'broadcaster':
-                            #     continue # skip
-
-                            if replanner == 'acbba':
-                                replanner += '-dp'
 
                             # create specs from template
                             scenario_specs : dict = copy.deepcopy(template_specs)
@@ -231,13 +225,13 @@ def main(
                             # print results
                             mission.print_results()
                                 
-                            # update progress bad
+                            # update progress bar
                             pbar.update(1)
 
                             # update experiment index
                             experiment_i += 1
 
-                            if debug: return
+            if debug: return
 
 def clear_orbitdata(scenario_dir : str) -> None:
     orbitdata_path = os.path.join(scenario_dir, 'orbit_data')
@@ -440,7 +434,7 @@ if __name__ == "__main__":
          upper_bound, 
          level, 
          overwrite, 
-         debug
+        #  debug
          )
 
     # print DONE
