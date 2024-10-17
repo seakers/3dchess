@@ -21,6 +21,7 @@ from dmas.clocks import *
 from dmas.network import NetworkConfig
 from dmas.clocks import *
 
+from chess3d.agents.groundstat import GroundStationAgent
 from chess3d.agents.planning.planners.consensus.dynamic import DynamicProgrammingACBBAReplanner
 from chess3d.agents.planning.planners.dynamic import DynamicProgrammingPlanner
 from chess3d.agents.planning.planners.rewards import RewardGrid
@@ -152,9 +153,24 @@ class Mission:
             # TODO Implement UAV agents
             raise NotImplementedError('UAV agents not yet implemented.')
 
-        if gstation_dict is not None:
-            # TODO Implement ground station agents
-            raise NotImplementedError('Ground Station agents not yet implemented.')
+        if isinstance(gstation_dict, list):
+            # # TODO Implement ground station agents
+            # raise NotImplementedError('Ground Station agents not yet implemented.')
+            for gstation in gstation_dict:
+                agent = SimulationElementsFactory.generate_agent(
+                                                    scenario_name, 
+                                                    results_path,
+                                                    orbitdata_dir,
+                                                    gstation,
+                                                    gstation_dict.index(gstation), 
+                                                    manager_network_config, 
+                                                    agent_port, 
+                                                    SimulationAgentTypes.GROUND_STATION, 
+                                                    level,
+                                                    logger
+                                                )
+                agents.append(agent)
+                agent_port += 7
         
         # ------------------------------------
         # create environment
@@ -626,6 +642,28 @@ class SimulationElementsFactory:
                                     logger=logger
                                 )
         else:
+            # define initial state
+            lat = agent_dict['latitude']
+            lon = agent_dict['longitude']
+            alt = agent_dict.get('altitude', 0.0)
+
+            initial_state = GroundStationAgentState(agent_name, 
+                                                    lat, 
+                                                    lon, 
+                                                    alt)
+            
+            return GroundStationAgent(
+                                    agent_name,
+                                    results_path,
+                                    manager_network_config,
+                                    agent_network_config,
+                                    initial_state, 
+                                    agent_specs,
+                                    planner,
+                                    science,
+                                    logger=logger
+                                )
+
             raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")
 
     def create_agent_network_config(manager_network_config : NetworkConfig, 
@@ -973,7 +1011,7 @@ class SimulationElementsFactory:
                 # replanner = None
                 replanner = None
         else:
-            preplanner, replanner, = None, None
+            preplanner, replanner, reward_grid = None, None, None
         
         # create planning module
         return PlanningModule(results_path, 

@@ -84,7 +84,7 @@ class SimulationAgent(Agent):
         if isinstance(self.specs, Spacecraft):
             self.payload = {instrument.name: instrument for instrument in self.specs.instrument}
         elif isinstance(self.specs, dict):
-            self.payload = {instrument.name: instrument for instrument in self.specs['instrument']}
+            self.payload = {instrument.name: instrument for instrument in self.specs['instrument']} if 'instrument' in self.specs else dict()
         else:
             raise ValueError(f'`specs` must be of type `Spacecraft` or `dict`. Is of type `{type(specs)}`.')
 

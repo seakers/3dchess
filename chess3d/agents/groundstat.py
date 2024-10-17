@@ -13,72 +13,29 @@ from chess3d.agents.agent import SimulationAgentState, SimulationAgent
 
 class GroundStationAgent(SimulationAgent):
     def __init__(self, 
-                    agent_name: str, 
-                    results_path: str,
-                    scenario_name: str, 
-                    port : int,
-                    manager_network_config: NetworkConfig, 
-                    initial_state: SimulationAgentState, 
-                    utility_func: Callable[[], Any],  
-                    initial_reqs : list = [],
-                    science_module : ScienceModule = None,
-                    level: int = logging.INFO, 
-                    logger: logging.Logger = None
-                ) -> None:
-
-
-        manager_addresses : dict = manager_network_config.get_manager_addresses()
-        req_address : str = manager_addresses.get(zmq.REP)[0]
-        req_address = req_address.replace('*', 'localhost')
-
-        sub_address : str = manager_addresses.get(zmq.PUB)[0]
-        sub_address = sub_address.replace('*', 'localhost')
-
-        pub_address : str = manager_addresses.get(zmq.SUB)[0]
-        pub_address = pub_address.replace('*', 'localhost')
-
-        push_address : str = manager_addresses.get(zmq.PUSH)[0]
-
-        agent_network_config = NetworkConfig( 	scenario_name,
-												manager_address_map = {
-														zmq.REQ: [req_address],
-														zmq.SUB: [sub_address],
-														zmq.PUB: [pub_address],
-                                                        zmq.PUSH: [push_address]},
-												external_address_map = {
-														zmq.REQ: [],
-														zmq.SUB: [f'tcp://localhost:{port+1}'],
-														zmq.PUB: [f'tcp://*:{port+2}']},
-                                                internal_address_map = {
-														zmq.REP: [f'tcp://*:{port+3}'],
-														zmq.PUB: [f'tcp://*:{port+4}'],
-														zmq.SUB: [f'tcp://localhost:{port+5}']
-											})
-
+                 agent_name: str, 
+                 results_path: str, 
+                 manager_network_config: NetworkConfig, 
+                 agent_network_config: NetworkConfig, 
+                 initial_state: SimulationAgentState, 
+                 specs: object, 
+                 planning_module: PlanningModule = None, 
+                 science_module: ScienceModule = None, 
+                 level: int = logging.INFO, 
+                 logger: logging.Logger = None
+                 ) -> None:
         
-        preplanner = None # TODO implement request broadcast planner
-        
-        planning_module = PlanningModule(results_path, 
-                                        agent_name,
-                                        agent_network_config,
-                                        utility_func, 
-                                        preplanner,
-                                        initial_reqs=initial_reqs,
-                                        level=level,
-                                        logger=logger)
+        super().__init__(agent_name, 
+                         results_path, 
+                         manager_network_config, 
+                         agent_network_config, 
+                         initial_state, 
+                         specs, 
+                         planning_module, 
+                         science_module, 
+                         level, 
+                         logger)
 
-        super().__init__(   agent_name, 
-                            results_path,
-                            manager_network_config, 
-                            agent_network_config, 
-                            initial_state, 
-                            [], 
-                            planning_module, 
-                            science_module, 
-                            level, 
-                            logger)
-
-        self.measurement_reqs = initial_reqs
 
     async def setup(self) -> None:
         # nothing to setup

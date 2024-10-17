@@ -363,10 +363,13 @@ class OracleScienceModule(LookupTableScienceModule):
                 reqs.append(req)
 
             # register all events as detected
-            for event in self.events.values: self.events_detected.update(event)
+            self.events_detected.update([event for event in self.events.values])
+            # for event in self.events.values: self.events_detected.update(event)
 
             # create request messages
-            msgs = [MeasurementRequestMessage(self.get_parent_name(), self.get_parent_name(), req.to_dict())
+            msgs = [MeasurementRequestMessage(self.get_parent_name(), 
+                                              self.get_parent_name(), 
+                                              req.to_dict())
                     for req in reqs]
             
             req_dicts = [req.to_dict() for req in msgs]
