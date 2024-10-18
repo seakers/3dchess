@@ -1,4 +1,0 @@
-routine,t_avg,t_std,t_med,n,t_total
-get_current_time,0.0,0.0,0.0,96,0.0
-handle_manager_broadcast,0.003,0.0,0.003,2,0.006
-handle_request,0.003,0.0,0.003,2,0.006

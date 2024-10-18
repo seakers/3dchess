@@ -1,3 +1,0 @@
-routine,t_avg,t_std,t_med,n,t_total
-reward_grid/update,0.0,0.0,0.0,1,0.0
-reward_grid/get_history,0.00258,0.0,0.00258,1,0.00258
