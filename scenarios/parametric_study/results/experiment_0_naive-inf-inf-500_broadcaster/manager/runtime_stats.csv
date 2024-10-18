@@ -1,0 +1,6 @@
+routine,t_avg,t_std,t_med,n,t_total
+ENVIRONMENT_wait,-1.0,0.0,-1.0,0,0.0
+clock_wait,0.003,0.0,0.003,1,0.003
+sim_runtime,0.009,0.0,0.009,1,0.009
+sim_wait,0.009,0.0,0.009,1,0.009
+_execute,0.015,0.0,0.015,1,0.015

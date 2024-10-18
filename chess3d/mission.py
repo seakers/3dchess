@@ -155,7 +155,7 @@ class Mission:
 
         if isinstance(gstation_dict, list):
             # # TODO Implement ground station agents
-            # raise NotImplementedError('Ground Station agents not yet implemented.')
+            raise NotImplementedError('Ground Station agents not yet implemented.')
             for gstation in gstation_dict:
                 agent = SimulationElementsFactory.generate_agent(
                                                     scenario_name, 
@@ -952,10 +952,12 @@ class SimulationElementsFactory:
 
                 # initialize preplanner
                 if preplanner_type.lower() == "naive":
-                    preplanner = NaivePlanner(horizon, period, debug, logger)
+                    points = preplanner_dict.get('numGroundPoints', np.Inf)
+                    preplanner = NaivePlanner(horizon, period, points, debug, logger)
 
                 elif preplanner_type.lower() == 'nadir':
-                    preplanner = NadirPointingPlaner(horizon, period, debug, logger)
+                    points = preplanner_dict.get('numGroundPoints', np.Inf)
+                    preplanner = NadirPointingPlaner(horizon, period, points, debug, logger)
 
                 elif preplanner_type.lower() == "dynamic":
                     period = preplanner_dict.get('period', 500)
@@ -978,7 +980,7 @@ class SimulationElementsFactory:
             if isinstance(replanner_dict, dict):
                 replanner_type : str = replanner_dict.get('@type', None)
                 if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
-                debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
+                debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
                 if replanner_type.lower() == 'broadcaster':
                     replanner = Broadcaster(debug, logger)

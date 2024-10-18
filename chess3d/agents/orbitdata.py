@@ -389,6 +389,8 @@ class OrbitData:
                                                             'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
 
             for instrument in payload:
+                if instrument is None: continue 
+
                 i_ins = payload.index(instrument)
                 gp_acces_by_mode = []
 
@@ -443,11 +445,12 @@ class OrbitData:
             grid_data_compiled = []
             for grid in mission_dict.get('grid'):
                 grid : dict
+                i_grid = mission_dict.get('grid').index(grid)
+                
                 if grid.get('@type').lower() == 'customgrid':
                     grid_file = grid.get('covGridFilePath')
                     
                 elif grid.get('@type').lower() == 'autogrid':
-                    i_grid = mission_dict.get('grid').index(grid)
                     grid_file = os.path.join(orbitdata_path, f'grid{i_grid}.csv')
                 else:
                     raise NotImplementedError(f"Loading of grids of type `{grid.get('@type')} not yet supported.`")

@@ -164,8 +164,11 @@ def main(
                             # set spacecraft specs
                             sats = []
                             for j in range(n_planes):
+                                if debug : continue
+
                                 instr_counter = {instrument : 0 for instrument in instruments}
                                 for i in range(sats_per_plane):
+                                    # initiate satellite dictionary from template
                                     sat : dict = copy.deepcopy(scenario_specs['spacecraft'][-1])
 
                                     # choose agent instrument
@@ -209,6 +212,39 @@ def main(
 
                                     # update counter 
                                     instr_counter[instrument] += 1
+
+                            if debug:
+                                # initiate satellite dictionary from template
+                                sat : dict = copy.deepcopy(scenario_specs['spacecraft'][-1])
+
+                                # set agent name and id
+                                sat['@id'] = f'oracle_sat'
+                                sat['name'] = f'oracle_sat'
+
+                                # set slew rate
+                                sat['spacecraftBus']['components']['adcs']['maxRate'] = 0.0
+                                sat['spacecraftBus']['components']['adcs']['maxTorque'] = 0.0
+
+                                # set instrument properties
+                                sat['instrument'] = []
+
+                                # set orbit
+                                sat['orbitState']['state']['inc'] = 0.0
+                                sat['orbitState']['state']['raan'] = 0.0
+                                sat['orbitState']['state']['ta'] = 0.0
+
+                                # set preplanner
+                                sat['planner'].pop('preplanner')
+
+                                # set replanner
+                                sat['planner']['replanner']['@type'] = 'broadcaster'
+
+                                # set science
+                                sat['science']['@type'] = 'ORACLE'
+                                sat['science']['eventsPath'] = os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{row['Name']}_events.csv")
+                                
+                                # add to list of sats
+                                sats.append(sat)
                             
                             # update list of satellites
                             scenario_specs['spacecraft'] = sats

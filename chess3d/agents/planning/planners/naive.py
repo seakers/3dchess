@@ -1,3 +1,5 @@
+from logging import Logger
+from numpy import Inf
 from orbitpy.util import Spacecraft
 
 from dmas.clocks import ClockConfig
@@ -17,6 +19,16 @@ from chess3d.messages import *
 class NaivePlanner(AbstractPreplanner):
     """ Schedules observations based on the earliest feasible access point and broadcasts plan to all agents in the network """
 
+    def __init__(self, 
+                 horizon: float = np.Inf, 
+                 period: float = np.Inf, 
+                 points : int = np.Inf, 
+                 debug: bool = False, 
+                 logger: Logger = None
+                 ) -> None:
+        super().__init__(horizon, period, debug, logger)
+        self.points = points
+
     @runtime_tracker
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
@@ -31,8 +43,8 @@ class NaivePlanner(AbstractPreplanner):
             raise ValueError(f'`specs` needs to be of type `{Spacecraft}` for agents with states of type `{SatelliteAgentState}`')
 
         # compile access times for this planning horizon
-        access_times, ground_points = self.calculate_access_opportunities(state, specs, orbitdata)
-        access_times : list; ground_points : dict
+        ground_points : dict = self.get_ground_points(orbitdata, self.points)
+        access_times : list = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
 
         # sort by observation time
         access_times.sort(key = lambda a: a[3],reverse=True)

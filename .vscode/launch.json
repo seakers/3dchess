@@ -179,6 +179,22 @@
             //     "-l", "0",
             //     "-u", "1"
             // ]
+        },
+        {
+            "name": "PREPLANNER STUDY",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/scenarios/preplanner_study/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+            // "args": [
+            //     "-l", "0",
+            //     "-u", "1"
+            // ]
         }
         
     ],

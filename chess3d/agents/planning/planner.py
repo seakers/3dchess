@@ -1,6 +1,7 @@
 
 import math
 import queue
+import random
 from typing import Dict
 
 from instrupy.base import Instrument, BasicSensorModel
@@ -727,11 +728,38 @@ class AbstractPreplanner(AbstractPlanner):
         return [WaitForMessages(t_wait_start, t_next)]
     
     @runtime_tracker
+    def get_ground_points(self,
+                          orbitdata : OrbitData,
+                          max_points : int = np.Inf,
+                        ) -> dict:
+        # initiate accestimes 
+        all_ground_points = list({
+            (grid_index, gp_index, lat, lon)
+            for grid_datum in orbitdata.grid_data
+            for lat, lon, grid_index, gp_index in grid_datum.values
+        })
+        
+        # sample required number of points to consider
+        ground_point_set : list = random.sample(all_ground_points, max_points) if max_points < np.Inf else all_ground_points
+    
+        # organize into a `dict`
+        ground_points = dict()
+        for grid_index, gp_index, lat, lon in ground_point_set: 
+            if grid_index not in ground_points: ground_points[grid_index] = dict()
+            if gp_index not in ground_points[grid_index]: ground_points[grid_index][gp_index] = dict()
+
+            ground_points[grid_index][gp_index] = (lat,lon)
+
+        # return grid information
+        return ground_points
+
+    @runtime_tracker
     def calculate_access_opportunities(self, 
-                               state : SimulationAgentState, 
-                               specs : Spacecraft,
-                               orbitdata : OrbitData
-                               ) -> dict:
+                                       state : SimulationAgentState, 
+                                       specs : Spacecraft,
+                                       ground_points : dict,
+                                       orbitdata : OrbitData
+                                    ) -> dict:
         # define planning horizon
         t_start = state.t
         t_end = self.plan.t_next+self.horizon
@@ -747,25 +775,27 @@ class AbstractPreplanner(AbstractPlanner):
 
         # initiate accestimes 
         access_opportunities = {}
-        ground_points = {}
         
-        for data in raw_coverage_data:
+        for data in tqdm(raw_coverage_data, 
+                         desc='PREPLANNER: Compiling access opportunities', 
+                         leave=False):
             t_img = data[orbitdata_columns.index('time index')]
             grid_index = data[orbitdata_columns.index('grid index')]
             gp_index = data[orbitdata_columns.index('GP index')]
-            lat = data[orbitdata_columns.index('lat [deg]')]
-            lon = data[orbitdata_columns.index('lon [deg]')]
             instrument = data[orbitdata_columns.index('instrument')]
             look_angle = data[orbitdata_columns.index('look angle [deg]')]
+
+            # only consider ground points from the pedefined list of important groundopints
+            if grid_index not in ground_points or gp_index not in ground_points[grid_index]:
+                continue
             
             # initialize dictionaries if needed
             if grid_index not in access_opportunities:
                 access_opportunities[grid_index] = {}
-                ground_points[grid_index] = {}
+                
             if gp_index not in access_opportunities[grid_index]:
                 access_opportunities[grid_index][gp_index] = {instr.name : [] 
                                                         for instr in specs.instrument}
-                ground_points[grid_index][gp_index] = (lat, lon)
 
             # compile time interval information 
             found = False
@@ -794,7 +824,7 @@ class AbstractPreplanner(AbstractPlanner):
                                 ]
                 
         # return access times and grid information
-        return access_opportunities, ground_points
+        return access_opportunities
 
 class AbstractReplanner(AbstractPlanner):
     """ Repairs plans previously constructed by another planner """
