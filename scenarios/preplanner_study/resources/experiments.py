@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats._qmc import LatinHypercube
+from tqdm import tqdm
 
 def main(n_samples : int = 1, seed : int = 1000):
     """
@@ -17,7 +18,11 @@ def main(n_samples : int = 1, seed : int = 1000):
         ('Field of View (deg)',         [1,5,10]),
         ('Maximum Slew Rate (deg/s)',   [1,10]),
         ('Number of Events per Day',    [10, 100, 1000, 10000]),
-        ('Event Duration (hrs)',        [0.25, 1, 3, 6])
+        ('Event Duration (hrs)',        [0.25, 1, 3, 6]),
+        ('Grid Type',                   ['hydrolakes', 'uniform', 'fibonacci']),
+        ('Number of Grid-points',       [100, 500, 1000, 5000]),
+        ('Preplanner',                  ['nadir', 'naive']),
+        ('Points Considered',           [1/10, 1/4, 1/3, 1/2, 1.0])
     ]
 
     # calculate lowest-common-multiple for estimating number of samples
@@ -40,7 +45,8 @@ def main(n_samples : int = 1, seed : int = 1000):
     columns.insert(0,'Name')
     data = []
     j = 0
-    for sample in samples:
+    for sample in tqdm(samples, desc='Generating experiments'):
+        # create row of values 
         row = [f'experiment_{j}']
         for i in range(len(sample)):
             _,vals = params[i]
@@ -49,7 +55,11 @@ def main(n_samples : int = 1, seed : int = 1000):
                 row.extend(list(value))
             else:
                 row.append(value)
-        data.append(row)
+        
+        # if experiment is feasible, add to list of experiments
+        if is_feasible(row): data.append(row)
+
+        # update experiment index
         j += 1
 
     # create data frame
@@ -61,5 +71,9 @@ def main(n_samples : int = 1, seed : int = 1000):
     # save to csv
     df.to_csv(f'./experiments/experiments_seed-{seed}.csv',index=False)
 
+def is_feasible(row : list) -> bool:
+    # check if number of events can be acheived with number of ground points and event duration
+    return row[6] <= row[9] * (24 / row[7]) * (2/3)
+
 if __name__ == "__main__":
-    main(4)
+    main(1)
