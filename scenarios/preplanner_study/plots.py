@@ -18,7 +18,7 @@ from tqdm import tqdm
 if __name__  == "__main__":
     # set params
     results_path = './results'
-    show_plots = True
+    show_plots = False
     save_plots = True
     
     # get run names
@@ -34,7 +34,7 @@ if __name__  == "__main__":
     
     # organize data
     data = []
-    for experiment_name in tqdm(run_names, desc='Compiling results', leave=False):
+    for experiment_name in tqdm(run_names, desc='Compiling Results'):
         # load results summary
         summary_path = os.path.join(results_path, experiment_name, 'summary.csv')
         summary : pd.DataFrame = pd.read_csv(summary_path)
@@ -62,6 +62,7 @@ if __name__  == "__main__":
 
     # create compiled data frame
     df = pd.DataFrame(data=data, columns=columns)
+    df.sort_values('Name')
 
     df['Percent Ground Points Observed'] = df['Ground Points Observed'] / df['Ground Points']
     df['Number of Satellites'] = df['Number Planes'] * df['Number of Satellites per Plane']
@@ -77,8 +78,9 @@ if __name__  == "__main__":
     if not os.path.isdir(scatterplot_path): os.mkdir(scatterplot_path)
     
     # Apply the default theme
-    sns.set_theme(style="whitegrid", palette="pastel")
+    sns.set_theme(style="whitegrid", palette="Set2")
 
+    # define metrics
     ys = [
             "Percent Ground Points Observed",
             "P(Event Detected)",
@@ -88,26 +90,32 @@ if __name__  == "__main__":
             "P(Event Partially Co-observed)",
             "P(Event Fully Co-observed)"
           ]
-    xs = ["Points Considered"]
+    xs = ["Points Considered",
+          "Number of Grid-points",
+          "Number of Events per Day"]
+    vals = [(x,y) for y in ys for x in xs]
 
-    for y in ys:
-        for x in xs:
-            # Create a visualization
-            sns.relplot(
-                data=df,
-                x=x, 
-                y=y, 
-                col="Grid Type",
-                hue="Constellation", 
-                style="Preplanner", 
-                # size="Number of Satellites",
-            )
+    for x,y in tqdm(vals, desc='Generating Scatter Plots'):
+        # create plot
+        sns.relplot(
+            data=df,
+            x=x, 
+            y=y, 
+            col="Grid Type",
+            hue="Number of Satellites", 
+            # size="Number of Grid-points",
+            style="Preplanner",
+            palette="flare"
+        )
 
-            # save or show graph
-            if show_plots: plt.show()
-            if save_plots: 
-                plot_path = os.path.join(scatterplot_path, f'{y.lower()}_vs_{x.lower()}.png')
-                plt.savefig(plot_path)
+        # save or show graph
+        if show_plots: plt.show()
+        if save_plots: 
+            plot_path = os.path.join(scatterplot_path, f'{y.lower()}_vs_{x.lower()}.png')
+            plt.savefig(plot_path)
+
+        # close plot
+        plt.close()
 
     x = 1 
 
@@ -131,8 +139,8 @@ if __name__  == "__main__":
         #     plot_path = os.path.join(histogram_path, f'{metric}.png')
         #     plt.savefig(plot_path)
 
-    #     # close plot
-    #     plt.close()
+        # # close plot
+        # plt.close()
 
     # # grid layouts
     # grids_path = os.path.join('./plots', 'grids')
