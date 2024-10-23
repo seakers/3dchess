@@ -50,7 +50,7 @@ def main(
     assert upper_bound <= len(experiments_df) - 1 or np.isinf(upper_bound)
 
     # set fixed parameters
-    sim_duration = 4.0 / 24.0 if debug else 1.0 # in days
+    sim_duration = 1.0 / 24.0 if debug else 1.0 # in days
     period, horizon = np.Inf, np.Inf
     replanner = 'broadcaster'
 
@@ -61,7 +61,7 @@ def main(
     print(F'NUMBER OF RUNS TO PERFORM: {n_runs}')
 
     # run simulation for each set of parameters
-    for _,row in tqdm(experiments_to_eval, desc='Evaluating experiments'):           
+    for i,row in tqdm(experiments_to_eval, desc='Evaluating experiments'):           
 
         # extract constellation parameters
         n_planes = row['Number Planes']
@@ -88,6 +88,7 @@ def main(
         # extract planner info
         preplanner = row['Preplanner']
         n_points = row['Number of Grid-points']
+        points_considered = row['Points Considered']
         grid_name = f"{row['Grid Type']}_grid_{row['Number of Grid-points']}"
         if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
 
@@ -97,13 +98,15 @@ def main(
         scenario_specs : dict = copy.deepcopy(template_specs)
 
         # create scenario name
-        experiment_name = f"{row['Name']}_{preplanner}-{period}-{horizon}-{n_points}_{replanner}"
+        experiment_name = row['Name']
+        results_path = os.path.join(scenario_dir, 'results', experiment_name)
+        if os.path.isdir(results_path) and not overwrite: continue
         
         # set scenario name
         scenario_specs['scenario']['name'] = experiment_name
 
         # set outdir
-        orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', f'{n_planes}_{sats_per_plane}_{field_of_regard}_{field_of_view}')
+        orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', experiment_name)
         scenario_specs['settings']['outDir'] = orbitdata_dir
 
         # check overwrite toggle
@@ -163,7 +166,7 @@ def main(
                 sat['planner']['preplanner']['@type'] = preplanner
                 sat['planner']['preplanner']['period'] = period
                 sat['planner']['preplanner']['horizon'] = horizon
-                sat['planner']['preplanner']['numGroundPoints'] = n_points
+                sat['planner']['preplanner']['numGroundPoints'] = int(np.floor(n_points * points_considered))
 
                 # set replanner
                 sat['planner']['replanner']['@type'] = replanner
@@ -197,7 +200,7 @@ def main(
         mission.print_results()
 
         # stop if debugging mode is on
-        # if debug: return
+        if debug and i > 3: return
 
 def clear_orbitdata(scenario_dir : str) -> None:
     orbitdata_path = os.path.join(scenario_dir, 'orbit_data')

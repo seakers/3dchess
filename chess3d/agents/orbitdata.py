@@ -410,16 +410,20 @@ class OrbitData:
                     for grid in mission_dict.get('grid'):
                         i_grid = mission_dict.get('grid').index(grid)
                         metrics_file = os.path.join(orbitdata_path, agent_folder, f'datametrics_instru{i_ins}_mode{i_mode}_grid{i_grid}.csv')
-                        metrics_data = pd.read_csv(metrics_file, skiprows=range(4))
                         
-                        nrows, _ = metrics_data.shape
-                        grid_id_column = [i_grid] * nrows
-                        metrics_data['grid index'] = grid_id_column
+                        try:
+                            metrics_data = pd.read_csv(metrics_file, skiprows=range(4))
+                            
+                            nrows, _ = metrics_data.shape
+                            grid_id_column = [i_grid] * nrows
+                            metrics_data['grid index'] = grid_id_column
 
-                        if len(gp_access_by_grid) == 0:
-                            gp_access_by_grid = metrics_data
-                        else:
-                            gp_access_by_grid = pd.concat([gp_access_by_grid, metrics_data])
+                            if len(gp_access_by_grid) == 0:
+                                gp_access_by_grid = metrics_data
+                            else:
+                                gp_access_by_grid = pd.concat([gp_access_by_grid, metrics_data])
+                        except pd.errors.EmptyDataError:
+                            continue
 
                     nrows, _ = gp_access_by_grid.shape
                     gp_access_by_grid['pnt-opt index'] = [mode] * nrows

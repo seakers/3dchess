@@ -365,15 +365,13 @@ class Mission:
         events_detected : Dict[tuple, list] = {}
         events_observed : Dict[tuple, list] = {}
 
-        for event in tqdm(events.values, desc='Calssifying event observations', leave=False):
+        for event in tqdm(events.values, desc='Calssifying event and observations', leave=False):
             # unpackage event
             event = tuple(event)
             _, lat,lon,t_start,duration,severity,observations_req = event
             
             # classify events by their target groundpoint
-            if (lat,lon) not in events_per_gp:
-                events_per_gp[(lat,lon)] = []
-                
+            if (lat,lon) not in events_per_gp: events_per_gp[(lat,lon)] = []
             events_per_gp[(lat,lon)].append([t_start,duration,severity,observations_req])
 
             # find measurement requests that match this event
