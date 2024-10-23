@@ -488,7 +488,7 @@ class Mission:
         p_event_co_obs = n_events_co_obs / n_events
         p_event_co_obs_fully = n_events_fully_co_obs / n_events
         p_event_co_obs_partial = n_events_partially_co_obs / n_events
-        p_event_obs_if_obs = n_events_observed / n_observations
+        p_event_obs_if_obs = n_events_observed / n_observations if n_observations > 0 else np.NAN
 
         # calculate joint probabilities
         p_event_observed_and_detected = n_events_detected_and_observed / n_events
