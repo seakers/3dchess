@@ -20,6 +20,7 @@ if __name__  == "__main__":
     results_path = './results'
     show_plots = False
     save_plots = True
+    overwrite = False
     
     # get run names
     run_names = list({run_name for run_name in os.listdir(results_path)
@@ -81,21 +82,37 @@ if __name__  == "__main__":
     sns.set_theme(style="whitegrid", palette="Set2")
 
     # define metrics
-    ys = [
-            "Percent Ground Points Observed",
+    ys = [  
             "P(Event Detected)",
             "P(Event Observed)",
             "P(Event Re-observed)",
             "P(Event Co-observed)",
             "P(Event Partially Co-observed)",
-            "P(Event Fully Co-observed)"
-          ]
-    xs = ["Points Considered",
+            "P(Event Fully Co-observed)",
+            "P(Event at a GP)",
+            "P(Event Observation | Observation)",
+            "P(Event Observed | Event Detected)",
+            "P(Event Re-oberved | Event Detected)",
+            "P(Event Co-observed | Event Detected)",
+            "P(Event Co-observed Partially | Event Detected)",
+            "P(Event Co-observed Fully | Event Detected)",
+            "Percent Ground Points Observed",
+            "Ground Points Observed",            
+        ]
+    xs = [
+          "Points Considered",
           "Number of Grid-points",
-          "Number of Events per Day"]
+          "Number of Events per Day"
+        ]
     vals = [(x,y) for y in ys for x in xs]
 
     for x,y in tqdm(vals, desc='Generating Scatter Plots'):
+        # set plot name and path
+        plot_path = os.path.join(scatterplot_path, f'{y.lower()}_vs_{x.lower()}.png')
+
+        # check if plot has already been generated
+        if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
+
         # create plot
         sns.relplot(
             data=df,
@@ -111,36 +128,48 @@ if __name__  == "__main__":
         # save or show graph
         if show_plots: plt.show()
         if save_plots: 
-            plot_path = os.path.join(scatterplot_path, f'{y.lower()}_vs_{x.lower()}.png')
             plt.savefig(plot_path)
 
         # close plot
         plt.close()
 
-    x = 1 
+    # density histograms
+    histogram_path = os.path.join('./plots', 'histograms')
+    if not os.path.isdir(histogram_path): os.mkdir(histogram_path)
 
-    # # density histograms
-    # histogram_path = os.path.join('./plots', 'histograms')
-    # if not os.path.isdir(histogram_path): os.mkdir(histogram_path)
-
-    # for metric in tqdm(columns, desc='Histogram Plots'):
-    #     if 'obs' not in metric.lower() and 'events' not in metric.lower(): continue
-    #     if 'Strategy' in metric: continue
-
-    #     # create histogram
-    #     sns.displot(df, x=metric, hue='Strategy', kind="kde", warn_singular=False)
-    #     plt.xlim(left=0)
-    #     if 'P(' in metric: plt.xlim(right=1)
-    #     plt.grid(visible=True)
+    for x,y in tqdm(vals, desc='Generating Histogram Plots'):
         
-        # # save or show graph
-        # if show_plots: plt.show()
-        # if save_plots: 
-        #     plot_path = os.path.join(histogram_path, f'{metric}.png')
-        #     plt.savefig(plot_path)
+        # set plot name and path
+        plot_path = os.path.join(histogram_path, f'{y}.png')
 
-        # # close plot
-        # plt.close()
+        # check if plot has already been generated
+        if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
+
+        # check if metric is not a probability
+        if 'ob' not in y.lower() and 'percent' not in y.lower() and 'events' not in y.lower(): continue
+
+        # create histogram
+        sns.displot(df, 
+                    x=y, 
+                    # hue='Strategy', 
+                    kind="kde", 
+                    col="Grid Type",
+                    hue="Preplanner", 
+                    # size="Number of Grid-points",<
+                    # palette="flare",
+                    warn_singular=False
+                    )
+        plt.xlim(left=0)
+        plt.xlim(right=1)
+        plt.grid(visible=True)
+        
+        # save or show graph
+        if show_plots: plt.show()
+        if save_plots: 
+            plt.savefig(plot_path)
+
+        # close plot
+        plt.close()
 
     # # grid layouts
     # grids_path = os.path.join('./plots', 'grids')

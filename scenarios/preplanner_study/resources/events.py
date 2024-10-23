@@ -29,7 +29,6 @@ def main(experiments_name : str,
     n_runs : int = len(experiments_df)
     print(F'NUMBER OF EVENTS TO GENERATE: {n_runs}')
 
-
     # set simulation duration in hours
     sim_duration : float = 24.0 / 24.0
 

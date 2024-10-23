@@ -319,7 +319,7 @@ class Mission:
                     ['P(Event at a GP)', np.round(p_event_at_gp,n_decimals)],
                     ['P(Event Observation | Observation)', np.round(p_event_obs_if_obs,n_decimals)],
                     ['P(Event Observed | Event Detected)', np.round(p_event_observed_if_detected,n_decimals)],
-                    ['P(Event Re-oberved | Event Detected)', np.round(p_event_re_obs_if_detected,n_decimals)],
+                    ['P(Event Re-observed | Event Detected)', np.round(p_event_re_obs_if_detected,n_decimals)],
                     ['P(Event Co-observed | Event Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
                     ['P(Event Co-observed Partially | Event Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
                     ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
@@ -963,7 +963,7 @@ class SimulationElementsFactory:
                 debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
                 # initialize preplanner
-                if preplanner_type.lower() == "naive":
+                if preplanner_type.lower() in ["naive", "fifo"]:
                     points = preplanner_dict.get('numGroundPoints', np.Inf)
                     preplanner = NaivePlanner(horizon, period, points, debug, logger)
 
