@@ -61,7 +61,7 @@ def main(
     print(F'NUMBER OF RUNS TO PERFORM: {n_runs}')
 
     # run simulation for each set of parameters
-    for i,row in tqdm(experiments_to_eval, desc='Evaluating experiments'):           
+    for i_experiment,row in tqdm(experiments_to_eval, desc='Evaluating experiments'):           
 
         # extract constellation parameters
         n_planes = row['Number Planes']
@@ -200,7 +200,7 @@ def main(
         mission.print_results()
 
         # stop if debugging mode is on
-        if debug and i > 3: return
+        if debug and i_experiment > 3: return
 
 def clear_orbitdata(scenario_dir : str) -> None:
     orbitdata_path = os.path.join(scenario_dir, 'orbit_data')
@@ -280,7 +280,7 @@ if __name__ == "__main__":
          upper_bound, 
          level, 
          overwrite, 
-        #  debug
+         debug
          )
 
     # print DONE
