@@ -99,7 +99,7 @@ def main(
 
         # create scenario name
         experiment_name = row['Name']
-        results_path = os.path.join(scenario_dir, 'results', experiment_name)
+        results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
         if os.path.isdir(results_path) and not overwrite: continue
         
         # set scenario name
