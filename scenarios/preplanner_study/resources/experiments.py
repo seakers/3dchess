@@ -39,9 +39,9 @@ def main(n_samples : int = 1, seed : int = 1000):
     columns = [param for param,_ in params]
     if 'Constellation' in columns:
         i_constellation = columns.index('Constellation')
-        columns.pop(i_constellation)
-        columns.insert(i_constellation, 'Number Planes')
-        columns.insert(i_constellation+1, 'Number of Satellites per Plane')
+        # columns.pop(i_constellation)
+        columns.insert(i_constellation+1, 'Number Planes')
+        columns.insert(i_constellation+2, 'Number of Satellites per Plane')
     columns.insert(0,'Name')
     data = []
     j = 0
@@ -51,7 +51,9 @@ def main(n_samples : int = 1, seed : int = 1000):
         for i in range(len(sample)):
             _,vals = params[i]
             value = vals[sample[i]]
+
             if i == i_constellation:
+                row.append(sample[i])
                 row.extend(list(value))
             else:
                 row.append(value)
@@ -73,7 +75,7 @@ def main(n_samples : int = 1, seed : int = 1000):
 
 def is_feasible(row : list) -> bool:
     # check if number of events can be acheived with number of ground points and event duration
-    return row[6] <= row[9] * (24 / row[7]) * (2/3)
+    return row[7] <= row[10] * (24 / row[8]) * (2/3)
 
 if __name__ == "__main__":
     main(1)

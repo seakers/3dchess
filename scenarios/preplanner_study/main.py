@@ -61,7 +61,7 @@ def main(
     print(F'NUMBER OF RUNS TO PERFORM: {n_runs}')
 
     # run simulation for each set of parameters
-    for i_experiment,row in tqdm(experiments_to_eval, desc='Evaluating experiments'):           
+    for i_experiment,row in tqdm(experiments_to_eval, desc='Evaluating experiments'):          
 
         # extract constellation parameters
         n_planes = row['Number Planes']
@@ -100,7 +100,7 @@ def main(
         # create scenario name
         experiment_name = row['Name']
         results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
-        if os.path.isdir(results_path) and not overwrite: continue
+        if os.path.isfile(results_path) and not overwrite: continue
         
         # set scenario name
         scenario_specs['scenario']['name'] = experiment_name
@@ -199,6 +199,10 @@ def main(
         # print results
         mission.print_results()
 
+        # check if summary file was properly generated at the end of the simulation
+        if not os.path.isfile(results_path):
+            raise Exception(f'`{row["Name"]}` not executed properly.')
+
         # stop if debugging mode is on
         if debug and i_experiment > 3: return
 
@@ -280,7 +284,7 @@ if __name__ == "__main__":
          upper_bound, 
          level, 
          overwrite, 
-         debug
+        #  debug
          )
 
     # print DONE

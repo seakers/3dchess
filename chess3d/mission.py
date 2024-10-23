@@ -522,6 +522,9 @@ class Mission:
                                     events : pd.DataFrame,
                                     measurement_reqs : pd.DataFrame
                                     ) -> tuple:
+        # TODO count accessible ground points
+
+        
         # classify performed observations
         grouped_observations = {}
         for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values:
