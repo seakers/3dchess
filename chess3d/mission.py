@@ -231,9 +231,20 @@ class Mission:
 
         # collect results
         orbitdata : dict = OrbitData.from_directory(self.orbitdata_dir) if self.orbitdata_dir is not None else None
-        observations_performed = pd.read_csv((os.path.join(self.environment.results_path, 'measurements.csv')))
+
+        try:
+            observations_performed = pd.read_csv((os.path.join(self.environment.results_path, 'measurements.csv')))
+        except pd.errors.EmptyDataError:
+            columns = ['observer','t_img','lat','lon','range','look','incidence','zenith','instrument_name']
+            observations_performed = pd.DataFrame(data=[],columns=columns)
+
         events = self.environment.events
-        measurement_reqs = pd.read_csv((os.path.join(self.environment.results_path, 'requests.csv')))
+
+        try:
+            measurement_reqs = pd.read_csv((os.path.join(self.environment.results_path, 'requests.csv')))
+        except pd.errors.EmptyDataError:
+            columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
+            measurement_reqs = pd.DataFrame(data=[],columns=columns)
 
         # summarize results
         results_summary : pd.DataFrame = self.summarize_results(orbitdata, observations_performed, events, measurement_reqs, precission)
