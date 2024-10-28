@@ -284,18 +284,32 @@ class LookupTableScienceModule(ScienceModule):
                             ) -> tuple:
         
         # query known events
-        observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
-                            for _,lat_event,lon_event,t_start,duration,severity,measurements in self.events.values
-                            # same location as the observation
-                            if abs(lat - lat_event) <= 1e-3
-                            and abs(lon - lon_event) <= 1e-3
-                            # availability during the time of observation
-                            and t_start <= t_img <= t_start+duration
-                            # event requires observations of the same type as the one performed
-                            and instrument.name in measurements
-                            # event has not been detected before
-                            and (lat_event,lon_event,t_start,duration,severity,measurements) not in self.events_detected 
-                            ]
+        if len(self.events.columns) <= 6:
+            observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
+                                for lat_event,lon_event,t_start,duration,severity,measurements in self.events.values
+                                # same location as the observation
+                                if abs(lat - lat_event) <= 1e-3
+                                and abs(lon - lon_event) <= 1e-3
+                                # availability during the time of observation
+                                and t_start <= t_img <= t_start+duration
+                                # event requires observations of the same type as the one performed
+                                and instrument.name in measurements
+                                # event has not been detected before
+                                and (lat_event,lon_event,t_start,duration,severity,measurements) not in self.events_detected 
+                                ]
+        else:
+            observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
+                                for _,lat_event,lon_event,t_start,duration,severity,measurements in self.events.values
+                                # same location as the observation
+                                if abs(lat - lat_event) <= 1e-3
+                                and abs(lon - lon_event) <= 1e-3
+                                # availability during the time of observation
+                                and t_start <= t_img <= t_start+duration
+                                # event requires observations of the same type as the one performed
+                                and instrument.name in measurements
+                                # event has not been detected before
+                                and (lat_event,lon_event,t_start,duration,severity,measurements) not in self.events_detected 
+                                ]
         
         # sort by severity  
         observed_events.sort(key= lambda a: a[4])

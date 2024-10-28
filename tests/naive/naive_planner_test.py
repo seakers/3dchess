@@ -149,6 +149,9 @@ class TestNaivePlanner(unittest.TestCase):
         # execute mission
         self.mission.execute()
 
+        # print results
+        self.mission.print_results()
+
         print('DONE')
 
     def test_outputs(self) -> None:

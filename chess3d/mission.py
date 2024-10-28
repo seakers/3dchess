@@ -261,7 +261,7 @@ class Mission:
                           n_decimals : int = 5) -> pd.DataFrame:
         # count observations performed
         # n_events, n_unique_event_obs, n_total_event_obs,
-        n_gps, n_events, n_events_detected, n_events_observed, \
+        n_gps, n_gps_accessible, n_events, n_events_detected, n_events_observed, \
             n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
                 n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
                     n_total_event_co_obs, n_observations \
@@ -291,6 +291,7 @@ class Mission:
 
                     # Coverage Metrics #TODO add more
                     ['Ground Points', n_gps],
+                    ['Ground Points Accessible', n_gps_accessible],
                     ['Ground Points Observed', n_gps_observed],
                     ['Average Event Reobservation Time [s]', t_reobservation['mean']],
                     ['Standard Deviation of Event Reobservation Time [s]', t_reobservation['std']],
@@ -343,11 +344,21 @@ class Mission:
                                                                      measurement_reqs)
         
         # count number of groundpoints
+        n_gps = None
+        gps_accessible_compiled = set()
         for _,agent_orbitdata in orbitdata.items():
             agent_orbitdata : OrbitData
-            n_gps = sum([len(gps.values) for gps in agent_orbitdata.grid_data])
-            break
 
+            # count number of ground points
+            n_gps = sum([len(gps.values) for gps in agent_orbitdata.grid_data]) if n_gps is None else n_gps
+
+            # get set of accessible ground points
+            gps_accessible : set = {gp_index for _,gp_index,*__ in agent_orbitdata.gp_access_data.values}
+
+            # update set of accessible ground points
+            gps_accessible_compiled.update(gps_accessible)
+
+        n_gps_accessible = len(gps_accessible_compiled)
         n_events = len(events.values)
         n_events_detected = len(events_detected)
         n_events_observed = len(events_observed)
@@ -360,10 +371,10 @@ class Mission:
         n_total_event_co_obs = sum([len(observations) for _,observations in events_co_obs.items()])
         n_observations = len(observations_performed)
 
-        return n_gps, n_events, n_events_detected, n_events_observed, \
-                n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
-                    n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                        n_total_event_co_obs, n_observations
+        return n_gps, n_gps_accessible, n_events, n_events_detected, \
+                n_events_observed, n_total_event_obs, n_events_reobserved,\
+                    n_total_event_re_obs, n_events_co_obs, n_events_partially_co_obs, \
+                        n_events_fully_co_obs, n_total_event_co_obs, n_observations
                     
     def classify_observations(self, 
                               observations_performed : pd.DataFrame,
@@ -379,7 +390,10 @@ class Mission:
         for event in tqdm(events.values, desc='Calssifying event and observations', leave=False):
             # unpackage event
             event = tuple(event)
-            _, lat,lon,t_start,duration,severity,observations_req = event
+            if len(event) <= 6:
+                lat,lon,t_start,duration,severity,observations_req = event
+            else:
+                _, lat,lon,t_start,duration,severity,observations_req = event
             
             # classify events by their target groundpoint
             if (lat,lon) not in events_per_gp: events_per_gp[(lat,lon)] = []
@@ -452,7 +466,7 @@ class Mission:
                                                                      measurement_reqs)
     
         # count observations by type
-        n_gps, n_events, n_events_detected, n_events_observed, \
+        n_gps, _, n_events, n_events_detected, n_events_observed, \
             _, n_events_reobserved, _, \
                 n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
                     _, n_observations \
