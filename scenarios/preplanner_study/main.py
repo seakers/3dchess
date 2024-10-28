@@ -284,7 +284,7 @@ if __name__ == "__main__":
          upper_bound, 
          level, 
          overwrite, 
-        #  debug
+         debug
          )
 
     # print DONE
