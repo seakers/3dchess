@@ -223,7 +223,9 @@ if __name__ == "__main__":
     print_welcome('Event generator for Parametric Study')
 
     # run simulation
-    main(scenario_name, overwrite)
+    main(scenario_name, 
+        #  overwrite
+         )
 
     # print DONE
     print(f'Event generation for sims DONE')

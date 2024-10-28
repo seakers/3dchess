@@ -19,12 +19,12 @@ def main(n_samples : int = 1, seed : int = 1000):
         ('Field of Regard (deg)',       [30,60]),
         ('Field of View (deg)',         [1,5,10]),
         ('Maximum Slew Rate (deg/s)',   [1,10]),
-        ('Number of Events per Day',    [10, 100, 1000, 10000]),
+        ('Number of Events per Day',    [10**(i) for i in range(1,4)]),
         ('Event Duration (hrs)',        [0.25, 1, 3, 6]),
         ('Grid Type',                   ['hydrolakes', 'uniform', 'fibonacci']),
-        ('Number of Grid-points',       [100, 500, 1000, 5000]),
+        ('Number of Grid-points',       [10**(i) for i in range(2,6)]),
         ('Preplanner',                  ['nadir', 'fifo']),
-        ('Points Considered',           [1/10, 1/4, 1/3, 1/2, 1.0])
+        ('Points Considered',           [i/10 for i in range(1,11)])
     ]
 
     # calculate lowest-common-multiple for estimating number of samples
@@ -81,8 +81,21 @@ def main(n_samples : int = 1, seed : int = 1000):
     df.to_csv(f'./experiments/experiments_seed-{seed}.csv',index=False)
 
 def is_feasible(row : list) -> bool:
+
+    events_frequeny = row[7]    # [per day]
+    event_duration = row[8]     # [hrs]
+    gp_distribution = row[9]
+    n_gps = row[10]
+    
     # check if number of events can be acheived with number of ground points and event duration
-    return row[7] <= row[10] * (24 / row[8]) * (2/3)
+    if not events_frequeny <= n_gps * (24 / event_duration) * (2/3): 
+        return False
+
+    # check if there are enough ground points in hydrolakes database
+    if gp_distribution == 'hydrolakes' and n_gps > 5000: 
+        return False 
+
+    return True
 
 if __name__ == "__main__":
     # print welcome

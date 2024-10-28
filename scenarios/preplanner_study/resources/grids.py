@@ -215,25 +215,27 @@ def plot_grid(grid_path : str, grid_type : str, n_points : int, overwrite : bool
 
 
 if __name__ == "__main__":
-    grid_types = [
-        'uniform',
-        'hydrolakes',
-        'fibonacci'
-    ]
-    
-    points = [
-        100,
-        500,
-        1000,
-        5000
-    ]
+    # set seed
+    seed = 1000
+
+    # load experiments
+    experiments_path = os.path.join('experiments', f'experiments_seed-{seed}.csv')
+    experiments : pd.DataFrame = pd.read_csv(experiments_path)
+
+    grid_types : list = experiments['Grid Type'].unique(); grid_types.sort()
+    points : list = experiments['Number of Grid-points'].unique(); points.sort()
 
     # plot original hydrolakes database
     plot_grid('./grids/hydrolakes_dataset.csv', 'hydrolakes', 5000, overwrite=True)
 
     # generate grids and plots for all types and number of groundpoints
-    with tqdm(range(len(grid_types) * len(points)), desc='Generating plots') as pbar:
+    with tqdm(range(len(grid_types) * len(points)), desc='Generating coverage grids') as pbar:
         for grid_type in grid_types:
             for n_points in points:
+                
+                if grid_type == 'hydrolakes' and n_points > 5000:
+                    pbar.update(1)
+                    continue
+
                 main(n_points, grid_type, overwrite=False, plot=True)
                 pbar.update(1)
