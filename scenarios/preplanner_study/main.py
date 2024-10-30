@@ -46,7 +46,7 @@ def main(
 
     # check if bounds are valid
     assert 0 <= lower_bound <= upper_bound
-    if lower_bound <= len(experiments_df) - 1:
+    if len(experiments_df) <= lower_bound:
         print('WARNING lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
