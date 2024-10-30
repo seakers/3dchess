@@ -110,7 +110,7 @@ class TestNaivePlanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/naive/resources/all_events_formatted.csv"
+                        "eventsPath" : "./tests/naive/resources/lake_events.csv"
                     }
                 }
             ],
@@ -125,7 +125,7 @@ class TestNaivePlanner(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/naive/resources/all_events_formatted.csv"
+                    "eventsPath" : "./tests/naive/resources/lake_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"

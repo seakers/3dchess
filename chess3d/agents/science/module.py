@@ -269,6 +269,9 @@ class LookupTableScienceModule(ScienceModule):
         # initialize empty list of detected events
         self.events_detected = set()
 
+        # initialize update timer
+        self.t_update = None
+
     def load_events(self, events_path : str = None) -> pd.DataFrame:
         
         if events_path is None: raise ValueError('`events_path` must be of type `str`. Is `None`.')
@@ -283,6 +286,11 @@ class LookupTableScienceModule(ScienceModule):
                             **_
                             ) -> tuple:
         
+        # update list of events to ignore expired events
+        if self.t_update is None or abs(self.t_update - t_img) > 100.0:
+            self.events = self.events[self.events['start time [s]'] + self.events['duration [s]'] >= t_img]
+            self.t_update = t_img
+
         # query known events
         if len(self.events.columns) <= 6:
             observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
@@ -334,7 +342,7 @@ class LookupTableScienceModule(ScienceModule):
             t_end = t_start+duration
 
             # estimate decorrelation time:
-            t_corr = t_start+duration-t_img # TODO add scientific reason for this
+            t_corr = t_end-t_img # TODO add scientific reason for this
 
             return lat_event,lon_event,t_img,t_end,t_corr,severity,observations_required
 
