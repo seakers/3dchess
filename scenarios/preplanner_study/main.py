@@ -46,8 +46,8 @@ def main(
 
     # check if bounds are valid
     assert 0 <= lower_bound <= upper_bound
-    assert lower_bound <= len(experiments_df) - 1
-    assert upper_bound <= len(experiments_df) - 1 or np.isinf(upper_bound)
+    if lower_bound <= len(experiments_df) - 1:
+        print('WARNING lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
     sim_duration = 1.0 / 24.0 if debug else 1.0 # in days
