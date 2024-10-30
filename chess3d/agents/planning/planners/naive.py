@@ -47,7 +47,7 @@ class NaivePlanner(AbstractPreplanner):
         access_times : list = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
 
         # sort by observation time
-        access_times.sort(key = lambda a: a[3],reverse=True)
+        access_times.sort(key = lambda a: a[3],reverse=False)
 
         # compile list of instruments available in payload
         payload : dict = {instrument.name: instrument for instrument in specs.instrument}
@@ -68,55 +68,49 @@ class NaivePlanner(AbstractPreplanner):
         # generate plan
         observations : list[ObservationAction] = []
 
-        with tqdm(total=len(access_times), 
-                      desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 
-                      leave=False) as pbar:
+        for access_time in tqdm(access_times,
+                                desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 
+                                leave=False):
+            # get next available access interval
+            grid_index, gp_index, instrument, _, t, th = access_time
+            lat,lon = ground_points[grid_index][gp_index]
+            target = [lat,lon,0.0]
 
-            while access_times:
-                # get next available access interval
-                grid_index, gp_index, instrument, _, t, th = access_times.pop()
-                lat,lon = ground_points[grid_index][gp_index]
-                target = [lat,lon,0.0]
+            # check if agent has the payload to peform observation
+            if instrument not in payload:
+                continue
 
-                # check if agent has the payload to peform observation
-                if instrument not in payload:
-                    pbar.update(1)
-                    continue
+            # compare to previous measurement 
+            if not observations:
+                # no prior observation exists, compare with current state
+                t_prev = state.t
+                th_prev = state.attitude[0]
+            else:
+                # compare with previous scheduled observation
+                action_prev : ObservationAction = observations[-1]
+                t_prev = action_prev.t_end
+                th_prev = action_prev.look_angle
+        
+            # find if feasible observation times exist
+            feasible_obs = [(t[i], th[i]) 
+                            for i in range(len(t))
+                            if self.is_observation_feasible(state, t[i], th[i], t_prev, th_prev, 
+                                                            max_slew_rate, max_torque, 
+                                                            cross_track_fovs[instrument])]
+            feasible_obs.sort(key=lambda a : a[0])
 
-                # compare to previous measurement 
-                if not observations:
-                    # no prior observation exists, compare with current state
-                    t_prev = state.t
-                    th_prev = state.attitude[0]
-                else:
-                    # compare with previous scheduled observation
+            if feasible_obs:
+                # is feasible; create observation action with the earliest observation
+                t_img, th_img = feasible_obs[0]
+                action = ObservationAction(instrument, target, th_img, t_img)
+
+                # check if another observation was already scheduled at this time
+                if observations:
                     action_prev : ObservationAction = observations[-1]
-                    t_prev = action_prev.t_end
-                    th_prev = action_prev.look_angle
-            
-                # find if feasible observation times exist
-                feasible_obs = [(t[i], th[i]) 
-                                for i in range(len(t))
-                                if self.is_observation_feasible(state, t[i], th[i], t_prev, th_prev, 
-                                                                max_slew_rate, max_torque, 
-                                                                cross_track_fovs[instrument])]
-                feasible_obs.sort(key=lambda a : a[0])
+                    if abs(action_prev.t_start - action.t_start) <= 1e-3:
+                        continue
 
-                if feasible_obs:
-                    # is feasible; create observation action
-                    t_img, th_img = feasible_obs[0]
-                    action = ObservationAction(instrument, target, th_img, t_img)
-
-                    # check if another observation was already scheduled at this time
-                    if observations:
-                        action_prev : ObservationAction = observations[-1]
-                        if abs(action_prev.t_start - action.t_start) <= 1e-3:
-                            pbar.update(1)
-                            continue
-
-                    observations.append(action)
-
-                pbar.update(1)
+                observations.append(action)
 
         assert self.no_redundant_observations(state, observations, orbitdata)
 
