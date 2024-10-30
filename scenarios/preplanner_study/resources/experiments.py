@@ -22,7 +22,7 @@ def main(n_samples : int = 1, seed : int = 1000):
         ('Number of Events per Day',    [10**(i) for i in range(1,4)]),
         ('Event Duration (hrs)',        [0.25, 1, 3, 6]),
         ('Grid Type',                   ['hydrolakes', 'uniform', 'fibonacci']),
-        ('Number of Grid-points',       [10**(i) for i in range(2,6)]),
+        ('Number of Grid-points',       [100, 1000, 5000, 10000]),
         ('Preplanner',                  ['nadir', 'fifo']),
         ('Points Considered',           [i/10 for i in range(1,11)])
     ]
