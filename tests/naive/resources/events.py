@@ -25,7 +25,7 @@ def main(experiments_name : str,
     # extract event parameters
     experiment_name = "lake_events"
     grid_name = f"lake_event_points"
-    event_duration = 1000
+    event_duration = 3600
     n_events = 790
     min_severity = 0.0
     max_severity = 100

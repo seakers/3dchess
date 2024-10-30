@@ -322,9 +322,9 @@ class LookupTableScienceModule(ScienceModule):
         # sort by severity  
         observed_events.sort(key= lambda a: a[4])
 
-        while observed_events:
+        if observed_events:
             # get next highest severity event
-            event = observed_events.pop()
+            event = observed_events[-1]
             
             # add event to list of detected events
             self.events_detected.update(event)
