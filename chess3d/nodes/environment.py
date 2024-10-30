@@ -243,9 +243,9 @@ class SimulationEnvironment(EnvironmentNode):
             # add to list of received measurement requests 
             self.measurement_reqs.append(measurement_req)
 
-            # add to list of received broadcasts
-            content['t_msg'] = self.get_current_time()
-            self.broadcasts_history.append(content)
+        # add to list of received broadcasts
+        content['t_msg'] = self.get_current_time()
+        self.broadcasts_history.append(content)
 
         return True
 
