@@ -252,8 +252,14 @@ class SimulationManager(AbstractManager):
     
     async def teardown(self) -> None:
         # log performance stats
+        results_dir = os.path.join(self.results_path, self.get_element_name().lower())
+        if not os.path.isdir(results_dir): os.mkdir(results_dir)
+        
+        runtime_dir = os.path.join(results_dir, "runtime")
+        if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
+    
         n_decimals = 3
-        headers = ['routine','t_avg','t_std','t_med','n', 't_total']
+        headers = ['routine','t_avg','t_std','t_med', 't_max', 't_min', 'n', 't_total']
         data = []
 
         for routine in self.stats:
@@ -261,6 +267,8 @@ class SimulationManager(AbstractManager):
             t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
             t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
             t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+            t_max = np.round(max(self.stats[routine]),n_decimals) if n > 0 else -1
+            t_min = np.round(min(self.stats[routine]),n_decimals) if n > 0 else -1
             t_total = n * t_avg
 
             line_data = [ 
@@ -268,14 +276,22 @@ class SimulationManager(AbstractManager):
                             t_avg,
                             t_std,
                             t_median,
+                            t_max,
+                            t_min,
                             n,
                             t_total
                             ]
             data.append(line_data)
 
+
+            # save time-series
+            time_series = [[v] for v in self.stats[routine]]
+            routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+            routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
+            routine_df.to_csv(routine_dir,index=False)
+
         stats_df = pd.DataFrame(data, columns=headers)
         self.log(f'\nMANAGER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-        results_dir = f"{self.results_path}/{self.get_element_name().lower()}/" 
 
-        if not os.path.isdir(results_dir): os.mkdir(results_dir)
+        
         stats_df.to_csv(f"{results_dir}/runtime_stats.csv", index=False)

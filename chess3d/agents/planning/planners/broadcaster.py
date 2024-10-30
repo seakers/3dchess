@@ -49,6 +49,7 @@ class Broadcaster(AbstractReplanner):
 
         return len(self.pending_relays) > 0 or len(self.pending_reqs_to_broadcast)
     
+    @runtime_tracker
     def generate_plan(self, 
                       state : SimulationAgentState,
                       _ : object,

@@ -99,7 +99,7 @@ class SimulationAgent(Agent):
             SENSE       
     --------------------
     """
-
+    
     @runtime_tracker
     async def sense(self, statuses: list) -> list:
         # initiate senses array
@@ -319,7 +319,7 @@ class SimulationAgent(Agent):
 
         if dt > 0:
             # perfrom time wait if needed
-            await self.perform_wait_for_messages(WaitForMessages(t, t+dt))
+            await self.perform_wait_for_messages(WaitForMessages(t, t+dt), False)
 
             # update the agent's state
             status, _ = self.state.perform_action(action, self.get_current_time())
@@ -347,13 +347,13 @@ class SimulationAgent(Agent):
         return AgentAction.COMPLETED
     
     @runtime_tracker
-    async def perform_wait_for_messages(self, action : WaitForMessages) -> str:
+    async def perform_wait_for_messages(self, action : WaitForMessages, save : bool = True) -> str:
         """ Waits for a message from another agent to be received. """
         
         # get current start time
         t_curr = self.get_current_time()
         self.state.update_state(t_curr, status=SimulationAgentState.LISTENING)
-        self.state_history.append(self.state.to_dict())
+        if save: self.state_history.append(self.state.to_dict())
 
         # check if messages have already been received
         if not self.external_inbox.empty(): # messages in inbox; end wait
@@ -367,7 +367,7 @@ class SimulationAgent(Agent):
                 and self.external_inbox.empty()
                 ):
                 # give the agent time to finish processing messages before submitting a tic-request
-                t_wait = 1e-2 if t_curr < 1e-3 or action.t_end == np.Inf else 1e-3
+                t_wait = 1e-2 if t_curr < 1e-3 else 1e-5
                 await asyncio.sleep(t_wait)
 
             # initiate broadcast wait and timeout tasks
@@ -465,59 +465,72 @@ class SimulationAgent(Agent):
         x = 1
 
     async def teardown(self) -> None:
-        # TODO log agent capabilities
+        try:
+            # TODO log agent capabilities
 
-        # log states
-        n_decimals = 3
-        headers = ['t', 'x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'attitude', 'status']
-        data = []
+            # log states
+            n_decimals = 3
+            headers = ['t', 'x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'attitude', 'status']
+            data = []
 
-        for state_dict in self.state_history:
-            line_data = [
-                            np.round(state_dict['t'],3),
+            for state_dict in self.state_history:
+                line_data = [
+                                np.round(state_dict['t'],3),
 
-                            np.round(state_dict['pos'][0],n_decimals),
-                            np.round(state_dict['pos'][1],n_decimals),
-                            np.round(state_dict['pos'][2],n_decimals),
+                                np.round(state_dict['pos'][0],n_decimals),
+                                np.round(state_dict['pos'][1],n_decimals),
+                                np.round(state_dict['pos'][2],n_decimals),
 
-                            np.round(state_dict['vel'][0],n_decimals),
-                            np.round(state_dict['vel'][1],n_decimals),
-                            np.round(state_dict['vel'][2],n_decimals),
-                            
-                            np.round(state_dict['attitude'][0],n_decimals),
+                                np.round(state_dict['vel'][0],n_decimals),
+                                np.round(state_dict['vel'][1],n_decimals),
+                                np.round(state_dict['vel'][2],n_decimals),
+                                
+                                np.round(state_dict['attitude'][0],n_decimals),
 
-                            state_dict['status']
-                        ]
-            data.append(line_data)
-        
-        state_df = DataFrame(data,columns=headers)
-        self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
-        state_df.to_csv(f"{self.results_path}/states.csv", index=False)
-
-        # log performance stats
-        headers = ['routine','t_avg','t_std','t_med','n', 't_total']
-        data = []
-
-        for routine in self.stats:
-            t_avg = np.mean(self.stats[routine])
-            t_std = np.std(self.stats[routine])
-            t_median = np.median(self.stats[routine])
-            n = len(self.stats[routine])
-            t_total = n * t_avg
-
-            line_data = [ 
-                            routine,
-                            np.round(t_avg,n_decimals),
-                            np.round(t_std,n_decimals),
-                            np.round(t_median,n_decimals),
-                            n,
-                            t_total
+                                state_dict['status']
                             ]
-            data.append(line_data)
+                data.append(line_data)
+            
+            state_df = DataFrame(data,columns=headers)
+            self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
+            state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
-        stats_df = DataFrame(data, columns=headers)
-        self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-        stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
+            # log performance stats
+            runtime_dir = os.path.join(self.results_path, "runtime")
+            if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
+
+            headers = ['routine','t_avg','t_std','t_med','n', 't_total']
+            data = []
+
+            for routine in self.stats:
+                # compile stats
+                t_avg = np.mean(self.stats[routine])
+                t_std = np.std(self.stats[routine])
+                t_median = np.median(self.stats[routine])
+                n = len(self.stats[routine])
+                t_total = n * t_avg
+
+                line_data = [ 
+                                routine,
+                                np.round(t_avg,n_decimals),
+                                np.round(t_std,n_decimals),
+                                np.round(t_median,n_decimals),
+                                n,
+                                t_total
+                                ]
+                data.append(line_data)
+
+                # save time-series
+                time_series = [[v] for v in self.stats[routine]]
+                routine_df = DataFrame(data=time_series, columns=['dt'])
+                routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
+                routine_df.to_csv(routine_dir,index=False)
+
+            stats_df = DataFrame(data, columns=headers)
+            self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+            stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
+        except Exception as e:
+            x = 1
 
     async def sim_wait(self, delay: float) -> None:
         try:  

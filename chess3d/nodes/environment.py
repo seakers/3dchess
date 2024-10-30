@@ -106,6 +106,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.stats = {}
         self.t_0 = None
         self.t_f = None
+        self.t_update = None
 
         self.broadcasts_history = []
         
@@ -203,10 +204,16 @@ class SimulationEnvironment(EnvironmentNode):
 
         t_0 = time.perf_counter()
         
+
         if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
+            if abs(float(content['agent_state']['t']) - 6291.53) < 1e-3:
+                x=1
+            
             resp = self.handle_observation(content)
 
         elif content['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
+            if abs(float(content['state']['t']) - 6291.53) < 1e-3:
+                 x=1
             resp = self.handle_agent_state(content)
 
         else:
@@ -231,15 +238,14 @@ class SimulationEnvironment(EnvironmentNode):
 
         if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
             # some agent broadcasted a measurement request
-            req_msg = MeasurementRequestMessage(**content)
-            measurement_req : MeasurementRequest = MeasurementRequest.from_dict(req_msg.req)
+            measurement_req : MeasurementRequest = MeasurementRequest.from_dict(content['req'])
 
             # add to list of received measurement requests 
             self.measurement_reqs.append(measurement_req)
 
-        # add to list of received broadcasts
-        content['t_msg'] = self.get_current_time()
-        self.broadcasts_history.append(content)
+            # add to list of received broadcasts
+            content['t_msg'] = self.get_current_time()
+            self.broadcasts_history.append(content)
 
         return True
 
@@ -260,10 +266,21 @@ class SimulationEnvironment(EnvironmentNode):
 
             # unpack message
             msg = TocMessage(**content)
+            
+            # update internal databases
+            for _,agent_orbitdata in self.orbitdata.items():
+                agent_orbitdata : OrbitData
+                time_step=agent_orbitdata.time_step
+                break
+
+            if self.t_update is None or abs(self.t_update - msg.t) / time_step > 10:
+            # if self.get_current_time() < msg.t:
+                self.update_databases(msg.t)
 
             # update internal clock
             self.log(f"received message of type {content['msg_type']}. updating internal clock to {msg.t}[s]...")
             await self.update_current_time(msg.t)
+
 
             # wait for all agent's to send their updated states
             self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
@@ -273,6 +290,20 @@ class SimulationEnvironment(EnvironmentNode):
             self.log(f"received message of type {content['msg_type']}. ignoring message...")
 
         return True
+    
+    @runtime_tracker
+    def update_databases(self, t : float) -> None:
+        # update orbitdata
+        for _,agent_orbitdata in self.orbitdata.items(): 
+            agent_orbitdata : OrbitData
+            agent_orbitdata.update_databases(t)
+
+        # update events
+        self.events = self.events[self.events['start time [s]'] + self.events['duration [s]'] >= t]
+        
+        # update time tracker
+        self.t_update = t
+        x = 1
 
     @runtime_tracker
     def handle_observation(self, content : dict) -> SimulationMessage:
@@ -303,13 +334,13 @@ class SimulationEnvironment(EnvironmentNode):
         # unpack message
         msg = AgentStateMessage(**content)
         self.log(f'state message received from {msg.src}. updating state tracker...')
-       
+
         # update agent state
         updated_state = self.update_agent_state(msg)
-        
+
         # create state response message
         updated_state_msg = AgentStateMessage(self.get_element_name(), msg.src, updated_state)
-        
+
         # initiate response message list
         resp_msgs = [updated_state_msg.to_dict()]
 
@@ -507,12 +538,12 @@ class SimulationEnvironment(EnvironmentNode):
                                     and abs(satellite_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
                                     ]
                 
-                raw_coverage_data_no_fov = [
-                                    list(data)
-                                    for data in agent_orbitdata.gp_access_data.values
-                                    if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
-                                    and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
-                                    ]
+                # raw_coverage_data_no_fov = [
+                #                     list(data)
+                #                     for data in agent_orbitdata.gp_access_data.values
+                #                     if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
+                #                     and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
+                #                     ]
                 
                 # if not raw_coverage_data and raw_coverage_data_no_fov:
                 #     for data in raw_coverage_data_no_fov:
@@ -585,14 +616,20 @@ class SimulationEnvironment(EnvironmentNode):
             measurement_reqs.to_csv(f"{self.results_path}/requests.csv", index=False)
 
             # log performance stats
-            columns = ['routine','t_avg','t_std','t_med','n','t_total']
+            runtime_dir = os.path.join(self.results_path, "runtime")
+            if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
+
+            columns = ['routine','t_avg','t_std','t_med','t_max','t_min','n','t_total']
             data = []
 
             for routine in self.stats:
+                # compile stats
                 n = len(self.stats[routine])
                 t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
                 t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
                 t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_max = np.round(max(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_min = np.round(min(self.stats[routine]),n_decimals) if n > 0 else -1
                 t_total = n * t_avg
 
                 line_data = [ 
@@ -600,10 +637,18 @@ class SimulationEnvironment(EnvironmentNode):
                                 t_avg,
                                 t_std,
                                 t_median,
+                                t_max,
+                                t_min,
                                 n,
                                 t_total
                                 ]
                 data.append(line_data)
+
+                # save time-series
+                time_series = [[v] for v in self.stats[routine]]
+                routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
+                routine_df.to_csv(routine_dir,index=False)
 
             stats_df = pd.DataFrame(data, columns=columns)
             self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)

@@ -279,6 +279,8 @@ class PlanningModule(InternalModule):
             level = logging.DEBUG
 
             while True:
+                t_0 = time.perf_counter()
+
                 # wait for agent to update state
                 state : SimulationAgentState = await self.states_inbox.get()
 
@@ -412,6 +414,14 @@ class PlanningModule(InternalModule):
                 await self._send_manager_msg(plan_msg, zmq.PUB)
 
                 self.log(f'actions sent!')
+
+                # log runtime
+                dt = time.perf_counter() - t_0
+                if 'planner' not in self.stats: self.stats['planner'] = []
+                self.stats['planner'].append(dt)
+
+                if dt >= 0.1 and self.get_current_time() > 0:
+                    x = 1
 
         except asyncio.CancelledError:
             return
@@ -585,22 +595,24 @@ class PlanningModule(InternalModule):
                
     async def teardown(self) -> None:
         # log plan history
-        headers = ['plan_index', 't_plan', 'instrument', 't_img']
+        headers = ['plan_index', 't_plan', 'desc', 't_start', 't_end']
         data = []
         
         for i in range(len(self.plan_history)):
             t_plan, plan = self.plan_history[i]
-            t_plan : float; plan : list
+            t_plan : float; plan : list[AgentAction]
 
             for action in plan:
-                if not isinstance(action, ObservationAction):
-                    continue
-
+                desc = f'{action.action_type}'
+                if isinstance(action, ObservationAction):
+                    desc += f'_{action.instrument_name}'
+                    
                 line_data = [   i,
                                 np.round(t_plan,3),
-                                action.instrument_name,
-                                np.round(action.t_start,3 )
-                ]
+                                desc,
+                                np.round(action.t_start,3 ),
+                                np.round(action.t_end,3 )
+                            ]
                 data.append(line_data)
 
         df = pd.DataFrame(data, columns=headers)
@@ -616,7 +628,7 @@ class PlanningModule(InternalModule):
 
         # log performance stats
         n_decimals = 5
-        headers = ['routine','t_avg','t_std','t_med','n', 't_total']
+        headers = ['routine','t_avg','t_std','t_med', 't_max', 't_min', 'n', 't_total']
         data = []
 
         for routine in self.stats:
@@ -624,6 +636,8 @@ class PlanningModule(InternalModule):
             t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
             t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
             t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+            t_max = np.round(max(self.stats[routine]),n_decimals) if n > 0 else -1
+            t_min = np.round(min(self.stats[routine]),n_decimals) if n > 0 else -1
             t_total = t_avg * n
 
             line_data = [ 
@@ -631,6 +645,8 @@ class PlanningModule(InternalModule):
                             t_avg,
                             t_std,
                             t_median,
+                            t_max,
+                            t_min,
                             n,
                             t_total
                             ]
@@ -642,6 +658,8 @@ class PlanningModule(InternalModule):
                 t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
                 t_std = np.round(np.std(self.preplanner.stats[routine]),n_decimals) if n > 0 else 0.0
                 t_median = np.round(np.median(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                t_max = np.round(max(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                t_min = np.round(min(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
                 t_total = t_avg * n
 
                 line_data = [ 
@@ -649,6 +667,8 @@ class PlanningModule(InternalModule):
                                 t_avg,
                                 t_std,
                                 t_median,
+                                t_max,
+                                t_min,
                                 n,
                                 t_total
                                 ]
@@ -660,6 +680,8 @@ class PlanningModule(InternalModule):
                 t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
                 t_std = np.round(np.std(self.replanner.stats[routine]),n_decimals) if n > 0 else 0.0
                 t_median = np.round(np.median(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                t_max = np.round(max(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                t_min = np.round(min(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
                 t_total = t_avg * n
 
                 line_data = [ 
@@ -667,6 +689,8 @@ class PlanningModule(InternalModule):
                                 t_avg,
                                 t_std,
                                 t_median,
+                                t_max,
+                                t_min,
                                 n,
                                 t_total
                                 ]
@@ -678,6 +702,8 @@ class PlanningModule(InternalModule):
                 t_avg = np.round(np.mean(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
                 t_std = np.round(np.std(self.reward_grid.stats[routine]),n_decimals) if n > 0 else 0.0
                 t_median = np.round(np.median(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                t_max = np.round(max(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                t_min = np.round(min(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
                 t_total = t_avg * n
 
                 line_data = [ 
@@ -685,6 +711,8 @@ class PlanningModule(InternalModule):
                                 t_avg,
                                 t_std,
                                 t_median,
+                                t_max,
+                                t_min,
                                 n,
                                 t_total
                                 ]
@@ -692,6 +720,7 @@ class PlanningModule(InternalModule):
 
         stats_df = pd.DataFrame(data, columns=headers)
         self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+        self.log(f'total: {sum(stats_df["t_total"])}', level=logging.WARNING)
         stats_df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_runtime_stats.csv", index=False)
 
         await super().teardown()

@@ -93,8 +93,8 @@ class TestNaivePlanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period": 1000,
-                            "horizon": 1000,
+                            # "period": 1000,
+                            # "horizon": 1000,
                         },
                         "replanner" : {
                             "@type" : "broadcaster"

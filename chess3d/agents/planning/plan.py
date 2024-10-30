@@ -2,6 +2,7 @@ from abc import ABC
 import copy
 import uuid
 import numpy as np
+from tqdm import tqdm
 
 from chess3d.agents.actions import *
 
@@ -77,24 +78,35 @@ class Plan(ABC):
             curr_actions = [action for action in self.actions]
             new_actions = [action for action in actions]
 
-            while curr_actions and new_actions:
-                curr_action : AgentAction = curr_actions[0]
-                new_action : AgentAction = new_actions[0]
+            with tqdm(total=len(curr_actions) + len(new_actions),
+                      desc='Planner-Adding actions to plan',
+                      leave=False) as pbar:
+                while curr_actions and new_actions:
+                    curr_action : AgentAction = curr_actions[0]
+                    new_action : AgentAction = new_actions[0]
 
-                if curr_action.t_start < new_action.t_start:
-                    prelim_plan.append(curr_actions.pop(0))
-                
-                elif curr_action.t_start > new_action.t_start:
-                    prelim_plan.append(new_actions.pop(0))
+                    if curr_action.t_start < new_action.t_start:
+                        prelim_plan.append(curr_actions.pop(0))
+                        pbar.update(1)
+                    
+                    elif curr_action.t_start > new_action.t_start:
+                        prelim_plan.append(new_actions.pop(0))
+                        pbar.update(1)
 
-                elif abs(curr_action.t_end - curr_action.t_start) <= 1e-3:
-                    prelim_plan.append(curr_actions.pop(0))
-                
-                elif abs(new_action.t_end - new_action.t_start) <= 1e-3:
-                    prelim_plan.append(new_actions.pop(0))
+                    elif abs(curr_action.t_end - curr_action.t_start) <= 1e-3:
+                        prelim_plan.append(curr_actions.pop(0))
+                        pbar.update(1)
+                    
+                    elif abs(new_action.t_end - new_action.t_start) <= 1e-3:
+                        prelim_plan.append(new_actions.pop(0))
+                        pbar.update(1)
 
-            if curr_actions: prelim_plan.extend(curr_actions)
-            if new_actions: prelim_plan.extend(new_actions)
+                if curr_actions: 
+                    prelim_plan.extend(curr_actions)
+                    pbar.update(len(curr_actions))
+                if new_actions: 
+                    prelim_plan.extend(new_actions)
+                    pbar.update(len(new_actions))
 
             # check feasibility
             try:

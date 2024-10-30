@@ -116,7 +116,7 @@ class OrbitData:
 
         # inter-satellite communication access times
         self.isl_data = { satellite_name : isl_data[satellite_name].sort_values(by=['start index']) 
-                         for satellite_name in isl_data.keys() }
+                         for satellite_name in isl_data }
         
         # ground station access times
         self.gs_access_data = gs_access_data.sort_values(by=['start index'])
@@ -138,6 +138,21 @@ class OrbitData:
                          self.grid_data
                          )
     
+    def update_databases(self, t : float) -> None:
+        # calculate time-step
+        t_index = t / self.time_step 
+
+        # exclude outdated data
+        self.eclipse_data = self.eclipse_data[self.eclipse_data['end index'] >= t_index - 1]
+        self.position_data = self.position_data[self.position_data['time index'] >= t_index - 1]
+        self.isl_data = {   satellite_name : self.isl_data[satellite_name][self.isl_data[satellite_name]['end index'] >= t_index - 1]
+                            for satellite_name in self.isl_data}
+        self.gs_access_data = self.gs_access_data[self.gs_access_data['end index'] >= t_index - 1]
+        self.gp_access_data = self.gp_access_data[self.gp_access_data['time index'] >= t_index - 1]
+
+        # return
+        return
+
     """
     GET NEXT methods
     """
@@ -241,9 +256,13 @@ class OrbitData:
                 for t_i,x,y,z,vx,vy,vz in self.position_data.values
                 if t_l < t_i <= t_u]
         
+        if not data:
+            x = 1
+
         _,x,y,z,vx,vy,vz = data[0]
         pos = [x, y, z]
         vel = [vx, vy, vz]
+        
         return (pos, vel, is_eclipse)
 
     """
