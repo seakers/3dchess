@@ -33,9 +33,10 @@ def main(scenarios : list, agent : str, routine : str):
 if __name__ == '__main__':
 
     scenarios = [
-        'naive_normal',
-        'naive_selective',
-        'naive_updated'
+        # 'naive_normal',
+        # 'naive_selective',
+        # 'naive_updated',
+        'naive'
     ]
 
     agents = [
@@ -71,7 +72,10 @@ if __name__ == '__main__':
             'handle_manager_broadcast',
             'handle_observation',
             'handle_request',
-            'query_measurement_data'
+            'query_measurement_data',
+            'listen_manager_broadcast',
+            'listen_peer_broadcast',
+            'listen_peer_message'
         ]
     }
     

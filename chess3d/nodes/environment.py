@@ -248,6 +248,26 @@ class SimulationEnvironment(EnvironmentNode):
         self.broadcasts_history.append(content)
 
         return True
+    
+    @runtime_tracker
+    async def listen_internal_broadcast(self) -> tuple:
+        return await super().listen_internal_broadcast()
+    
+    @runtime_tracker
+    async def listen_manager_broadcast(self) -> tuple:
+        return await super().listen_manager_broadcast()
+    
+    @runtime_tracker
+    async def listen_peer_broadcast(self) -> tuple:
+        return await super().listen_peer_broadcast()
+    
+    @runtime_tracker
+    async def listen_internal_message(self) -> tuple:
+        return await super().listen_internal_message()
+    
+    @runtime_tracker
+    async def listen_peer_message(self) -> tuple:
+        return await super().listen_peer_message()
 
     @runtime_tracker
     async def handle_manager_broadcast(self) -> bool:
@@ -265,7 +285,7 @@ class SimulationEnvironment(EnvironmentNode):
             # toc message received
 
             # unpack message
-            msg = TocMessage(**content)
+            t = content['t']
             
             # update internal databases
             for _,agent_orbitdata in self.orbitdata.items():
@@ -273,13 +293,13 @@ class SimulationEnvironment(EnvironmentNode):
                 time_step=agent_orbitdata.time_step
                 break
 
-            if self.t_update is None or abs(self.t_update - msg.t) / time_step > 10:
+            if self.t_update is None or abs(self.t_update - t) / time_step > 10:
             # if self.get_current_time() < msg.t:
-                self.update_databases(msg.t)
+                self.update_databases(t)
 
             # update internal clock
-            self.log(f"received message of type {content['msg_type']}. updating internal clock to {msg.t}[s]...")
-            await self.update_current_time(msg.t)
+            self.log(f"received message of type {content['msg_type']}. updating internal clock to {t}[s]...")
+            await self.update_current_time(t)
 
 
             # wait for all agent's to send their updated states
