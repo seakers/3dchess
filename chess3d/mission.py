@@ -238,7 +238,8 @@ class Mission:
             columns = ['observer','t_img','lat','lon','range','look','incidence','zenith','instrument_name']
             observations_performed = pd.DataFrame(data=[],columns=columns)
 
-        events = self.environment.events
+        # load senario events
+        events = pd.read_csv(self.environment.events_path)
 
         try:
             measurement_reqs = pd.read_csv((os.path.join(self.environment.results_path, 'requests.csv')))

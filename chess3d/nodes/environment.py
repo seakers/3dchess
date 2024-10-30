@@ -88,6 +88,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.agents[self.GROUND_STATION] = gs_names
 
         # load events
+        self.events_path : str = events_path
         self.events : pd.DataFrame = self.load_events(events_path)
 
         # initialize parameters
