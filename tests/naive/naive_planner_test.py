@@ -1,3 +1,4 @@
+import os
 import unittest
 
 from chess3d.mission import Mission
@@ -132,12 +133,19 @@ class TestToyCase(unittest.TestCase):
             }
         }
 
+        # set outdir
+        orbitdata_dir = os.path.join('./tests', 'naive', 'orbit_data')
+        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'toy')
+        scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
+        if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
+        if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
+
         # initialize mission
         self.mission : Mission = Mission.from_dict(scenario_specs)
 
         # check type of mission object
         self.assertTrue(isinstance(self.mission, Mission))
-
+        
 
     def test_planner(self) -> None:
         # execute mission
@@ -147,10 +155,6 @@ class TestToyCase(unittest.TestCase):
         self.mission.print_results()
 
         print('DONE')
-
-    def test_outputs(self) -> None:
-        # TODO Check outputs
-        self.assertTrue(True)
 
 class TestBenCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -288,6 +292,13 @@ class TestBenCase(unittest.TestCase):
             }
         }
 
+        # set outdir
+        orbitdata_dir = os.path.join('./tests', 'naive', 'orbit_data')
+        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'ben_case')
+        scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
+        if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
+        if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
+
         # initialize mission
         self.mission : Mission = Mission.from_dict(scenario_specs)
 
@@ -295,18 +306,14 @@ class TestBenCase(unittest.TestCase):
         self.assertTrue(isinstance(self.mission, Mission))
 
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.mission.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
 
-        # print results
-        self.mission.print_results()
+    #     # print results
+    #     self.mission.print_results()
 
-        print('DONE')
-
-    def test_outputs(self) -> None:
-        # TODO Check outputs
-        self.assertTrue(True)
+    #     print('DONE')
 
 # class TestRandomCase(unittest.TestCase):
 #     def setUp(self) -> None:

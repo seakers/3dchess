@@ -54,28 +54,28 @@ class TimeInterval:
         return self.end - self.start
 
     def __eq__(self, __value: object) -> bool:
-        return self.start == __value.start and self.end == __value.end
+        return abs(self.start - __value.start) < 1e-6 and abs(self.end - __value.end) < 1e-6
 
     def __gt__(self, __value: object) -> bool:
-        if self.start == __value.start:
+        if abs(self.start - __value.start) < 1e-6:
             return self.duration() > __value.duration()
         
         return self.start > __value.start
 
     def __ge__(self, __value: object) -> bool:
-        if self.start == __value.start:
+        if abs(self.start - __value.start) < 1e-6:
             return self.duration() >= __value.duration()
         
         return self.start >= __value.start
     
     def __lt__(self, __value: object) -> bool:
-        if self.start == __value.start:
+        if abs(self.start - __value.start) < 1e-6:
             return self.duration() < __value.duration()
         
         return self.start < __value.start
 
     def __le__(self, __value: object) -> bool:
-        if self.start == __value.start:
+        if abs(self.start - __value.start) < 1e-6:
             return self.duration() <= __value.duration()
         
         return self.start <= __value.start

@@ -47,7 +47,7 @@ class NaivePlanner(AbstractPreplanner):
         access_times : list = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
 
         # sort by observation time
-        access_times.sort(key = lambda a: a[3],reverse=False)
+        access_times.sort(key = lambda a: a[3])
 
         # compile list of instruments available in payload
         payload : dict = {instrument.name: instrument for instrument in specs.instrument}
@@ -94,23 +94,27 @@ class NaivePlanner(AbstractPreplanner):
             # find if feasible observation times exist
             feasible_obs = [(t[i], th[i]) 
                             for i in range(len(t))
-                            if self.is_observation_feasible(state, t[i], th[i], t_prev, th_prev, 
+                            if self.is_observation_feasible(state, 
+                                                            t[i], th[i], 
+                                                            t_prev, th_prev, 
                                                             max_slew_rate, max_torque, 
                                                             cross_track_fovs[instrument])]
             feasible_obs.sort(key=lambda a : a[0])
 
-            if feasible_obs:
+            while feasible_obs:
                 # is feasible; create observation action with the earliest observation
-                t_img, th_img = feasible_obs[0]
+                t_img, th_img = feasible_obs.pop(0)
                 action = ObservationAction(instrument, target, th_img, t_img)
 
                 # check if another observation was already scheduled at this time
-                if observations:
+                if not observations:
+                    observations.append(action)
+                    break
+                else:
                     action_prev : ObservationAction = observations[-1]
-                    if abs(action_prev.t_start - action.t_start) <= 1e-3:
-                        continue
-
-                observations.append(action)
+                    if abs(action_prev.t_end - action.t_start) > 1e-3 and action_prev.t_end <= action.t_start:
+                        observations.append(action)
+                        break
 
         assert self.no_redundant_observations(state, observations, orbitdata)
 
