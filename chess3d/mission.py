@@ -355,7 +355,7 @@ class Mission:
                     ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
 
                     # Simulation Runtime
-                    ['Total Runtime [s]', round(self.environment.t_f - self.environment.t_0, n_decimals)]
+                    # ['Total Runtime [s]', round(self.environment.t_f - self.environment.t_0, n_decimals)]
                 ]
 
         return pd.DataFrame(summary_data, columns=summary_headers)
