@@ -251,26 +251,6 @@ class SimulationEnvironment(EnvironmentNode):
         return True
     
     @runtime_tracker
-    async def listen_internal_broadcast(self) -> tuple:
-        return await super().listen_internal_broadcast()
-    
-    @runtime_tracker
-    async def listen_manager_broadcast(self) -> tuple:
-        return await super().listen_manager_broadcast()
-    
-    @runtime_tracker
-    async def listen_peer_broadcast(self) -> tuple:
-        return await super().listen_peer_broadcast()
-    
-    @runtime_tracker
-    async def listen_internal_message(self) -> tuple:
-        return await super().listen_internal_message()
-    
-    @runtime_tracker
-    async def listen_peer_message(self) -> tuple:
-        return await super().listen_peer_message()
-
-    @runtime_tracker
     async def handle_manager_broadcast(self) -> bool:
         dst, src, content = await self.listen_manager_broadcast()
 
@@ -289,10 +269,10 @@ class SimulationEnvironment(EnvironmentNode):
             t = content['t']
             
             # update internal databases
-            # time_step = self.get_orbitdata_time_step()
-            # if self.t_update is None or abs(self.t_update - t) / time_step > 10:
-            # # if self.get_current_time() < msg.t:
-            #     self.update_databases(t)
+            time_step = self.get_orbitdata_time_step()
+            if self.t_update is None or abs(self.t_update - t) / time_step > 10:
+            # if self.get_current_time() < msg.t:
+                self.update_databases(t)
 
             # update internal clock
             self.log(f"received message of type {content['msg_type']}. updating internal clock to {t}[s]...")
@@ -559,23 +539,6 @@ class SimulationEnvironment(EnvironmentNode):
                                     and abs(satellite_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
                                     ]
                 
-                # raw_coverage_data_no_fov = [
-                #                     list(data)
-                #                     for data in agent_orbitdata.gp_access_data.values
-                #                     if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
-                #                     and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
-                #                     ]
-                
-                # if not raw_coverage_data and raw_coverage_data_no_fov:
-                #     for data in raw_coverage_data_no_fov:
-                #         look_angle_index = orbitdata_columns.index('look angle [deg]')
-                #         look_angle = data[look_angle_index]
-                #         pointing_angle = satellite_off_axis_angle
-
-                #         in_fov = abs(look_angle - pointing_angle) <= instrument_off_axis_fov/2.0
-                #         x= 1
-                #     x = 1
-
                 # compile data
                 for data in raw_coverage_data:                    
                     obs_data.append({
@@ -820,3 +783,23 @@ class SimulationEnvironment(EnvironmentNode):
                 
         except asyncio.CancelledError:
             return
+
+    @runtime_tracker
+    async def listen_internal_broadcast(self) -> tuple:
+        return await super().listen_internal_broadcast()
+    
+    @runtime_tracker
+    async def listen_manager_broadcast(self) -> tuple:
+        return await super().listen_manager_broadcast()
+    
+    @runtime_tracker
+    async def listen_peer_broadcast(self) -> tuple:
+        return await super().listen_peer_broadcast()
+    
+    @runtime_tracker
+    async def listen_internal_message(self) -> tuple:
+        return await super().listen_internal_message()
+    
+    @runtime_tracker
+    async def listen_peer_message(self) -> tuple:
+        return await super().listen_peer_message()

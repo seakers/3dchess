@@ -1,5 +1,6 @@
 import logging
 import os
+from dmas.messages import SimulationMessage
 import numpy as np
 from pandas import DataFrame
 
@@ -9,6 +10,7 @@ from orbitpy.util import Spacecraft
 from dmas.agents import *
 from dmas.network import NetworkConfig
 from dmas.utils import runtime_tracker
+from zmq import SocketType
 
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.science.requests import MeasurementRequest
@@ -499,7 +501,7 @@ class SimulationAgent(Agent):
             runtime_dir = os.path.join(self.results_path, "runtime")
             if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
 
-            headers = ['routine','t_avg','t_std','t_med','n', 't_total']
+            headers = ['routine','t_avg','t_std','t_med','t_max','t_min','n', 't_total']
             data = []
 
             for routine in self.stats:
@@ -507,6 +509,8 @@ class SimulationAgent(Agent):
                 t_avg = np.mean(self.stats[routine])
                 t_std = np.std(self.stats[routine])
                 t_median = np.median(self.stats[routine])
+                t_max = max(self.stats[routine])
+                t_min = min(self.stats[routine])
                 n = len(self.stats[routine])
                 t_total = n * t_avg
 
@@ -515,6 +519,8 @@ class SimulationAgent(Agent):
                                 np.round(t_avg,n_decimals),
                                 np.round(t_std,n_decimals),
                                 np.round(t_median,n_decimals),
+                                t_max,
+                                t_min,
                                 n,
                                 t_total
                                 ]
@@ -528,7 +534,7 @@ class SimulationAgent(Agent):
 
             stats_df = DataFrame(data, columns=headers)
             self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-            stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
+            stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
         except Exception as e:
             x = 1
 
@@ -601,3 +607,19 @@ class SimulationAgent(Agent):
                 # forward all ignored messages as manager messages
                 for dst, src, content in ignored:
                     await self.manager_inbox.put((dst,src,content))
+    
+    @runtime_tracker
+    async def _send_manager_msg(self, msg: SimulationMessage, socket_type: SocketType) -> bool:
+        return await super()._send_manager_msg(msg, socket_type)
+
+    @runtime_tracker
+    async def send_internal_message(self, msg: SimulationMessage) -> tuple:
+        return await super().send_internal_message(msg)
+
+    @runtime_tracker
+    async def send_peer_message(self, msg: SimulationMessage) -> tuple:
+        return await super().send_peer_message(msg)
+
+    @runtime_tracker
+    async def send_peer_broadcast(self, msg: SimulationMessage) -> None:
+        return await super().send_peer_broadcast(msg)

@@ -306,10 +306,14 @@ class PlanningModule(InternalModule):
                 observations.update({action_from_dict(**msg.observation_action) 
                                     for msg in misc_messages
                                     if isinstance(msg, ObservationPerformedMessage)})
-                
+
+                t_1 = time.perf_counter()
+
                 # update reward grid
                 self.reward_grid.update(self.get_current_time(), observations, incoming_reqs)
                 
+                t_2 = time.perf_counter()
+
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_actions(completed_actions, aborted_actions, pending_actions)
                 # -------------------------------------
@@ -349,6 +353,8 @@ class PlanningModule(InternalModule):
                         # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
+
+                t_3 = time.perf_counter()
 
                 # --- Modify plan ---
                 # Check if reeplanning is needed
@@ -399,6 +405,8 @@ class PlanningModule(InternalModule):
                         x = 1
                         # -------------------------------------
 
+                t_4 = time.perf_counter()
+
                 # --- Execute plan ---
                 # get next action to perform
                 plan_out : list = self.get_plan_out(plan)
@@ -415,13 +423,24 @@ class PlanningModule(InternalModule):
 
                 self.log(f'actions sent!')
 
-                # log runtime
-                dt = time.perf_counter() - t_0
-                if 'planner' not in self.stats: self.stats['planner'] = []
-                self.stats['planner'].append(dt)
+                t_5 = time.perf_counter()
 
-                if dt >= 0.1 and self.get_current_time() > 0:
-                    x = 1
+                # log runtime
+                if 'planner_s1' not in self.stats: self.stats['planner_s1'] = []
+                self.stats['planner_s1'].append(t_1-t_0)
+                if 'planner_s2' not in self.stats: self.stats['planner_s2'] = []
+                self.stats['planner_s2'].append(t_2-t_1)
+                if 'planner_s3' not in self.stats: self.stats['planner_s3'] = []
+                self.stats['planner_s3'].append(t_3-t_2)
+                if 'planner_s4' not in self.stats: self.stats['planner_s4'] = []
+                self.stats['planner_s4'].append(t_4-t_3)
+                if 'planner_s5' not in self.stats: self.stats['planner_s5'] = []
+                self.stats['planner_s5'].append(t_5-t_4)
+
+
+                dt_0 = t_5 - t_0
+                if 'planner' not in self.stats: self.stats['planner'] = []
+                self.stats['planner'].append(dt_0)
 
         except asyncio.CancelledError:
             return

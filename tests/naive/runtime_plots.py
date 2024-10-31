@@ -2,41 +2,64 @@ import os
 from matplotlib import pyplot as plt
 import pandas as pd
 import seaborn as sns
+from tqdm import tqdm
 
+def create_plot_folder(scenario : str, agent : str):
+    if not os.path.isdir('plots'): os.mkdir('plots')
+    if not os.path.isdir(f'plots/{scenario}'): os.mkdir(f'plots/{scenario}')
+    if not os.path.isdir(f'plots/{scenario}/{agent}'): os.mkdir(f'plots/{scenario}/{agent}')
 
-def main(scenarios : list, agent : str, routine : str):
-    data = None
-    for scenario in scenarios:
-        file_path = os.path.join('results', scenario, agent, 'runtime', f'time_series-{routine}.csv')
-        df : pd.DataFrame = pd.read_csv(file_path)
-        df['t'] = range(len(df))
-        df['scenario'] = scenario
-
-
-        if data is None:
-            data = df
-        else:
-            data = pd.concat([data, df], axis=0)
-
-    if len(data) <= len(scenarios) : return
-
-    sns.set_theme()
+def main(scenarios : list, agent : str, show_plot : bool = False, save_plot : bool = False):
+    # get list of routines
+    if not scenarios: raise ValueError('Must have at least one scenario in scenario list')
+    dir_path = os.path.join('results', scenarios[0], agent, 'runtime')
+    routines = os.listdir(dir_path)
     
-    sns.relplot(
-                data=data, x='t', y="dt", col="scenario",
-                kind="line", errorbar=('ci', 95)
-                )
-    print(f'{scenario} : {agent} `{routine}()` runtime')
-    plt.show()
-    x = 1
+    # generate a plot per routine
+    for routine in tqdm(routines, f'Generating runtime performance plots for {agent}\'s routines', leave=False):
+        # compile data
+        data = None
+        for scenario in scenarios:
+            file_path = os.path.join(dir_path, routine)
+            df : pd.DataFrame = pd.read_csv(file_path)
+            df['t'] = range(len(df))
+            df['scenario'] = scenario
+
+            if data is None:
+                data = df
+            else:
+                data = pd.concat([data, df], axis=0)
+
+        # if data is incomplete, skip
+        if len(data) / len(scenarios) < len(df): 
+            continue
+        if len(data) == 0:
+            continue
+
+        # create plots
+        sns.set_theme()
+        sns.relplot(
+                    data=data, x='t', y="dt", col="scenario",
+                    kind="line", errorbar=('ci', 95)
+                    )
+
+        # show or save plot    
+        if show_plot: 
+            plt.show()    
+        if save_plot: 
+            create_plot_folder(scenario, agent)
+            routine = routine.replace('.csv','')
+            routine = routine.replace('time_series-', '')
+            plt.savefig(f'plots/{scenario}/{agent}/{routine}.png')
+            plt.close()
 
 if __name__ == '__main__':
 
+    show_plot = False
+    save_plot = True
+
     scenarios = [
-        # 'naive_normal',
-        # 'naive_selective',
-        # 'naive_updated',
-        'naive'
+        'ben_case'
     ]
 
     agents = [
@@ -44,41 +67,6 @@ if __name__ == '__main__':
         'environment',
         'thermal_0'
     ]
-    
-
-    routines = {
-        'manager' : [
-            '_execute',
-            'sim_wait',
-            'clock_wait',
-            'thermal_0_wait',
-            'ENVIRONMENT_wait'
-        ],
-
-        'thermal_0' : [
-            'sense',
-            'think',
-            'do',
-            'perform_broadcast',
-            'perform_observation',
-            'perform_state_change',
-            'perform_wait_for_messages'
-        ],
         
-        'environment' : [
-            'handle_agent_broadcast',
-            'handle_agent_request',
-            'handle_agent_state',
-            'handle_manager_broadcast',
-            'handle_observation',
-            'handle_request',
-            'query_measurement_data',
-            'listen_manager_broadcast',
-            'listen_peer_broadcast',
-            'listen_peer_message'
-        ]
-    }
-    
-    for agent in agents:
-        for routine in routines[agent]:
-            main(scenarios, agent, routine)
+    for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
+        main(scenarios, agent, False, True)
