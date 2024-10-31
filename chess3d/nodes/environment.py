@@ -289,14 +289,10 @@ class SimulationEnvironment(EnvironmentNode):
             t = content['t']
             
             # update internal databases
-            for _,agent_orbitdata in self.orbitdata.items():
-                agent_orbitdata : OrbitData
-                time_step=agent_orbitdata.time_step
-                break
-
-            if self.t_update is None or abs(self.t_update - t) / time_step > 10:
-            # if self.get_current_time() < msg.t:
-                self.update_databases(t)
+            # time_step = self.get_orbitdata_time_step()
+            # if self.t_update is None or abs(self.t_update - t) / time_step > 10:
+            # # if self.get_current_time() < msg.t:
+            #     self.update_databases(t)
 
             # update internal clock
             self.log(f"received message of type {content['msg_type']}. updating internal clock to {t}[s]...")
@@ -312,6 +308,11 @@ class SimulationEnvironment(EnvironmentNode):
 
         return True
     
+    def get_orbitdata_time_step(self) -> float:
+        for _,agent_orbitdata in self.orbitdata.items():
+            agent_orbitdata : OrbitData
+            return agent_orbitdata.time_step
+
     @runtime_tracker
     def update_databases(self, t : float) -> None:
         # update orbitdata
@@ -324,7 +325,6 @@ class SimulationEnvironment(EnvironmentNode):
         
         # update time tracker
         self.t_update = t
-        x = 1
 
     @runtime_tracker
     def handle_observation(self, content : dict) -> SimulationMessage:

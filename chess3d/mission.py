@@ -394,7 +394,7 @@ class Mission:
             if len(event) <= 6:
                 lat,lon,t_start,duration,severity,observations_req = event
             else:
-                _, lat,lon,t_start,duration,severity,observations_req = event
+                gp_index, lat,lon,t_start,duration,severity,observations_req = event
             
             # classify events by their target groundpoint
             if (lat,lon) not in events_per_gp: events_per_gp[(lat,lon)] = []
@@ -407,7 +407,7 @@ class Mission:
                                     and abs(lon - lon_req) < 1e-2
                                     and t_start <= t_start_req <= t_end_req <= t_start+duration
                                     and all([instrument in observations_req for instrument in str_to_list(observation_types)])
-                                ]          
+                                ]       
 
             if matching_requests:
                 events_detected[event] = matching_requests

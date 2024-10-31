@@ -15,8 +15,8 @@
     },
     "spacecraft": [
         {
-            "@id": "thermal_sat_0_0",
-            "name": "thermal_0",
+            "@id": "img_sat_0",
+            "name": "img_0",
             "spacecraftBus": {
                 "name": "BlueCanyon",
                 "mass": 20,
@@ -33,7 +33,7 @@
                 }
             },
             "instrument": {
-                "name": "thermal",
+                "name": "visible",
                 "mass": 10,
                 "volume": 12.45,
                 "dataRate": 40,
@@ -49,14 +49,9 @@
                 "fieldOfViewGeometry": {
                     "shape": "RECTANGULAR",
                     "angleHeight": 5,
-                    "angleWidth": 10
+                    "angleWidth": 45
                 },
-                "maneuver": {
-                    "maneuverType": "SINGLE_ROLL_ONLY",
-                    "A_rollMin": -50,
-                    "A_rollMax": 50
-                },
-                "@id": "therm1",
+                "@id": "img1",
                 "@type": "Basic Sensor"
             },
             "orbitState": {
@@ -73,7 +68,7 @@
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                     "sma": 7078,
                     "ecc": 0.01,
-                    "inc": 67,
+                    "inc": 0.0,
                     "raan": 0.0,
                     "aop": 0.0,
                     "ta": 0.0
@@ -81,9 +76,7 @@
             },
             "planner": {
                 "preplanner": {
-                    "@type": "naive",
-                    "period": 1000,
-                    "horizon": 1000
+                    "@type": "naive"
                 },
                 "replanner": {
                     "@type": "broadcaster"
@@ -99,14 +92,14 @@
             },
             "science": {
                 "@type": "lookup",
-                "eventsPath": "./tests/naive/resources/all_events_formatted.csv"
+                "eventsPath": "./tests/naive/resources/toy_events.csv"
             }
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./tests/naive/resources/lake_event_points.csv"
+            "covGridFilePath": "./tests/naive/resources/toy_points.csv"
         }
     ],
     "scenario": {
@@ -114,13 +107,13 @@
         "utility": "LINEAR",
         "events": {
             "@type": "PREDEF",
-            "eventsPath": "./tests/naive/resources/all_events_formatted.csv"
+            "eventsPath": "./tests/naive/resources/toy_events.csv"
         },
         "clock": {
             "@type": "EVENT"
         },
         "scenarioPath": "./tests/naive/",
-        "name": "naive"
+        "name": "toy"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",

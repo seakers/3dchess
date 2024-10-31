@@ -138,6 +138,7 @@ def str_to_list(lst_string : str, list_type : type = str) -> list:
     lst = lst_string.replace('[','')
     lst = lst.replace(']','')
     lst = lst.replace('\'','')
+    lst = lst.replace(' ','')
 
     # convert into a string
     return [list_type(val) for val in lst.split(',')]

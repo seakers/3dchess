@@ -61,11 +61,13 @@ def main(n_samples : int = 1, seed : int = 1000):
                 else:
                     row.append(value)
             
-            # if experiment is feasible, add to list of experiments
-            if is_feasible(row): data.append(row)
+            # check if experiment is feasible
+            if is_feasible(row): 
+                # add to list of experiments
+                data.append(row)
 
-            # update experiment index
-            j += 1
+                # update experiment index
+                j += 1
 
         # create data frame
         df = pd.DataFrame(data=data, columns=columns)
