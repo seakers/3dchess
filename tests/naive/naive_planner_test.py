@@ -172,7 +172,7 @@ class TestBenCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 1,
+            "duration": 0.1,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10

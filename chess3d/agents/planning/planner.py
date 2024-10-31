@@ -102,6 +102,7 @@ class AbstractPlanner(ABC):
     def generate_plan(self, **kwargs) -> Plan:
         """ Creates a plan for the agent to perform """
 
+    @runtime_tracker
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
                              orbitdata : OrbitData

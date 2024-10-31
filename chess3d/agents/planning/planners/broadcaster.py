@@ -57,10 +57,7 @@ class Broadcaster(AbstractReplanner):
     
     @runtime_tracker
     def needs_planning( self, 
-                        state : SimulationAgentState,
-                        _ : object,
-                        current_plan : Plan,
-                        __ : OrbitData
+                        *_
                         ) -> bool:
         """ only replans whenever there are any pending relays or requests to broadcasts to perform """
 

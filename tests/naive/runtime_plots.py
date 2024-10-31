@@ -6,8 +6,7 @@ from tqdm import tqdm
 
 def create_plot_folder(scenario : str, agent : str):
     if not os.path.isdir('plots'): os.mkdir('plots')
-    if not os.path.isdir(f'plots/{scenario}'): os.mkdir(f'plots/{scenario}')
-    if not os.path.isdir(f'plots/{scenario}/{agent}'): os.mkdir(f'plots/{scenario}/{agent}')
+    if not os.path.isdir(f'plots/{agent}'): os.mkdir(f'plots/{agent}')
 
 def main(scenarios : list, agent : str, show_plot : bool = False, save_plot : bool = False):
     # get list of routines
@@ -20,7 +19,8 @@ def main(scenarios : list, agent : str, show_plot : bool = False, save_plot : bo
         # compile data
         data = None
         for scenario in scenarios:
-            file_path = os.path.join(dir_path, routine)
+            scenario_path = os.path.join('results', scenario, agent, 'runtime')
+            file_path = os.path.join(scenario_path, routine)
             df : pd.DataFrame = pd.read_csv(file_path)
             df['t'] = range(len(df))
             df['scenario'] = scenario
@@ -31,8 +31,6 @@ def main(scenarios : list, agent : str, show_plot : bool = False, save_plot : bo
                 data = pd.concat([data, df], axis=0)
 
         # if data is incomplete, skip
-        if len(data) / len(scenarios) < len(df): 
-            continue
         if len(data) == 0:
             continue
 
@@ -50,7 +48,7 @@ def main(scenarios : list, agent : str, show_plot : bool = False, save_plot : bo
             create_plot_folder(scenario, agent)
             routine = routine.replace('.csv','')
             routine = routine.replace('time_series-', '')
-            plt.savefig(f'plots/{scenario}/{agent}/{routine}.png')
+            plt.savefig(f'plots/{agent}/{routine}.png')
             plt.close()
 
 if __name__ == '__main__':
@@ -59,7 +57,8 @@ if __name__ == '__main__':
     save_plot = True
 
     scenarios = [
-        'ben_case'
+        'ben_case',
+        'ben_case_day'
     ]
 
     agents = [

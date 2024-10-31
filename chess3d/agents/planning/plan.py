@@ -408,13 +408,6 @@ class Replan(Plan):
 
         super().__init__(*actions, t=t)
 
-    def add(self, action: AgentAction, t: float) -> None:
-        # if self.t_next < action.t_end:
-        #     return
-        #     # raise ValueError(f'cannot add action scheduled to be done past the next scheduled replan for this plan')
-
-        super().add(action, t)
-
     def copy(self) -> object:
         return Replan(self.actions, t=self.t, t_next=self.t_next)
     
