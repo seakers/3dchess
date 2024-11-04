@@ -82,7 +82,7 @@
             "planner": {
                 "preplanner": {
                     "@type": "naive",
-                    "period": 100
+                    "period": Infinity
                 },
                 "replanner": {
                     "@type": "acbba"
@@ -98,7 +98,7 @@
             },
             "science": {
                 "@type": "lookup",
-                "eventsPath": "./tests/acbba/resources/events.csv"
+                "eventsPath": "./tests/acbba/resources/lake_events.csv"
             }
         },
         {
@@ -169,7 +169,7 @@
             "planner": {
                 "preplanner": {
                     "@type": "naive",
-                    "period": 100
+                    "period": Infinity
                 },
                 "replanner": {
                     "@type": "acbba"
@@ -185,7 +185,7 @@
             },
             "science": {
                 "@type": "lookup",
-                "eventsPath": "./tests/acbba/resources/events.csv"
+                "eventsPath": "./tests/acbba/resources/lake_events.csv"
             }
         },
         {
@@ -256,7 +256,7 @@
             "planner": {
                 "preplanner": {
                     "@type": "naive",
-                    "period": 100
+                    "period": Infinity
                 },
                 "replanner": {
                     "@type": "acbba"
@@ -272,14 +272,14 @@
             },
             "science": {
                 "@type": "lookup",
-                "eventsPath": "./tests/acbba/resources/events.csv"
+                "eventsPath": "./tests/acbba/resources/lake_events.csv"
             }
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./tests/acbba/resources/points.csv"
+            "covGridFilePath": "./tests/acbba/resources/lake_event_points.csv"
         }
     ],
     "scenario": {
@@ -287,7 +287,7 @@
         "utility": "LINEAR",
         "events": {
             "@type": "PREDEF",
-            "eventsPath": "./tests/acbba/resources/events.csv"
+            "eventsPath": "./tests/acbba/resources/lake_events.csv"
         },
         "clock": {
             "@type": "EVENT"

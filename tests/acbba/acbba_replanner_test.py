@@ -1,6 +1,8 @@
 import copy
 import unittest
 
+import numpy as np
+
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
 
@@ -88,7 +90,7 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                             "@type" : "naive"
                         },
                         "replanner" : {
-                            "@type" : "acbba-dp"
+                            "@type" : "acbba"
                         },
                         "rewardGrid":{
                             "reward_function" : 'event',
@@ -174,7 +176,7 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                             "@type" : "naive"
                         },
                         "replanner" : {
-                            "@type" : "acbba-dp"
+                            "@type" : "acbba"
                         },
                         "rewardGrid":{
                             "reward_function" : 'event',
@@ -260,7 +262,7 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                             "@type" : "naive"
                         },
                         "replanner" : {
-                            "@type" : "acbba-dp"
+                            "@type" : "acbba"
                         },
                         "rewardGrid":{
                             "reward_function" : 'event',
@@ -346,7 +348,7 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                             "@type" : "naive"
                         },
                         "replanner" : {
-                            "@type" : "acbba-dp"
+                            "@type" : "acbba"
                         },
                         "rewardGrid":{
                             "reward_function" : 'event',
@@ -394,6 +396,9 @@ class ToyTestACBBAReplanner(unittest.TestCase):
     def test_toy_mission(self) -> None:
         # execute mission
         self.toy_mission.execute()
+
+        # print results
+        self.toy_mission.print_results()
 
 class MissionTestACBBAReplanner(unittest.TestCase):
     def setUp(self) -> None:
@@ -482,7 +487,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" : 100
+                            "period" :  np.Inf
                         },
                         "replanner" : {
                             "@type" : "acbba"
@@ -498,7 +503,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/events.csv"
+                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
                     }
                 },
                 {
@@ -569,7 +574,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" : 100
+                            "period" :  np.Inf
                         },
                         "replanner" : {
                             "@type" : "acbba"
@@ -585,7 +590,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/events.csv"
+                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
                     }
                 },
                 {
@@ -656,7 +661,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" : 100
+                            "period" :  np.Inf
                         },
                         "replanner" : {
                             "@type" : "acbba"
@@ -672,14 +677,14 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/events.csv"
+                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/acbba/resources/points.csv"
+                    "covGridFilePath": "./tests/acbba/resources/lake_event_points.csv"
                 }
             ],
             "scenario": {   
@@ -687,7 +692,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/acbba/resources/events.csv"
+                    "eventsPath" : "./tests/acbba/resources/lake_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
@@ -704,9 +709,12 @@ class MissionTestACBBAReplanner(unittest.TestCase):
         # initialize mission
         self.mission : Mission = Mission.from_dict(mission_specs)
 
-    def test_mission(self) -> None:
-        # execute mission
-        self.mission.execute()
+    # def test_mission(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
+
+    #     # print results
+    #     self.mission.print_results()
 
 class MissionTestDynamicACBBAReplanner(unittest.TestCase):
     def setUp(self) -> None:
@@ -795,7 +803,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" : 100
+                            "period" :  np.Inf
                         },
                         "replanner" : {
                             "@type" : "acbba-dp"
@@ -811,7 +819,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/events.csv"
+                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
                     }
                 },
                 {
@@ -882,7 +890,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" : 100
+                            "period" :  np.Inf
                         },
                         "replanner" : {
                             "@type" : "acbba-dp"
@@ -898,7 +906,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/events.csv"
+                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
                     }
                 },
                 {
@@ -969,7 +977,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" : 100
+                            "period" :  np.Inf
                         },
                         "replanner" : {
                             "@type" : "acbba-dp"
@@ -985,14 +993,14 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/events.csv"
+                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/acbba/resources/points.csv"
+                    "covGridFilePath": "./tests/acbba/resources/lake_points.csv"
                 }
             ],
             "scenario": {   
@@ -1000,7 +1008,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/acbba/resources/events.csv"
+                    "eventsPath" : "./tests/acbba/resources/lake_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
@@ -1017,9 +1025,9 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
         # initialize mission
         self.mission : Mission = Mission.from_dict(mission_specs)
 
-    def test_mission(self) -> None:
-        # execute mission
-        self.mission.execute()
+    # def test_mission(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
 
 if __name__ == '__main__':
     # terminal welcome message

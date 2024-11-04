@@ -1,30 +1,34 @@
 stat_name,val
-Simulation Start Date,2020-01-01 00:00:00+00:00
-Simulation End Date,2020-01-01 03:00:00+00:00
-Ground Points,5001
-Ground Points Observed,1549
-Events,117
-Events Detected,3
-Events Observed,5
-Observations,4971
-Event Observations,11
-Events Re-observed,4
-Event Re-observations,10
-Events Co-observed,5
-Events Partially Co-observed,2
-Events Fully Co-observed,2
-Event Co-observations,11
-P(Event Detected),0.02564
-P(Event Observed),0.04274
-P(Event Re-observed),0.03419
-P(Event Co-observed),0.04274
-P(Event Partially Co-observed),0.01709
-P(Event Fully Co-observed),0.01709
-P(Event at a GP),0.0142
-P(Event Observation | Observation),0.00101
+Ground Points,5001.0
+Ground Points Accessible,2560.0
+Ground Points Observed,992.0
+Ground Point Observations,3381.0
+Average GP Reobservation Time [s],406.4043532858937
+Standard Deviation of GP Reobservation Time [s],1426.7898753594018
+Median GP Reobservation Time [s],70.0
+Events,790.0
+Events Detected,9.0
+Events Observed,9.0
+Average Event Reobservation Time [s],0.0
+Standard Deviation of Event Reobservation Time [s],0.0
+Median Event Reobservation Time [s],0.0
+Event Observations,20.0
+Events Re-observed,6.0
+Event Re-observations,11.0
+Events Co-observed,9.0
+Events Partially Co-observed,3.0
+Events Fully Co-observed,3.0
+Event Co-observations,11.0
+P(Event Detected),0.01139
+P(Event Observed),0.01139
+P(Event Re-observed),0.00759
+P(Event Co-observed),0.01139
+P(Event Partially Co-observed),0.0038
+P(Event Fully Co-observed),0.0038
+P(Event at a GP),0.15797
+P(Event Observation | Observation),0.00266
 P(Event Observed | Event Detected),1.0
-P(Event Re-oberved | Event Detected),0.66667
+P(Event Re-observed | Event Detected),0.66667
 P(Event Co-observed | Event Detected),1.0
-P(Event Co-observed Partially | Event Detected),0.0
-P(Event Co-observed Fully | Event Detected),0.66667
-Total Runtime [s],163.56876
+P(Event Co-observed Partially | Event Detected),0.33333
+P(Event Co-observed Fully | Event Detected),0.33333

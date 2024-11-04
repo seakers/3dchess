@@ -27,7 +27,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
     def _generate_bids_from_request(self, 
                                     req: MeasurementRequest, 
                                     state: SimulationAgentState
-                                    ) -> list:
+                                    ) -> set:
         return [Bid(req.id, observation_type, state.agent_name) 
                 for observation_type in req.observation_types]
 

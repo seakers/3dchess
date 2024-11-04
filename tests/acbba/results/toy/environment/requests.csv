@@ -1,3 +1,3 @@
 ID,Requester,lat [deg],lon [deg],Severity,t start,t end,t corr,Measurment Types
-12c6bc79-6fb3-11ef-a702-0d6a0aea0689,img_0,-1.0,0.0,10.0,1750.0,6000.0,4250.0,"['sar', 'thermal']"
-12c6bc7b-6fb3-11ef-a702-0d6a0aea0689,img_0,1.0,0.0,10.0,1750.0,6000.0,4250.0,"['sar', 'thermal']"
+f9c33d51-9b04-11ef-a3ff-b42e993745e8,img_0,-1.0,0.0,10.0,1750.0,6000.0,4250.0,"['sar', 'thermal']"
+f9c33d53-9b04-11ef-a3ff-b42e993745e8,img_0,1.0,0.0,10.0,1750.0,6000.0,4250.0,"['sar', 'thermal']"

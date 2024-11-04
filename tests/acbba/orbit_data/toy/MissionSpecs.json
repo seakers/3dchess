@@ -79,7 +79,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba-dp"
+                    "@type": "acbba"
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -165,7 +165,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba-dp"
+                    "@type": "acbba"
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -251,7 +251,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba-dp"
+                    "@type": "acbba"
                 },
                 "rewardGrid": {
                     "reward_function": "event",
@@ -337,7 +337,7 @@
                     "@type": "naive"
                 },
                 "replanner": {
-                    "@type": "acbba-dp"
+                    "@type": "acbba"
                 },
                 "rewardGrid": {
                     "reward_function": "event",

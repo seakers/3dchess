@@ -261,7 +261,7 @@ class Mission:
                           measurement_reqs : pd.DataFrame,
                           n_decimals : int = 5) -> pd.DataFrame:
         # classify observations
-        events_per_gp, events_detected, events_observed, \
+        observations_per_gp, events_per_gp, events_detected, events_observed, \
             events_re_obs, events_co_obs, events_co_obs_fully, \
                 events_co_obs_partially = self.classify_observations(observations_performed, 
                                                                      events, 
@@ -275,6 +275,7 @@ class Mission:
                     n_total_event_co_obs, n_observations \
                         = self.count_observations(orbitdata, 
                                                   observations_performed, 
+                                                  observations_per_gp,
                                                   events, 
                                                   events_detected, 
                                                   events_observed, 
@@ -291,6 +292,7 @@ class Mission:
                         p_event_co_obs_fully_if_detected \
                             = self.calc_event_probabilities(orbitdata, 
                                                             observations_performed,
+                                                            observations_per_gp,
                                                             events,
                                                             events_per_gp,
                                                             events_detected,
@@ -300,8 +302,8 @@ class Mission:
                                                             events_co_obs_fully,
                                                             events_co_obs_partially)
         
-        # get event revisit times
-        t_gp_reobservation = self.calc_groundpoint_coverage_metrics(observations_performed, events, measurement_reqs)
+        # calculate event revisit times
+        t_gp_reobservation = self.calc_groundpoint_coverage_metrics(observations_per_gp)
         t_event_reobservation = self.calc_event_coverage_metrics(events_observed)
 
         # count number of GPs observed
@@ -363,6 +365,7 @@ class Mission:
     def count_observations(self, 
                            orbitdata : dict, 
                            observations_performed : pd.DataFrame, 
+                           observations_per_gp : dict,
                            events : pd.DataFrame,
                            events_detected : dict,
                            events_observed : dict,
@@ -393,12 +396,13 @@ class Mission:
         n_events_observed = len(events_observed)
         n_total_event_obs = sum([len(observations) for _,observations in events_observed.items()])
         n_events_reobserved = len(events_re_obs)
-        n_total_event_re_obs = sum([len(observations) for _,observations in events_re_obs.items()])
+        n_total_event_re_obs = sum([len(observations)-1 for _,observations in events_re_obs.items()])
         n_events_co_obs = len(events_co_obs)
         n_events_fully_co_obs = len(events_co_obs_fully)
         n_events_partially_co_obs = len(events_co_obs_partially)
-        n_total_event_co_obs = sum([len(observations) for _,observations in events_co_obs.items()])
+        n_total_event_co_obs = sum([len(observations)-1 for _,observations in events_co_obs.items()])
         n_observations = len(observations_performed)
+        # n_reobservations = sum([len(observations)-1 for observations in observations_per_gp.items()])
 
         return n_gps, n_gps_accessible, n_events, n_events_detected, \
                 n_events_observed, n_total_event_obs, n_events_reobserved,\
@@ -411,6 +415,13 @@ class Mission:
                               measurement_reqs : pd.DataFrame
                               ) -> tuple:
                
+        # classify observations per GP
+        observations_per_gp : Dict[tuple, list] = {}
+        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values:
+            if (lat_img,lon_img) not in observations_per_gp:
+                observations_per_gp[(lat_img,lon_img)] = []
+            observations_per_gp[(lat_img,lon_img)].append((observer,t_img,lat_img,lon_img,_,instrument))
+
         # count event presense, detections, and observations
         events_per_gp : Dict[tuple, list] = {}
         events_detected : Dict[tuple, list] = {}
@@ -453,8 +464,8 @@ class Mission:
         
         # find reobserved events
         events_re_obs = {event: observations 
-                                for event,observations in events_observed.items()
-                                if len(observations) > 1}
+                            for event,observations in events_observed.items()
+                            if len(observations) > 1}
         
         # find coobserved events
         events_co_obs : Dict[tuple, list] = {}
@@ -479,11 +490,12 @@ class Mission:
 
                 events_co_obs[event] = valid_observations
 
-        return events_per_gp, events_detected, events_observed, events_re_obs, events_co_obs, events_co_obs_fully, events_co_obs_partially
+        return observations_per_gp, events_per_gp, events_detected, events_observed, events_re_obs, events_co_obs, events_co_obs_fully, events_co_obs_partially
     
     def calc_event_probabilities(self,
                                  orbitdata : dict, 
                                  observations_performed : pd.DataFrame, 
+                                 observations_per_gp : dict,
                                  events : pd.DataFrame,
                                  events_per_gp : dict,
                                  events_detected : dict,
@@ -501,6 +513,7 @@ class Mission:
                     _, n_observations \
                         = self.count_observations(orbitdata,
                                                   observations_performed,
+                                                  observations_per_gp,
                                                   events,
                                                   events_detected,
                                                   events_observed,
@@ -566,22 +579,11 @@ class Mission:
                             p_event_co_obs_fully_if_detected
 
     def calc_groundpoint_coverage_metrics(self,
-                                    observations_performed : pd.DataFrame, 
-                                    events : pd.DataFrame,
-                                    measurement_reqs : pd.DataFrame
+                                    observations_per_gp: dict
                                     ) -> tuple:
-        
-        # classify performed observations
-        grouped_observations = {}
-        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values:
-            if (lat_img, lon_img) not in grouped_observations:
-                grouped_observations[(lat_img, lon_img)] = []
-
-            grouped_observations[(lat_img, lon_img)].append((observer,t_img,lat_img,lon_img,*_,instrument))
-
         # event reobservation times
         t_reobservations : list = []
-        for _,observations in grouped_observations.items():
+        for _,observations in observations_per_gp.items():
             prev_observation = None
             for observation in observations:
                 if prev_observation is None:
@@ -620,9 +622,9 @@ class Mission:
                     prev_observation = observation
                     continue
 
-                # get observation times
-                _,_,t,*_ = observation
-                _,_,t_prev,*_ = prev_observation
+                # get observation times - (lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
+                *_,t_prev,_,_ = prev_observation
+                *_,t,_,_ = observation
 
                 # calculate revisit
                 t_reobservation = t-t_prev

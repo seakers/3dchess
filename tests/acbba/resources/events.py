@@ -15,67 +15,39 @@ def main(experiments_name : str,
          overwrite : bool = True,
          seed : int = 1000
          ):    
-    # read scenario parameters file
-    experiment_path = os.path.join('./experiments', f'{experiments_name}.csv')
-    experiments_df : pd.DataFrame = pd.read_csv(experiment_path)
 
     # make output directory
-    events_dir = os.path.join('./events', experiments_name)
-    if overwrite or not os.path.isdir(events_dir):
-        clear_events(events_dir)
-        os.mkdir(events_dir)
-
-    # count number of runs to be made
-    n_runs : int = len(experiments_df)
-    print(F'NUMBER OF EVENTS TO GENERATE: {n_runs}')
+    events_dir = './'
 
     # set simulation duration in hours
     sim_duration : float = 24.0 / 24.0
 
-    # run simulation for each set of parameters
-    for _,row in tqdm.tqdm(experiments_df.iterrows(), 
-                                      desc = 'Generating Events'):
-
-        # extract event parameters
-        experiment_name = row['Name']
-        grid_name = f"{row['Grid Type']}_grid_{row['Number of Ground-Points']}"
-        event_duration = row['Event Duration (hrs)']
-        n_events = row['Number of Events per Day']
-        min_severity = 0.0
-        max_severity = 100
-        measurement_list = ['sar', 'visual', 'thermal']
+    # extract event parameters
+    experiment_name = "lake_events"
+    grid_name = f"lake_event_points"
+    event_duration = 3600
+    n_events = 790
+    min_severity = 0.0
+    max_severity = 100
+    measurement_list = ['sar', 'visual', 'thermal']
 
 
-        # get grid
-        if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
-        grid_path : str = os.path.join('./grids', f'{grid_name}.csv')
-        grid : pd.DataFrame = pd.read_csv(grid_path)
+    # get grid
+    grid_path : str = os.path.join('./', f'{grid_name}.csv')
+    grid : pd.DataFrame = pd.read_csv(grid_path)
 
-        # run cases
-        create_events(events_dir,
-                      experiment_name, 
-                      grid, 
-                      sim_duration, 
-                      n_events, 
-                      event_duration, 
-                      min_severity, 
-                      max_severity, 
-                      measurement_list, 
-                      overwrite,
-                      seed)
-
-def clear_events(events_path : str) -> None:
-    if os.path.exists(events_path):       
-        # clear results in case it already exists
-        for filename in os.listdir(events_path):
-            file_path = os.path.join(events_path, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print('Failed to delete %s. Reason: %s' % (file_path, e))
+    # run cases
+    create_events(events_dir,
+                  experiment_name, 
+                  grid, 
+                  sim_duration, 
+                  n_events, 
+                  event_duration, 
+                  min_severity, 
+                  max_severity, 
+                  measurement_list, 
+                  overwrite,
+                  seed)
 
 def create_events(experiments_dir : str,
                   experiment_name : str, 
@@ -92,12 +64,6 @@ def create_events(experiments_dir : str,
     # set random seed
     random.seed(seed)
     
-    # set events path
-    experiments_path = os.path.join(experiments_dir, f'{experiment_name}_events.csv')
-    
-    # check if events have already been generated
-    if os.path.isfile(experiments_path) and not overwrite: return experiments_path
-
     # check if measurements list contains more than one measurement
     if len(measurements) < 2: raise ValueError('`measurements` must include more than one sensor')
 
@@ -186,10 +152,7 @@ def create_events(experiments_dir : str,
     events_df = pd.DataFrame(data=events, columns=['gp_index','lat [deg]','lon [deg]','start time [s]','duration [s]','severity','measurements'])
     
     # save list of events to events path 
-    events_df.to_csv(experiments_path,index=False)
-
-    # return path address
-    return experiments_path
+    events_df.to_csv(f'{experiment_name}.csv',index=False)
 
 if __name__ == "__main__":
     

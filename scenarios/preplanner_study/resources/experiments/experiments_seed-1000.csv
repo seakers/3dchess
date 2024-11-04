@@ -1,4 +1,4 @@
-Name,Constellation,Number Planes,Number of Satellites per Plane,Field of Regard (deg),Field of View (deg),Maximum Slew Rate (deg/s),Number of Events per Day,Event Duration (hrs),Grid Type,Number of Grid-points,Preplanner,Points Considered
+Name,Constellation,Number Planes,Number of Satellites per Plane,Field of Regard (deg),Field of View (deg),Maximum Slew Rate (deg/s),Number of Events per Day,Event Duration (hrs),Grid Type,Number of Ground-Points,Preplanner,Percent Ground-Points Considered
 experiment_0,1,2,4,30,1,10,1000,6.0,fibonacci,1000,nadir,0.6
 experiment_1,0,1,8,30,5,1,10,6.0,fibonacci,10000,fifo,0.1
 experiment_2,0,1,8,30,5,1,1000,3.0,fibonacci,1000,nadir,0.7

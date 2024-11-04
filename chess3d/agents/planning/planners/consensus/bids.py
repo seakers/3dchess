@@ -512,8 +512,8 @@ class Bid(ABC):
         return out
     
     def __repr__(self):
-        task_id = self.id.split('-')
-        return f'Bid_{task_id[0]}_{self.bidder}'
+        task_id = self.req_id.split('-')
+        return f'Bid_{task_id[0]}_{self.bidder}_{self.main_measurement}'
 
     def __hash__(self) -> int:
         return hash(repr(self))

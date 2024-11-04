@@ -2,6 +2,7 @@
 Compiles results and creates plots
 """
 
+from itertools import combinations
 import math
 import os
 import pandas as pd
@@ -21,11 +22,11 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
 
     # get run parameters
     parameters_df = pd.read_csv('./resources/experiments/experiments_seed-1000.csv')
-    parameters = { name : params for name,*params in parameters_df.values } # Name,Number Planes,Number of Satellites per Plane,Field of Regard (deg),Field of View (deg),Maximum Slew Rate (deg/s),Number of Events per Day,Event Duration (hrs),Grid Type,Number of Grid-points,Preplanner,Points Considered
+    parameters = { params for params in parameters_df.columns.values }
 
     # define performance metrics
     columns = list(parameters_df.columns.values)
-    ys = []
+    # ys = []
     
     # organize data
     data = []
@@ -44,7 +45,7 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
 
             if key not in columns: 
                 columns.append(key)           
-                ys.append(key)
+                # ys.append(key)
 
             if not isinstance(value, float):
                 try:
@@ -63,6 +64,14 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
 
     df['Percent Ground Points Observed'] = df['Ground Points Observed'] / df['Ground Points']
     df['Percent Ground Points Accessible'] = df['Ground Points Accessible'] / df['Ground Points']
+    df['Percent Events Detected'] = df['Events Detected'] / df["Number of Events per Day"]
+    df['Percent Events Observed'] = df['Events Observed'] / df["Number of Events per Day"]
+    df['Percent Events Re-observed'] = df['Events Re-observed'] / df["Number of Events per Day"]
+    df['Percent Events Co-observed'] = df['Events Co-observed'] / df["Number of Events per Day"]
+    df['Percent Events Fully Co-observed'] = df['Events Fully Co-observed'] / df["Number of Events per Day"]
+    df['Percent Events Partially Co-observed'] = df['Events Partially Co-observed'] / df["Number of Events per Day"]
+    df['Percent Events Observed'] = df['Events Observed'] / df["Number of Events per Day"]
+    df['Ground-Points Considered'] = df['Percent Ground-Points Considered'] * df['Number of Ground-Points']
     df['Number of Satellites'] = df['Number Planes'] * df['Number of Satellites per Plane']
 
     # save to csv
@@ -71,27 +80,41 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
     # create plots directory if necessary
     if not os.path.isdir('./plots'): os.mkdir('./plots')
 
-    # scatter plots
+    # SCATTER PLOTS
     scatterplot_path = os.path.join('./plots', 'scatterplots')
     if not os.path.isdir(scatterplot_path): os.mkdir(scatterplot_path)
     
     # Apply the default theme
     sns.set_theme(style="whitegrid", palette="Set2")
 
+    # select data to be plotted
+    ys : set[str] = {val for val in df.columns.values}
+    ys.difference_update(parameters)
+    ys.remove('Events')
+    ys.remove('Number of Satellites')
+    ys.remove('Ground Points')
     xs = [
-          "Points Considered",
-          "Percent Ground Points Accessible",
           "Ground Points Accessible",
-          "Number of Grid-points",
-          "Number of Events per Day"
+          "Percent Ground Points Accessible",
+          "Ground-Points Considered",
+          "Percent Ground-Points Considered",
+          "Number of Ground-Points",
+          "Number of Events per Day",
+          "Events Detected",
+          "Percent Events Detected"
         ]
-    vals = [(x,y) for y in ys for x in xs]
+    ys.difference_update(xs)
+    
+    vals = [(x,y) for y in ys for x in xs if x != y]
 
     for x,y in tqdm(vals, desc='Generating Scatter Plots'):
         # set plot name and path
         dep_var = y.replace(' ', '_')
         indep_var = x.replace(' ', '_')
-        plot_path = os.path.join(scatterplot_path, f'{dep_var}_vs_{indep_var}.png')
+        
+        dep_var_path = os.path.join(scatterplot_path, y)
+        if not os.path.isdir(dep_var_path): os.mkdir(dep_var_path)
+        plot_path = os.path.join(dep_var_path, f'{dep_var}_vs_{indep_var}.png')
 
         # check if plot has already been generated
         if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
@@ -118,11 +141,48 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
         # close plot
         plt.close()
 
-    # density histograms
+
+    # regressionplots_path = os.path.join('./plots', 'categorical')
+    # if not os.path.isdir(regressionplots_path): os.mkdir(regressionplots_path)
+
+    # for y in tqdm(ys, desc='Generating Categorical Plots'):
+    #     # set plot name and path
+    #     dep_var = y.replace(' ', '_')
+    #     indep_var = x.replace(' ', '_')
+        
+    #     dep_var_path = os.path.join(regressionplots_path, y)
+    #     if not os.path.isdir(dep_var_path): os.mkdir(dep_var_path)
+    #     plot_path = os.path.join(dep_var_path, f'{dep_var}_vs_{indep_var}.png')
+
+    #     # check if plot has already been generated
+    #     if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
+
+    #     # create plot
+    #     sns.catplot(data=df, 
+    #                 x='Constellation', 
+    #                 y=y, 
+    #                 hue='Preplanner',
+    #                 kind='boxen')
+
+    #     plt.xlim(left=0)
+    #     plt.ylim(bottom=0)
+
+    #     # save or show graph
+    #     # if show_plots: plt.show()
+    #     # if save_plots: plt.savefig(plot_path)
+
+    #     plt.show()
+
+    #     # close plot
+    #     plt.close()
+
+
+    # HISTOGRAMS
+
     histogram_path = os.path.join('./plots', 'histograms')
     if not os.path.isdir(histogram_path): os.mkdir(histogram_path)
 
-    vals_histogram = [y for y in ys if 'ob' in y.lower() or 'percent' in y.lower() or 'events' in y.lower()]
+    vals_histogram = [y for y in ys if 'p(' in y.lower() or 'percent' in y.lower()]
     for y in tqdm(vals_histogram, desc='Generating Histogram Plots'):
         
         # set plot name and path
@@ -156,6 +216,51 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
 
         # close plot
         plt.close()
+
+    # # HEAT MAPS
+    # heatmap_path = os.path.join('./plots', 'heatmaps')
+    # if not os.path.isdir(heatmap_path): os.mkdir(heatmap_path)
+
+    # vals = [
+    #         (x1,x2,y) for x1,x2 in combinations(xs,2) for y in ys 
+    #         if x1!=x2 and y!=x1 and y!=x2 
+    #         and x1 not in x2 and x2 not in x1
+    #         and all(['P(' not in val for val in [x1,x2,y]])
+    #         ]
+    # for x1,x2,y in tqdm(vals, desc='Generating Heatmap Plots'):
+    #     # set plot name and path
+    #     dep_var = y.replace(' ', '_')
+    #     indep_var1 = x1.replace(' ', '_')
+    #     indep_var2 = x2.replace(' ', '_')
+        
+    #     dep_var_path = os.path.join(heatmap_path, y)
+    #     if not os.path.isdir(dep_var_path): os.mkdir(dep_var_path)
+    #     plot_path = os.path.join(dep_var_path, f'{dep_var}_vs_{indep_var1}-{indep_var2}.png')
+
+    #     # create plot
+    #     sns.relplot(
+    #         data=df,
+    #         x=x1, 
+    #         y=x2, 
+    #         col="Grid Type",
+    #         hue="Number of Satellites", 
+    #         size=y,
+    #         style="Preplanner",
+    #         palette="flare"
+    #     )
+
+    #     plt.xlim(left=0)
+    #     plt.ylim(bottom=0)
+
+    #     plt.show()
+
+    #     # save or show graph
+    #     # if show_plots: plt.show()
+    #     # if save_plots: plt.savefig(plot_path)
+
+    #     # close plot
+    #     plt.close()
+    # sns.heatmap(glue)
 
     # TODO n_messages time-line
 
@@ -212,161 +317,6 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
     #     plt.close()
 
     # x = 1
-
-    # # initialize metrics
-    # ## Bar plots
-    # events = {
-    #     'Events Detected': [],
-    #     'Total Event Observations' : [],
-    #     'Unique Event Observations' : []
-    # }
-
-    # coobservations = {
-    #     "Events Co-observed" : [],
-    #     "Events Partially Co-observed" : [],
-    #     "Events Fully Co-observed" : [],
-    #     "Total Event Co-observations" : []
-    # }
-
-    # # Scatter plots
-    # scatter_metrics = { planner : {
-    #                                 "N sats" : [],
-    #                                 "N planes" : [],
-    #                                 "N sats per plane" : [],
-    #                                 "Events Detected" : [],
-    #                                 "Total Event Observations" : [],
-    #                                 "Unique Event Observations" : [],
-    #                                 "Events Co-observed" : [],
-    #                                 "Events Partially Co-observed" : [],
-    #                                 "Events Fully Co-observed" : [],
-    #                                 "Total Event Co-observations" : []
-    #                                 } 
-    #                     for planner in ['naive_fifo', 'acbba-1', 'acbba-3']
-    #                 }
-
-    # # collect metrics
-    # n_events = None
-    # ignored_runs = []
-    # for run_name in run_names:
-    #     # load run specs
-    #     *_,n_planes,n_sats_per_plane,field_of_view,field_of_regard,max_slew_rate,preplanner,replanner = run_name.split('_')
-    #     n_planes = int(n_planes)
-    #     n_sats_per_plane = int(n_sats_per_plane)
-    #     field_of_view = float(field_of_view)
-    #     field_of_regard = float(field_of_regard)
-
-        # # load results summary
-        # summary_path = os.path.join(results_path, run_name, 'summary.csv')
-        # summary : pd.DataFrame = pd.read_csv(summary_path)
-
-    #     # # load list of observations
-    #     # observations_path = os.path.join(results_path, run_name, 'environment', 'measurements.csv')
-    #     # observations : pd.DataFrame = pd.read_csv(observations_path)
-
-    #     # collect data for plots
-    #     n_events = [int(val) for key,val in summary.values if key == 'Events'][0] if n_events is None else n_events
-
-    #     events['Events Detected'].append([int(val) for key,val in summary.values if key == 'Events Detected'][0])
-    #     events['Unique Event Observations'].append([int(val) for key,val in summary.values if key == 'Unique Event Observations'][0])
-    #     events['Total Event Observations'].append([int(val) for key,val in summary.values if key == 'Total Event Observations'][0])
-
-    #     coobservations['Events Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Co-observed'][0])
-    #     coobservations['Events Partially Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Partially Co-observed'][0])
-    #     coobservations['Events Fully Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Fully Co-observed'][0])
-    #     coobservations['Total Event Co-observations'].append([int(val) for key,val in summary.values if key == 'Total Event Co-observations'][0])
-
-    #     planner = replanner if 'acbba' in replanner else 'naive_fifo'
-    #     scatter_metrics[planner]['N sats'].append(n_planes*n_sats_per_plane)
-    #     scatter_metrics[planner]['N planes'].append(n_planes)
-    #     scatter_metrics[planner]['N sats per plane'].append(n_sats_per_plane)
-
-    #     scatter_metrics[planner]['Events Detected'].append([int(val) for key,val in summary.values if key == 'Events Detected'][0])
-    #     scatter_metrics[planner]['Unique Event Observations'].append([int(val) for key,val in summary.values if key == 'Unique Event Observations'][0])
-    #     scatter_metrics[planner]['Total Event Observations'].append([int(val) for key,val in summary.values if key == 'Total Event Observations'][0])
-
-    #     scatter_metrics[planner]['Events Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Co-observed'][0])
-    #     scatter_metrics[planner]['Events Partially Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Partially Co-observed'][0])
-    #     scatter_metrics[planner]['Events Fully Co-observed'].append([int(val) for key,val in summary.values if key == 'Events Fully Co-observed'][0])
-    #     scatter_metrics[planner]['Total Event Co-observations'].append([int(val) for key,val in summary.values if key == 'Total Event Co-observations'][0])
-
-    # # ---- BAR PLOTS ----
-    # # set x-axis
-    # x = np.arange(len(run_names))  # the label locations
-    # width = 0.25  # the width of the bars
-    # multiplier = 0
-
-    # # event observation plot
-    # fig, ax = plt.subplots(layout='constrained')
-
-    # for attribute, measurement in events.items():
-    #     offset = width * multiplier
-    #     rects = ax.bar(x + offset, measurement, width, label=attribute)
-    #     ax.bar_label(rects, padding=3)
-    #     multiplier += 1
-
-    # # Add some text for labels, title and custom x-axis tick labels, etc.
-    # ax.set_ylabel('n')
-    # ax.set_title(f'Events ({n_events} total)')
-    # ax.set_xticks(x + width, run_names)
-    # ax.legend(loc='upper left')
-
-    # # show/save plots
-    # # if show_plots: plt.show()
-    # # if save_plots: plt.savefig('./plots/events.png')
-
-    # # event observation plot
-    # fig, ax = plt.subplots(layout='constrained')
-
-    # for attribute, measurement in coobservations.items():
-    #     offset = width * multiplier
-    #     rects = ax.bar(x + offset, measurement, width, label=attribute)
-    #     ax.bar_label(rects, padding=3)
-    #     multiplier += 1
-
-    # # Add some text for labels, title and custom x-axis tick labels, etc.
-    # ax.set_ylabel('n')
-    # ax.set_title(f'Event Co-observations ({n_events} total)')
-    # ax.set_xticks(x + width, run_names)
-    # ax.legend(loc='upper left')
-
-    # # show/save plots
-    # # if show_plots: plt.show()
-    # # if save_plots: plt.savefig('./plots/observations.png')
-
-    # # ---- SCATTER PLOTS ----
-    # titles = [
-    #            "Events Detected",
-    #            "Total Event Observations",
-    #            "Unique Event Observations",
-    #            "Events Co-observed",
-    #            "Events Partially Co-observed",
-    #            "Events Fully Co-observed",
-    #            "Total Event Co-observations"
-    #           ]
-    # counter = 1
-    # for title in titles:
-    #     # create plot
-    #     fig, ax = plt.subplots(layout='constrained')
-    #     for planner in scatter_metrics:
-    #         x = scatter_metrics[planner]['N sats']
-    #         y = scatter_metrics[planner][title]
-    #         ax.scatter(x, y, label=planner, edgecolors='none')
-
-    #     # set axis and title
-    #     ax.set_title(f'{title} per N sats')
-    #     ax.set_xlabel('N sats')
-    #     ax.set_ylabel(title)
-    #     ax.legend()
-    #     ax.grid(True)
-
-    #     # show/save plots
-    #     if show_plots: plt.show()
-    #     if save_plots: plt.savefig(f'./plots/scatter{counter}.png')
-        
-    #     # increase counter
-    #     counter += 1 
-
-
 
 if __name__  == "__main__":
     # set params
