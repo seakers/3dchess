@@ -12,9 +12,6 @@ from chess3d.utils import print_welcome, LEVELS
 
 
 def main(experiments_name : str,
-         grid_name : str,
-         lower_bound : int, 
-         upper_bound : int, 
          overwrite : bool = True,
          seed : int = 1000
          ):    
@@ -22,43 +19,37 @@ def main(experiments_name : str,
     experiment_path = os.path.join('./experiments', f'{experiments_name}.csv')
     experiments_df : pd.DataFrame = pd.read_csv(experiment_path)
 
-    # check if bounds are valid
-    assert 0 <= lower_bound <= upper_bound
-    assert lower_bound <= len(experiments_df) - 1
-    assert upper_bound <= len(experiments_df) - 1 or np.isinf(upper_bound)
-
     # make output directory
     events_dir = os.path.join('./events', experiments_name)
     if overwrite or not os.path.isdir(events_dir):
-        clear_events(events_dir)
+        if os.path.isdir(events_dir): clear_events(events_dir)
         os.mkdir(events_dir)
 
     # count number of runs to be made
-    n_runs : int = min(len(experiments_df), upper_bound-lower_bound)
+    n_runs : int = len(experiments_df)
     print(F'NUMBER OF EVENTS TO GENERATE: {n_runs}')
-
-    # get grid
-    grid_path : str = os.path.join('./grids', f'{grid_name}.csv')
-    grid : pd.DataFrame = pd.read_csv(grid_path)
 
     # set simulation duration in hours
     sim_duration : float = 24.0 / 24.0
 
     # run simulation for each set of parameters
-    for experiment_i,row in tqdm.tqdm(experiments_df.iterrows(), 
+    for _,row in tqdm.tqdm(experiments_df.iterrows(), 
                                       desc = 'Generating Events'):
-        if experiment_i < lower_bound:
-            continue
-        elif upper_bound < experiment_i:
-            break
 
         # extract event parameters
         experiment_name = row['Name']
+        grid_name = f"{row['Grid Type']}_grid_{row['Number of Grid-points']}"
         event_duration = row['Event Duration (hrs)']
         n_events = row['Number of Events per Day']
         min_severity = 0.0
         max_severity = 100
         measurement_list = ['sar', 'visual', 'thermal']
+
+
+        # get grid
+        if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
+        grid_path : str = os.path.join('./grids', f'{grid_name}.csv')
+        grid : pd.DataFrame = pd.read_csv(grid_path)
 
         # run cases
         create_events(events_dir,
@@ -117,20 +108,32 @@ def create_events(experiments_dir : str,
                        leave=False):
         
         while True:
-            # select a random ground point for this event
-            gp_index = random.randint(0, len(grid)-1)
-            gp = grid.iloc[gp_index]
-            
             # generate start time 
             t_start = sim_duration * 24 * 3600 * random.random()
-
-            # check if time overlap exists in the same ground point
-            overlapping_events = [(t_start_overlap,duration_overlap)
-                                for gp_index_overlap,_,_,t_start_overlap,duration_overlap,_,_ in events
-                                if gp_index == gp_index_overlap
-                                and (t_start_overlap <= t_start <= t_start_overlap + duration_overlap
-                                or   t_start <= t_start_overlap <= t_start + event_duration*3600)]
             
+            gp_history = set()
+            while True:
+                # select a random ground point for this event
+                gp_index = random.randint(0, len(grid)-1)
+
+                if gp_index in gp_history: continue
+
+                gp_history.add(gp_index)
+                gp = grid.iloc[gp_index]
+
+                # check if time overlap exists in the same ground point
+                overlapping_events = [(t_start_overlap,duration_overlap)
+                                    for gp_index_overlap,_,_,t_start_overlap,duration_overlap,_,_ in events
+                                    if gp_index == gp_index_overlap
+                                    and (t_start_overlap <= t_start <= t_start_overlap + duration_overlap
+                                    or   t_start <= t_start_overlap <= t_start + event_duration*3600)]
+                
+                # if no overlaps, break random generation cycle
+                if not overlapping_events: break
+
+                # if all ground points have overlaps at this time, try another start time
+                if len(gp_history) == len(grid): break
+
             # if no overlaps, break random generation cycle
             if not overlapping_events: break
 
@@ -164,7 +167,7 @@ def create_events(experiments_dir : str,
 
     # validate event generation constraints
     for gp_index,_,_,t_start,duration,_,_ in tqdm.tqdm(events, 
-                       desc=f'validating {experiment_name} events', 
+                       desc=f'Validating {experiment_name} events', 
                        leave=False):
         
         # check if time overlap exists in the same ground point
@@ -202,24 +205,6 @@ if __name__ == "__main__":
                         type=str,
                         required=False,
                         default='experiments_seed-1000')
-    parser.add_argument('-g',
-                        '--grid-name', 
-                        help='name of grid being used to select the location of events',
-                        type=str,
-                        required=False,
-                        default='hydrolakes_dataset')
-    parser.add_argument('-l',
-                        '--lower-bound', 
-                        help='lower bound of simulation indeces to be run',
-                        type=int,
-                        required=False,
-                        default=0)
-    parser.add_argument('-u',
-                        '--upper-bound', 
-                        help='upper bound of simulation indeces to be run',
-                        type=int,
-                        required=False,
-                        default=np.Inf)
     parser.add_argument('-o', 
                         '--overwrite',
                         default=False,
@@ -232,17 +217,16 @@ if __name__ == "__main__":
     
     # extract arguments
     scenario_name = args.scenario_name
-    grid_name = args.grid_name
-    lower_bound = args.lower_bound
-    upper_bound = args.upper_bound
     overwrite = args.overwrite
 
     # print welcome
     print_welcome('Event generator for Parametric Study')
 
     # run simulation
-    main(scenario_name, grid_name, lower_bound, upper_bound, overwrite)
+    main(scenario_name, 
+        #  overwrite
+         )
 
     # print DONE
-    print(f'Event generation for sims {lower_bound}-{upper_bound} DONE')
+    print(f'Event generation for sims DONE')
     

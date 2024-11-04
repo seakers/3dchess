@@ -97,14 +97,14 @@
             },
             "science" : {
                 "@type": "lookup", 
-                "eventsPath" : "./scenarios/parametric_study/resources/random_events.csv"
+                "eventsPath" : "./scenarios/preplanner_study/resources/random_events.csv"
             }
         }
     ],
     "grid": [
         {
             "@type": "customGrid",
-            "covGridFilePath": "./scenarios/parametric_study/resources/grids/hydrolakes_dataset.csv"
+            "covGridFilePath": "./scenarios/preplanner_study/resources/grids/hydrolakes_dataset.csv"
         }
     ],
     "scenario": {   
@@ -121,12 +121,12 @@
         "clock" : {
             "@type" : "EVENT"
         },
-        "scenarioPath" : "./scenarios/parametric_study/",
+        "scenarioPath" : "./scenarios/preplanner_study/",
         "name" : "toy"
     },
     "settings": {
         "coverageType": "GRID COVERAGE",
-        "outDir" : "./scenarios/parametric_study/orbit_data",
+        "outDir" : "./scenarios/preplanner_study/orbit_data",
         "overwrite" : "False" 
     }
 }

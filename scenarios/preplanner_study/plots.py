@@ -14,14 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-
-if __name__  == "__main__":
-    # set params
-    results_path = './results'
-    show_plots = False
-    save_plots = True
-    overwrite = False
-    
+def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : bool) -> None:
     # get run names
     run_names = list({run_name for run_name in os.listdir(results_path)
                  if os.path.isfile(os.path.join(results_path, run_name, 'summary.csv'))})
@@ -32,6 +25,7 @@ if __name__  == "__main__":
 
     # define performance metrics
     columns = list(parameters_df.columns.values)
+    ys = []
     
     # organize data
     data = []
@@ -48,7 +42,9 @@ if __name__  == "__main__":
         for key,value in summary.values:
             key : str; value : str
 
-            if key not in columns: columns.append(key)           
+            if key not in columns: 
+                columns.append(key)           
+                ys.append(key)
 
             if not isinstance(value, float):
                 try:
@@ -66,6 +62,7 @@ if __name__  == "__main__":
     df.sort_values('Name')
 
     df['Percent Ground Points Observed'] = df['Ground Points Observed'] / df['Ground Points']
+    df['Percent Ground Points Accessible'] = df['Ground Points Accessible'] / df['Ground Points']
     df['Number of Satellites'] = df['Number Planes'] * df['Number of Satellites per Plane']
 
     # save to csv
@@ -81,26 +78,10 @@ if __name__  == "__main__":
     # Apply the default theme
     sns.set_theme(style="whitegrid", palette="Set2")
 
-    # define metrics
-    ys = [  
-            "P(Event Detected)",
-            "P(Event Observed)",
-            "P(Event Re-observed)",
-            "P(Event Co-observed)",
-            "P(Event Partially Co-observed)",
-            "P(Event Fully Co-observed)",
-            "P(Event at a GP)",
-            "P(Event Observation | Observation)",
-            "P(Event Observed | Event Detected)",
-            "P(Event Re-oberved | Event Detected)",
-            "P(Event Co-observed | Event Detected)",
-            "P(Event Co-observed Partially | Event Detected)",
-            "P(Event Co-observed Fully | Event Detected)",
-            "Percent Ground Points Observed",
-            "Ground Points Observed",            
-        ]
     xs = [
           "Points Considered",
+          "Percent Ground Points Accessible",
+          "Ground Points Accessible",
           "Number of Grid-points",
           "Number of Events per Day"
         ]
@@ -108,7 +89,9 @@ if __name__  == "__main__":
 
     for x,y in tqdm(vals, desc='Generating Scatter Plots'):
         # set plot name and path
-        plot_path = os.path.join(scatterplot_path, f'{y.lower()}_vs_{x.lower()}.png')
+        dep_var = y.replace(' ', '_')
+        indep_var = x.replace(' ', '_')
+        plot_path = os.path.join(scatterplot_path, f'{dep_var}_vs_{indep_var}.png')
 
         # check if plot has already been generated
         if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
@@ -125,10 +108,12 @@ if __name__  == "__main__":
             palette="flare"
         )
 
+        plt.xlim(left=0)
+        plt.ylim(bottom=0)
+
         # save or show graph
         if show_plots: plt.show()
-        if save_plots: 
-            plt.savefig(plot_path)
+        if save_plots: plt.savefig(plot_path)
 
         # close plot
         plt.close()
@@ -137,16 +122,16 @@ if __name__  == "__main__":
     histogram_path = os.path.join('./plots', 'histograms')
     if not os.path.isdir(histogram_path): os.mkdir(histogram_path)
 
-    for x,y in tqdm(vals, desc='Generating Histogram Plots'):
+    vals_histogram = [y for y in ys if 'ob' in y.lower() or 'percent' in y.lower() or 'events' in y.lower()]
+    for y in tqdm(vals_histogram, desc='Generating Histogram Plots'):
         
         # set plot name and path
-        plot_path = os.path.join(histogram_path, f'{y}.png')
+        histogram_name = y.replace(' ', '_')
+        plot_path = os.path.join(histogram_path, f'{histogram_name}.png')
 
         # check if plot has already been generated
-        if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
-
-        # check if metric is not a probability
-        if 'ob' not in y.lower() and 'percent' not in y.lower() and 'events' not in y.lower(): continue
+        if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: 
+            continue
 
         # create histogram
         sns.displot(df, 
@@ -167,6 +152,7 @@ if __name__  == "__main__":
         if show_plots: plt.show()
         if save_plots: 
             plt.savefig(plot_path)
+            print(f'saved {plot_path}')
 
         # close plot
         plt.close()
@@ -379,3 +365,14 @@ if __name__  == "__main__":
         
     #     # increase counter
     #     counter += 1 
+
+
+
+if __name__  == "__main__":
+    # set params
+    results_path = './results'
+    show_plots = False
+    save_plots = True
+    overwrite = False
+    
+    main(results_path, show_plots, save_plots, overwrite)
