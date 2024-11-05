@@ -709,12 +709,12 @@ class MissionTestACBBAReplanner(unittest.TestCase):
         # initialize mission
         self.mission : Mission = Mission.from_dict(mission_specs)
 
-    # def test_mission(self) -> None:
-    #     # execute mission
-    #     self.mission.execute()
+    def test_mission(self) -> None:
+        # execute mission
+        self.mission.execute()
 
-    #     # print results
-    #     self.mission.print_results()
+        # print results
+        self.mission.print_results()
 
 class MissionTestDynamicACBBAReplanner(unittest.TestCase):
     def setUp(self) -> None:

@@ -423,11 +423,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
                              current_plan: Plan, 
                              orbitdata: dict
                              ) -> list:
-        # compile IDs of requests to be broadcasted
-        req_ids = [req.id for req in self.pending_reqs_to_broadcast]
-        
-        broadcasts : list[BroadcastMessageAction] = super()._schedule_broadcasts(state,
-                                                                                 orbitdata)
+        # compile IDs of requests to be broadcasted        
+        broadcasts : list[BroadcastMessageAction] = super()._schedule_broadcasts(state, orbitdata)
         
         
         # compile bids to be broadcasted
@@ -467,7 +464,36 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
         # ensure the right number of broadcasts were created
         assert len(bids_out) <= len(compiled_bids)
-        
+
+        # schedule observation performed mesasges
+        # gather observation plan to be sent out
+        plan_out = [action.to_dict()
+                    for action in current_plan
+                    if isinstance(action,ObservationAction)]
+
+        # check if observations exist in plan
+        if plan_out:
+            # find best path for broadcasts
+            path, t_start = self._create_broadcast_path(state, orbitdata)
+
+            # check feasibility of path found
+            if t_start >= 0:
+                # create plan message
+                msg = PlanMessage(state.agent_name, state.agent_name, plan_out, state.t, path=path)
+                
+                # add plan broadcast to list of broadcasts
+                broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
+                
+                # add action performance broadcast to plan
+                for action_dict in tqdm(plan_out, 
+                      desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
+                      leave=False):
+
+                    # path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end']) # TODO improve runtime when simulatin dynamic network
+                    t_start = action_dict['t_end'] # TODO temp solution
+                    msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
+                    if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
+
         return broadcasts
 
     @runtime_tracker
