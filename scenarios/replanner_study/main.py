@@ -49,7 +49,7 @@ def main(
     if len(experiments_df) <= lower_bound: raise ValueError('Lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
-    sim_duration = 1.0 / 24.0 if debug else 1.0 # in days
+    sim_duration = 0.1 / 24.0 if debug else 1.0 # in days
     period, horizon = np.Inf, np.Inf
 
     # count number of runs to be made
@@ -191,6 +191,9 @@ def main(
 
         # initialize mission
         mission : Mission = Mission.from_dict(scenario_specs)
+
+        # check if output directory was properly initalized
+        assert os.path.isdir(os.path.join(scenario_dir, 'results', experiment_name))
 
         # execute mission
         mission.execute()
