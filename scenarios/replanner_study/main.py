@@ -76,7 +76,7 @@ def main(
         if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
 
         # extract satellite capability parameters
-        field_of_regard = 0.0 if preplanner == 'nadir' and replanner == 'broadcaster' else row['Field of Regard (deg)']
+        field_of_regard = 1e-6 if preplanner == 'nadir' and replanner == 'broadcaster' else row['Field of Regard (deg)']
         field_of_view = row['Field of View (deg)']
         agility = row['Maximum Slew Rate (deg/s)']
         max_torque = 0.0
