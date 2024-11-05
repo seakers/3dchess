@@ -46,13 +46,11 @@ def main(
 
     # check if bounds are valid
     assert 0 <= lower_bound <= upper_bound
-    if len(experiments_df) <= lower_bound:
-        print('WARNING lower bound exceeds number of experiments. None will be run.')
+    if len(experiments_df) <= lower_bound: raise ValueError('Lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
     sim_duration = 1.0 / 24.0 if debug else 1.0 # in days
     period, horizon = np.Inf, np.Inf
-    replanner = 'broadcaster'
 
     # count number of runs to be made
     experiments_to_eval = [ (i,row) for i,row in experiments_df.iterrows()
@@ -69,8 +67,16 @@ def main(
         tas = [360 * i / sats_per_plane for i in range(sats_per_plane)]
         raans = [360 * j / n_planes for j in range(n_planes)]
 
+        # extract planner info
+        preplanner = row['Preplanner']
+        replanner = row['Replanner']
+        n_points = row['Number of Ground-Points']
+        fraction_points_considered = row['Percent Ground-Points Considered']
+        grid_name = f"{row['Grid Type']}_grid_{row['Number of Ground-Points']}"
+        if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
+
         # extract satellite capability parameters
-        field_of_regard = row['Field of Regard (deg)']
+        field_of_regard = 0.0 if preplanner == 'nadir' and replanner == 'broadcaster' else row['Field of Regard (deg)']
         field_of_view = row['Field of View (deg)']
         agility = row['Maximum Slew Rate (deg/s)']
         max_torque = 0.0
@@ -85,13 +91,6 @@ def main(
                         'sar' : 'sar'
                         }       
         
-        # extract planner info
-        preplanner = row['Preplanner']
-        n_points = row['Number of Grid-points']
-        points_considered = row['Points Considered']
-        grid_name = f"{row['Grid Type']}_grid_{row['Number of Grid-points']}"
-        if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
-
         # run cases
 
         # create specs from template
@@ -156,7 +155,7 @@ def main(
                 sat['instrument']['fieldOfViewGeometry'] ['angleWidth'] = field_of_view
                 sat['instrument']['maneuver']['A_rollMin'] = - field_of_regard / 2.0
                 sat['instrument']['maneuver']['A_rollMax'] = field_of_regard / 2.0
-                sat['instrument']['@id'] = f'{abbreviations[instrument]}1'
+                sat['instrument']['@id'] = f'{abbreviations[instrument]}_1'
 
                 # set orbit
                 sat['orbitState']['state']['raan'] = raans[j]
@@ -166,7 +165,7 @@ def main(
                 sat['planner']['preplanner']['@type'] = preplanner
                 sat['planner']['preplanner']['period'] = period
                 sat['planner']['preplanner']['horizon'] = horizon
-                sat['planner']['preplanner']['numGroundPoints'] = int(np.floor(n_points * points_considered))
+                sat['planner']['preplanner']['numGroundPoints'] = int(np.floor(n_points * fraction_points_considered))
 
                 # set replanner
                 sat['planner']['replanner']['@type'] = replanner
@@ -200,8 +199,7 @@ def main(
         mission.print_results()
 
         # check if summary file was properly generated at the end of the simulation
-        if not os.path.isfile(results_path):
-            raise Exception(f'`{row["Name"]}` not executed properly.')
+        if not os.path.isfile(results_path): raise Exception(f'`{row["Name"]}` not executed properly.')
 
         # stop if debugging mode is on
         if debug and i_experiment > 3: return
@@ -224,7 +222,7 @@ def clear_orbitdata(scenario_dir : str) -> None:
 if __name__ == "__main__":
     
     # create argument parser
-    parser = argparse.ArgumentParser(prog='3D-CHESS - Preplanner Parametric Study',
+    parser = argparse.ArgumentParser(prog='3D-CHESS - Replanner Parametric Study',
                                      description='Study performance of ACBBA as a reactive planning strategy in the context of Earth-observing missions.',
                                      epilog='- TAMU')
     

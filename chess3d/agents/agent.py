@@ -369,7 +369,7 @@ class SimulationAgent(Agent):
                 and self.external_inbox.empty()
                 ):
                 # give the agent time to finish processing messages before submitting a tic-request
-                t_wait = 1e-2 if t_curr < 1e-3 else 1e-5
+                t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
                 await asyncio.sleep(t_wait)
 
             # initiate broadcast wait and timeout tasks
@@ -534,7 +534,7 @@ class SimulationAgent(Agent):
 
             stats_df = DataFrame(data, columns=headers)
             self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-            stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
+            stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
         except Exception as e:
             x = 1
 

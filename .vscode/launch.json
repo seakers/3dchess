@@ -165,10 +165,10 @@
             }
         },
         {
-            "name": "PARAMETRIC STUDY",
+            "name": "REPLANNER STUDY",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/scenarios/parametric_study/main.py",
+            "program": "${workspaceRoot}/scenarios/replanner_study/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",

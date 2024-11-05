@@ -22,7 +22,7 @@ def main(experiments_name : str,
     # make output directory
     events_dir = os.path.join('./events', experiments_name)
     if overwrite or not os.path.isdir(events_dir):
-        if os.path.isdir(events_dir): clear_events(events_dir)
+        clear_events(events_dir)
         os.mkdir(events_dir)
 
     # count number of runs to be made
@@ -38,7 +38,7 @@ def main(experiments_name : str,
 
         # extract event parameters
         experiment_name = row['Name']
-        grid_name = f"{row['Grid Type']}_grid_{row['Number of Grid-points']}"
+        grid_name = f"{row['Grid Type']}_grid_{row['Number of Ground-Points']}"
         event_duration = row['Event Duration (hrs)']
         n_events = row['Number of Events per Day']
         min_severity = 0.0

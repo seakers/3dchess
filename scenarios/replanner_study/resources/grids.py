@@ -50,6 +50,8 @@ def create_uniform_grid(n_points : int,
     k = np.floor(max(k_1,k_2))
 
     spacing = 180/k # deg / plane
+    n_meridians = 2*k
+    n_parallels = k - 1
 
     # generate grid
     groundpoints = [[lat, lon] 
@@ -221,7 +223,7 @@ if __name__ == "__main__":
     experiments : pd.DataFrame = pd.read_csv(experiments_path)
 
     grid_types : list = experiments['Grid Type'].unique(); grid_types.sort()
-    points : list = experiments['Number of Grid-points'].unique(); points.sort()
+    points : list = experiments['Number of Ground-Points'].unique(); points.sort()
 
     # plot original hydrolakes database
     plot_grid('./grids/hydrolakes_dataset.csv', 'hydrolakes', 5000, overwrite=True)

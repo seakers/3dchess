@@ -1,11 +1,11 @@
 stat_name,val
 Ground Points,5001.0
 Ground Points Accessible,2560.0
-Ground Points Observed,994.0
-Ground Point Observations,3321.0
-Average GP Reobservation Time [s],435.51783412118607
-Standard Deviation of GP Reobservation Time [s],1476.7099738278673
-Median GP Reobservation Time [s],70.0
+Ground Points Observed,992.0
+Ground Point Observations,3399.0
+Average GP Reobservation Time [s],403.3651848774408
+Standard Deviation of GP Reobservation Time [s],1421.876111029117
+Median GP Reobservation Time [s],10.0
 Events,790.0
 Events Detected,9.0
 Events Observed,9.0
@@ -26,7 +26,7 @@ P(Event Co-observed),0.01139
 P(Event Partially Co-observed),0.0038
 P(Event Fully Co-observed),0.0038
 P(Event at a GP),0.15797
-P(Event Observation | Observation),0.00271
+P(Event Observation | Observation),0.00265
 P(Event Observed | Event Detected),1.0
 P(Event Re-observed | Event Detected),0.66667
 P(Event Co-observed | Event Detected),1.0
