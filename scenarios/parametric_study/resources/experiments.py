@@ -21,9 +21,11 @@ def main(n_samples : int = 1, seed : int = 1000):
         ('Maximum Slew Rate (deg/s)',           [1,10]),
         ('Number of Events per Day',            [10**(i) for i in range(1,4)]),
         ('Event Duration (hrs)',                [0.25, 1, 3, 6]),
-        ('Grid Type',                           ['grid0']),
-        ('Preplanner',                          ['nadir', 'fifo', 'dp', 'fifo']),
-        ('Replanner',                           ['acbba', 'none']),
+        ('Grid Type',                           ['hydrolakes', 'uniform', 'fibonacci']),
+        ('Number of Ground-Points',             [100, 1000, 5000, 10000]),
+        ('Preplanner',                          ['nadir', 'fifo']),
+        ('Replanner',                           ['acbba', 'broadcaster']),
+        ('Percent Ground-Points Considered',    [i/10 for i in range(1,11)])
     ]
 
     # calculate lowest-common-multiple for estimating number of samples

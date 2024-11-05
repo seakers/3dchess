@@ -163,7 +163,9 @@ cython_debug/
 *results*
 *orbit_data*
 *plots*
-*tests*results
+*results*
+**tests/study/experiments
+**tests/**/results
 
 *.tar
 *.tar*
