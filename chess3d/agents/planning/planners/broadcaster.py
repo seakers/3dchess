@@ -35,9 +35,6 @@ class Broadcaster(AbstractReplanner):
                         pending_actions: list
                         ) -> None:
     
-        
-        self.n_prev_reqs = len(self.pending_reqs_to_broadcast)
-
         super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
         
         # check if latest known plan has been updated
@@ -60,6 +57,9 @@ class Broadcaster(AbstractReplanner):
 
             # update list of planned request broadcasts
             self.planned_reqs_to_broadcasts = planned_reqs
+
+        # remove from list of planned requests to breadcasts if they've been broadcasted already
+        self.planned_reqs_to_broadcasts.difference_update(self.broadcasted_reqs)
     
     @runtime_tracker
     def needs_planning( self, 
@@ -67,9 +67,10 @@ class Broadcaster(AbstractReplanner):
                         ) -> bool:
         """ only replans whenever there are any pending relays or requests to broadcasts to perform """
 
-        unscheduled_reqs_to_broadcasts : set[MeasurementRequest] = self.pending_reqs_to_broadcast.difference(self.planned_reqs_to_broadcasts)
+        # unscheduled_reqs_to_broadcasts : set[MeasurementRequest] = self.pending_reqs_to_broadcast.difference(self.planned_reqs_to_broadcasts)
 
-        return len(self.pending_relays) > 0 or len(unscheduled_reqs_to_broadcasts) > 0
+        return len(self.pending_relays) > 0 \
+                or (len(self.pending_reqs_to_broadcast) != len(self.planned_reqs_to_broadcasts) and len(self.pending_reqs_to_broadcast) > 0)
     
     @runtime_tracker
     def generate_plan(self, 
@@ -100,40 +101,35 @@ class Broadcaster(AbstractReplanner):
 
         # get set of requests that have not been broadcasted yet 
         unscheduled_reqs_to_broadcasts = self.pending_reqs_to_broadcast.difference(self.planned_reqs_to_broadcasts)
-        
+
+        # sort requests based on their start time
+        pending_reqs_to_broadcast = list(unscheduled_reqs_to_broadcasts) 
+        pending_reqs_to_broadcast.sort(key=lambda a : a.t_start)
+
         # schedule generated measurement request broadcasts
-        if unscheduled_reqs_to_broadcasts:
-            # sort requests based on their start time
-            pending_reqs_to_broadcast = list(unscheduled_reqs_to_broadcasts) 
-            pending_reqs_to_broadcast.sort(key=lambda a : a.t_start)
-
-            # find best path for broadcasts at the current time
-            path, t_start = self._create_broadcast_path(state, orbitdata, state.t)
-
-            for req in tqdm(pending_reqs_to_broadcast,
-                            desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
-                            leave=False):
-
-            # for req in pending_reqs_to_broadcast:
-                req : MeasurementRequest
+        t_start = None
+        for req in tqdm(pending_reqs_to_broadcast,
+                        desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
+                        leave=False):
+            req : MeasurementRequest
+            
+            # calculate broadcast start time
+            if t_start is None or req.t_start > t_start:
+                path, t_start = self._create_broadcast_path(state, orbitdata, req.t_start)
                 
-                # calculate broadcast start time
-                if req.t_start > t_start:
-                    path, t_start = self._create_broadcast_path(state, orbitdata, req.t_start)
-                    
-                # check broadcast feasibility
-                if t_start < 0:
-                    break
+            # check broadcast feasibility
+            if t_start < 0:
+                break
 
-                # create broadcast action
-                msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-                
-                # add to list of broadcasts
-                broadcasts.append(broadcast_action)
+            # create broadcast action
+            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+            broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+            
+            # add to list of broadcasts
+            broadcasts.append(broadcast_action)
 
-                # remove request from list of pending broadcasts
-                self.pending_reqs_to_broadcast.remove(req)
+            # update list of planned request broadcasts
+            self.planned_reqs_to_broadcasts.add(req)
 
         # schedule message relay
         relay_broadcasts = [self._schedule_relay(relay) for relay in self.pending_relays]

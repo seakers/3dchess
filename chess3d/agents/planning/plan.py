@@ -19,8 +19,7 @@ class Plan(ABC):
         self.actions : list[AgentAction] = []
         
         # load preplan
-        if actions:
-            self.update(*actions, t=t)
+        if actions: self.update(*actions, t=t)
             
     def counters(self) -> dict:
         counts = {}
@@ -41,7 +40,7 @@ class Plan(ABC):
         self.actions = []
 
         # add actions from iterable set of actions
-        for actions in action_lists:
+        for actions in tqdm(action_lists, desc='Adding action lists to plan', leave=False):
             # check argument types
             if not isinstance(actions, list):
                 raise ValueError(f'updated plan must be of type `list`.')
