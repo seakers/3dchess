@@ -2,6 +2,7 @@ import logging
 
 from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
+from tqdm import tqdm
 
 from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.messages import MeasurementRequestMessage, message_from_dict
@@ -10,16 +11,17 @@ from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.plan import Plan, Preplan, Replan
 from chess3d.agents.planning.planner import AbstractReplanner
 from chess3d.agents.science.requests import MeasurementRequest
-from chess3d.agents.states import SimulationAgentState
+from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 
 class Broadcaster(AbstractReplanner):
     def __init__(self, debug: bool = False, logger: logging.Logger = None) -> None:
         super().__init__(debug, logger)
 
         # initialize set of preplanned broadcasts
-        self.planned_req_broadcasts : set = set()
+        self.planned_reqs_to_broadcasts : set = set()
 
         self.latest_plan : Plan = None
+        self.n_prev_reqs = 0
 
     @runtime_tracker
     def update_percepts(self, 
@@ -32,6 +34,10 @@ class Broadcaster(AbstractReplanner):
                         aborted_actions: list, 
                         pending_actions: list
                         ) -> None:
+    
+        
+        self.n_prev_reqs = len(self.pending_reqs_to_broadcast)
+
         super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
         
         # check if latest known plan has been updated
@@ -53,7 +59,7 @@ class Broadcaster(AbstractReplanner):
                             if isinstance(msg, MeasurementRequestMessage)}
 
             # update list of planned request broadcasts
-            self.planned_req_broadcasts = planned_reqs
+            self.planned_reqs_to_broadcasts = planned_reqs
     
     @runtime_tracker
     def needs_planning( self, 
@@ -61,9 +67,9 @@ class Broadcaster(AbstractReplanner):
                         ) -> bool:
         """ only replans whenever there are any pending relays or requests to broadcasts to perform """
 
-        pending_request_broadcasts : set[MeasurementRequest] = self.pending_reqs_to_broadcast.difference(self.planned_req_broadcasts)
+        unscheduled_reqs_to_broadcasts : set[MeasurementRequest] = self.pending_reqs_to_broadcast.difference(self.planned_reqs_to_broadcasts)
 
-        return len(self.pending_relays) > 0 or len(pending_request_broadcasts)
+        return len(self.pending_relays) > 0 or len(unscheduled_reqs_to_broadcasts) > 0
     
     @runtime_tracker
     def generate_plan(self, 
@@ -81,3 +87,57 @@ class Broadcaster(AbstractReplanner):
         # update and return plan with new broadcasts
         self.latest_plan =  Replan.from_preplan(current_plan, broadcasts, t=state.t)
         return self.latest_plan.copy()
+
+    @runtime_tracker
+    def _schedule_broadcasts(self, state: SimulationAgentState, orbitdata: OrbitData) -> list:
+        if not isinstance(state, SatelliteAgentState):
+            raise NotImplementedError(f'Broadcast scheduling for agents of type `{type(state)}` not yet implemented.')
+        elif orbitdata is None:
+            raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+
+        # initialize list of broadcasts to be done
+        broadcasts = []       
+
+        # get set of requests that have not been broadcasted yet 
+        unscheduled_reqs_to_broadcasts = self.pending_reqs_to_broadcast.difference(self.planned_reqs_to_broadcasts)
+        
+        # schedule generated measurement request broadcasts
+        if unscheduled_reqs_to_broadcasts:
+            # sort requests based on their start time
+            pending_reqs_to_broadcast = list(unscheduled_reqs_to_broadcasts) 
+            pending_reqs_to_broadcast.sort(key=lambda a : a.t_start)
+
+            # find best path for broadcasts at the current time
+            path, t_start = self._create_broadcast_path(state, orbitdata, state.t)
+
+            for req in tqdm(pending_reqs_to_broadcast,
+                            desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
+                            leave=False):
+
+            # for req in pending_reqs_to_broadcast:
+                req : MeasurementRequest
+                
+                # calculate broadcast start time
+                if req.t_start > t_start:
+                    path, t_start = self._create_broadcast_path(state, orbitdata, req.t_start)
+                    
+                # check broadcast feasibility
+                if t_start < 0:
+                    break
+
+                # create broadcast action
+                msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
+                broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
+                
+                # add to list of broadcasts
+                broadcasts.append(broadcast_action)
+
+                # remove request from list of pending broadcasts
+                self.pending_reqs_to_broadcast.remove(req)
+
+        # schedule message relay
+        relay_broadcasts = [self._schedule_relay(relay) for relay in self.pending_relays]
+        broadcasts.extend(relay_broadcasts)    
+                        
+        # return scheduled broadcasts
+        return broadcasts 

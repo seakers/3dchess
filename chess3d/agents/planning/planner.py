@@ -91,8 +91,7 @@ class AbstractPlanner(ABC):
         self.pending_reqs_to_broadcast.update(my_reqs)
         
         # remove from list of pending requests to breadcasts if they've been broadcasted already
-        for req in self.pending_reqs_to_broadcast.intersection(self.broadcasted_reqs):
-            self.pending_reqs_to_broadcast.remove(req)
+        self.pending_reqs_to_broadcast.difference_update(self.broadcasted_reqs)
 
     @abstractmethod
     def needs_planning(self, **kwargs) -> bool:

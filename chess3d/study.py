@@ -32,7 +32,7 @@ class ParametricStudy:
         self.outdir = outdir
         self.resources_dir = resources_dir
 
-    def generate_study(self, n_samples : int = 1, seed : int = 1000, print_to_csv : bool = True) -> tuple:
+    def generate_study(self, n_samples : int = 1, seed : int = 1000, print_to_csv : bool = False) -> tuple:
         # set random seed
         random.seed(seed)
 
@@ -46,12 +46,14 @@ class ParametricStudy:
         events : Dict[str, pd.DataFrame] = self.generate_events(experiments, grids, seed)
 
         if print_to_csv:
+            if not os.path.isdir(self.outdir): os.mkdir(self.outdir)
+
             seed_dir = os.path.join(self.outdir, f'seed-{seed}')
             if not os.path.isdir(seed_dir): os.mkdir(seed_dir)
 
             # print experiments to `csv` file
             experiments_path = os.path.join(seed_dir, f'experiments.csv')
-            experiments.to_csv(experiments_path)
+            experiments.to_csv(experiments_path,index=False)
 
             # print grids to `csv` file
             grids_path = os.path.join(seed_dir, 'grids')
@@ -59,7 +61,7 @@ class ParametricStudy:
 
             for experiment_name,grid in tqdm(grids.items(), desc='Printing coverage grids'):
                 grid_path = os.path.join(grids_path,f'{experiment_name}_grid.csv')
-                grid.to_csv(grid_path)
+                grid.to_csv(grid_path,index=False)
 
             # print events to `csv` file
             events_path = os.path.join(seed_dir, 'events')
@@ -67,7 +69,7 @@ class ParametricStudy:
 
             for experiment_name,grid in tqdm(events.items(), desc='Printing experiment events'):
                 grid_path = os.path.join(events_path,f'{experiment_name}_events.csv')
-                grid.to_csv(grid_path)
+                grid.to_csv(grid_path,index=False)
 
         return experiments, grids, events
 
@@ -166,9 +168,10 @@ class ParametricStudy:
                 grid : pd.DataFrame = self.create_fibonacci_grid(n_points)
             
             else:
-                grid : pd.DataFrame = self.sample_custom_grid(grid_type, seed)
+                grid : pd.DataFrame = self.sample_custom_grid(grid_type, n_points)
             
             # add to compiled list of grids
+            grid = grid.sort_values(by=['lat [deg]', 'lon [deg]'])
             grids[experiment_name] = grid
         
         # return list of grids

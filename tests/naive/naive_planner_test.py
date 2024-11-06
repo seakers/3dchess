@@ -147,14 +147,14 @@ class TestToyCase(unittest.TestCase):
         self.assertTrue(isinstance(self.mission, Mission))
         
 
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.mission.execute()
+    def test_planner(self) -> None:
+        # execute mission
+        self.mission.execute()
 
-    #     # print results
-    #     self.mission.print_results()
+        # print results
+        self.mission.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
 class TestBenCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -172,7 +172,7 @@ class TestBenCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 0.1,
+            "duration": 24 / 24,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10

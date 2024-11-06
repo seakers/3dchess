@@ -17,4 +17,4 @@ if __name__ == '__main__':
     }
 
     study = ParametricStudy(params, 1.0, './experiments', './resources')
-    experiments, grids, events = study.generate_study()
+    experiments, grids, events = study.generate_study(print=True)
