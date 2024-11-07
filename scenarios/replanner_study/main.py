@@ -75,7 +75,7 @@ def main(
 
         # extract planner info
         preplanner = row['Preplanner']
-        replanner = row['Replanner'] if row['Replanner']is not 'none' else 'broadcaster'
+        replanner = row['Replanner'] if row['Replanner'] != 'none' else 'broadcaster'
         n_points = row['Number of Ground-Points']
         fraction_points_considered = row['Percent Ground-Points Considered']
         grid_name = f"{row['Grid Type']}_grid_{row['Number of Ground-Points']}"
