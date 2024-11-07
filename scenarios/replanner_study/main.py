@@ -20,6 +20,12 @@ def main(
          overwrite : bool = True,
          debug : bool = True):
     
+
+    # stop if debugging mode is on
+    if debug: 
+        lower_bound = 0
+        upper_bound = 4
+
     # get experiments name
     _,seeds = experiments_name.split('_')
     _,seed =  seeds.split('-')
@@ -45,11 +51,11 @@ def main(
     # experiments_df = experiments_df.sort_values(by=['Number Planes','Number of Satellites per Plane'], ascending=True)
 
     # check if bounds are valid
-    assert 0 <= lower_bound <= upper_bound
+    assert 0 <= lower_bound < upper_bound
     if len(experiments_df) <= lower_bound: raise ValueError('Lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
-    sim_duration = 0.1 / 24.0 if debug else 1.0 # in days
+    sim_duration = 1 / 24.0 if debug else 1.0 # in days
     period, horizon = np.Inf, np.Inf
 
     # count number of runs to be made
@@ -59,7 +65,7 @@ def main(
     print(F'NUMBER OF RUNS TO PERFORM: {n_runs}')
 
     # run simulation for each set of parameters
-    for i_experiment,row in tqdm(experiments_to_eval, desc='Evaluating experiments'):          
+    for _,row in tqdm(experiments_to_eval, desc='Evaluating experiments'):          
 
         # extract constellation parameters
         n_planes = row['Number Planes']
@@ -98,6 +104,7 @@ def main(
 
         # create scenario name
         experiment_name = row['Name']
+        scenario_name = get_scenario_name(experiment_name)
         results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
         if os.path.isfile(results_path) and not overwrite: continue
         
@@ -105,7 +112,7 @@ def main(
         scenario_specs['scenario']['name'] = experiment_name
 
         # set outdir
-        orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', experiment_name)
+        orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', scenario_name)
         scenario_specs['settings']['outDir'] = orbitdata_dir
 
         # check overwrite toggle
@@ -125,7 +132,7 @@ def main(
                                 }]
         scenario_specs['scenario']['events'] = {
                                     "@type": "PREDEF", 
-                                    "eventsPath" : os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{row['Name']}_events.csv")
+                                    "eventsPath" : os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{scenario_name}_events.csv")
                                 }
 
         # set spacecraft specs
@@ -171,7 +178,7 @@ def main(
                 sat['planner']['replanner']['@type'] = replanner
 
                 # set science
-                events_path = os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{row['Name']}_events.csv")
+                events_path = os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{scenario_name}_events.csv")
                 sat['science']['eventsPath'] = events_path
                 
                 # add to list of sats
@@ -204,9 +211,6 @@ def main(
         # check if summary file was properly generated at the end of the simulation
         if not os.path.isfile(results_path): raise Exception(f'`{row["Name"]}` not executed properly.')
 
-        # stop if debugging mode is on
-        if debug and i_experiment > 3: return
-
 def clear_orbitdata(scenario_dir : str) -> None:
     orbitdata_path = os.path.join(scenario_dir, 'orbit_data')
 
@@ -221,6 +225,10 @@ def clear_orbitdata(scenario_dir : str) -> None:
                     shutil.rmtree(file_path)
             except Exception as e:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+def get_scenario_name(experiment_name : str) -> str:
+    *_,scenario_id = experiment_name.split('_')
+    return f'scenario_{scenario_id}'
 
 if __name__ == "__main__":
     
@@ -285,7 +293,7 @@ if __name__ == "__main__":
          upper_bound, 
          level, 
          overwrite, 
-         debug
+        #  debug
          )
 
     # print DONE

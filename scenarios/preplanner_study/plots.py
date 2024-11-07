@@ -19,6 +19,7 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
     # get run names
     run_names = list({run_name for run_name in os.listdir(results_path)
                  if os.path.isfile(os.path.join(results_path, run_name, 'summary.csv'))})
+    run_names.sort()
 
     # get run parameters
     parameters_df = pd.read_csv('./resources/experiments/experiments_seed-1000.csv')
@@ -26,7 +27,6 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
 
     # define performance metrics
     columns = list(parameters_df.columns.values)
-    # ys = []
     
     # organize data
     data = []
@@ -56,6 +56,9 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
             datum.append(value)
 
         # add to data
+        if not len(datum) == len(columns):
+            x = 1
+        assert len(datum) == len(columns)
         data.append(datum)
 
     # create compiled data frame
@@ -141,44 +144,7 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
         # close plot
         plt.close()
 
-
-    # regressionplots_path = os.path.join('./plots', 'categorical')
-    # if not os.path.isdir(regressionplots_path): os.mkdir(regressionplots_path)
-
-    # for y in tqdm(ys, desc='Generating Categorical Plots'):
-    #     # set plot name and path
-    #     dep_var = y.replace(' ', '_')
-    #     indep_var = x.replace(' ', '_')
-        
-    #     dep_var_path = os.path.join(regressionplots_path, y)
-    #     if not os.path.isdir(dep_var_path): os.mkdir(dep_var_path)
-    #     plot_path = os.path.join(dep_var_path, f'{dep_var}_vs_{indep_var}.png')
-
-    #     # check if plot has already been generated
-    #     if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
-
-    #     # create plot
-    #     sns.catplot(data=df, 
-    #                 x='Constellation', 
-    #                 y=y, 
-    #                 hue='Preplanner',
-    #                 kind='boxen')
-
-    #     plt.xlim(left=0)
-    #     plt.ylim(bottom=0)
-
-    #     # save or show graph
-    #     # if show_plots: plt.show()
-    #     # if save_plots: plt.savefig(plot_path)
-
-    #     plt.show()
-
-    #     # close plot
-    #     plt.close()
-
-
     # HISTOGRAMS
-
     histogram_path = os.path.join('./plots', 'histograms')
     if not os.path.isdir(histogram_path): os.mkdir(histogram_path)
 
@@ -217,106 +183,47 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
         # close plot
         plt.close()
 
-    # # HEAT MAPS
-    # heatmap_path = os.path.join('./plots', 'heatmaps')
-    # if not os.path.isdir(heatmap_path): os.mkdir(heatmap_path)
+    # BOX PLOTS
+    boxplot_path = os.path.join('./plots', 'boxplots')
+    if not os.path.isdir(boxplot_path): os.mkdir(boxplot_path)
 
-    # vals = [
-    #         (x1,x2,y) for x1,x2 in combinations(xs,2) for y in ys 
-    #         if x1!=x2 and y!=x1 and y!=x2 
-    #         and x1 not in x2 and x2 not in x1
-    #         and all(['P(' not in val for val in [x1,x2,y]])
-    #         ]
-    # for x1,x2,y in tqdm(vals, desc='Generating Heatmap Plots'):
-    #     # set plot name and path
-    #     dep_var = y.replace(' ', '_')
-    #     indep_var1 = x1.replace(' ', '_')
-    #     indep_var2 = x2.replace(' ', '_')
+    for y in tqdm(ys, desc='Generating Box Plots'):
+        # set plot name and path
+        dep_var = y.replace(' ', '_')
         
-    #     dep_var_path = os.path.join(heatmap_path, y)
-    #     if not os.path.isdir(dep_var_path): os.mkdir(dep_var_path)
-    #     plot_path = os.path.join(dep_var_path, f'{dep_var}_vs_{indep_var1}-{indep_var2}.png')
+        plot_path = os.path.join(boxplot_path, f'{dep_var}.png')
 
-    #     # create plot
-    #     sns.relplot(
-    #         data=df,
-    #         x=x1, 
-    #         y=x2, 
-    #         col="Grid Type",
-    #         hue="Number of Satellites", 
-    #         size=y,
-    #         style="Preplanner",
-    #         palette="flare"
-    #     )
+        # check if plot has already been generated
+        if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
 
-    #     plt.xlim(left=0)
-    #     plt.ylim(bottom=0)
+        # create plot
+        # sns.relplot(
+        #     data=df,
+        #     x=x, 
+        #     y=y, 
+        #     col="Grid Type",
+        #     hue="Number of Satellites", 
+        #     # size="Number of Grid-points",
+        #     style="Preplanner",
+        #     palette="flare"
+        # )
 
-    #     plt.show()
+        sns.boxplot(
+            df, y="Preplanner", x=y, hue="Number of Satellites",
+            whis=[0, 100], width=.6, palette="vlag"
+        )
 
-    #     # save or show graph
-    #     # if show_plots: plt.show()
-    #     # if save_plots: plt.savefig(plot_path)
+        plt.xlim(left=0)
+        plt.ylim(bottom=0)
 
-    #     # close plot
-    #     plt.close()
-    # sns.heatmap(glue)
+        plt.show()
 
-    # TODO n_messages time-line
+        # save or show graph
+        # if show_plots: plt.show()
+        # if save_plots: plt.savefig(plot_path)
 
-    # # grid layouts
-    # grids_path = os.path.join('./plots', 'grids')
-    # if not os.path.isdir(grids_path): os.mkdir(grids_path)
-
-    # grid_names = list({grid_name.replace('.csv','') for grid_name in os.listdir('./resources')
-    #              if 'grid' in grid_name})
-    # grid_names.sort()
-
-    # for grid_name in tqdm(grid_names, desc='Coverage Grid Plots'):
-    #     # load grid
-    #     grid_path = os.path.join('./resources', f'{grid_name}.csv')
-    #     grid : pd.DataFrame = pd.read_csv(grid_path)
-
-    #     # get lats and lons
-    #     lats = [lat for lat,_ in grid.values]
-    #     lons = [lon for _,lon in grid.values]
-
-    #     # get grid info
-    #     *_,grid_i = grid_name.split('_')
-    #     field_of_regard,fov,agility,event_duration, \
-    #         num_events,distribution,num_planes,sats_per_plane \
-    #             = parameters[f'updated_experiment_{grid_i}']
-
-    #     # plot ground points
-    #     fig, ax = plt.subplots()
-    #     m = Basemap(projection='cyl',llcrnrlat=-90,urcrnrlat=90,\
-    #                 llcrnrlon=-180,urcrnrlon=180,resolution='c',ax=ax)
-        
-    #     x, y = m(lons,lats)
-    #     m.drawmapboundary(fill_color='#99ffff')
-    #     m.fillcontinents(color='#cc9966',lake_color='#99ffff')
-    #     m.scatter(x,y,3,marker='o',color='r')
-
-    #     m.drawcoastlines()
-    #     # m.fillcontinents(color='coral',lake_color='aqua')
-    #     # draw parallels and meridians.
-    #     m.drawparallels(np.arange(-90.,91.,30.))
-    #     m.drawmeridians(np.arange(-180.,181.,60.))
-    #     m.drawmapboundary(fill_color='aqua') 
-
-    #     # set title
-    #     plt.title(f"{distribution} distribution (n={num_events})")
-        
-    #     # save or show graph
-    #     if show_plots: plt.show()
-    #     if save_plots: 
-    #         plot_path = os.path.join(grids_path, f'{distribution}_grid_{grid_i}.png')
-    #         plt.savefig(plot_path)
-        
-    #     # close plot
-    #     plt.close()
-
-    # x = 1
+        # close plot
+        plt.close()
 
 if __name__  == "__main__":
     # set params

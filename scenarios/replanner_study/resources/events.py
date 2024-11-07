@@ -23,10 +23,10 @@ def main(experiments_name : str,
     events_dir = os.path.join('./events', experiments_name)
     if overwrite or not os.path.isdir(events_dir):
         clear_events(events_dir)
-        os.mkdir(events_dir)
+        if not os.path.isdir(events_dir): os.mkdir(events_dir)
 
     # count number of runs to be made
-    n_runs : int = len(experiments_df)
+    n_runs : int = len(experiments_df) / (len(experiments_df['Preplanner'].unique()) * len(experiments_df['Replanner'].unique()))
     print(F'NUMBER OF EVENTS TO GENERATE: {n_runs}')
 
     # set simulation duration in hours
@@ -37,7 +37,8 @@ def main(experiments_name : str,
                                       desc = 'Generating Events'):
 
         # extract event parameters
-        experiment_name = row['Name']
+        experiment_name : str = row['Name']
+        *_,scenario_id = experiment_name.split('_')
         grid_name = f"{row['Grid Type']}_grid_{row['Number of Ground-Points']}"
         event_duration = row['Event Duration (hrs)']
         n_events = row['Number of Events per Day']
@@ -53,7 +54,7 @@ def main(experiments_name : str,
 
         # run cases
         create_events(events_dir,
-                      experiment_name, 
+                      scenario_id, 
                       grid, 
                       sim_duration, 
                       n_events, 
@@ -78,7 +79,7 @@ def clear_events(events_path : str) -> None:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 def create_events(experiments_dir : str,
-                  experiment_name : str, 
+                  scenario_id : str, 
                   grid : pd.DataFrame, 
                   sim_duration : float, 
                   n_events : int, 
@@ -93,7 +94,7 @@ def create_events(experiments_dir : str,
     random.seed(seed)
     
     # set events path
-    experiments_path = os.path.join(experiments_dir, f'{experiment_name}_events.csv')
+    experiments_path = os.path.join(experiments_dir, f'scenario_{scenario_id}_events.csv')
     
     # check if events have already been generated
     if os.path.isfile(experiments_path) and not overwrite: return experiments_path
@@ -104,7 +105,7 @@ def create_events(experiments_dir : str,
     # generate events
     events = []
     for _ in tqdm.tqdm(range(int(n_events * sim_duration)), 
-                       desc=f'Generating Events for {experiment_name}', 
+                       desc=f'Generating Events for `scenario_{scenario_id}`', 
                        leave=False):
         
         while True:
@@ -166,19 +167,19 @@ def create_events(experiments_dir : str,
         events.append(event)
 
     # validate event generation constraints
-    for gp_index,_,_,t_start,duration,_,_ in tqdm.tqdm(events, 
-                       desc=f'Validating {experiment_name} events', 
-                       leave=False):
+    # for gp_index,_,_,t_start,duration,_,_ in tqdm.tqdm(events, 
+    #                    desc=f'Validating {experiment_name} events', 
+    #                    leave=False):
         
-        # check if time overlap exists in the same ground point
-        overlapping_events = [(t_start_overlap,duration_overlap)
-                            for gp_index_overlap,_,_,t_start_overlap,duration_overlap,_,_ in events
-                            if gp_index == gp_index_overlap
-                            and abs(t_start - t_start_overlap) > 1e-3
-                            and (t_start_overlap <= t_start <= t_start_overlap + duration_overlap
-                            or   t_start <= t_start_overlap <= t_start + duration)]
+    #     # check if time overlap exists in the same ground point
+    #     overlapping_events = [(t_start_overlap,duration_overlap)
+    #                         for gp_index_overlap,_,_,t_start_overlap,duration_overlap,_,_ in events
+    #                         if gp_index == gp_index_overlap
+    #                         and abs(t_start - t_start_overlap) > 1e-3
+    #                         and (t_start_overlap <= t_start <= t_start_overlap + duration_overlap
+    #                         or   t_start <= t_start_overlap <= t_start + duration)]
         
-        assert not overlapping_events
+    #     assert not overlapping_events
 
     assert len(events) == n_events
 

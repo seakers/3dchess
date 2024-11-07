@@ -357,3 +357,67 @@ class ParametricStudy:
 
         # compile list of events
         return pd.DataFrame(data=events, columns=['gp_index','lat [deg]','lon [deg]','start time [s]','duration [s]','severity','measurements'])
+    
+    def compile_results(self, experiments : pd.DataFrame, results_path : str, print_to_csv : bool = True) -> pd.DataFrame:
+        # get run names
+        run_names = list({
+                          run_name 
+                          for run_name in os.listdir(results_path)
+                          if os.path.isfile(os.path.join(results_path, run_name, 'summary.csv'))
+                          }
+                        )
+
+        # define performance metrics
+        columns = list(experiments.columns.values)
+        
+        # organize data
+        data = []
+        for experiment_name in tqdm(run_names, desc='Compiling Results'):
+            # load results summary
+            summary_path = os.path.join(results_path, experiment_name, 'summary.csv')
+            summary : pd.DataFrame = pd.read_csv(summary_path)
+
+            # get experiment parameters
+            matching_experiment = [[name,*_] for name,*_ in experiments.values if name==experiment_name]
+            datum = matching_experiment.pop()
+            
+            # collect xperiment results
+            for key,value in summary.values:
+                key : str; value : str
+
+                if key not in columns: 
+                    columns.append(key)           
+                    # ys.append(key)
+
+                if not isinstance(value, float):
+                    try:
+                        value = float(value)  
+                    except ValueError:
+                        pass
+            
+                datum.append(value)
+
+            # add to data
+            data.append(datum)
+
+        # create compiled data frame
+        results = pd.DataFrame(data=data, columns=columns)
+        results.sort_values('Name')
+
+        results['Percent Ground Points Observed'] = results['Ground Points Observed'] / results['Ground Points']
+        results['Percent Ground Points Accessible'] = results['Ground Points Accessible'] / results['Ground Points']
+        results['Percent Events Detected'] = results['Events Detected'] / results["Number of Events per Day"]
+        results['Percent Events Observed'] = results['Events Observed'] / results["Number of Events per Day"]
+        results['Percent Events Re-observed'] = results['Events Re-observed'] / results["Number of Events per Day"]
+        results['Percent Events Co-observed'] = results['Events Co-observed'] / results["Number of Events per Day"]
+        results['Percent Events Fully Co-observed'] = results['Events Fully Co-observed'] / results["Number of Events per Day"]
+        results['Percent Events Partially Co-observed'] = results['Events Partially Co-observed'] / results["Number of Events per Day"]
+        results['Percent Events Observed'] = results['Events Observed'] / results["Number of Events per Day"]
+        results['Ground-Points Considered'] = results['Percent Ground-Points Considered'] * results['Number of Ground-Points']
+        results['Number of Satellites'] = results['Number Planes'] * results['Number of Satellites per Plane']
+
+        # save to csv
+        if print_to_csv: results.to_csv(os.path.join(results_path, 'study_results_compiled.csv'),index=False)
+
+        # return results dataframe
+        return results
