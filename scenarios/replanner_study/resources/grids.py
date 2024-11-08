@@ -138,53 +138,6 @@ def sample_hyrolakes(n_points : int,
     # return address
     return grid_path
 
-# def create_clustered_grid(n_points : int, 
-#                           overwrite : bool,
-#                           seed : int,
-#                           n_clusters : float = 100, 
-#                           variance : float = 1.0
-#                           ) -> str:
-    
-    # # set random seed
-    # random.seed(seed)
-    
-#     # set grid name
-#     grid_path : str = os.path.join('grids', f'clustered_grid_{n_points}_seed-{seed}.csv')
-    
-#     # check if grid already exists
-#     if os.path.isfile(grid_path) and not overwrite: return grid_path
-    
-#     # generate cluster grid
-#     all_clusters = [[lat, lon ]
-#                     for lat in np.linspace(-90, 90, int(180/spacing)+1)
-#                     for lon in np.linspace(-180, 180, int(360/spacing)+1)
-#                     if lon < 180
-#                     ]
-#     clusters : list = random.sample(all_clusters, n_clusters)
-#     clusters.sort()
-
-#     # create clustered grid of gound points
-#     std = np.sqrt(variance)
-#     groundpoints = []
-
-#     for lat_cluster,lon_cluster in tqdm.tqdm(clusters, desc='generating clustered grid', leave=False):
-#         for _ in range(int(n_points / n_clusters)):
-#             # sample groundpoint
-#             lat = random.normalvariate(lat_cluster, std)
-#             lon = random.normalvariate(lon_cluster, std)
-#             groundpoints.append((lat,lon))
-
-#     assert len(groundpoints) == n_points
-
-#     # create datagrame
-#     df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
-
-#     # save to csv
-#     df.to_csv(grid_path,index=False)
-
-#     # return address
-#     return grid_path
-
 def plot_grid(grid_path : str, grid_type : str, n_points : int, overwrite : bool) -> None:
     # get plot path
     plot_path = grid_path.replace('.csv', '.png')

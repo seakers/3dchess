@@ -1,7 +1,0 @@
-observer,t_img,lat,lon,range,look,incidence,zenith,instrument_name
-img_0,1750.0,0.0,0.0,721.1,2.21,2.46,,visible
-img_0,1750.0,-1.0,0.0,730.6,-9.03,10.06,,visible
-img_0,1750.0,1.0,0.0,730.6,9.03,10.06,,visible
-sar_0,1920.0,-1.0,0.0,730.8,-8.8,9.8,,sar
-sar_1,1940.0,1.0,0.0,731.5,9.0,10.03,,sar
-thermal_0,1950.0,-1.0,0.0,730.8,-8.89,9.9,,thermal
