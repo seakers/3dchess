@@ -400,7 +400,7 @@ class Mission:
         n_events_co_obs = len(events_co_obs)
         n_events_fully_co_obs = len(events_co_obs_fully)
         n_events_partially_co_obs = len(events_co_obs_partially)
-        n_total_event_co_obs = sum([len(observations)-1 for _,observations in events_co_obs.items()])
+        n_total_event_co_obs = sum([len(observations) for _,observations in events_co_obs.items()])
         n_observations = len(observations_performed)
         # n_reobservations = sum([len(observations)-1 for observations in observations_per_gp.items()])
 
@@ -481,14 +481,27 @@ class Mission:
             valid_observations = list({(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req) 
                                         for lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req in observations
                                         if instrument in observations_req})
-            if valid_observations:
-                if len(valid_observations) == len(observations_req):
-                    events_co_obs_fully[event] = valid_observations
+            observation_types = list({instrument
+                                    for *_, instrument, _ in valid_observations
+                                    if instrument in observations_req})
+            if observation_types:
+                #there are observations that satisfy the requirements of the request; event is co-observed
 
-                elif len(valid_observations) > 1:
-                    events_co_obs_partially[event] = valid_observations
+                if all([observation_req in observation_types for observation_req in observations_req]):
+                    # all required observation types were performed; event was fully co-observed
+                    
+                    # events_co_obs_fully[event] = valid_observations
+                    events_co_obs_fully[event] = observation_types
 
-                events_co_obs[event] = valid_observations
+                # elif len(observation_types) > 1:
+                else:
+                    # some required observation types were performed; event was parially co-observed
+                    pass
+                    # events_co_obs_partially[event] = valid_observations
+                    events_co_obs_partially[event] = observation_types
+
+                # events_co_obs[event] = valid_observations
+                events_co_obs[event] = observation_types
 
         return observations_per_gp, events_per_gp, events_detected, events_observed, events_re_obs, events_co_obs, events_co_obs_fully, events_co_obs_partially
     
