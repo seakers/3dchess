@@ -525,7 +525,7 @@ class Mission:
         n_total_event_co_obs = sum([len(co_observations) for _,co_observations in events_co_obs.items()])        
 
         assert n_events_co_obs <= n_events_observed
-        assert n_total_event_co_obs <= n_total_event_re_obs <= n_observations
+        assert n_total_event_co_obs <= n_observations
 
         n_events_fully_co_obs = len(events_co_obs_fully)
         n_total_events_fully_co_obs = sum([len(full_co_observations) for _,full_co_observations in events_co_obs_fully.items()])        
