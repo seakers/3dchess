@@ -269,20 +269,21 @@ class Mission:
 
         # count observations performed
         # n_events, n_unique_event_obs, n_total_event_obs,
-        n_gps, n_gps_accessible, n_events, n_events_detected, n_events_observed, \
-            n_total_event_obs, n_events_reobserved, n_total_event_re_obs, \
-                n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                    n_total_event_co_obs, n_observations \
-                        = self.count_observations(orbitdata, 
-                                                  observations_performed, 
-                                                  observations_per_gp,
-                                                  events, 
-                                                  events_detected, 
-                                                  events_observed, 
-                                                  events_re_obs, 
-                                                  events_co_obs, 
-                                                  events_co_obs_fully, 
-                                                  events_co_obs_partially)
+        n_gps, n_gps_accessible, n_events, n_events_detected, \
+            n_events_observed, n_total_event_obs, n_events_reobserved,\
+                n_total_event_re_obs, n_events_co_obs, n_events_partially_co_obs, \
+                    n_events_fully_co_obs, n_total_event_co_obs, n_total_events_fully_co_obs, \
+                        n_total_events_partially_co_obs,  n_observations \
+                            = self.count_observations(orbitdata, 
+                                                    observations_performed, 
+                                                    observations_per_gp,
+                                                    events, 
+                                                    events_detected, 
+                                                    events_observed, 
+                                                    events_re_obs, 
+                                                    events_co_obs, 
+                                                    events_co_obs_fully, 
+                                                    events_co_obs_partially)
         
         # count probabilities of observations performed
         p_event_detected, p_event_observed, p_event_re_obs, \
@@ -361,54 +362,7 @@ class Mission:
                 ]
 
         return pd.DataFrame(summary_data, columns=summary_headers)
-   
-    def count_observations(self, 
-                           orbitdata : dict, 
-                           observations_performed : pd.DataFrame, 
-                           observations_per_gp : dict,
-                           events : pd.DataFrame,
-                           events_detected : dict,
-                           events_observed : dict,
-                           events_re_obs : dict,
-                           events_co_obs : dict,
-                           events_co_obs_fully : dict,
-                           events_co_obs_partially : dict
-                           ) -> tuple:
-        
-        # count number of groundpoints
-        n_gps = None
-        gps_accessible_compiled = set()
-        for _,agent_orbitdata in orbitdata.items():
-            agent_orbitdata : OrbitData
-
-            # count number of ground points
-            n_gps = sum([len(gps.values) for gps in agent_orbitdata.grid_data]) if n_gps is None else n_gps
-
-            # get set of accessible ground points
-            gps_accessible : set = {gp_index for _,gp_index,*__ in agent_orbitdata.gp_access_data.values}
-
-            # update set of accessible ground points
-            gps_accessible_compiled.update(gps_accessible)
-
-        n_gps_accessible = len(gps_accessible_compiled)
-        n_events = len(events.values)
-        n_events_detected = len(events_detected)
-        n_events_observed = len(events_observed)
-        n_total_event_obs = sum([len(observations) for _,observations in events_observed.items()])
-        n_events_reobserved = len(events_re_obs)
-        n_total_event_re_obs = sum([len(observations)-1 for _,observations in events_re_obs.items()])
-        n_events_co_obs = len(events_co_obs)
-        n_events_fully_co_obs = len(events_co_obs_fully)
-        n_events_partially_co_obs = len(events_co_obs_partially)
-        n_total_event_co_obs = sum([len(observations) for _,observations in events_co_obs.items()])
-        n_observations = len(observations_performed)
-        # n_reobservations = sum([len(observations)-1 for observations in observations_per_gp.items()])
-
-        return n_gps, n_gps_accessible, n_events, n_events_detected, \
-                n_events_observed, n_total_event_obs, n_events_reobserved,\
-                    n_total_event_re_obs, n_events_co_obs, n_events_partially_co_obs, \
-                        n_events_fully_co_obs, n_total_event_co_obs, n_observations
-                    
+                       
     def classify_observations(self, 
                               observations_performed : pd.DataFrame,
                               events : pd.DataFrame,
@@ -447,64 +401,155 @@ class Mission:
                                     and t_start <= t_start_req <= t_end_req <= t_start+duration
                                     and all([instrument in observations_req for instrument in str_to_list(observation_types)])
                                 ]       
+            matching_requests.sort(key= lambda a : a[5])
 
-            if matching_requests:
-                events_detected[event] = matching_requests
+            if matching_requests: events_detected[event] = matching_requests
 
             # find observations that overlooked a given event's location
-            matching_observations = [(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
-                                        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
-                                        if abs(lat - lat_img) < 1e-3 
-                                    and abs(lon - lon_img) < 1e-3
-                                    and t_start <= t_img <= t_start+duration
-                                    and instrument in observations_req  #TODO include better reasoning!
-                                        ]  
-            if matching_observations:
-                events_observed[event] = matching_observations
-        
+            matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)
+                                            for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
+                                            if abs(lat - lat_img) < 1e-3 
+                                        and abs(lon - lon_img) < 1e-3
+                                        and t_start <= t_img <= t_start+duration
+                                        and instrument in observations_req  #TODO include better reasoning!
+                                    ]  
+            matching_observations.sort(key= lambda a : a[6])
+            if matching_observations: events_observed[event] = matching_observations
+ 
         # find reobserved events
-        events_re_obs = {event: observations 
-                            for event,observations in events_observed.items()
-                            if len(observations) > 1}
+        events_re_obs : dict = {event: observations[1:] 
+                                for event,observations in events_observed.items()
+                                if len(observations) > 1}
         
         # find coobserved events
         events_co_obs : Dict[tuple, list] = {}
         events_co_obs_fully : Dict[tuple, list] = {}
         events_co_obs_partially : Dict[tuple, list] = {}
 
-        for event,observations in tqdm(events_observed.items(), desc='Calssifying observations', leave=False):
+        for event,observations in tqdm(events_observed.items(), desc='Compiling co-observations', leave=False):
             # get required measurements for a given event
-            *_,observations_req = observations[-1]
+            *_,observations_req = event
             observations_req : list = str_to_list(observations_req)
             
-            # check if valid observations match this event
-            valid_observations = list({(lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req) 
-                                        for lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req in observations
-                                        if instrument in observations_req})
+            # get types of observations that were performed for this event
             observation_types = list({instrument
-                                    for *_, instrument, _ in valid_observations
+                                    for *_, instrument in observations
                                     if instrument in observations_req})
-            if observation_types:
-                #there are observations that satisfy the requirements of the request; event is co-observed
+            
+            # check if there are observations that satisfy the requirements of the request
+            if len(observation_types) > 1:
+                # check if valid co-observations match this event
+                co_observations : set = {(*_, instrument) 
+                                        for *_, instrument in observations
+                                        if instrument in observations_req}
+                
+                # find which observations may have triggered co-observations
+                requesting_observations = {(lat, lon, t_start, duration, severity, observer, t_img, instrument)
+                                           for lat, lon, t_start, duration, severity, observer, t_img, instrument in co_observations
+                                           for _, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in events_detected[event]
+                                           if abs(t_start_req - t_img) <= 1e-3
+                                           and requester == observer
+                                           }
+
+                # remove requesting observations from co-observations (if any)
+                co_observations.difference_update(requesting_observations)
 
                 if all([observation_req in observation_types for observation_req in observations_req]):
                     # all required observation types were performed; event was fully co-observed
-                    
-                    # events_co_obs_fully[event] = valid_observations
-                    events_co_obs_fully[event] = observation_types
+                    events_co_obs_fully[event] = co_observations
 
-                # elif len(observation_types) > 1:
                 else:
                     # some required observation types were performed; event was parially co-observed
-                    pass
-                    # events_co_obs_partially[event] = valid_observations
-                    events_co_obs_partially[event] = observation_types
+                    events_co_obs_partially[event] = co_observations
 
-                # events_co_obs[event] = valid_observations
-                events_co_obs[event] = observation_types
+                # event is co-observed
+                events_co_obs[event] = co_observations
 
         return observations_per_gp, events_per_gp, events_detected, events_observed, events_re_obs, events_co_obs, events_co_obs_fully, events_co_obs_partially
     
+
+    def count_observations(self, 
+                           orbitdata : dict, 
+                           observations_performed : pd.DataFrame, 
+                           observations_per_gp : dict,
+                           events : pd.DataFrame,
+                           events_detected : dict,
+                           events_observed : dict,
+                           events_re_obs : dict,
+                           events_co_obs : dict,
+                           events_co_obs_fully : dict,
+                           events_co_obs_partially : dict
+                           ) -> tuple:
+        
+        # count number of groundpoints and their accessibility
+        n_gps = None
+        gps_accessible_compiled = set()
+        for _,agent_orbitdata in orbitdata.items():
+            agent_orbitdata : OrbitData
+
+            # count number of ground points
+            n_gps = sum([len(gps.values) for gps in agent_orbitdata.grid_data]) if n_gps is None else n_gps
+
+            # get set of accessible ground points
+            gps_accessible : set = {gp_index for _,gp_index,*__ in agent_orbitdata.gp_access_data.values}
+
+            # update set of accessible ground points
+            gps_accessible_compiled.update(gps_accessible)
+        n_gps_accessible = len(gps_accessible_compiled)
+        
+        # count number of observations performed
+        n_observations = len(observations_performed)
+        
+        # count number of events
+        n_events = len(events.values)
+
+        # count event detections
+        n_events_detected = len(events_detected)
+
+        # count event observations
+        n_events_observed = len(events_observed)
+        n_total_event_obs = sum([len(observations) for _,observations in events_observed.items()])
+
+        assert n_events_detected <= n_events_observed
+        assert n_total_event_obs <= n_observations
+
+        # count event reobservations
+        n_events_reobserved = len(events_re_obs)
+        n_total_event_re_obs = sum([len(re_observations) for _,re_observations in events_re_obs.items()])
+
+        assert n_events_reobserved <= n_events_observed
+        assert n_total_event_re_obs <= n_observations
+
+        # count event co-observations
+        n_events_co_obs = len(events_co_obs)
+        n_total_event_co_obs = sum([len(co_observations) for _,co_observations in events_co_obs.items()])        
+
+        assert n_events_co_obs <= n_events_observed
+        assert n_total_event_co_obs <= n_total_event_re_obs <= n_observations
+
+        n_events_fully_co_obs = len(events_co_obs_fully)
+        n_total_events_fully_co_obs = sum([len(full_co_observations) for _,full_co_observations in events_co_obs_fully.items()])        
+        
+        assert n_events_fully_co_obs <= n_events_observed
+        assert n_total_events_fully_co_obs <= n_total_event_co_obs
+
+        n_events_partially_co_obs = len(events_co_obs_partially)
+        n_total_events_partially_co_obs = sum([len(partial_co_observations) for _,partial_co_observations in events_co_obs_partially.items()])        
+
+        assert n_events_partially_co_obs <= n_events_observed
+        assert n_total_events_partially_co_obs <= n_total_event_co_obs
+
+        assert n_events_co_obs == n_events_fully_co_obs + n_events_partially_co_obs
+        assert n_total_event_co_obs == n_total_events_fully_co_obs + n_total_events_partially_co_obs
+
+
+        # return values
+        return n_gps, n_gps_accessible, n_events, n_events_detected, \
+                n_events_observed, n_total_event_obs, n_events_reobserved,\
+                    n_total_event_re_obs, n_events_co_obs, n_events_partially_co_obs, \
+                        n_events_fully_co_obs, n_total_event_co_obs, n_total_events_fully_co_obs, \
+                            n_total_events_partially_co_obs,  n_observations
+
     def calc_event_probabilities(self,
                                  orbitdata : dict, 
                                  observations_performed : pd.DataFrame, 
@@ -520,56 +565,57 @@ class Mission:
                                  ) -> tuple:
     
         # count observations by type
-        n_gps, _, n_events, n_events_detected, n_events_observed, \
-            _, n_events_reobserved, _, \
-                n_events_co_obs, n_events_partially_co_obs, n_events_fully_co_obs, \
-                    _, n_observations \
-                        = self.count_observations(orbitdata,
-                                                  observations_performed,
-                                                  observations_per_gp,
-                                                  events,
-                                                  events_detected,
-                                                  events_observed,
-                                                  events_re_obs,
-                                                  events_co_obs,
-                                                  events_co_obs_fully,
-                                                  events_co_obs_partially)
+        n_gps, _, n_events, n_events_detected, \
+            n_events_observed, _, n_events_reobserved,\
+                _, n_events_co_obs, n_events_partially_co_obs, \
+                    n_events_fully_co_obs, *_, n_observations \
+                        = self.count_observations(  orbitdata,
+                                                    observations_performed,
+                                                    observations_per_gp,
+                                                    events,
+                                                    events_detected,
+                                                    events_observed,
+                                                    events_re_obs,
+                                                    events_co_obs,
+                                                    events_co_obs_fully,
+                                                    events_co_obs_partially)
                     
         # count number of groundpoints with events
         n_gps_with_events = len(events_per_gp)
 
-        # count number of detected events
+        # count number of obseved and detected events
         n_events_detected_and_observed = len([event for event in events_detected
                                                 if event in events_observed])
             
-        # count number of observed events
+        # count number of re-obseved and events
         n_event_re_obs_and_detected = len([event for event in events_detected
                                                 if event in events_re_obs])
 
-        # count number of co-observed events 
+        # count number of co-observed and detected events 
         n_events_co_obs_and_detected = len([event for event in events_detected
                                                 if event in events_co_obs])
         n_events_fully_co_obs_and_detected = len([event for event in events_detected
                                                 if event in events_co_obs_fully])
+        
         n_events_partially_co_obs_and_detected = len([event for event in events_detected
                                                     if event in events_co_obs_partially])
 
         # calculate probabilities
         p_event_at_gp = n_gps_with_events / n_gps
-        p_event_detected = n_events_detected / n_events
-        p_event_observed = n_events_observed / n_events
-        p_event_re_obs = n_events_reobserved / n_events
-        p_event_co_obs = n_events_co_obs / n_events
-        p_event_co_obs_fully = n_events_fully_co_obs / n_events
-        p_event_co_obs_partial = n_events_partially_co_obs / n_events
+        p_event_detected = n_events_detected / n_events if n_events > 0 else np.NAN
+        p_event_observed = n_events_observed / n_events if n_events > 0 else np.NAN
+        p_event_re_obs = n_events_reobserved / n_events if n_events > 0 else np.NAN
+        p_event_co_obs = n_events_co_obs / n_events if n_events > 0 else np.NAN
+        p_event_co_obs_fully = n_events_fully_co_obs / n_events if n_events > 0 else np.NAN
+        p_event_co_obs_partial = n_events_partially_co_obs / n_events if n_events > 0 else np.NAN
         p_event_obs_if_obs = n_events_observed / n_observations if n_observations > 0 else np.NAN
 
         # calculate joint probabilities
-        p_event_observed_and_detected = n_events_detected_and_observed / n_events
-        p_event_re_obs_and_detected = n_event_re_obs_and_detected / n_events
-        p_event_co_obs_and_detected = n_events_co_obs_and_detected / n_events
-        p_event_co_obs_fully_and_detected = n_events_fully_co_obs_and_detected / n_events
-        p_event_co_obs_partial_and_detected = n_events_partially_co_obs_and_detected / n_events
+        p_event_observed_and_detected = n_events_detected_and_observed / n_events if n_events > 0 else np.NAN
+        p_event_re_obs_and_detected = n_event_re_obs_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_co_obs_and_detected = n_events_co_obs_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_co_obs_fully_and_detected = n_events_fully_co_obs_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_co_obs_partial_and_detected = n_events_partially_co_obs_and_detected / n_events if n_events > 0 else np.NAN
 
         # calculate conditional probabilities
         if p_event_detected > 0.0:
@@ -618,9 +664,9 @@ class Mission:
         
         # compile statistical data
         t_reobservation : dict = {
-            'mean' : np.average(t_reobservations) if t_reobservations else -1,
-            'std' : np.std(t_reobservations) if t_reobservations else 0.0,
-            'median' : np.median(t_reobservations) if t_reobservations else -1,
+            'mean' : np.average(t_reobservations) if t_reobservations else np.NAN,
+            'std' : np.std(t_reobservations) if t_reobservations else np.NAN,
+            'median' : np.median(t_reobservations) if t_reobservations else np.NAN,
             'data' : t_reobservations
         }
 
@@ -636,8 +682,8 @@ class Mission:
                     continue
 
                 # get observation times - (lat, lon, t_start, duration, severity, observer, t_img, instrument, observations_req)
-                *_,t_prev,_,_ = prev_observation
-                *_,t,_,_ = observation
+                *_,t_prev,_ = prev_observation
+                *_,t,_ = observation
 
                 # calculate revisit
                 t_reobservation = t-t_prev
@@ -650,9 +696,9 @@ class Mission:
 
         # compile statistical data
         t_reobservation : dict = {
-            'mean' : np.average(t_reobservations) if t_reobservations else -1,
-            'std' : np.std(t_reobservations) if t_reobservations else 0.0,
-            'median' : np.median(t_reobservations) if t_reobservations else -1,
+            'mean' : np.average(t_reobservations) if t_reobservations else np.NAN,
+            'std' : np.std(t_reobservations) if t_reobservations else np.NAN,
+            'median' : np.median(t_reobservations) if t_reobservations else np.NAN,
             'data' : t_reobservations
         }
 
