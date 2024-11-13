@@ -494,7 +494,7 @@ class SimulationAgent(Agent):
                 data.append(line_data)
             
             state_df = DataFrame(data,columns=headers)
-            self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
+            # self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
             state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
             # log performance stats
@@ -533,7 +533,7 @@ class SimulationAgent(Agent):
                 routine_df.to_csv(routine_dir,index=False)
 
             stats_df = DataFrame(data, columns=headers)
-            self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+            # self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
             stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
         except Exception as e:
             x = 1

@@ -635,14 +635,14 @@ class PlanningModule(InternalModule):
                 data.append(line_data)
 
         df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+        # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
         df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
 
         # log reward grid history
         headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
         data = self.reward_grid.get_history()
         df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
+        # self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
         df.to_csv(f"{self.results_path}/{self.get_parent_name()}/reward_grid_history.csv", index=False)
 
         # log performance stats
@@ -738,8 +738,8 @@ class PlanningModule(InternalModule):
                 data.append(line_data)
 
         stats_df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-        self.log(f'total: {sum(stats_df["t_total"])}', level=logging.WARNING)
+        # self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+        # self.log(f'total: {sum(stats_df["t_total"])}', level=logging.WARNING)
         stats_df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_runtime_stats.csv", index=False)
 
         await super().teardown()
