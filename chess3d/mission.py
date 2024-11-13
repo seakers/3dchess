@@ -444,15 +444,15 @@ class Mission:
                                         if instrument in observations_req}
                 
                 # find which observations may have triggered co-observations
-                requesting_observations = {(lat, lon, t_start, duration, severity, observer, t_img, instrument)
-                                           for lat, lon, t_start, duration, severity, observer, t_img, instrument in co_observations
-                                           for _, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in events_detected[event]
-                                           if abs(t_start_req - t_img) <= 1e-3
-                                           and requester == observer
-                                           }
-
-                # remove requesting observations from co-observations (if any)
-                co_observations.difference_update(requesting_observations)
+                if event in events_detected:
+                    requesting_observations = {(lat, lon, t_start, duration, severity, observer, t_img, instrument)
+                                            for lat, lon, t_start, duration, severity, observer, t_img, instrument in co_observations
+                                            for _, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in events_detected[event]
+                                            if abs(t_start_req - t_img) <= 1e-3
+                                            and requester == observer
+                                            }
+                    # remove requesting observations from co-observations (if any)
+                    co_observations.difference_update(requesting_observations)
 
                 if all([observation_req in observation_types for observation_req in observations_req]):
                     # all required observation types were performed; event was fully co-observed
