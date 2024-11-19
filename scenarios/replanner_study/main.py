@@ -17,8 +17,9 @@ def main(
          lower_bound : int, 
          upper_bound : int, 
          level : int, 
-         overwrite : bool = True,
-         debug : bool = True):
+         overwrite : bool,
+         debug : bool
+         ):
     
 
     # stop if debugging mode is on
@@ -97,14 +98,12 @@ def main(
                         'sar' : 'sar'
                         }       
         
-        # run cases
-
         # create specs from template
         scenario_specs : dict = copy.deepcopy(template_specs)
 
         # get scenario name
-        experiment_name = row['Name']
-        scenario_name = get_scenario_name(experiment_name)
+        experiment_name = f"{row['Name']}_DEBUG" if debug else row['Name']
+        scenario_name = get_scenario_name(experiment_name, debug)
         
         # set scenario name
         scenario_specs['scenario']['name'] = experiment_name
@@ -223,8 +222,11 @@ def clear_orbitdata(scenario_dir : str) -> None:
             except Exception as e:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
 
-def get_scenario_name(experiment_name : str) -> str:
-    *_,scenario_id = experiment_name.split('_')
+def get_scenario_name(experiment_name : str, debug : bool) -> str:
+    if debug:
+        *_,scenario_id, _ = experiment_name.split('_')
+    else:
+        *_,scenario_id = experiment_name.split('_')
     return f'scenario_{scenario_id}'
 
 if __name__ == "__main__":
@@ -266,7 +268,7 @@ if __name__ == "__main__":
                         help='results overwrite toggle',
                         required=False,
                         type=bool) 
-    parser.add_argument('-debug', 
+    parser.add_argument('-d', 
                         '--debug',
                         default=False,
                         help='toggles to run just one experiment for debugging purposes',

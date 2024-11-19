@@ -471,8 +471,8 @@ class Mission:
             # find measurement requests that match this event
             matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
                                     for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
-                                    if  abs(lat - lat_req) < 1e-2 
-                                    and abs(lon - lon_req) < 1e-2
+                                    if  abs(lat - lat_req) < 1e-3 
+                                    and abs(lon - lon_req) < 1e-3
                                     and t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
                                     and all([instrument in observations_req for instrument in str_to_list(observation_types)])
                                 ]       
