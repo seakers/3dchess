@@ -25,6 +25,7 @@ def main(
     if debug: 
         lower_bound = 0
         upper_bound = 4
+        print('WARNING: Debug mode activated.')
 
     # get experiments name
     _,seeds = experiments_name.split('_')
@@ -48,14 +49,13 @@ def main(
     # read scenario parameters file
     experiments_file = os.path.join(scenario_dir, 'resources', 'experiments', f'{experiments_name}.csv')
     experiments_df : pd.DataFrame = pd.read_csv(experiments_file)
-    # experiments_df = experiments_df.sort_values(by=['Number Planes','Number of Satellites per Plane'], ascending=True)
 
     # check if bounds are valid
     assert 0 <= lower_bound < upper_bound
     if len(experiments_df) <= lower_bound: raise ValueError('Lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
-    sim_duration = 1 / 24.0 if debug else 1.0 # in days
+    sim_duration = 4 / 24.0 if debug else 1.0 # in days
     period, horizon = np.Inf, np.Inf
 
     # count number of runs to be made
@@ -102,11 +102,9 @@ def main(
         # create specs from template
         scenario_specs : dict = copy.deepcopy(template_specs)
 
-        # create scenario name
+        # get scenario name
         experiment_name = row['Name']
         scenario_name = get_scenario_name(experiment_name)
-        results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
-        if os.path.isfile(results_path) and not overwrite: continue
         
         # set scenario name
         scenario_specs['scenario']['name'] = experiment_name
@@ -114,12 +112,6 @@ def main(
         # set outdir
         orbitdata_dir = os.path.join('./scenarios', parent_scenario_name, 'orbit_data', scenario_name)
         scenario_specs['settings']['outDir'] = orbitdata_dir
-
-        # check overwrite toggle
-        results_dir = os.path.join('./scenarios', parent_scenario_name, 'results', experiments_name)
-        if not overwrite and os.path.exists(os.path.join(results_dir, 'summary.csv')):
-            # scenario already simulated and told not to overwrite; skip
-            continue
 
         # set simulation duration
         scenario_specs['duration'] = sim_duration
@@ -197,19 +189,24 @@ def main(
         print_welcome(experiment_name)
 
         # initialize mission
-        mission : Mission = Mission.from_dict(scenario_specs)
+        mission : Mission = Mission.from_dict(scenario_specs, overwrite=overwrite, level=level)
 
         # check if output directory was properly initalized
         assert os.path.isdir(os.path.join(scenario_dir, 'results', experiment_name))
 
-        # execute mission
-        mission.execute()
+        # execute mission if it hasn't been performed yet or if results need to be overwritten
+        results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
+        if not os.path.isfile(results_path) or overwrite: mission.execute()
 
         # print results
         mission.print_results()
 
         # check if summary file was properly generated at the end of the simulation
         if not os.path.isfile(results_path): raise Exception(f'`{row["Name"]}` not executed properly.')
+
+    # print DONE
+    print(f'Sims {lower_bound}-{upper_bound} DONE')
+    
 
 def clear_orbitdata(scenario_dir : str) -> None:
     orbitdata_path = os.path.join(scenario_dir, 'orbit_data')
@@ -293,9 +290,5 @@ if __name__ == "__main__":
          upper_bound, 
          level, 
          overwrite, 
-         debug
+        #  debug
          )
-
-    # print DONE
-    print(f'Sims {lower_bound}-{upper_bound} DONE')
-    

@@ -1,13 +1,11 @@
 from logging import Logger
-from numpy import Inf
 from orbitpy.util import Spacecraft
 
-from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 from tqdm import tqdm
 
-from chess3d.agents.orbitdata import OrbitData, TimeInterval
+from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
