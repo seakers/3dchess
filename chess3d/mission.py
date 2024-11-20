@@ -286,11 +286,11 @@ class Mission:
         # count probabilities of observations performed
         p_gp_accessible, p_gp_observed, p_event_at_gp, p_event_detected, \
             p_event_obs_if_obs, p_event_re_obs_if_obs, p_event_co_obs_if_obs, p_event_co_obs_fully_if_obs, p_event_co_obs_partially_if_obs, \
-                p_event_observable, p_event_observed, p_event_observed_if_observable, p_event_observed_if_detected, \
-                    p_event_re_observable, p_event_re_obs, p_event_re_obs_if_re_observable, p_event_re_obs_if_detected, \
-                        p_event_co_observable, p_event_co_obs, p_event_co_obs_if_co_observable, p_event_co_obs_if_detected, \
-                            p_event_co_observable_fully, p_event_co_obs_fully, p_event_co_obs_fully_if_co_observable_fully, p_event_co_obs_fully_if_detected, \
-                                p_event_co_observable_partial, p_event_co_obs_partial, p_event_co_obs_partial_if_co_observable_partially, p_event_co_obs_partial_if_detected \
+                p_event_observable, p_event_observed, p_event_observed_if_observable, p_event_observed_if_detected, p_event_observed_if_observable_and_detected, \
+                    p_event_re_observable, p_event_re_obs, p_event_re_obs_if_re_observable, p_event_re_obs_if_detected, p_event_re_obs_if_reobservable_and_detected, \
+                        p_event_co_observable, p_event_co_obs, p_event_co_obs_if_co_observable, p_event_co_obs_if_detected, p_event_co_obs_if_co_observable_and_detected, \
+                            p_event_co_observable_fully, p_event_co_obs_fully, p_event_co_obs_fully_if_co_observable_fully, p_event_co_obs_fully_if_detected, p_event_co_obs_fully_if_co_observable_fully_and_detected, \
+                                p_event_co_observable_partial, p_event_co_obs_partial, p_event_co_obs_partial_if_co_observable_partially, p_event_co_obs_partial_if_detected, p_event_co_obs_partial_if_co_observable_partially_and_detected \
                                     = self.calc_event_probabilities(orbitdata, 
                                                                     observations_performed, 
                                                                     observations_per_gp,
@@ -375,23 +375,29 @@ class Mission:
                     ['P(Event Fully Co-observed)', np.round(p_event_co_obs_fully,n_decimals)],
                     ['P(Event Partially Co-observed)', np.round(p_event_co_obs_partial,n_decimals)],
 
-                    ['P(Event Observed | Observable)', np.round(p_event_observed_if_observable,n_decimals)],
-                    ['P(Event Re-observed | Re-observable)', np.round(p_event_re_obs_if_re_observable,n_decimals)],
-                    ['P(Event Co-observed | Co-observable)', np.round(p_event_co_obs_if_co_observable,n_decimals)],
-                    ['P(Event Fully Co-observed | Fully Co-observable)', np.round(p_event_co_obs_fully_if_co_observable_fully,n_decimals)],
-                    ['P(Event Partially Co-observed | Partially Co-observable)', np.round(p_event_co_obs_partial_if_co_observable_partially,n_decimals)],
-
                     ['P(Event Observation | Observation)', np.round(p_event_obs_if_obs,n_decimals)],
                     ['P(Event Re-observation | Observation)', np.round(p_event_re_obs_if_obs,n_decimals)],
                     ['P(Event Co-observation | Observation)', np.round(p_event_co_obs_if_obs,n_decimals)],
                     ['P(Event Full Co-observation | Observation)', np.round(p_event_co_obs_partially_if_obs,n_decimals)],
                     ['P(Event Partial Co-observation | Observation)', np.round(p_event_co_obs_fully_if_obs,n_decimals)],
+
+                    ['P(Event Observed | Observable)', np.round(p_event_observed_if_observable,n_decimals)],
+                    ['P(Event Re-observed | Re-observable)', np.round(p_event_re_obs_if_re_observable,n_decimals)],
+                    ['P(Event Co-observed | Co-observable)', np.round(p_event_co_obs_if_co_observable,n_decimals)],
+                    ['P(Event Fully Co-observed | Fully Co-observable)', np.round(p_event_co_obs_fully_if_co_observable_fully,n_decimals)],
+                    ['P(Event Partially Co-observed | Partially Co-observable)', np.round(p_event_co_obs_partial_if_co_observable_partially,n_decimals)],
                     
                     ['P(Event Observed | Event Detected)', np.round(p_event_observed_if_detected,n_decimals)],
                     ['P(Event Re-observed | Event Detected)', np.round(p_event_re_obs_if_detected,n_decimals)],
                     ['P(Event Co-observed | Event Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
                     ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
                     ['P(Event Co-observed Partially | Event Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
+
+                    ['P(Event Observed | Event Observable and Detected)', np.round(p_event_observed_if_detected,n_decimals)],
+                    ['P(Event Re-observed | Event Re-observable and Detected)', np.round(p_event_re_obs_if_detected,n_decimals)],
+                    ['P(Event Co-observed | Event Co-observable and Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
+                    ['P(Event Co-observed Fully | Event Fully Co-observable and Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
+                    ['P(Event Co-observed Partially | Event Partially Co-observable and Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
 
                     # Simulation Runtime
                     # ['Total Runtime [s]', round(self.environment.t_f - self.environment.t_0, n_decimals)]
@@ -742,34 +748,58 @@ class Mission:
                                                             events_co_obs_partially)
                     
         # count number of obseved and detected events
-        n_events_observed_and_observable = len([event for event in events_observable
-                                                if event in events_observed])
-        n_events_observed_and_detected = len([event for event in events_detected
-                                                if event in events_observed])
+        n_events_observed_and_observable = len([event for event in events_observed
+                                                if event in events_observable])
+        n_events_observed_and_detected = len([event for event in events_observed
+                                                if event in events_detected])
+        n_events_observed_and_observable_and_detected = len([event for event in events_observed
+                                                            if event in events_observable
+                                                            and event in events_detected])
+        n_events_observable_and_detected = len([event for event in events_observable
+                                                if event in events_detected])
             
         # count number of re-obseved and events
-        n_event_re_obs_and_reobservable = len([event for event in events_re_observable
-                                                    if event in events_re_obs])
-        n_event_re_obs_and_detected = len([event for event in events_detected
-                                                if event in events_re_obs])
+        n_events_re_obs_and_reobservable = len([event for event in events_re_obs
+                                                if event in  events_re_observable])
+        n_events_re_obs_and_detected = len([event for event in events_re_obs
+                                            if event in events_detected])
+        n_events_re_obs_and_reobservable_and_detected = len([event for event in events_re_obs
+                                                            if event in  events_re_observable
+                                                            and event in events_detected])
+        n_events_re_observable_and_detected = len([event for event in events_re_observable
+                                                  if event in events_detected])
 
         # count number of co-observed and detected events 
-        n_events_co_obs_and_co_observable = len([event for event in events_co_observable
-                                                if event in events_co_obs])
-        n_events_co_obs_and_detected = len([event for event in events_detected
-                                                if event in events_co_obs])
+        n_events_co_obs_and_co_observable = len([event for event in events_co_obs
+                                                if event in events_co_observable])
+        n_events_co_obs_and_detected = len([event for event in events_co_obs
+                                                if event in events_detected])
+        n_events_co_obs_and_co_observable_and_detected = len([event for event in events_co_obs
+                                                                if event in events_co_observable
+                                                                and event in events_detected])
+        n_events_co_observable_and_detected = len([event for event in events_co_observable
+                                                    if event in events_detected])
+
         
-        n_events_fully_co_obs_and_fully_co_observable = len([event for event in events_co_observable_fully
-                                                            if event in events_co_obs_fully])
-        n_events_fully_co_obs_and_detected = len([event for event in events_detected
-                                                if event in events_co_obs_fully])
-        # n_events_fully_co_obs_and_fully_co_observable = len([event for event in events_co_observable_fully
-        #                                                     if event in events_co_obs_fully])
+        n_events_fully_co_obs_and_fully_co_observable = len([event for event in events_co_obs_fully
+                                                            if event in events_co_observable_fully])
+        n_events_fully_co_obs_and_detected = len([event for event in events_co_obs_fully
+                                                  if event in events_detected])
+        n_events_fully_co_obs_and_fully_co_observable_and_detected = len([event for event in events_co_obs_fully
+                                                                          if event in events_co_observable_fully
+                                                                          and event in events_detected])
+        n_events_fully_co_observable_and_detected = len([event for event in events_co_observable_fully
+                                                        if event in events_detected])
         
-        n_events_partially_co_obs_and_partially_co_observable = len([event for event in events_co_observable_partially
-                                                                    if event in events_co_obs_partially])
+        n_events_partially_co_obs_and_partially_co_observable = len([event for event in events_co_obs_partially
+                                                                    if event in events_co_observable_partially])
         n_events_partially_co_obs_and_detected = len([event for event in events_detected
                                                     if event in events_co_obs_partially])
+        n_events_partially_co_obs_and_partially_co_observable_and_detected = len([event for event in events_co_observable_partially
+                                                                          if event in events_co_obs_partially
+                                                                          and event in events_detected])
+        n_events_partially_co_observable_and_detected = len([event for event in events_co_observable_partially
+                                                            if event in events_detected])
 
         # calculate probabilities
         p_gp_accessible = n_gps_accessible / n_gps if n_gps > 0 else np.NAN
@@ -790,18 +820,28 @@ class Mission:
         # calculate joint probabilities
         p_event_observed_and_observable = n_events_observed_and_observable / n_events if n_events > 0 else np.NAN
         p_event_observed_and_detected = n_events_observed_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_observed_and_observable_and_detected = n_events_observed_and_observable_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_observable_and_detected = n_events_observable_and_detected / n_events if n_events > 0 else np.NAN
 
-        p_event_re_obs_and_reobservable = n_event_re_obs_and_reobservable / n_events if n_events > 0 else np.NAN
-        p_event_re_obs_and_detected = n_event_re_obs_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_re_obs_and_reobservable = n_events_re_obs_and_reobservable / n_events if n_events > 0 else np.NAN
+        p_event_re_obs_and_detected = n_events_re_obs_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_re_obs_and_reobservable_and_detected = n_events_re_obs_and_reobservable_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_re_observable_and_detected = n_events_re_observable_and_detected / n_events if n_events > 0 else np.NAN
 
         p_event_co_obs_and_co_observable = n_events_co_obs_and_co_observable / n_events if n_events > 0 else np.NAN
         p_event_co_obs_and_detected = n_events_co_obs_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_co_obs_and_co_observable_and_detected = n_events_co_obs_and_co_observable_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_co_observable_and_detected = n_events_co_observable_and_detected / n_events if n_events > 0 else np.NAN
 
         p_event_co_obs_fully_and_co_observable_fully = n_events_fully_co_obs_and_fully_co_observable / n_events if n_events > 0 else np.NAN
         p_event_co_obs_fully_and_detected = n_events_fully_co_obs_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_fully_co_obs_and_fully_co_observable_and_detected = n_events_fully_co_obs_and_fully_co_observable_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_fully_co_observable_and_detected = n_events_fully_co_observable_and_detected / n_events if n_events > 0 else np.NAN
 
         p_event_co_obs_partially_and_co_observable_partially = n_events_partially_co_obs_and_partially_co_observable / n_events if n_events > 0 else np.NAN
         p_event_co_obs_partial_and_detected = n_events_partially_co_obs_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_partially_co_obs_and_partially_co_observable_and_detected = n_events_partially_co_obs_and_partially_co_observable_and_detected / n_events if n_events > 0 else np.NAN
+        p_event_partially_co_observable_and_detected = n_events_partially_co_observable_and_detected / n_events if n_events > 0 else np.NAN
 
         # calculate conditional probabilities
         p_event_obs_if_obs = n_total_event_obs / n_observations if n_observations > 0 else np.NAN
@@ -812,26 +852,31 @@ class Mission:
         
         p_event_observed_if_observable = p_event_observed_and_observable / p_event_observable if p_event_observable > 0.0 else np.NAN
         p_event_observed_if_detected = p_event_observed_and_detected / p_event_detected if p_event_detected > 0.0 else np.NAN
+        p_event_observed_if_observable_and_detected = p_event_observed_and_observable_and_detected / p_event_observable_and_detected if p_event_observable_and_detected > 0.0 else np.NAN
         
         p_event_re_obs_if_re_observable = p_event_re_obs_and_reobservable / p_event_re_observable if p_event_re_observable > 0.0 else np.NAN
         p_event_re_obs_if_detected = p_event_re_obs_and_detected / p_event_detected if p_event_detected > 0.0 else np.NAN
+        p_event_re_obs_if_reobservable_and_detected = p_event_re_obs_and_reobservable_and_detected / p_event_re_observable_and_detected if p_event_re_observable_and_detected > 0.0 else np.NAN
         
         p_event_co_obs_if_co_observable = p_event_co_obs_and_co_observable / p_event_co_observable if p_event_co_observable > 0.0 else np.NAN
         p_event_co_obs_if_detected = p_event_co_obs_and_detected / p_event_detected if p_event_detected > 0.0 else np.NAN
+        p_event_co_obs_if_co_observable_and_detected = p_event_co_obs_and_co_observable_and_detected / p_event_co_observable_and_detected if p_event_co_observable_and_detected > 0 else np.NAN
 
         p_event_co_obs_fully_if_co_observable_fully = p_event_co_obs_fully_and_co_observable_fully / p_event_co_observable_fully if p_event_co_observable_fully > 0.0 else np.NAN
         p_event_co_obs_fully_if_detected = p_event_co_obs_fully_and_detected / p_event_detected if p_event_detected > 0.0 else np.NAN
+        p_event_co_obs_fully_if_co_observable_fully_and_detected = p_event_fully_co_obs_and_fully_co_observable_and_detected / p_event_fully_co_observable_and_detected if p_event_fully_co_observable_and_detected > 0 else np.NAN
 
         p_event_co_obs_partial_if_co_observable_partially = p_event_co_obs_partially_and_co_observable_partially / p_event_co_observable_partial if p_event_co_observable_partial > 0.0 else np.NAN
         p_event_co_obs_partial_if_detected = p_event_co_obs_partial_and_detected / p_event_detected if p_event_detected > 0.0 else np.NAN
+        p_event_co_obs_partial_if_co_observable_partially_and_detected = p_event_partially_co_obs_and_partially_co_observable_and_detected / p_event_partially_co_observable_and_detected if p_event_partially_co_observable_and_detected > 0 else np.NAN
 
         return p_gp_accessible, p_gp_observed, p_event_at_gp, p_event_detected, \
                 p_event_obs_if_obs, p_event_re_obs_if_obs, p_event_co_obs_if_obs, p_event_co_obs_fully_if_obs, p_event_co_obs_partially_if_obs, \
-                    p_event_observable, p_event_observed, p_event_observed_if_observable, p_event_observed_if_detected, \
-                        p_event_re_observable, p_event_re_obs, p_event_re_obs_if_re_observable, p_event_re_obs_if_detected, \
-                            p_event_co_observable, p_event_co_obs, p_event_co_obs_if_co_observable, p_event_co_obs_if_detected, \
-                                p_event_co_observable_fully, p_event_co_obs_fully, p_event_co_obs_fully_if_co_observable_fully, p_event_co_obs_fully_if_detected, \
-                                    p_event_co_observable_partial, p_event_co_obs_partial, p_event_co_obs_partial_if_co_observable_partially, p_event_co_obs_partial_if_detected
+                    p_event_observable, p_event_observed, p_event_observed_if_observable, p_event_observed_if_detected, p_event_observed_if_observable_and_detected, \
+                        p_event_re_observable, p_event_re_obs, p_event_re_obs_if_re_observable, p_event_re_obs_if_detected, p_event_re_obs_if_reobservable_and_detected, \
+                            p_event_co_observable, p_event_co_obs, p_event_co_obs_if_co_observable, p_event_co_obs_if_detected, p_event_co_obs_if_co_observable_and_detected, \
+                                p_event_co_observable_fully, p_event_co_obs_fully, p_event_co_obs_fully_if_co_observable_fully, p_event_co_obs_fully_if_detected, p_event_co_obs_fully_if_co_observable_fully_and_detected, \
+                                    p_event_co_observable_partial, p_event_co_obs_partial, p_event_co_obs_partial_if_co_observable_partially, p_event_co_obs_partial_if_detected, p_event_co_obs_partial_if_co_observable_partially_and_detected
 
     def calc_groundpoint_coverage_metrics(self,
                                     observations_per_gp: dict
