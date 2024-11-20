@@ -763,6 +763,8 @@ class Mission:
                                                             if event in events_co_obs_fully])
         n_events_fully_co_obs_and_detected = len([event for event in events_detected
                                                 if event in events_co_obs_fully])
+        # n_events_fully_co_obs_and_fully_co_observable = len([event for event in events_co_observable_fully
+        #                                                     if event in events_co_obs_fully])
         
         n_events_partially_co_obs_and_partially_co_observable = len([event for event in events_co_observable_partially
                                                                     if event in events_co_obs_partially])

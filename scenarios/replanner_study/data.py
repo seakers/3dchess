@@ -448,7 +448,9 @@ def plot_results(processed_results : pd.DataFrame, differential_results : pd.Dat
     ys.difference_update(parameters)
     ys.difference_update({'Events',
                           'Number of Satellites',
-                          'Ground Points'})
+                          'Ground Points',
+                          'Planner',
+                          'Scenario ID'})
     
     xs = [
           "Ground Points Accessible",
@@ -458,9 +460,10 @@ def plot_results(processed_results : pd.DataFrame, differential_results : pd.Dat
           "Number of Ground-Points",
           "Number of Events per Day",
           "Events Detected",
-          "P(Event Detected)"
+          "P(Event Detected)",
+          "P(Event Observable)"
         ]
-    ys.difference_update(xs)
+    # ys.difference_update(xs)
        
     # # SCATTER PLOTS
     generate_scatterplots(processed_results, ys, xs, show_plots, save_plots, overwrite, 'completed')
@@ -552,7 +555,7 @@ def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_pl
         if all([np.isnan(val) for val in results_data[y_vals].values]): continue
 
         # create histogram
-        
+        left,right = plt.xlim()
         if 'dif' not in dir_name:
             sns.displot(results_data, 
                         x=y_vals, 
@@ -563,7 +566,8 @@ def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_pl
                         warn_singular=False,
                         )
             plt.xlim(left=0)
-            plt.xlim(right=1)
+            if right > 0.50: 
+                plt.xlim(right=1)
         else:
             sns.displot(results_data, 
                         x=y_vals, 
@@ -573,8 +577,14 @@ def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_pl
                         # hue='Replanner',
                         warn_singular=False
                         )
-            plt.xlim(left=-1)
-            plt.xlim(right=1)
+            
+            if left < -1 or 1 < right:
+                plt.xlim(left=-1)
+                plt.xlim(right=1)
+            else:
+                bound = max([abs(left),abs(right)])
+                plt.xlim(left=-bound)
+                plt.xlim(right=bound)
             # plt.suptitle(f'Difference of `{y_vals}` (ACBBA - None)')
         
         # save or show graph
@@ -631,6 +641,14 @@ def generate_histograms(results_data : pd.DataFrame, ys : list,  show_plots : bo
                         # palette="flare",
                         # warn_singular=False
                         )
+            left,right = plt.xlim()
+            # if left < -1 or 1 < right:
+            #     plt.xlim(left=-1)
+            #     plt.xlim(right=1)
+            # else:
+            bound = max([abs(left),abs(right)])
+            plt.xlim(left=-bound)
+            plt.xlim(right=bound)
         
         # save or show graph
         if show_plots: plt.show()
