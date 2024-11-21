@@ -254,14 +254,11 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         filtered_observations = [observation for observation in observations 
                         if observation.t_start <= self.plan.t_next+self.period]
         
-        if len(filtered_observations) < len(observations):
-            x = 1
-
         t_5 = time.perf_counter() - t_prev
         t_f = time.perf_counter() - t_0
 
         # return observations
-        return observations
+        return filtered_observations
     
     @runtime_tracker
     def _schedule_broadcasts(self, state: SimulationAgentState, observations: list, orbitdata: OrbitData) -> list:
@@ -271,7 +268,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         t_broadcast = self.plan.t+self.period-1e-2
         
         # schedule relays 
-        broadcasts : list = super()._schedule_broadcasts(state, observations, orbitdata, t_broadcast)
+        broadcasts : list = super()._schedule_broadcasts(state, observations, orbitdata)
 
         assert all([t_broadcast-1e-3 <= broadcast.t_start  for broadcast in broadcasts])
 
