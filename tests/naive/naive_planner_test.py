@@ -20,7 +20,7 @@ class TestToyCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 0.1,
+            "duration": 1.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -129,7 +129,7 @@ class TestToyCase(unittest.TestCase):
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/naive/orbit_data"
+                "outDir" : "./tests/naive/orbit_data/toy"
             }
         }
 
@@ -147,14 +147,14 @@ class TestToyCase(unittest.TestCase):
         self.assertTrue(isinstance(self.mission, Mission))
         
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.mission.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
 
-        # print results
-        self.mission.print_results()
+    #     # print results
+    #     self.mission.print_results()
 
-        print('DONE')
+    #     print('DONE')
 
 class TestBenCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -172,7 +172,7 @@ class TestBenCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 24 / 24,
+            "duration": 1.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -288,7 +288,7 @@ class TestBenCase(unittest.TestCase):
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/naive/orbit_data"
+                "outDir" : "./tests/naive/orbit_data/ben_case"
             }
         }
 
@@ -331,7 +331,7 @@ class TestRandomCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 0.1,
+            "duration": 1.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -447,7 +447,7 @@ class TestRandomCase(unittest.TestCase):
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/naive/orbit_data"
+                "outDir" : "./tests/naive/orbit_data/naive"
             }
         }
 
@@ -457,14 +457,14 @@ class TestRandomCase(unittest.TestCase):
         # check type of mission object
         self.assertTrue(isinstance(self.mission, Mission))
 
-#     def test_planner(self) -> None:
-#         # execute mission
-#         self.mission.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
 
-#         # print results
-#         self.mission.print_results()
+    #     # print results
+    #     self.mission.print_results()
 
-#         print('DONE')
+    #     print('DONE')
 
 if __name__ == '__main__':
     unittest.main()

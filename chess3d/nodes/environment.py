@@ -3,6 +3,7 @@ import os
 import time
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from zmq import asyncio as azmq
 import concurrent.futures
 
@@ -572,31 +573,29 @@ class SimulationEnvironment(EnvironmentNode):
     async def teardown(self) -> None:
         try:
             self.t_f = time.perf_counter()
-
             n_decimals = 3
 
-            # print final time
-            self.log(f'Environment shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
-            
+            self.log('Compiling results...',level=logging.WARNING)
+
             # compile observations performed
             observations_performed : pd.DataFrame = self.compile_observations()
 
             # log and save results
-            self.log(f"MEASUREMENTS RECEIVED:\n{len(observations_performed.values)}\n\n", level=logging.WARNING)
+            # self.log(f"MEASUREMENTS RECEIVED:\n{len(observations_performed.values)}\n\n", level=logging.WARNING)
             observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
             
             # commpile list of broadcasts performed
             broadcasts_performed : pd.DataFrame = self.compile_broadcasts()
 
             # log and save results
-            self.log(f"BROADCASTS RECEIVED:\n{len(broadcasts_performed.values)}\n\n", level=logging.WARNING)
+            # self.log(f"BROADCASTS RECEIVED:\n{len(broadcasts_performed.values)}\n\n", level=logging.WARNING)
             broadcasts_performed.to_csv(f"{self.results_path}/broadcasts.csv", index=False)
 
             # compile list of measurement requests 
             measurement_reqs : pd.DataFrame = self.compile_requests()
 
             # log and save results
-            self.log(f"MEASUREMENT REQUESTS RECEIVED:\n{len(measurement_reqs.values)}\n\n", level=logging.WARNING)
+            # self.log(f"MEASUREMENT REQUESTS RECEIVED:\n{len(measurement_reqs.values)}\n\n", level=logging.WARNING)
             measurement_reqs.to_csv(f"{self.results_path}/requests.csv", index=False)
 
             # log performance stats
@@ -606,7 +605,7 @@ class SimulationEnvironment(EnvironmentNode):
             columns = ['routine','t_avg','t_std','t_med','t_max','t_min','n','t_total']
             data = []
 
-            for routine in self.stats:
+            for routine in tqdm(self.stats, desc="ENVIRONMENT: Compiling runtime statistics", leave=False):
                 # compile stats
                 n = len(self.stats[routine])
                 t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
@@ -635,8 +634,11 @@ class SimulationEnvironment(EnvironmentNode):
                 routine_df.to_csv(routine_dir,index=False)
 
             stats_df = pd.DataFrame(data, columns=columns)
-            self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+            # self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
             stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
+
+            # print final time
+            self.log(f'shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
         
         except asyncio.CancelledError as e:
             raise e
@@ -648,7 +650,7 @@ class SimulationEnvironment(EnvironmentNode):
     def compile_observations(self) -> pd.DataFrame:
         columns = None
         data = []
-        for msg in self.observation_history:
+        for msg in tqdm(self.observation_history, desc='Compiling observations results', leave=True):
             msg : ObservationResultsMessage
             observation_data : list = msg.observation_data
             observer = msg.dst
@@ -670,15 +672,12 @@ class SimulationEnvironment(EnvironmentNode):
         columns = ['t_msg', 'Sender', 'Message Type', 
                 #    'Message'
                    ]
-        data = []
-
-        for msg in self.broadcasts_history:
-            msg : dict
-            data.append([msg['t_msg'],
-                         msg['src'],
-                         msg['msg_type'],
-                        #  json.dumps(msg)
-                         ]) 
+        data = [[msg['t_msg'], 
+                 msg['src'], 
+                 msg['msg_type'],
+                 #  json.dumps(msg)
+                 ]
+                for msg in self.broadcasts_history]
             
         return pd.DataFrame(data=data, columns=columns)
     

@@ -291,7 +291,7 @@ class SimulationManager(AbstractManager):
             routine_df.to_csv(routine_dir,index=False)
 
         stats_df = pd.DataFrame(data, columns=headers)
-        self.log(f'\nMANAGER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-
-        
+        # self.log(f'\nMANAGER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
         stats_df.to_csv(f"{results_dir}/runtime_stats.csv", index=False)
+        
+        self.log(f'sucessfully shutdown ', level=logging.WARNING)

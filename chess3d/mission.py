@@ -2,6 +2,7 @@
 import concurrent.futures
 import datetime
 from datetime import timedelta
+from itertools import repeat
 import logging
 import os
 import random
@@ -415,89 +416,36 @@ class Mission:
                               ) -> tuple:
                
         # classify observations per GP
-        observations_per_gp : Dict[tuple, list] = {}
-        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values:
-            if (lat_img,lon_img) not in observations_per_gp:
-                observations_per_gp[(lat_img,lon_img)] = []
-            observations_per_gp[(lat_img,lon_img)].append((observer,t_img,lat_img,lon_img,_,instrument))
+        observations_per_gp : Dict[tuple, list] = { (lat,lon) :   [(observer,t_img,lat_img,lon_img,__,instrument)
+                                                                    for observer,t_img,lat_img,lon_img,*__,instrument in observations_performed.values
+                                                                    if abs(lat - lat_img) <= 1e-3
+                                                                    and abs(lon - lon_img) <= 1e-3]
+                                                                    for _,_,lat,lon,*_ in observations_performed.values
 
+                                                    }
+        # classify events per ground point
+        events_per_gp : Dict[tuple, list] = {(lat,lon): [[t_start,duration,severity,observations_req] 
+                                                        for *_,lat_event,lon_event,t_start,duration,severity,observations_req in events.values
+                                                        if abs(lat - lat_event) <= 1e-3
+                                                        and abs(lon - lon_event) <= 1e-3] 
+                                                        for *_,lat,lon,_,_,_,_ in events.values}
+        
         # count event presense, detections, and observations
-        events_per_gp : Dict[tuple, list] = {}
         events_observable : Dict[tuple, list] = {}
         events_detected : Dict[tuple, list] = {}
         events_observed : Dict[tuple, list] = {}
 
-        for event in tqdm(events.values, desc='Calssifying event accesses, detections, and observations', leave=False):
-            # unpackage event
-            event = tuple(event)
-            if len(event) <= 6:
-                lat,lon,t_start,duration,severity,observations_req = event
-            else:
-                gp_index, lat,lon,t_start,duration,severity,observations_req = event
-            
-            # classify events by their target groundpoint
-            if (lat,lon) not in events_per_gp: events_per_gp[(lat,lon)] = []
-            events_per_gp[(lat,lon)].append([t_start,duration,severity,observations_req])
+        for event in tqdm(events.values, 
+                          desc='Calssifying event accesses, detections, and observations', 
+                          leave=True):
 
-            # find accesses that overlook a given event's location
-            matching_accesses = [
-                                    (t_index*agent_orbit_data.time_step, agent_name, instrument)
-                                    for _, agent_orbit_data in orbitdata.items()
-                                    for t_index,gp_index,pnt_opt_index,gp_lat,gp_lon,*_,instrument,agent_name in agent_orbit_data.gp_access_data.values
-                                    if abs(lat - gp_lat) < 1e-3 
-                                    and abs(lon - gp_lon) < 1e-3
-                                    and t_start <= t_index*agent_orbit_data.time_step <= t_start+duration
-                                    and instrument in observations_req
-                                ]
-            
+            event_tuple, access_intervals, matching_requests, matching_observations \
+                = self.classify_observation(event, orbitdata, measurement_reqs, observations_performed)
 
-            if matching_accesses: 
-                # initialize list of compiled access intervals
-                access_intervals : Dict[tuple,TimeInterval] = dict()
+            if access_intervals: events_observable[event_tuple] = access_intervals
+            if matching_requests: events_detected[event_tuple] = matching_requests
+            if matching_observations: events_observed[event_tuple] = matching_observations
 
-                # compile list of accesses
-                for t_access, agent_name, instrument in matching_accesses:
-                    if (agent_name,instrument) not in access_intervals:
-                        time_step = orbitdata[agent_name].time_step 
-                        access_intervals[(agent_name,instrument)] = TimeInterval(t_access,t_access+time_step)
-
-                    elif access_intervals[(agent_name,instrument)].is_during(t_access):
-                        access_intervals[(agent_name,instrument)].extend(t_access)
-
-                access_intervals : list = [ (access_interval,agent_name,instrument) 
-                                            for (agent_name,instrument),access_interval in access_intervals.items()
-                                        ]
-                
-                # sort in chronological order
-                access_intervals.sort()
-
-                # save to list of accessible events
-                events_observable[event] = access_intervals
-
-            # find measurement requests that match this event
-            matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
-                                    for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
-                                    if  abs(lat - lat_req) < 1e-3 
-                                    and abs(lon - lon_req) < 1e-3
-                                    and t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
-                                    and all([instrument in observations_req for instrument in str_to_list(observation_types)])
-                                ]       
-            matching_requests.sort(key= lambda a : a[5])
-
-            if matching_requests: events_detected[event] = matching_requests
-
-            # find observations that overlooked a given event's location
-            matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)
-                                        for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
-                                        if abs(lat - lat_img) < 1e-3 
-                                        and abs(lon - lon_img) < 1e-3
-                                        and t_start <= t_img <= t_start+duration
-                                        and instrument in observations_req  #TODO include better reasoning!
-                                    ]
-            matching_observations.sort(key= lambda a : a[6])
-            if matching_observations: events_observed[event] = matching_observations
-
- 
         assert all([event in events_observable for event in events_observed])
 
         # find reobserved events
@@ -508,8 +456,6 @@ class Mission:
                                 for event,observations in events_observed.items()
                                 if len(observations) > 1}
         
-        assert all([event in events_re_observable for event in events_re_obs])
-
         # find co-observable events
         events_co_observable : Dict[tuple, list] = {}
         events_co_observable_fully : Dict[tuple, list] = {}
@@ -599,6 +545,63 @@ class Mission:
                         events_co_observable_fully, events_co_obs_fully, \
                             events_co_observable_partially, events_co_obs_partially
     
+    def classify_observation(self, event : tuple, orbitdata : Dict[str, OrbitData], measurement_reqs : pd.DataFrame, observations_performed : pd.DataFrame) -> tuple:
+        # unpackage event
+        event = tuple(event)
+        *_,lat,lon,t_start,duration,severity,observations_req = event
+
+        # find accesses that overlook a given event's location
+        matching_accesses = [
+                                (t_index*agent_orbit_data.time_step, agent_name, instrument)
+                                for _, agent_orbit_data in orbitdata.items()
+                                for t_index,gp_index,pnt_opt_index,gp_lat,gp_lon,*_,instrument,agent_name in agent_orbit_data.gp_access_data.values
+                                if abs(lat - gp_lat) < 1e-3 
+                                and abs(lon - gp_lon) < 1e-3
+                                and t_start <= t_index*agent_orbit_data.time_step <= t_start+duration
+                                and instrument in observations_req
+                            ]
+        
+        # initialize map of compiled access intervals
+        access_intervals : Dict[tuple,TimeInterval] = dict()
+
+        # compile list of accesses
+        for t_access, agent_name, instrument in matching_accesses:
+            if (agent_name,instrument) not in access_intervals:
+                time_step = orbitdata[agent_name].time_step 
+                access_intervals[(agent_name,instrument)] = TimeInterval(t_access,t_access+time_step)
+
+            elif access_intervals[(agent_name,instrument)].is_during(t_access):
+                access_intervals[(agent_name,instrument)].extend(t_access)
+        
+        # convert to list
+        access_intervals : list = [ (access_interval,agent_name,instrument) 
+                                    for (agent_name,instrument),access_interval in access_intervals.items()
+                                ]
+        
+        # sort in chronological order
+        access_intervals.sort()
+
+        # find measurement requests that match this event
+        matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
+                                for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
+                                if  abs(lat - lat_req) < 1e-3 
+                                and abs(lon - lon_req) < 1e-3
+                                and t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
+                                and all([instrument in observations_req for instrument in str_to_list(observation_types)])
+                            ]       
+        matching_requests.sort(key= lambda a : a[5])
+
+        # find observations that overlooked a given event's location
+        matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)
+                                    for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
+                                    if abs(lat - lat_img) < 1e-3 
+                                    and abs(lon - lon_img) < 1e-3
+                                    and t_start <= t_img <= t_start+duration
+                                    and instrument in observations_req  #TODO include better reasoning!
+                                ]
+        matching_observations.sort(key= lambda a : a[6])
+
+        return event, access_intervals, matching_requests, matching_observations
 
     def count_observations(self, 
                            orbitdata : dict, 
