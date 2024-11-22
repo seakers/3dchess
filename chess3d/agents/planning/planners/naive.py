@@ -203,6 +203,7 @@ class NaivePlanner(AbstractPreplanner):
                       leave=False):
 
                     # path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end']) # TODO improve runtime when simulatin dynamic network
+                    action_dict['status'] = AgentAction.COMPLETED
                     t_start = action_dict['t_end'] # TODO temp solution
                     msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
                     if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))

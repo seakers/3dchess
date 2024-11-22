@@ -573,7 +573,6 @@ class SimulationEnvironment(EnvironmentNode):
     async def teardown(self) -> None:
         try:
             self.t_f = time.perf_counter()
-            n_decimals = 3
 
             self.log('Compiling results...',level=logging.WARNING)
 
@@ -605,6 +604,7 @@ class SimulationEnvironment(EnvironmentNode):
             columns = ['routine','t_avg','t_std','t_med','t_max','t_min','n','t_total']
             data = []
 
+            n_decimals = 3
             for routine in tqdm(self.stats, desc="ENVIRONMENT: Compiling runtime statistics", leave=False):
                 # compile stats
                 n = len(self.stats[routine])

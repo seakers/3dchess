@@ -1360,7 +1360,7 @@ class SimulationElementsFactory:
                     
                     if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
 
-                    sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
+                    sharing = bool(preplanner_dict.get('sharing', 'true').lower() in ['true', 't'])
                     preplanner = DynamicProgrammingPlanner(sharing, horizon, period, debug, logger)
                 
                 # elif... # add more planners here

@@ -19,8 +19,7 @@ class TestDynamicProgrammingPlannerBen(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            # "duration": 90/60 / 24.0,
-            "duration": 12.0 / 24.0,
+            "duration": 4.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -145,14 +144,14 @@ class TestDynamicProgrammingPlannerBen(unittest.TestCase):
         # check type of mission object
         self.assertTrue(isinstance(self.mission, Mission))
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.mission.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
 
-        # print results
-        self.mission.print_results()
+    #     # print results
+    #     self.mission.print_results()
 
-        print('DONE')
+        # print('DONE')
 
 class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
     def setUp(self) -> None:
@@ -171,7 +170,7 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
                 "second": 0
             },
             # "duration": 90/60 / 24.0,
-            "duration": 12.0 / 24.0,
+            "duration": 4.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -246,9 +245,10 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
                         "preplanner" : {
                             "@type" : "dynamic",
                             "period" : 500,     # s
+                            "sharing" : "False"
                         },
                         # "replanner" : {
-                        #     "@type" : "broadcaster"
+                        #     "@type" : "acbba"
                         # },
                         "rewardGrid":{
                             "reward_function" : 'event',

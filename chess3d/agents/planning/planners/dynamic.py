@@ -1,5 +1,6 @@
 from itertools import repeat
 from logging import Logger
+from typing import Dict
 from orbitpy.util import Spacecraft
 from tqdm import tqdm
 import concurrent.futures
@@ -8,7 +9,7 @@ from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from chess3d.agents.planning.plan import Plan
+from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
@@ -20,7 +21,7 @@ from chess3d.messages import *
 
 class DynamicProgrammingPlanner(AbstractPreplanner):
     def __init__(self, 
-                 sharing : bool = False,
+                 sharing : bool = True,
                  horizon: float = np.Inf, 
                  period : float = np.Inf, 
                  debug : bool = False,
@@ -31,80 +32,77 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # toggle for sharing plans
         self.sharing = sharing 
 
-    #     self.pending_observations_to_broadcast : set[ObservationAction] = set()    # set of completed observations that have not been broadcasted
+        # initialize attributes
+        self.pending_observations_to_broadcast : set[ObservationAction] = set()    # set of completed observations that have not been broadcasted
 
-    # def update_percepts(self, state: SimulationAgentState, current_plan: Plan, incoming_reqs: list, relay_messages: list, misc_messages: list, completed_actions: list, aborted_actions: list, pending_actions: list) -> None:
-    #     super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
+    def update_percepts(self, state: SimulationAgentState, current_plan: Plan, incoming_reqs: list, relay_messages: list, misc_messages: list, completed_actions: list, aborted_actions: list, pending_actions: list) -> None:
+        super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
 
-    #     # update list of completed broadcasts
-    #     completed_observations : set[ObservationAction]= {  action 
-    #                                                         for action in completed_actions
-    #                                                         if isinstance(action, ObservationAction)}
-    #     completed_observation_broadcasts : set[ObservationAction] = {action_from_dict(**broadcast.observation_action)
-    #                                                                  for broadcast in self.completed_broadcasts
-    #                                                                  if isinstance(broadcast, ObservationPerformedMessage)}
-        
-    #     if completed_observation_broadcasts:
-    #         x=1
-        
-    #     # any([observation in self.pending_observations_to_broadcast for observation in completed_observation_broadcasts])
+        # update list of pending observation completion broadcasts
+        if self.sharing:
+            ## include recently performed observations
+            completed_observations : set[ObservationAction]= {  action 
+                                                                for action in completed_actions
+                                                                if isinstance(action, ObservationAction)}
+            self.pending_observations_to_broadcast.update(completed_observations)
 
-    #     self.pending_observations_to_broadcast.update(completed_observations)
-    #     self.pending_observations_to_broadcast.difference_update(completed_observation_broadcasts)
+            ## remove recently performed broadcasts
+            completed_observation_broadcasts : set[ObservationAction] = {action_from_dict(**broadcast.observation_action)
+                                                                        for broadcast in self.completed_broadcasts
+                                                                        if isinstance(broadcast, ObservationPerformedMessage)}
+            self.pending_observations_to_broadcast.difference_update(completed_observation_broadcasts)
 
-    #     x = 1
+    def needs_planning(self, state: SimulationAgentState, __: object, current_plan: Plan) -> bool:
+        if super().needs_planning(state, __, current_plan):
+            # replanning period has passed; check if any actions in the plan are left to be performed 
+
+            pending_actions = [action for action in self.plan
+                               if action.t_start <= self.plan.t_next]
+            
+            return not bool(pending_actions)
+        return False
 
     @runtime_tracker
-    def populate_adjacency_matrix(self, 
-                                  state : SimulationAgentState, 
-                                  specs : object,
-                                  access_opportunities : list, 
-                                  ground_points : dict,
-                                  adjacency : list,
-                                  j : int,
-                                  pbar : tqdm = None):
-               
-        # get current observation
-        curr_opportunity : tuple = access_opportunities[j]
-        lat_curr,lon_curr = ground_points[curr_opportunity[0]][curr_opportunity[1]]
-        curr_target = [lat_curr,lon_curr,0.0]
+    def generate_plan(  self, 
+                        state : SimulationAgentState,
+                        specs : object,
+                        reward_grid : RewardGrid,
+                        clock_config : ClockConfig,
+                        orbitdata : OrbitData,
+                    ) -> Plan:
+        
+        # check if broadcasts need to be performed
+        if bool(self.pending_observations_to_broadcast) or bool(self.pending_reqs_to_broadcast):
+            # set next replanning time
+            t_next = state.t
 
-        # get any possibly prior observation
-        prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
-                                            if prev_opportunity[3].end <= curr_opportunity[3].end
-                                            and prev_opportunity != curr_opportunity
-                                            ]
+            # schedule no observations
+            observations : list = []
 
-        # construct adjacency matrix
-        for prev_opportunity in prev_opportunities:
-            prev_opportunity : tuple
+        else:
+            # set next replanning time
+            t_next = state.t + self.period
 
-            # get previous observation opportunity's target 
-            lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
-            prev_target = [lat_prev,lon_prev,0.0]
+            # schedule observations
+            observations : list = self._schedule_observations(state, specs, reward_grid, clock_config, orbitdata)
 
-            # assume earliest observation time from previous observation
-            earliest_prev_observation = ObservationAction(prev_opportunity[2], 
-                                                        prev_target, 
-                                                        prev_opportunity[5][0], 
-                                                        prev_opportunity[4][0])
-            
-            # check if observation can be reached from previous observation
-            adjacent = any([self.is_observation_path_valid(state, 
-                                                        specs, 
-                                                        [earliest_prev_observation,
-                                                            ObservationAction(curr_opportunity[2], 
-                                                                            curr_target, 
-                                                                            curr_opportunity[5][k], 
-                                                                            curr_opportunity[4][k])])
-                            for k in range(len(curr_opportunity[4]))
-                            ])                               
+            assert self.is_observation_path_valid(state, specs, observations)
 
-            # update adjacency matrix
-            adjacency[access_opportunities.index(prev_opportunity)][j] = adjacent
+        # schedule broadcasts to be perfomed
+        broadcasts : list = self._schedule_broadcasts(state, observations, orbitdata)
 
-            # update progress bar
-            if pbar is not None: pbar.update(1)
+        # generate maneuver and travel actions from measurements
+        maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
+        
+        # generate plan from actions
+        self.plan : Preplan = Preplan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=t_next)    
+        
+        # wait for next planning period to start
+        replan : list = self._schedule_periodic_replan(state, self.plan, t_next)
+        self.plan.add_all(replan, t=state.t)
+
+        # return plan and save local copy
+        return self.plan.copy()
 
     @runtime_tracker
     def _schedule_observations(self, 
@@ -153,7 +151,6 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         t_prev = time.perf_counter()
 
         # calculate optimal path and update results
-        n_prev_opp = []
         for j in tqdm(range(len(access_opportunities)), 
                       desc=f'{state.agent_name}-PLANNER: Calculating Optimal Path',
                       leave=False):
@@ -163,12 +160,15 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             lat,lon = ground_points[curr_opportunity[0]][curr_opportunity[1]]
             curr_target = [lat,lon,0.0]
 
-            # get any possibly prior observation
-            prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
-                                                if adjancency[access_opportunities.index(prev_opportunity)][j]
-                                                and not np.isnan(th_imgs[access_opportunities.index(prev_opportunity)])
-                                                ]
-            n_prev_opp.append(len(prev_opportunities))
+            # get any possibly prior observation            
+            prev_opportunities : list[tuple] = [(i,access_opportunities[i]) for i in range(len(access_opportunities))
+                                                if adjancency[i][j] and not np.isnan(th_imgs[i]) ]
+
+            prev_observations : Dict[int, ObservationAction] = {i : ObservationAction(prev_opportunity[2], 
+                                                                                      [*ground_points[prev_opportunity[0]][prev_opportunity[1]],0.0], 
+                                                                                      th_imgs[i], 
+                                                                                      t_imgs[i])
+                                                                for i,prev_opportunity in prev_opportunities}
 
             # calculate all possible observation actions for this observation opportunity
             possible_observations = [ObservationAction( curr_opportunity[2], 
@@ -179,41 +179,38 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
 
             # update observation time and look angle
             if not prev_opportunities: # there are no previous possible observations
-                possible_observations = [possible_observation for possible_observation in possible_observations
-                                         if self.is_observation_path_valid(state, specs, [possible_observation])]
-
-                if possible_observations:
-                    t_imgs[j] = possible_observations[0].t_start
-                    th_imgs[j] = possible_observations[0].look_angle
-                    rewards[j] = reward_grid.estimate_reward(possible_observations[0])
-            
-            for prev_opportunity in prev_opportunities: # there are previous possible observations
-                # get previous observation opportunity
-                prev_opportunity : tuple
-                i = access_opportunities.index(prev_opportunity)
-
-                # create previous observation action using known information 
-                lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
-                prev_target = [lat_prev,lon_prev,0.0]
-
-                prev_observation = ObservationAction(prev_opportunity[2], 
-                                                    prev_target, 
-                                                    th_imgs[i], 
-                                                    t_imgs[i])
+                # get possible observation action from the current observation opportunity
+                feasible_observation = next((possible_observation for possible_observation in possible_observations
+                                             if self.is_observation_path_valid(state, specs, [possible_observation])),
+                                            None)
                 
-                # get possible observation actions from the current observation opportuinty
-                possible_observations = [possible_observation for possible_observation in possible_observations
-                                        if self.is_observation_path_valid(state, specs, [prev_observation, possible_observation])]
-
                 # check if an observation is possible
-                if possible_observations: 
+                if feasible_observation is not None:
                     # update imaging time, look angle, and reward
-                    t_imgs[j] = possible_observations[0].t_start
-                    th_imgs[j] = possible_observations[0].look_angle
-                    rewards[j] = reward_grid.estimate_reward(possible_observations[0])
+                    t_imgs[j] = feasible_observation.t_start
+                    th_imgs[j] = feasible_observation.look_angle
+                    rewards[j] = reward_grid.estimate_reward(feasible_observation)
+            
+            for i,_ in prev_opportunities: # there are previous possible observations
+                # get previous observation
+                prev_observation : ObservationAction = prev_observations[i]
+                                
+                # check if an observation is possible
+                feasible_observation = next((possible_observation for possible_observation in possible_observations
+                                            if self.is_observation_path_valid(state, specs, [prev_observation, possible_observation])),
+                                            None)
+                
+                # update imaging time, look angle, and reward
+                if feasible_observation is not None:
+                    # estimate reward for observation
+                    reward = reward_grid.estimate_reward(feasible_observation)
 
-                    # update results
-                    if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j] and not np.isnan(t_imgs[i]):
+                    # update results only if cumulative reward is increased
+                    if cumulative_rewards[i] + reward > cumulative_rewards[j] and not np.isnan(t_imgs[i]):
+                        t_imgs[j] = feasible_observation.t_start
+                        th_imgs[j] = feasible_observation.look_angle
+                        rewards[j] = reward
+
                         cumulative_rewards[j] += cumulative_rewards[i] + rewards[j]
                         preceeding_observations[j] = i
             
@@ -250,34 +247,78 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             observation = ObservationAction(instrument_name, target, th_imgs[j], t_imgs[j])
             observations.append(observation)
         
-        # filter out observations that go beyond the replanning period
-        filtered_observations = [observation for observation in observations 
-                        if observation.t_start <= self.plan.t_next+self.period]
+        # # filter out observations that go beyond the replanning period
+        # filtered_observations = [observation for observation in observations 
+        #                 if observation.t_start <= self.plan.t_next+self.period]
         
         t_5 = time.perf_counter() - t_prev
         t_f = time.perf_counter() - t_0
 
         # return observations
-        return filtered_observations
-    
+        return observations    
+
+    @runtime_tracker
+    def populate_adjacency_matrix(self, 
+                                  state : SimulationAgentState, 
+                                  specs : object,
+                                  access_opportunities : list, 
+                                  ground_points : dict,
+                                  adjacency : list,
+                                  j : int,
+                                  pbar : tqdm = None):
+               
+        # get current observation
+        curr_opportunity : tuple = access_opportunities[j]
+        lat_curr,lon_curr = ground_points[curr_opportunity[0]][curr_opportunity[1]]
+        curr_target = [lat_curr,lon_curr,0.0]
+
+        # get any possibly prior observation
+        prev_opportunities : list[tuple] = [prev_opportunity for prev_opportunity in access_opportunities
+                                            if prev_opportunity[3].end <= curr_opportunity[3].end
+                                            and prev_opportunity != curr_opportunity
+                                            ]
+
+        # construct adjacency matrix
+        for prev_opportunity in prev_opportunities:
+            prev_opportunity : tuple
+
+            # get previous observation opportunity's target 
+            lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
+            prev_target = [lat_prev,lon_prev,0.0]
+
+            # assume earliest observation time from previous observation
+            earliest_prev_observation = ObservationAction(prev_opportunity[2], 
+                                                        prev_target, 
+                                                        prev_opportunity[5][0], 
+                                                        prev_opportunity[4][0])
+            
+            # check if observation can be reached from THE previous observation
+            adjacent = self.is_observation_path_valid(state, specs, 
+                                                          [earliest_prev_observation,
+                                                          ObservationAction(curr_opportunity[2], 
+                                                                            curr_target, 
+                                                                            curr_opportunity[5][-1], 
+                                                                            curr_opportunity[4][-1])])     
+
+            # update adjacency matrix
+            adjacency[access_opportunities.index(prev_opportunity)][j] = adjacent
+
+            # update progress bar
+            if pbar is not None: pbar.update(1)
+
     @runtime_tracker
     def _schedule_broadcasts(self, state: SimulationAgentState, observations: list, orbitdata: OrbitData) -> list:
-
-        # set earliest broadcast time to end of replanning period
-        # t_broadcast = state.t
-        t_broadcast = self.plan.t+self.period-1e-2
-        
-        # schedule relays 
+        # schedule relays and measurement requests
         broadcasts : list = super()._schedule_broadcasts(state, observations, orbitdata)
 
-        assert all([t_broadcast-1e-3 <= broadcast.t_start  for broadcast in broadcasts])
+        # # if no sharing is ennabled, only boradcasts relays and measurement requests
+        # if not self.sharing: return broadcasts
 
+        # set earliest broadcast time to end of replanning period
+        t_broadcast = self.plan.t+self.period
+        
         # gather observation plan to be sent out
-        plan_out = [action.to_dict()
-                    for action in observations
-                    if isinstance(action,ObservationAction)
-                    and action.t_end <= t_broadcast
-                    ]
+        plan_out = [action.to_dict() for action in self.pending_observations_to_broadcast]
 
         # check if observations exist in plan
         if plan_out or self.sharing:
@@ -286,23 +327,18 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
 
             # check feasibility of path found
             if t_start >= 0:
-
-                # add plan boradcast
-                if self.sharing:
-                    # create plan message
-                    msg = PlanMessage(state.agent_name, state.agent_name, plan_out, state.t, path=path)
-                    
-                    # add plan broadcast to list of broadcasts
-                    broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
                 
                 # add performing action broadcast to plan
                 for action_dict in tqdm(plan_out, 
                                         desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
                                         leave=False):
-                    # create action
-                    msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
+                    # update action dict to indicate completion
+                    action_dict['status'] = AgentAction.COMPLETED
+                    
+                    # create message
+                    msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict, path=path)
 
-                    # add to plan
+                    # add message broadcast to plan
                     broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
             
         return broadcasts

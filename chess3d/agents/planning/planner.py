@@ -650,6 +650,7 @@ class AbstractPreplanner(AbstractPlanner):
                         ) -> None:
         
         super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
+        self.plan.update_action_completion(completed_actions, aborted_actions, pending_actions, state.t)
     
     @runtime_tracker
     def needs_planning( self, 
@@ -685,7 +686,7 @@ class AbstractPreplanner(AbstractPlanner):
         self.plan : Preplan = Preplan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
         
         # wait for next planning period to start
-        replan : list = self.__schedule_periodic_replan(state, self.plan)
+        replan : list = self._schedule_periodic_replan(state, self.plan, t_next=state.t+self.period)
         self.plan.add_all(replan, t=state.t)
 
         # return plan and save local copy
@@ -700,11 +701,8 @@ class AbstractPreplanner(AbstractPlanner):
         return super()._schedule_broadcasts(state, orbitdata, t)
 
     @runtime_tracker
-    def __schedule_periodic_replan(self, state : SimulationAgentState, prelim_plan : Plan) -> list:
+    def _schedule_periodic_replan(self, state : SimulationAgentState, prelim_plan : Plan, t_next : float) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
-        
-        # calculate next period for planning
-        t_next = state.t + self.period
 
         # find wait start time
         if prelim_plan.empty():
