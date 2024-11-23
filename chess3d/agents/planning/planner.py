@@ -686,7 +686,7 @@ class AbstractPreplanner(AbstractPlanner):
         self.plan : Preplan = Preplan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
         
         # wait for next planning period to start
-        replan : list = self._schedule_periodic_replan(state, self.plan, t_next=state.t+self.period)
+        replan : list = self._schedule_periodic_replan(state, self.plan, state.t+self.period)
         self.plan.add_all(replan, t=state.t)
 
         # return plan and save local copy
