@@ -1354,7 +1354,7 @@ class SimulationElementsFactory:
                     points = preplanner_dict.get('numGroundPoints', np.Inf)
                     preplanner = NadirPointingPlaner(horizon, period, points, debug, logger)
 
-                elif preplanner_type.lower() == "dynamic":
+                elif preplanner_type.lower() in ["dynamic", "dp"]:
                     period = preplanner_dict.get('period', 500)
                     horizon = preplanner_dict.get('horizon', period)
                     

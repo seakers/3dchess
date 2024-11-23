@@ -186,6 +186,37 @@ def compile_data(results_path : str, experiments_path : str) -> tuple:
         # save to csv
         df.to_csv(compiled_results_path,index=False)
 
+    # set compiled results file name
+    failed_results_path = os.path.join(results_path, 'failed_scenarios.csv')
+
+    df_eval = df.copy()
+    df_eval['Scenario ID'] = [row['Name'].split('_')[-1] for _,row in df.iterrows()]
+    df_eval.sort_values('Scenario ID')
+    df_eval : pd.DataFrame = df_eval[df_eval['P(Event Co-observable)'] == 0.0]
+
+    parameters.add('Scenario ID')
+
+    failed_scenarios = []
+        
+    unique_vals : list = df_eval['Scenario ID'].unique()
+    unique_vals.sort()
+
+    for unique_val in unique_vals:
+        count = len([val for val in df_eval['Scenario ID'] if val == unique_val])
+
+        if count == 4:
+            failed_scenarios.append(int(unique_val))
+
+    failed_scenarios.sort()
+    print('failed_scenarios:', failed_scenarios)
+
+    params_to_remove = [param for param in df.columns.values if param not in parameters]
+    params_to_remove.extend(['Name', 'Preplanner', 'Replanner', 'Scenario ID'])
+    df_eval = df_eval.drop(columns=params_to_remove)
+    df_eval = df_eval.drop_duplicates()
+
+    df_eval.to_csv(failed_results_path, index=False)
+
     return parameters, df
 
 def process_results(results_path : str, results_data : pd.DataFrame, parameters : set, metrics : list):

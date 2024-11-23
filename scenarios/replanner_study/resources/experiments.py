@@ -19,112 +19,82 @@ def main(n_samples : int = 1, seed : int = 1000):
         ('Field of Regard (deg)',               [30,60]),
         ('Field of View (deg)',                 [1,10]),
         ('Maximum Slew Rate (deg/s)',           [1,10]),
-        ('Number of Events per Day',            [10**(i) for i in range(1,5)]),
+        ('Number of Events per Day',            [10**(i) for i in range(2,5)]),
         ('Event Duration (hrs)',                [0.25, 1, 3, 6]),
         ('Grid Type',                           ['hydrolakes', 'uniform', 'fibonacci']),
-        ('Number of Ground-Points',             [100, 1000, 5000, 10000]),
-        # ('Preplanner',                          ['nadir', 'fifo']),
-        # ('Replanner',                           ['acbba', 'none']),
-        ('Percent Ground-Points Considered',    [1/i for i in range(1,6)])
+        ('Number of Ground-Points',             [1000, 2500, 5000, 10000]),
+        ('Percent Ground-Points Considered',    [1/i for i in range(1,5)])
     ]
 
     # calculate lowest-common-multiple for estimating number of samples
     lcm = np.lcm.reduce([len(vals) for _,vals in params])
 
-    # while True:
-    #     # sample latin hypercube
-    #     n = n_samples*lcm
-    #     sampler : LatinHypercube = LatinHypercube(d=len(params),seed=seed)
-    #     samples = sampler.integers(l_bounds=[0 for _ in params], 
-    #                             u_bounds=[len(vals) for _,vals in params], 
-    #                             n=n)
+    # load failed scenarios
+    failed_scenarios : pd.DataFrame = pd.read_csv('./experiments/failed_scenarios.csv')
 
-    #     # interpret samples and generate experiments
-    #     columns = [param for param,_ in params]
-    #     if 'Constellation' in columns:
-    #         i_constellation = columns.index('Constellation')
-    #         # columns.pop(i_constellation)
-    #         columns.insert(i_constellation+1, 'Number Planes')
-    #         columns.insert(i_constellation+2, 'Number of Satellites per Plane')
-    #     columns.insert(0,'Name')
-    #     data = []
-    #     j = 0
-    #     for sample in tqdm(samples, desc='Generating experiments'):
-    #         # create row of values 
-    #         row = [f'experiment_{j}']
-    #         for i in range(len(sample)):
-    #             _,vals = params[i]
-    #             value = vals[sample[i]]
+    # generate experiments
+    n_samples_init = n_samples
+    while True:
+        # sample latin hypercube
+        n = n_samples*lcm
+        sampler : LatinHypercube = LatinHypercube(d=len(params),seed=seed)
+        samples = sampler.integers(l_bounds=[0 for _ in params], 
+                                u_bounds=[len(vals) for _,vals in params], 
+                                n=n)
 
-    #             if i == i_constellation:
-    #                 row.append(sample[i])
-    #                 row.extend(list(value))
-    #             else:
-    #                 row.append(value)
+        # interpret samples and generate experiments
+        columns = [param for param,_ in params]
+        if 'Constellation' in columns:
+            i_constellation = columns.index('Constellation')
+            # columns.pop(i_constellation)
+            columns.insert(i_constellation+1, 'Number Planes')
+            columns.insert(i_constellation+2, 'Number of Satellites per Plane')
+        columns.insert(0,'Scenario ID')
+        data = []
+        j = 0
+        for sample in tqdm(samples, desc='Generating experiments'):
+            # create row of values 
+            row = [j]
+            for i in range(len(sample)):
+                _,vals = params[i]
+                value = vals[sample[i]]
+
+                if i == i_constellation:
+                    row.append(sample[i])
+                    row.extend(list(value))
+                else:
+                    row.append(value)
             
-    #         # check if experiment is feasible
-    #         if is_feasible(row): 
-    #             # add to list of experiments
-    #             data.append(row)
+            # check if experiment is feasible
+            if is_feasible(row) and not has_failed(columns, row, failed_scenarios): 
+                # add to list of experiments
+                data.append(row)
 
-    #             # update experiment index
-    #             j += 1
+                # update experiment index
+                j += 1
 
-    #     # create data frame
-    #     df = pd.DataFrame(data=data, columns=columns)
+        # create data frame
+        feasible_scenarios = pd.DataFrame(data=data, columns=columns)
 
-    #     # check if enough samples are contained in the experiment list
-    #     if len(df) >= lcm: break
-    #     n_samples += 1
-    # sample latin hypercube
-    n = n_samples*lcm
-    sampler : LatinHypercube = LatinHypercube(d=len(params),seed=seed)
-    samples = sampler.integers(l_bounds=[0 for _ in params], 
-                            u_bounds=[len(vals) for _,vals in params], 
-                            n=n)
+        # check if enough samples are contained in the experiment list
+        if len(feasible_scenarios) >= lcm*n_samples_init: break
+        n_samples += 1
+   
+    # create compiled data frame
+    df = pd.DataFrame(data=[], columns=feasible_scenarios.columns.values)
 
-    # interpret samples and generate experiments
-    columns = [param for param,_ in params]
-    if 'Constellation' in columns:
-        i_constellation = columns.index('Constellation')
-        # columns.pop(i_constellation)
-        columns.insert(i_constellation+1, 'Number Planes')
-        columns.insert(i_constellation+2, 'Number of Satellites per Plane')
-    columns.insert(0,'Name')
-    columns.append('Preplanner')
-    columns.append('Replanner')
-    
-    data = []
-    for preplanner in ['fifo', 'nadir']:
+    for preplanner in ['fifo', 'nadir', 'dp']:
         for replanner in ['acbba', 'none']:
-            j = 0
-            for sample in tqdm(samples, desc='Generating experiments'):    
-                # create row of values 
-                row = [f'scenario_{preplanner}-{replanner}_{j}']
-                for i in range(len(sample)):
-                    _,vals = params[i]
-                    value = vals[sample[i]]
+            df_temp : pd.DataFrame = feasible_scenarios.copy()
 
-                    if i == i_constellation:
-                        row.append(sample[i])
-                        row.extend(list(value))
-                    else:
-                        row.append(value)
-                
-                # check if experiment is feasible
-                if is_feasible(row):
-                    # add planner info
-                    row.extend([preplanner, replanner])
+            df_temp['Preplanner'] = preplanner
+            df_temp['Replanner'] = replanner
+            df_temp['Name'] = [f'scenario_{preplanner}-{replanner}_{j}' for j in df_temp['Scenario ID'].values]
 
-                    # add to list of experiments
-                    data.append(row)
-        
-                if is_feasible(row):
-                    # update experiment index
-                    j += 1
+            df = pd.concat([df,df_temp],axis=0)
 
-    # create data frame
-    df = pd.DataFrame(data=data, columns=columns)
+    name_column = df.pop('Name')
+    df.insert(0, 'Name', name_column)
 
     # make dir if it doesn't exist
     if not os.path.isdir('./experiments'): os.mkdir('./experiments')
@@ -149,9 +119,19 @@ def is_feasible(row : list) -> bool:
 
     return True
 
+def has_failed(columns : list, row : list, failed_scenarios : pd.DataFrame) -> bool:
+    
+    for _,failed_row in failed_scenarios.iterrows():
+        if all([row[columns.index(param)]==failed_row[param] 
+                for param in failed_row.index.values
+                if param in columns]):
+            return True
+    
+    return False
+
 if __name__ == "__main__":
     # print welcome
     print_welcome('Experiment generator for Preplanner Parametric Study')
 
     # generate experiments
-    main()
+    main(3)

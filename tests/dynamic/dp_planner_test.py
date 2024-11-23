@@ -170,7 +170,7 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
                 "second": 0
             },
             # "duration": 90/60 / 24.0,
-            "duration": 4.0 / 24.0,
+            "duration": 2 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -245,7 +245,7 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
                         "preplanner" : {
                             "@type" : "dynamic",
                             "period" : 500,     # s
-                            "sharing" : "False"
+                            "sharing" : "True"
                         },
                         # "replanner" : {
                         #     "@type" : "acbba"

@@ -24,8 +24,8 @@ def main(
 
     # stop if debugging mode is on
     if debug: 
-        lower_bound = 0
-        upper_bound = 1
+        lower_bound = 220
+        upper_bound = 221
         print('WARNING: Debug mode activated.')
 
     # get experiments name
@@ -56,8 +56,7 @@ def main(
     if len(experiments_df) <= lower_bound: raise ValueError('Lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
-    sim_duration = 8.0 / 24.0 if debug else 1.0 # in days
-    period, horizon = np.Inf, np.Inf
+    sim_duration = 1.0 / 24.0 if debug else 1.0 # in days
 
     # count number of runs to be made
     experiments_to_eval = [ (i,row) for i,row in experiments_df.iterrows()
@@ -81,6 +80,11 @@ def main(
         fraction_points_considered = row['Percent Ground-Points Considered']
         grid_name = f"{row['Grid Type']}_grid_{row['Number of Ground-Points']}"
         if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
+        
+        if preplanner in ['dp', 'dynamic']:
+            period, horizon = 500, 500
+        else:
+            period, horizon = np.Inf, np.Inf
 
         # extract satellite capability parameters
         field_of_regard = 1e-6 if preplanner == 'nadir' and replanner == 'broadcaster' else row['Field of Regard (deg)']
@@ -164,9 +168,11 @@ def main(
                 sat['planner']['preplanner']['period'] = period
                 sat['planner']['preplanner']['horizon'] = horizon
                 sat['planner']['preplanner']['numGroundPoints'] = int(np.floor(n_points * fraction_points_considered))
+                # if preplanner == 'dp': sat['planner']['preplanner']['sharing'] = str(replanner == 'none')
 
                 # set replanner
                 sat['planner']['replanner']['@type'] = replanner
+                if preplanner == 'dp' and replanner in ['broadcaster', 'none']: sat['planner'].pop('replanner')
 
                 # set science
                 events_path = os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{scenario_name}_events.csv")

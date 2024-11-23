@@ -32,13 +32,17 @@ def main(experiments_name : str,
     # set simulation duration in hours
     sim_duration : float = 24.0 / 24.0
 
+    experiments_df.pop('Preplanner')
+    experiments_df.pop('Replanner')
+    experiments_df.pop('Name')
+    experiments_df = experiments_df.drop_duplicates()
+
     # run simulation for each set of parameters
     for _,row in tqdm.tqdm(experiments_df.iterrows(), 
                                       desc = 'Generating Events'):
 
         # extract event parameters
-        experiment_name : str = row['Name']
-        *_,scenario_id = experiment_name.split('_')
+        scenario_id = row['Scenario ID']
         grid_name = f"{row['Grid Type']}_grid_{row['Number of Ground-Points']}"
         event_duration = row['Event Duration (hrs)']
         n_events = row['Number of Events per Day']

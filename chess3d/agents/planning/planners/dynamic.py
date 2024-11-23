@@ -24,6 +24,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                  sharing : bool = True,
                  horizon: float = np.Inf, 
                  period : float = np.Inf, 
+                #  points : float = np.Inf,
                  debug : bool = False,
                  logger: Logger = None
                  ) -> None:
@@ -31,6 +32,9 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
 
         # toggle for sharing plans
         self.sharing = sharing 
+
+        # # save number of points considered
+        # self.points = points
 
         # initialize attributes
         self.pending_observations_to_broadcast : set[ObservationAction] = set()    # set of completed observations that have not been broadcasted
@@ -51,6 +55,9 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                                                                         for broadcast in self.completed_broadcasts
                                                                         if isinstance(broadcast, ObservationPerformedMessage)}
             self.pending_observations_to_broadcast.difference_update(completed_observation_broadcasts)
+
+            if completed_observations: 
+                x = 1
 
     def needs_planning(self, state: SimulationAgentState, __: object, current_plan: Plan) -> bool:
         if super().needs_planning(state, __, current_plan):

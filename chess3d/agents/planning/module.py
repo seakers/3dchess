@@ -350,7 +350,7 @@ class PlanningModule(InternalModule):
                         self.plan_history.append((state.t, plan_copy))
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
-                        self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
+                        # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
                         x = 1
                         # -------------------------------------
 
