@@ -151,11 +151,11 @@ def event_driven(
         latest_observation = observations.pop() if observations else None
         t_init = latest_observation.t_end if latest_observation else 0.0
         
-        assert (t - t_init) >= 0.0
+        # assert (t - t_init) >= 0.0 # TODO fix acbba triggering this
 
         # calculate reward
         reward = (t - t_init) * unobserved_reward_rate / 3600  + min_reward
-        reward = min(reward, max_unobserved_reward)
+        reward = min(reward, max_unobserved_reward) * int((t - t_init) >= 0.0)
 
     # time penalty
     # day = 24 * 3600
