@@ -18,6 +18,7 @@ def main(
          upper_bound : int, 
          level : int, 
          overwrite : bool,
+         reeval : bool,
          debug : bool
          ):
     
@@ -214,8 +215,8 @@ def main(
         results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
         if not os.path.isfile(results_path) or overwrite: mission.execute()
 
-        # print results
-        mission.print_results()
+        # print results if it hasn't been performed yet or if results need to be reevaluated
+        if not os.path.isfile(results_path) or reeval: mission.print_results()
 
         # check if summary file was properly generated at the end of the simulation
         if not os.path.isfile(results_path): raise Exception(f'`{row["Name"]}` not executed properly.')
@@ -285,6 +286,12 @@ if __name__ == "__main__":
                         help='results overwrite toggle',
                         required=False,
                         type=bool) 
+    parser.add_argument('-r', 
+                        '--reevaluate',
+                        default=False,
+                        help=' results reevaluation toggle',
+                        required=False,
+                        type=bool) 
     parser.add_argument('-d', 
                         '--debug',
                         default=False,
@@ -301,6 +308,7 @@ if __name__ == "__main__":
     upper_bound = args.upper_bound
     level = LEVELS.get(args.level)
     overwrite = args.overwrite
+    reevaluate = args.reevaluate
     debug = args.debug
 
     # run simulation
@@ -309,5 +317,6 @@ if __name__ == "__main__":
          upper_bound, 
          level, 
          overwrite, 
+         reevaluate,
          debug
          )
