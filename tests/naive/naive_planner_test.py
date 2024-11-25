@@ -20,7 +20,7 @@ class TestToyCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 1.0 / 24.0,
+            "duration": 3.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -172,7 +172,7 @@ class TestBenCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 1.0 / 24.0,
+            "duration": 3.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -249,9 +249,9 @@ class TestBenCase(unittest.TestCase):
                             # "period": 1000,
                             # "horizon": 1000,
                         },
-                        "replanner" : {
-                            "@type" : "broadcaster"
-                        },
+                        # "replanner" : {
+                        #     "@type" : "broadcaster"
+                        # },
                         "rewardGrid":{
                             "reward_function" : 'event',
                             'initial_reward' : 1.0,
@@ -331,7 +331,7 @@ class TestRandomCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 1.0 / 24.0,
+            "duration": 3.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -408,9 +408,9 @@ class TestRandomCase(unittest.TestCase):
                             # "period": 1000,
                             # "horizon": 1000,
                         },
-                        "replanner" : {
-                            "@type" : "broadcaster"
-                        },
+                        # "replanner" : {
+                        #     "@type" : "broadcaster"
+                        # },
                         "rewardGrid":{
                             "reward_function" : 'event',
                             'initial_reward' : 1.0,
@@ -457,14 +457,14 @@ class TestRandomCase(unittest.TestCase):
         # check type of mission object
         self.assertTrue(isinstance(self.mission, Mission))
 
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.mission.execute()
+    def test_planner(self) -> None:
+        # execute mission
+        self.mission.execute()
 
-    #     # print results
-    #     self.mission.print_results()
+        # print results
+        self.mission.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
 if __name__ == '__main__':
     unittest.main()

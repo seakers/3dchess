@@ -224,9 +224,25 @@ class Mission:
             columns = ['observer','t_img','lat','lon','range','look','incidence','zenith','instrument_name']
             observations_performed = pd.DataFrame(data=[],columns=columns)
 
-        # load senario events
-        events = pd.read_csv(self.environment.events_path)
+        # load all senario events
+        events = pd.read_csv(self.environment.events_path) 
 
+        # filter out events that do not occurr during this simulation
+        events = events[events['start time [s]'] <= self.manager._clock_config.get_total_seconds()] 
+
+        # compile events detected
+        event_detections = None
+        for agent in self.agents:
+            _,agent_name = agent.name.split('/')
+            events_detected_path = os.path.join(self.results_path, agent_name, 'events_detected.csv')
+            events_detected_temp = pd.read_csv(events_detected_path)
+
+            if event_detections is None: 
+                event_detections = events_detected_temp
+            else:
+                event_detections = pd.concat([event_detections, events_detected_temp], axis=0)
+
+        # compile mesurement requests
         try:
             measurement_reqs = pd.read_csv((os.path.join(self.environment.results_path, 'requests.csv')))
         except pd.errors.EmptyDataError:
@@ -234,7 +250,7 @@ class Mission:
             measurement_reqs = pd.DataFrame(data=[],columns=columns)
 
         # summarize results
-        results_summary : pd.DataFrame = self.summarize_results(orbitdata, observations_performed, events, measurement_reqs, precission)
+        results_summary : pd.DataFrame = self.summarize_results(orbitdata, observations_performed, events, event_detections, measurement_reqs, precission)
 
         # log and save results summary
         print(f"\nSIMULATION RESULTS SUMMARY:\n{str(results_summary)}\n\n")
@@ -244,25 +260,27 @@ class Mission:
                           orbitdata : dict,
                           observations_performed : pd.DataFrame, 
                           events : pd.DataFrame,
+                          event_detections : pd.DataFrame,
                           measurement_reqs : pd.DataFrame,
                           n_decimals : int = 5) -> pd.DataFrame:
         
         # classify observations
         observations_per_gp, events_per_gp, \
-            events_observable, events_detected, events_observed, \
+            events_observable, events_observed, events_detected, events_requested, \
                 events_re_observable, events_re_obs, \
                     events_co_observable, events_co_obs, \
-                        events_co_observable_fully, events_co_obs_fully, \
-                            events_co_observable_partially, events_co_obs_partially \
+                    events_co_observable_fully, events_co_obs_fully, \
+                        events_co_observable_partially, events_co_obs_partially \
                                 = self.classify_observations(orbitdata,
                                                              observations_performed, 
                                                              events, 
+                                                             event_detections,
                                                              measurement_reqs)       
 
         # count observations performed
         # n_events, n_unique_event_obs, n_total_event_obs,
         n_observations, n_gps, n_gps_accessible, n_gps_observed, n_gps_with_events, \
-            n_events, n_events_observable, n_events_detected, n_events_observed, n_total_event_obs, \
+            n_events, n_events_observable, n_events_detected, n_events_requested, n_events_observed, n_total_event_obs, \
                 n_events_reobservable, n_events_reobserved, n_total_event_re_obs, \
                     n_events_co_observable, n_events_co_obs, n_total_event_co_obs, \
                         n_events_co_observable_fully, n_events_fully_co_obs, n_total_event_fully_co_obs, \
@@ -274,6 +292,7 @@ class Mission:
                                                             events_per_gp,
                                                             events_observable,
                                                             events_detected, 
+                                                            events_requested,
                                                             events_observed, 
                                                             events_re_observable,
                                                             events_re_obs, 
@@ -299,6 +318,7 @@ class Mission:
                                                                     events_per_gp,
                                                                     events_observable,
                                                                     events_detected, 
+                                                                    events_requested,
                                                                     events_observed, 
                                                                     events_re_observable,
                                                                     events_re_obs, 
@@ -341,8 +361,9 @@ class Mission:
                     # Counters
                     ['Events', n_events],
                     ['Events Observable', n_events_observable],
-                    ['Events Detected', n_events_detected],
                     ['Events Observed', n_events_observed],
+                    ['Events Detected', n_events_detected],
+                    ['Events Requested', n_events_requested],
                     ['Event Observations', n_total_event_obs],
                     ['Events Re-observable', n_events_reobservable],
                     ['Events Re-observed', n_events_reobserved],
@@ -412,6 +433,7 @@ class Mission:
                               orbitdata : dict,
                               observations_performed : pd.DataFrame,
                               events : pd.DataFrame,
+                              event_detections : pd.DataFrame,
                               measurement_reqs : pd.DataFrame
                               ) -> tuple:
                
@@ -433,17 +455,19 @@ class Mission:
         # count event presense, detections, and observations
         events_observable : Dict[tuple, list] = {}
         events_detected : Dict[tuple, list] = {}
+        events_requested : Dict[tuple, list] = {}
         events_observed : Dict[tuple, list] = {}
 
         for event in tqdm(events.values, 
                           desc='Calssifying event accesses, detections, and observations', 
                           leave=True):
 
-            event_tuple, access_intervals, matching_requests, matching_observations \
-                = self.classify_observation(event, orbitdata, measurement_reqs, observations_performed)
+            event_tuple, access_intervals, matching_detections, matching_requests, matching_observations \
+                = self.classify_observation(event, orbitdata, event_detections, measurement_reqs, observations_performed)
 
             if access_intervals: events_observable[event_tuple] = access_intervals
-            if matching_requests: events_detected[event_tuple] = matching_requests
+            if matching_detections: events_detected[event_tuple] = matching_detections
+            if matching_requests: events_requested[event_tuple] = matching_requests
             if matching_observations: events_observed[event_tuple] = matching_observations
 
         assert all([event in events_observable for event in events_observed])
@@ -513,10 +537,10 @@ class Mission:
                                         if instrument in observations_req}
                 
                 # find which observations may have triggered co-observations
-                if event in events_detected:
+                if event in events_requested:
                     requesting_observations = {(lat, lon, t_start, duration, severity, observer, t_img, instrument)
                                             for lat, lon, t_start, duration, severity, observer, t_img, instrument in co_observations
-                                            for _, requester, _, _, _, t_start_req, *_ in events_detected[event]
+                                            for _, requester, _, _, _, t_start_req, *_ in events_requested[event]
                                             if abs(t_start_req - t_img) <= 1e-3
                                             and requester == observer
                                             }
@@ -539,13 +563,18 @@ class Mission:
         assert all([event in events_co_observable_partially for event in events_co_obs_partially])
 
         return observations_per_gp, events_per_gp, \
-                events_observable, events_detected, events_observed, \
+                events_observable, events_observed, events_detected, events_requested, \
                     events_re_observable, events_re_obs, \
                         events_co_observable, events_co_obs, \
                         events_co_observable_fully, events_co_obs_fully, \
                             events_co_observable_partially, events_co_obs_partially
     
-    def classify_observation(self, event : tuple, orbitdata : Dict[str, OrbitData], measurement_reqs : pd.DataFrame, observations_performed : pd.DataFrame) -> tuple:
+    def classify_observation(self, 
+                             event : tuple, 
+                             orbitdata : Dict[str, OrbitData],
+                             event_detections : pd.DataFrame, 
+                             measurement_reqs : pd.DataFrame, 
+                             observations_performed : pd.DataFrame) -> tuple:
         # unpackage event
         event = tuple(event)
         *_,lat,lon,t_start,duration,severity,observations_req = event
@@ -575,11 +604,20 @@ class Mission:
         
         # convert to list
         access_intervals : list = [ (access_interval,agent_name,instrument) 
-                                    for (agent_name,instrument),access_interval in access_intervals.items()
-                                ]
+                                    for (agent_name,instrument),access_interval in access_intervals.items()]
         
         # sort in chronological order
         access_intervals.sort()
+
+        # find measurement detections that match this event
+        matching_detections = [ (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
+                                for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in event_detections.values
+                                if  abs(lat - lat_req) < 1e-3 
+                                and abs(lon - lon_req) < 1e-3
+                                and t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
+                                and all([instrument in observations_req for instrument in str_to_list(observation_types)])
+                            ]       
+        matching_detections.sort(key= lambda a : a[5])
 
         # find measurement requests that match this event
         matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
@@ -601,7 +639,7 @@ class Mission:
                                 ]
         matching_observations.sort(key= lambda a : a[6])
 
-        return event, access_intervals, matching_requests, matching_observations
+        return event, access_intervals, matching_detections, matching_requests, matching_observations
 
     def count_observations(self, 
                            orbitdata : dict, 
@@ -611,6 +649,7 @@ class Mission:
                            events_per_gp : dict,
                            events_observable : dict,
                            events_detected : dict, 
+                           events_requested : dict,
                            events_observed : dict, 
                            events_re_observable : dict,
                            events_re_obs : dict, 
@@ -653,6 +692,9 @@ class Mission:
 
         # count event detections
         n_events_detected = len(events_detected)
+
+        # count events with meaurement requests
+        n_events_requested = len(events_requested)
 
         # count event observations
         n_events_observed = len(events_observed)
@@ -701,7 +743,7 @@ class Mission:
 
         # return values
         return n_observations, n_gps, n_gps_accessible, n_gps_observed, n_gps_with_events, \
-                n_events, n_events_observable, n_events_detected, n_events_observed, n_total_event_obs, \
+                n_events, n_events_observable, n_events_detected, n_events_requested, n_events_observed, n_total_event_obs, \
                     n_events_reobservable, n_events_reobserved, n_total_event_re_obs, \
                         n_events_co_observable, n_events_co_obs, n_total_event_co_obs, \
                             n_events_co_observable_fully, n_events_fully_co_obs, n_total_event_fully_co_obs, \
@@ -715,6 +757,7 @@ class Mission:
                                  events_per_gp : dict,
                                  events_observable : dict,
                                  events_detected : dict, 
+                                 events_requested : dict,
                                  events_observed : dict, 
                                  events_re_observable : dict,
                                  events_re_obs : dict, 
@@ -728,7 +771,7 @@ class Mission:
     
         # count observations by type
         n_observations, n_gps, n_gps_accessible, n_gps_observed, n_gps_with_events, \
-            n_events, n_events_observable, n_events_detected, n_events_observed, n_total_event_obs, \
+            n_events, n_events_observable, n_events_detected, n_events_requested, n_events_observed, n_total_event_obs, \
                 n_events_reobservable, n_events_reobserved, n_total_event_re_obs, \
                     n_events_co_observable, n_events_co_obs, n_total_event_co_obs, \
                         n_events_co_observable_fully, n_events_fully_co_obs, n_total_event_fully_co_obs, \
@@ -740,6 +783,7 @@ class Mission:
                                                             events_per_gp,
                                                             events_observable,
                                                             events_detected, 
+                                                            events_requested,
                                                             events_observed, 
                                                             events_re_observable,
                                                             events_re_obs, 

@@ -184,7 +184,7 @@ def main(
 
                 # set replanner
                 sat['planner']['replanner']['@type'] = replanner
-                if preplanner == 'dp' and replanner in ['broadcaster', 'none']: sat['planner'].pop('replanner')
+                if replanner in ['broadcaster', 'none']: sat['planner'].pop('replanner')
 
                 # set science
                 events_path = os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{scenario_name}_events.csv")
@@ -206,23 +206,23 @@ def main(
         print_welcome(experiment_name)
 
         # define results output file name
-        results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
+        results_summary_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
 
         # initialize mission
-        if not os.path.isfile(results_path) or overwrite or reeval:
+        if not os.path.isfile(results_summary_path) or overwrite or reeval:
             mission : Mission = Mission.from_dict(scenario_specs, overwrite=overwrite, level=level)
 
         # check if output directory was properly initalized
         assert os.path.isdir(os.path.join(scenario_dir, 'results', experiment_name))
 
         # execute mission if it hasn't been performed yet or if results need to be overwritten
-        if not os.path.isfile(results_path) or overwrite: mission.execute()
+        if not os.path.isfile(results_summary_path) or overwrite: mission.execute()
 
         # print results if it hasn't been performed yet or if results need to be reevaluated
-        if not os.path.isfile(results_path) or reeval: mission.print_results()
+        if not os.path.isfile(results_summary_path) or reeval: mission.print_results()
 
         # check if summary file was properly generated at the end of the simulation
-        if not os.path.isfile(results_path): raise Exception(f'`{row["Name"]}` not executed properly.')
+        if not os.path.isfile(results_summary_path): raise Exception(f'`{row["Name"]}` not executed properly.')
 
     # print DONE
     print(f'Sims {lower_bound}-{upper_bound} DONE')

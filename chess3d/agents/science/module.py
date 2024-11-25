@@ -50,7 +50,7 @@ class ScienceModule(InternalModule):
         
         # initialize attributes
         self.events = None
-        self.known_reqs = set()
+        self.known_reqs : set[MeasurementRequest] = set()
 
         # assign parameters
         self.results_path = results_path
@@ -244,8 +244,14 @@ class ScienceModule(InternalModule):
         """ Processes incoming observation data and returns the characteristics of the event being detected if this exists"""
 
     async def teardown(self) -> None:
-        # nothing to tear-down
-        return
+        # print out events detected by this module
+        columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
+        data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
+                for req in self.known_reqs
+                if req.requester == self.get_parent_name()]
+        
+        df = pd.DataFrame(data=data, columns=columns)        
+        df.to_csv(f"{self.results_path}/{self.get_parent_name()}/events_detected.csv", index=False)   
     
 class LookupTableScienceModule(ScienceModule):
     def __init__(self, 
