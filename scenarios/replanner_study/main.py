@@ -205,14 +205,17 @@ def main(
         # print welcome message
         print_welcome(experiment_name)
 
+        # define results output file name
+        results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
+
         # initialize mission
-        mission : Mission = Mission.from_dict(scenario_specs, overwrite=overwrite, level=level)
+        if not os.path.isfile(results_path) or overwrite or reeval:
+            mission : Mission = Mission.from_dict(scenario_specs, overwrite=overwrite, level=level)
 
         # check if output directory was properly initalized
         assert os.path.isdir(os.path.join(scenario_dir, 'results', experiment_name))
 
         # execute mission if it hasn't been performed yet or if results need to be overwritten
-        results_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
         if not os.path.isfile(results_path) or overwrite: mission.execute()
 
         # print results if it hasn't been performed yet or if results need to be reevaluated
