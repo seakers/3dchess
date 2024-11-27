@@ -64,13 +64,13 @@ def main(
                             if lower_bound <= i < upper_bound] 
     
     # sort to run smaller constellations first
-    experiments_to_eval.sort(key= lambda a: (
-                                             a[1]['Number of Ground-Points'],
-                                             a[1]['Number Planes']*a[1]['Number of Satellites per Plane'],
-                                             a[1]['Number Planes'],
-                                             a[1]['Number of Satellites per Plane'],
-                                             a[1]['Name']
-                                             ))
+    # experiments_to_eval.sort(key= lambda a: (
+    #                                          a[1]['Number of Ground-Points'],
+    #                                          a[1]['Number Planes']*a[1]['Number of Satellites per Plane'],
+    #                                          a[1]['Number Planes'],
+    #                                          a[1]['Number of Satellites per Plane'],
+    #                                          a[1]['Name']
+    #                                          ))
     
     # count number of simulations to perform
     n_runs : int = len(experiments_to_eval)
