@@ -8,10 +8,10 @@ def create_plot_folder(scenario : str, agent : str):
     if not os.path.isdir('plots'): os.mkdir('plots')
     if not os.path.isdir(f'plots/{agent}'): os.mkdir(f'plots/{agent}')
 
-def main(scenarios : list, agent : str, show_plot : bool = False, save_plot : bool = False):
+def plot_scenario_runtime(scenarios : list, agent : str, show_plot : bool = False, save_plot : bool = False, stats_path : str = 'results', plots_path : str = '.'):
     # get list of routines
     if not scenarios: raise ValueError('Must have at least one scenario in scenario list')
-    dir_path = os.path.join('results', scenarios[0], agent, 'runtime')
+    dir_path = os.path.join(stats_path, scenarios[0], agent, 'runtime')
     routines = os.listdir(dir_path)
     
     # generate a plot per routine
@@ -19,7 +19,7 @@ def main(scenarios : list, agent : str, show_plot : bool = False, save_plot : bo
         # compile data
         data = None
         for scenario in scenarios:
-            scenario_path = os.path.join('results', scenario, agent, 'runtime')
+            scenario_path = os.path.join(stats_path, scenario, agent, 'runtime')
             file_path = os.path.join(scenario_path, routine)
             df : pd.DataFrame = pd.read_csv(file_path)
             df['t'] = range(len(df))
@@ -48,7 +48,7 @@ def main(scenarios : list, agent : str, show_plot : bool = False, save_plot : bo
             create_plot_folder(scenario, agent)
             routine = routine.replace('.csv','')
             routine = routine.replace('time_series-', '')
-            plt.savefig(f'plots/{agent}/{routine}.png')
+            plt.savefig(f'{plots_path}/plots/{agent}/{routine}.png')
             plt.close()
 
 if __name__ == '__main__':
@@ -57,8 +57,9 @@ if __name__ == '__main__':
     save_plot = True
 
     scenarios = [
-        'ben_case',
-        'ben_case_day'
+        # 'ben_case',
+        # 'ben_case_day'
+        'naive'
     ]
 
     agents = [
@@ -68,4 +69,4 @@ if __name__ == '__main__':
     ]
         
     for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
-        main(scenarios, agent, False, True)
+        plot_scenario_runtime(scenarios, agent, False, True)

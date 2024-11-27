@@ -21,10 +21,11 @@ class NaivePlanner(AbstractPreplanner):
                  horizon: float = np.Inf, 
                  period: float = np.Inf, 
                  points : int = np.Inf, 
+                 sharing : bool = True,
                  debug: bool = False, 
                  logger: Logger = None
                  ) -> None:
-        super().__init__(horizon, period, debug, logger)
+        super().__init__(horizon, period, sharing, debug, logger)
         self.points = points
 
     @runtime_tracker
@@ -62,6 +63,19 @@ class NaivePlanner(AbstractPreplanner):
 
         max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
         if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
+
+
+        # DEBUGGER -----
+        # instruments = [instrument for instrument,_ in payload.items()]
+        # steps = 300
+        # duration = 3.0 * 3600
+        # interval = duration / steps
+        # observations = [    ObservationAction(instruments[0], [0,0,0], 0.0, t*interval)
+        #                     for t in range(steps)
+        #                 ]
+        
+        # return observations
+        # --------------
 
         # generate plan
         observations : list[ObservationAction] = []
@@ -143,7 +157,6 @@ class NaivePlanner(AbstractPreplanner):
         return dt_maneuver <= dt_obs or abs(dt_maneuver - dt_obs) <= 1e-6
     
         #TODO check torque constraint
-
     
     def no_redundant_observations(self, 
                                  state : SimulationAgentState, 
@@ -176,7 +189,8 @@ class NaivePlanner(AbstractPreplanner):
                              state: SimulationAgentState, 
                              observations : list, 
                              orbitdata: OrbitData) -> list:
-        # schedule relays 
+        
+        # schedule measurement request broadcasts 
         broadcasts : list = super()._schedule_broadcasts(state, observations, orbitdata)
 
         # gather observation plan to be sent out
@@ -184,29 +198,36 @@ class NaivePlanner(AbstractPreplanner):
                     for action in observations
                     if isinstance(action,ObservationAction)]
 
-        # check if observations exist in plan
-        if plan_out:
+        # check if broadcasts are enabled 
+        if self.sharing and plan_out:
             # find best path for broadcasts
             path, t_start = self._create_broadcast_path(state, orbitdata)
-
-            # check feasibility of path found
+                
+            # share current plan to other agents
             if t_start >= 0:
                 # create plan message
                 msg = PlanMessage(state.agent_name, state.agent_name, plan_out, state.t, path=path)
                 
                 # add plan broadcast to list of broadcasts
                 broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
-                
-                # add action performance broadcast to plan
-                for action_dict in tqdm(plan_out, 
-                      desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
-                      leave=False):
 
-                    # path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end']) # TODO improve runtime when simulatin dynamic network
-                    action_dict['status'] = AgentAction.COMPLETED
-                    t_start = action_dict['t_end'] # TODO temp solution
-                    msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
-                    if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
+            # add action performance broadcast to plan based on their completion
+            for action_dict in tqdm(plan_out, 
+                    desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
+                    leave=False):
+                
+                # calculate broadcast start time
+                if action_dict['t_end'] > t_start:
+                    path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end'])
+                    
+                # check broadcast feasibility
+                if t_start < 0: continue
+                
+                action_dict['status'] = AgentAction.COMPLETED
+                # t_start = action_dict['t_end'] # TODO temp solution
+                msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
+                if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
 
         # return broadcast plan
         return broadcasts
+    

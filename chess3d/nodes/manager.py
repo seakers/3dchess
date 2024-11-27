@@ -55,7 +55,6 @@ class SimulationManager(AbstractManager):
     async def _execute(self) -> None:
         return await super()._execute()
 
-    @runtime_tracker
     async def sim_wait(self, delay: float) -> None:
         """
         Waits for the total number of seconds in the simulation.
@@ -110,6 +109,7 @@ class SimulationManager(AbstractManager):
             elif isinstance(self._clock_config, EventDrivenClockConfig):  
                 t = 0
                 tf = self._clock_config.get_total_seconds()
+                iter_counter = 0
                 with tqdm(total=tf , desc=desc) as pbar:
                     while t < tf:
                         
@@ -138,10 +138,11 @@ class SimulationManager(AbstractManager):
                         await self.send_monitor_message(toc) 
 
                         self.log(f'toc for time {t_next}[s] sent!')
-
+                        
                         # updete time and display
                         pbar.update(t_next - t)
                         t = t_next
+                        iter_counter += 1
                         
                         dt = time.perf_counter() - t_0
                         self.stats['clock_wait'].append(dt)

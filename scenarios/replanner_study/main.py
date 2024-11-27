@@ -180,7 +180,6 @@ def main(
                 sat['planner']['preplanner']['period'] = period
                 sat['planner']['preplanner']['horizon'] = horizon
                 sat['planner']['preplanner']['numGroundPoints'] = int(np.floor(n_points * fraction_points_considered))
-                # if preplanner == 'dp': sat['planner']['preplanner']['sharing'] = str(replanner == 'none')
 
                 # set replanner
                 sat['planner']['replanner']['@type'] = replanner

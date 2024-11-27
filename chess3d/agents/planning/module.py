@@ -1,4 +1,5 @@
 import copy
+import os
 import traceback
 from typing import Callable
 import pandas as pd
@@ -279,10 +280,10 @@ class PlanningModule(InternalModule):
             level = logging.DEBUG
 
             while True:
-                t_0 = time.perf_counter()
-
                 # wait for agent to update state
                 state : SimulationAgentState = await self.states_inbox.get()
+                
+                t_0 = time.perf_counter()
 
                 # update internal clock
                 await self.update_current_time(state.t)
@@ -292,6 +293,8 @@ class PlanningModule(InternalModule):
                 # Read incoming messages
                 incoming_reqs, relay_messages, misc_messages \
                     = await self._read_incoming_messages()
+                
+                t_1_5 = time.perf_counter()
 
                 # check action completion
                 completed_actions, aborted_actions, pending_actions \
@@ -310,7 +313,7 @@ class PlanningModule(InternalModule):
                 t_1 = time.perf_counter()
 
                 # update reward grid
-                self.reward_grid.update(self.get_current_time(), observations, incoming_reqs)
+                if self.reward_grid: self.reward_grid.update(self.get_current_time(), observations, incoming_reqs)
                 
                 t_2 = time.perf_counter()
 
@@ -351,7 +354,7 @@ class PlanningModule(InternalModule):
                         
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
                         # self.__log_plan(plan, "PRE-PLAN", logging.WARNING)
-                        x = 1
+                        # x = 1 # breakpoint
                         # -------------------------------------
 
                 t_3 = time.perf_counter()
@@ -378,7 +381,7 @@ class PlanningModule(InternalModule):
                                                      self.orbitdata):    
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
                         # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
-                        x = 1
+                        # x = 1 # breakpoint
                         # -------------------------------------
 
                         # Modify current Plan      
@@ -402,7 +405,7 @@ class PlanningModule(InternalModule):
 
                         # --- FOR DEBUGGING PURPOSES ONLY: ---
                         # self.__log_plan(plan, "REPLAN", logging.WARNING)
-                        x = 1
+                        # x = 1 # breakpoint
                         # -------------------------------------
 
                 t_4 = time.perf_counter()
@@ -413,7 +416,7 @@ class PlanningModule(InternalModule):
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
-                x = 1
+                # x = 1 # breakpoint
                 # -------------------------------------
 
                 # send plan to parent agent
@@ -427,7 +430,9 @@ class PlanningModule(InternalModule):
 
                 # log runtime
                 if 'planner_s1' not in self.stats: self.stats['planner_s1'] = []
-                self.stats['planner_s1'].append(t_1-t_0)
+                self.stats['planner_s1'].append(t_1_5-t_0)
+                if 'planner_s1_5' not in self.stats: self.stats['planner_s1_5'] = []
+                self.stats['planner_s1_5'].append(t_1-t_1_5)
                 if 'planner_s2' not in self.stats: self.stats['planner_s2'] = []
                 self.stats['planner_s2'].append(t_2-t_1)
                 if 'planner_s3' not in self.stats: self.stats['planner_s3'] = []
@@ -436,7 +441,6 @@ class PlanningModule(InternalModule):
                 self.stats['planner_s4'].append(t_4-t_3)
                 if 'planner_s5' not in self.stats: self.stats['planner_s5'] = []
                 self.stats['planner_s5'].append(t_5-t_4)
-
 
                 dt_0 = t_5 - t_0
                 if 'planner' not in self.stats: self.stats['planner'] = []
@@ -481,12 +485,11 @@ class PlanningModule(InternalModule):
                 # check the type of response from the science module
                 if isinstance(internal_msg, MeasurementRequestMessage):
                     # the science module analized out latest observation(s)
-                    request : MeasurementRequest = MeasurementRequest.from_dict(internal_msg.req)
                     
-                    # check if outlier was deteced
-                    if request.severity > 0.0:
+                    # check if an outlier was deteced
+                    if internal_msg.req['severity'] > 0.0:
                         # event was detected and an observation was requested
-                        requests.append(request)
+                        requests.append(MeasurementRequest.from_dict(internal_msg.req))
 
                 else:
                     # the science module generated a different response; process later
@@ -505,12 +508,18 @@ class PlanningModule(InternalModule):
                 # classify message
                 if isinstance(internal_msg, MeasurementRequestMessage):
                     # the science module analized out latest observation(s)
-                    request : MeasurementRequest = MeasurementRequest.from_dict(internal_msg.req)
-                    
-                    # check if outlier was deteced
-                    if request.severity > 0.0:
+
+                    # check if an outlier was deteced
+                    if internal_msg.req['severity'] > 0.0:
                         # event was detected and an observation was requested
-                        requests.append(request)
+                        requests.append(MeasurementRequest.from_dict(internal_msg.req))
+                        
+                    # request : MeasurementRequest = MeasurementRequest.from_dict(internal_msg.req)
+                    
+                    # # check if outlier was deteced
+                    # if request.severity > 0.0:
+                    #     # event was detected and an observation was requested
+                    #     requests.append(request)
 
                 else:
                     # the science module generated a different response; process later
@@ -639,11 +648,12 @@ class PlanningModule(InternalModule):
         df.to_csv(f"{self.results_path}/{self.get_parent_name()}/planner_history.csv", index=False)
 
         # log reward grid history
-        headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
-        data = self.reward_grid.get_history()
-        df = pd.DataFrame(data, columns=headers)
-        # self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
-        df.to_csv(f"{self.results_path}/{self.get_parent_name()}/reward_grid_history.csv", index=False)
+        if self.reward_grid is not None:
+            headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
+            data = self.reward_grid.get_history()
+            df = pd.DataFrame(data, columns=headers)
+            # self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
+            df.to_csv(f"{self.results_path}/{self.get_parent_name()}/reward_grid_history.csv", index=False)
 
         # log performance stats
         n_decimals = 5
@@ -671,6 +681,12 @@ class PlanningModule(InternalModule):
                             ]
             data.append(line_data)
 
+            # save time-series
+            time_series = [[v] for v in self.stats[routine]]
+            routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+            routine_dir = os.path.join(f"{self.results_path}/{self.get_parent_name()}/runtime", f"time_series-planner_{routine}.csv")
+            routine_df.to_csv(routine_dir,index=False)
+
         if isinstance(self.preplanner, AbstractPreplanner):
             for routine in self.preplanner.stats:
                 n = len(self.preplanner.stats[routine])
@@ -693,6 +709,12 @@ class PlanningModule(InternalModule):
                                 ]
                 data.append(line_data)
 
+                # save time-series
+                time_series = [[v] for v in self.preplanner.stats[routine]]
+                routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                routine_dir = os.path.join(f"{self.results_path}/{self.get_parent_name()}/runtime", f"time_series-preplanner_{routine}.csv")
+                routine_df.to_csv(routine_dir,index=False)
+
         if isinstance(self.replanner, AbstractReplanner):
             for routine in self.replanner.stats:
                 n = len(self.replanner.stats[routine])
@@ -714,6 +736,12 @@ class PlanningModule(InternalModule):
                                 t_total
                                 ]
                 data.append(line_data)
+
+                # save time-series
+                time_series = [[v] for v in self.replanner.stats[routine]]
+                routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                routine_dir = os.path.join(f"{self.results_path}/{self.get_parent_name()}/runtime", f"time_series-replanner_{routine}.csv")
+                routine_df.to_csv(routine_dir,index=False)
 
         if self.reward_grid:
             for routine in self.reward_grid.stats:

@@ -150,9 +150,6 @@ class OrbitData:
         self.gs_access_data = self.gs_access_data[self.gs_access_data['end index'] >= t_index - 1]
         self.gp_access_data = self.gp_access_data[self.gp_access_data['time index'] >= t_index - 1]
 
-        # return
-        return
-
     """
     GET NEXT methods
     """

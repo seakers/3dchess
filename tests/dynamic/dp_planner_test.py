@@ -1,7 +1,10 @@
 import unittest
 
+from tqdm import tqdm
+
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
+from runtime_plots import plot_scenario_runtime
 
 class TestDynamicProgrammingPlannerBen(unittest.TestCase):
     def setUp(self) -> None:
@@ -302,6 +305,20 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
 
         # print results
         self.mission.print_results()
+
+        # plot runtime
+        scenarios = [
+            'dynamic_random'
+        ]
+
+        agents = [
+            'manager',
+            'environment',
+            'thermal_0'
+        ]
+            
+        for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
+            plot_scenario_runtime(scenarios, agent, False, True, './tests/dynamic/results', './tests/dynamic')
 
         print('DONE')
 

@@ -393,12 +393,12 @@ class ToyTestACBBAReplanner(unittest.TestCase):
         # initialize mission
         self.toy_mission : Mission = Mission.from_dict(mission_specs)
 
-    # def test_toy_mission(self) -> None:
-    #     # execute mission
-    #     self.toy_mission.execute()
+    def test_toy_mission(self) -> None:
+        # execute mission
+        self.toy_mission.execute()
 
-    #     # print results
-    #     self.toy_mission.print_results()
+        # print results
+        self.toy_mission.print_results()
 
 class MissionTestACBBAReplanner(unittest.TestCase):
     def setUp(self) -> None:
@@ -1027,7 +1027,10 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
 
     # def test_mission(self) -> None:
     #     # execute mission
-    #     self.mission.execute()
+    #     self.toy_mission.execute()
+
+    #     # print results
+    #     self.toy_mission.print_results()
 
 if __name__ == '__main__':
     # terminal welcome message

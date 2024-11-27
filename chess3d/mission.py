@@ -33,7 +33,6 @@ from chess3d.agents.orbitdata import OrbitData, TimeInterval
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulationAgent
 from chess3d.agents.planning.module import PlanningModule
-from chess3d.agents.planning.planners.broadcaster import Broadcaster
 from chess3d.agents.planning.planners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.planning.planners.naive import NaivePlanner
 from chess3d.agents.planning.planners.nadir import NadirPointingPlaner
@@ -52,7 +51,8 @@ class Mission:
                  manager : SimulationManager,
                  environment : SimulationEnvironment,
                  agents : list,
-                 monitor : ResultsMonitor
+                 monitor : ResultsMonitor,
+                 level : int
             ) -> None:
         self.results_path : str = results_path
         self.orbitdata_dir : str = orbitdata_dir
@@ -60,6 +60,7 @@ class Mission:
         self.environment : SimulationEnvironment = environment
         self.agents : list[SimulationAgent] = agents
         self.monitor : ResultsMonitor = monitor
+        self.level=level
         
     def from_dict(mission_specs : dict, overwrite : bool = False, level=logging.WARNING):
         """ Loads simulation from input json """
@@ -90,7 +91,6 @@ class Mission:
         
         # get scenario path and name
         scenario_path : str = scenario_dict.get('scenarioPath', None)
-        # overwrite = bool(settings_dict.get('overwrite', 'false').lower() in ['true', 't'])
         if scenario_path is None: raise ValueError(f'`scenarioPath` not contained in input file.')
 
         # create results directory
@@ -197,7 +197,7 @@ class Mission:
                                             logger)
         
         # return initialized mission
-        return Mission(results_path, orbitdata_dir, manager, environment, agents, monitor)
+        return Mission(results_path, orbitdata_dir, manager, environment, agents, monitor, level)
     
     def execute(self, plot_results : bool = False, save_plot : bool = False) -> None:
         """ executes the simulation """
@@ -374,7 +374,7 @@ class Mission:
                     ['Events Fully Co-observable', n_events_co_observable_fully],
                     ['Events Fully Co-observed', n_events_fully_co_obs],
                     ['Event Full Co-observations', n_total_event_fully_co_obs],
-                    ['Events Partially Co-observable', n_events_co_observable_partially],
+                    ['Events Only Partially Co-observable', n_events_co_observable_partially],
                     ['Events Partially Co-observed', n_events_partially_co_obs],
                     ['Event Partial Co-observations', n_total_event_partially_co_obs],
 
@@ -559,8 +559,8 @@ class Mission:
                 events_co_obs[event] = co_observations
 
         assert all([event in events_co_observable for event in events_co_obs])
-        assert all([event in events_co_observable_fully for event in events_co_obs_fully])
-        assert all([event in events_co_observable_partially for event in events_co_obs_partially])
+        assert all([event in events_co_observable and event in events_co_observable_fully for event in events_co_obs_fully])
+        assert all([event in events_co_observable for event in events_co_obs_partially])
 
         return observations_per_gp, events_per_gp, \
                 events_observable, events_observed, events_detected, events_requested, \
@@ -1353,7 +1353,7 @@ class SimulationElementsFactory:
         
         if planner_dict is not None:
             # get reward grid spes
-            reward_grid_params : dict = planner_dict.get('rewardGrid', 'fixed')
+            reward_grid_params : dict = planner_dict.get('rewardGrid', None)
 
             if reward_grid_params:
                 assert agent_orbitdata is not None
@@ -1387,16 +1387,18 @@ class SimulationElementsFactory:
 
                 period = preplanner_dict.get('period', np.Inf)
                 horizon = preplanner_dict.get('horizon', period)
+                horizon = np.Inf if isinstance(horizon, str) and 'inf' in horizon.lower() else horizon
                 debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
+                sharing = bool(preplanner_dict.get('sharing', 'true').lower() in ['true', 't'])
 
                 # initialize preplanner
                 if preplanner_type.lower() in ["naive", "fifo"]:
                     points = preplanner_dict.get('numGroundPoints', np.Inf)
-                    preplanner = NaivePlanner(horizon, period, points, debug, logger)
+                    preplanner = NaivePlanner(horizon, period, points, sharing, debug, logger)
 
                 elif preplanner_type.lower() == 'nadir':
                     points = preplanner_dict.get('numGroundPoints', np.Inf)
-                    preplanner = NadirPointingPlaner(horizon, period, points, debug, logger)
+                    preplanner = NadirPointingPlaner(horizon, period, points, sharing, debug, logger)
 
                 elif preplanner_type.lower() in ["dynamic", "dp"]:
                     period = preplanner_dict.get('period', 500)
@@ -1404,7 +1406,6 @@ class SimulationElementsFactory:
                     
                     if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
 
-                    sharing = bool(preplanner_dict.get('sharing', 'true').lower() in ['true', 't'])
                     preplanner = DynamicProgrammingPlanner(sharing, horizon, period, debug, logger)
                 
                 # elif... # add more planners here
@@ -1422,7 +1423,7 @@ class SimulationElementsFactory:
                 debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
                 if replanner_type.lower() == 'broadcaster':
-                    replanner = Broadcaster(debug, logger)
+                    raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
 
                 elif replanner_type.lower() == 'acbba': 
                     max_bundle_size = replanner_dict.get('bundle size', 3)

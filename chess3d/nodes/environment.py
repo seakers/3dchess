@@ -1,6 +1,8 @@
 import copy
 import os
 import time
+from dmas.elements import SimulationMessage
+from dmas.messages import SimulationMessage
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -233,6 +235,10 @@ class SimulationEnvironment(EnvironmentNode):
         self.stats[src].append(dt)
 
         return True
+    
+    @runtime_tracker
+    async def respond_peer_message(self, resp: SimulationMessage) -> None:
+        return await super().respond_peer_message(resp)
 
     @runtime_tracker
     async def handle_agent_broadcast(self) -> bool:

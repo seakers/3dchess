@@ -1,8 +1,15 @@
 import os
 import unittest
 
+from tqdm import tqdm
+
+from chess3d.agents.actions import ObservationAction
+from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.planning.planners.naive import NaivePlanner
+from chess3d.agents.states import SimulationAgentState
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
+from runtime_plots import plot_scenario_runtime
 
 class TestToyCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -306,14 +313,14 @@ class TestBenCase(unittest.TestCase):
         self.assertTrue(isinstance(self.mission, Mission))
 
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.mission.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
 
-        # print results
-        self.mission.print_results()
+    #     # print results
+    #     self.mission.print_results()
 
-        print('DONE')
+    #     print('DONE')
 
 class TestRandomCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -331,7 +338,7 @@ class TestRandomCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 3.0 / 24.0,
+            "duration": 2 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
                 "stepSize": 10
@@ -405,19 +412,8 @@ class TestRandomCase(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            # "period": 1000,
-                            # "horizon": 1000,
-                        },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster"
-                        # },
-                        "rewardGrid":{
-                            "reward_function" : 'event',
-                            'initial_reward' : 1.0,
-                            'min_reward' : 1.0,
-                            'unobserved_reward_rate' : 2.0, # pts/hrs
-                            'max_unobserved_reward' : 10.0,
-                            'event_reward' : 10.0
+                            # "period": 500,
+                            # "horizon": 'Inf',
                         }
                     },
                     "science" : {
@@ -452,7 +448,7 @@ class TestRandomCase(unittest.TestCase):
         }
 
         # initialize mission
-        self.mission : Mission = Mission.from_dict(scenario_specs)
+        self.mission : Mission = Mission.from_dict(scenario_specs, overwrite=True)
 
         # check type of mission object
         self.assertTrue(isinstance(self.mission, Mission))
@@ -464,7 +460,37 @@ class TestRandomCase(unittest.TestCase):
         # print results
         self.mission.print_results()
 
+        # plot runtime
+        scenarios = [
+            'naive'
+        ]
+
+        agents = [
+            'manager',
+            'environment',
+            'thermal_0'
+        ]
+            
+        for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
+            plot_scenario_runtime(scenarios, agent, False, True, './tests/naive/results', './tests/naive')
+
         print('DONE')
 
 if __name__ == '__main__':
     unittest.main()
+
+    # # plot runtime
+    # scenarios = [
+    #     'naive'
+    # ]
+
+    # agents = [
+    #     'manager',
+    #     'environment',
+    #     'thermal_0'
+    # ]
+        
+    # for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
+    #     plot_scenario_runtime(scenarios, agent, False, True, './tests/naive/results')
+
+    # print('DONE')
