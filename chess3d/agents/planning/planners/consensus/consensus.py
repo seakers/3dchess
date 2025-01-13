@@ -662,8 +662,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                 changes.append(bid.copy())
 
                 # add to rebroadcast lists if parent agent performed the observation
-                if bid.winner == state.agent_name:
-                    rebroadcasts.append(bid.copy())
+                if bid.winner == state.agent_name: rebroadcasts.append(bid.copy())
 
         # check for task completion in bundle
         for task in [(req, instrument_name, current_bid)
@@ -840,6 +839,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
 
     @runtime_tracker
     def _get_matching_request(self, id : list) -> MeasurementRequest:
+        # return next([req for req in self.known_reqs if req.id == id], None)
+        
         reqs = {req for req in self.known_reqs if req.id == id}
         return reqs.pop() if reqs else None
 

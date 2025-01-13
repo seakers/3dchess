@@ -38,7 +38,7 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
                 ("Events Fully Co-observable",'max'),
                 ("Events Fully Co-observed",'max'),
                 ("Event Full Co-observations",'max'),
-                ("Events Partially Co-observable",'max'),
+                ("Events Only Partially Co-observable",'max'),
                 ("Events Partially Co-observed",'max'),
                 ("Event Partial Co-observations",'max'),
                 ("P(Ground Point Accessible)",'max'),
@@ -69,7 +69,32 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
                 ("P(Event Co-observed | Event Detected)",'max'),
                 ("P(Event Co-observed Fully | Event Detected)",'max'),
                 ("P(Event Co-observed Partially | Event Detected)",'max'),
-                ("Ground-Points Considered",'max')
+                ("Ground Points Considered",'max'),
+                ("P(Event Observed | Event Observable and Detected)",'max'),
+                ("P(Event Co-observed | Event Co-observable and Detected)",'max'),
+                ("P(Event Re-observed | Event Re-observable and Detected)",'max'),
+
+
+                # P(Event Observation | Observation),0.00296
+                # P(Event Re-observation | Observation),0.00013
+                # P(Event Co-observation | Observation),0.00026
+                # P(Event Full Co-observation | Observation),0.0
+                # P(Event Partial Co-observation | Observation),0.00026
+                # P(Event Observed | Observable),0.55
+                # P(Event Re-observed | Re-observable),0.11111
+                # P(Event Co-observed | Co-observable),0.33333
+                # P(Event Fully Co-observed | Fully Co-observable),0.33333
+                # P(Event Partially Co-observed | Partially Co-observable),
+                # P(Event Observed | Event Detected),1.0
+                # P(Event Re-observed | Event Detected),0.04545
+                # P(Event Co-observed | Event Detected),0.04545
+                # P(Event Co-observed Fully | Event Detected),0.04545
+                # P(Event Co-observed Partially | Event Detected),0.0
+                # P(Event Observed | Event Observable and Detected),1.0
+                # P(Event Re-observed | Event Re-observable and Detected),0.04545
+                # P(Event Co-observed | Event Co-observable and Detected),0.04545
+                # P(Event Co-observed Fully | Event Fully Co-observable and Detected),0.04545
+                # P(Event Co-observed Partially | Event Partially Co-observable and Detected),0.0
 
                 # ('Ground Points Accessible', 'max'),
                 # # ('Percent Ground Points Accessible', 'max'),
@@ -192,7 +217,7 @@ def compile_data(results_path : str, experiments_path : str) -> tuple:
     df_eval = df.copy()
     df_eval['Scenario ID'] = [row['Name'].split('_')[-1] for _,row in df.iterrows()]
     df_eval.sort_values('Scenario ID')
-    df_eval : pd.DataFrame = df_eval[df_eval['P(Event Co-observable)'] == 0.0]
+    df_eval : pd.DataFrame = df_eval[df_eval['P(Event Observable)'] == 0.0]
 
     parameters.add('Scenario ID')
 
@@ -208,7 +233,6 @@ def compile_data(results_path : str, experiments_path : str) -> tuple:
             failed_scenarios.append(int(unique_val))
 
     failed_scenarios.sort()
-    print('failed_scenarios:', failed_scenarios)
 
     params_to_remove = [param for param in df.columns.values if param not in parameters]
     params_to_remove.extend(['Name', 'Preplanner', 'Replanner', 'Scenario ID'])
@@ -232,6 +256,8 @@ def process_results(results_path : str, results_data : pd.DataFrame, parameters 
     planners = [(preplanner,replanner) 
                 for preplanner in temp_data['Preplanner'].unique() 
                 for replanner in temp_data['Replanner'].unique()]
+    preplanners = [preplanner for preplanner in temp_data['Preplanner'].unique()]
+    replanners = [replanner for replanner in temp_data['Replanner'].unique()]
 
     # initialize results
     processed_results = pd.DataFrame(data=[], columns=temp_data.columns)
@@ -243,52 +269,66 @@ def process_results(results_path : str, results_data : pd.DataFrame, parameters 
     scenario_ids = [int(id) for id in temp_data['Scenario ID'].unique()]
     scenario_ids.sort()
     
+
+    failed_scenarios = []
+    completed_scenarios = []
+    incomplete_scenarios = []
+    invalid_scenario = []
     for scenario_id in scenario_ids:
         # get results entries for a given scenario
         scenario_results : pd.DataFrame = temp_data[temp_data['Scenario ID'] == str(scenario_id)]
 
         scenario_grid_type = scenario_results['Grid Type'].unique()[-1]
-        scenario_planners = { tuple(planner.split('-')) for planner in scenario_results['Planner']}
-        
-        # check if all planner runs were completed in this scenario
-        if (    
-            len(scenario_planners) != len(planners) 
-            or any([planner not in scenario_planners for planner in planners])
-            ): 
-            continue
-        
-        # check if any of the metrics has invalid values as their best value
-        invalid_metric = False
-        for metric,optimum in metrics:
-            # find best value
-            best_results = [val for val in scenario_results[metric]
-                            if val >= 0.0 and not np.isnan(val)]
-            if not best_results:
-                continue
-
-            # result is invalid if leq 0.0
-            best_val = max(best_results) if optimum.lower() == 'max' else min(best_results) 
-            if best_val < 0.0: 
-                invalid_metric = True
-                break
-        
-        # if invalid, skip
-        if invalid_metric: 
-            continue                
-        
-        # add to list of completed scenarios
-        processed_results = pd.concat([processed_results, scenario_results])
-
-        # calculate differential values between metrics 
-        preplanners = {preplanner for preplanner,_ in scenario_planners}
+        # scenario_planners = { tuple(planner.split('-')) for planner in scenario_results['Planner']}
+        # scenario_preplanners = { preplanner for preplanner in scenario_results['Preplanner']}
+        # scenario_replanners = { replanner for replanner in scenario_results['Replanner']}
         
         for preplanner in preplanners:
+            preplanner_results = scenario_results[scenario_results['Preplanner'] == preplanner]
+
+            if len(preplanner_results) < len(replanners):
+                incomplete_scenarios.append((scenario_id,preplanner))
+                continue
+            
+            # check if any of the metrics has invalid values as their best value
+            invalid_metric = False
+            for metric,optimum in metrics:
+                # find best value
+                best_results = [val for val in preplanner_results[metric]
+                                if val >= 0.0 and not np.isnan(val)]
+                if not best_results:
+                    continue
+
+                # result is invalid if leq 0.0
+                best_val = max(best_results) if optimum.lower() == 'max' else min(best_results) 
+                if best_val < 0.0: 
+                    invalid_metric = True
+                    break
+            
+            # if invalid, skip
+            if invalid_metric: 
+                invalid_scenario.append((scenario_id,preplanner))
+                continue                
+            
+            # check if the scenario allowed for events to be observable
+            # if any([np.isnan(val) for val in preplanner_results['P(Event Co-observed | Co-observable)']]): 
+            #     failed_scenarios.append((scenario_id,preplanner))
+            #     continue
+
+            if all([val == 0.0 for val in preplanner_results['P(Event Observable)']]): 
+                failed_scenarios.append((scenario_id,preplanner))
+                continue
+            
+            # add to list of completed scenarios
+            processed_results = pd.concat([processed_results, preplanner_results])
+            completed_scenarios.append((scenario_id,preplanner))
+
+            # calculate differential values between metrics             
             row = [scenario_id, preplanner, scenario_grid_type]
-            replanner_results : pd.DataFrame = scenario_results[scenario_results['Preplanner'] == preplanner] 
 
             for metric,_ in metrics:
-                vals = replanner_results[metric].values
-                replanners = list(replanner_results['Replanner'].values)
+                vals = preplanner_results[metric].values
+                replanners = list(preplanner_results['Replanner'].values)
 
                 i_acbba = replanners.index('acbba')
                 i_none = replanners.index('none')
@@ -300,7 +340,17 @@ def process_results(results_path : str, results_data : pd.DataFrame, parameters 
             differential_results.loc[-1] = row
             differential_results.index = differential_results.index + 1  # shifting index
             differential_results = differential_results.sort_index()  # sorting by index
-                    
+
+    assert len(processed_results[processed_results['Replanner'] == 'acbba']) == len(processed_results[processed_results['Replanner'] == 'none'])
+    assert len(processed_results[processed_results['Replanner'] == 'acbba']) + len(processed_results[processed_results['Replanner'] == 'none']) == len(processed_results)
+    # assert allEqual([len(processed_results[processed_results['Preplanner']] == replanner)
+    #             for replanner 
+    #             ])   )             
+    
+    print(f'failed scenarios (total={len(failed_scenarios)}):', failed_scenarios)
+    print(f'invalid scenarios (total={len(invalid_scenario)}):', invalid_scenario)
+    print(f'incomplete scenarios (total={len(incomplete_scenarios)}):', incomplete_scenarios)
+    print(f'complete scenarios (total={len(completed_scenarios)})',completed_scenarios)
 
     # save to csv
     processed_results_path = os.path.join(results_path, 'processed_results.csv')
@@ -413,8 +463,9 @@ def generate_experiment_report(results_path : str, processed_results : pd.DataFr
         processed_data : pd.DataFrame = processed_results.copy()
 
         # add scenario ID to results
-        processed_data['Scenario ID'] = [row['Name'].split('_')[-1] for _,row in processed_results.iterrows()]
-        processed_data.sort_values('Scenario ID')
+        if 'Scenario ID' not in processed_data:
+            processed_data['Scenario ID'] = [row['Name'].split('_')[-1] for _,row in processed_results.iterrows()]
+            processed_data.sort_values('Scenario ID')
 
         # processes completed scenarios
         scenario_ids = [int(id) for id in processed_data['Scenario ID'].unique()]
@@ -431,6 +482,10 @@ def generate_experiment_report(results_path : str, processed_results : pd.DataFr
             if param in ['Name', 'Constellation', 'Preplanner', 'Replanner']: continue
             
             vals : list = list(processed_data[param].unique())
+
+            if param == 'Scenario ID':
+                vals = [int(val) for val in vals]
+
             vals.sort()
             
             report.write(f'|{param}| \t {vals}|\n')
@@ -440,20 +495,45 @@ def generate_experiment_report(results_path : str, processed_results : pd.DataFr
                             for preplanner in processed_data['Preplanner'].unique() 
                             for replanner in processed_data['Replanner'].unique()]
         
-        report.write(f'\n| Performance Metric |')
-        for preplanner,replanner in scenario_planners:
-            report.write(f' {preplanner}-{replanner} | ')
-        report.write('\n| - |')
-        for preplanner,replanner in scenario_planners:
-            report.write(f'- | ')
-        report.write('\n')
+        # report.write(f'\n| Performance Metric |')
+        # for preplanner,replanner in scenario_planners:
+        #     report.write(f' {preplanner}-{replanner} | ')
+        # report.write('\n| - |')
+        # for preplanner,replanner in scenario_planners:
+        #     report.write(f'- | ')
+        # report.write('\n')
             
+        # # generate compiled table
+        # for metric,optimum in metrics:
+        #     if 'P(' not in metric and 'Percent' not in metric: continue
+
+        #     metric_name = metric.replace("|","\|")
+        #     report.write(f'| {metric_name} |')
+
+        #     for preplanner,replanner in scenario_planners:
+        #         data = processed_data[processed_data['Preplanner'] == preplanner]
+        #         data = data[data['Replanner'] == replanner]
+                
+        #         vals = [val for val in data[metric] 
+        #                 if not np.isnan(val)
+        #                 ]
+        #         avg = np.round(np.average(vals),3)
+        #         dev = np.round(np.std(vals),3)
+
+        #         report.write(f' {avg} ± {dev} | ')
+
+        #     report.write('\n')
+
+        # USE TO GENERATE LATEX TABLE
+        report.write(f'\n Performance Metric ')
+        for preplanner,replanner in scenario_planners:
+            report.write(f'& {preplanner}-{replanner} ')
+        report.write('\\\\\\hline \n')
+        
         # generate compiled table
         for metric,optimum in metrics:
             if 'P(' not in metric and 'Percent' not in metric: continue
-
-            metric_name = metric.replace("|","\|")
-            report.write(f'| {metric_name} |')
+            report.write(f' {metric}')
 
             for preplanner,replanner in scenario_planners:
                 data = processed_data[processed_data['Preplanner'] == preplanner]
@@ -465,9 +545,9 @@ def generate_experiment_report(results_path : str, processed_results : pd.DataFr
                 avg = np.round(np.average(vals),3)
                 dev = np.round(np.std(vals),3)
 
-                report.write(f' {avg} ± {dev} | ')
+                report.write(f' & {avg} ± {dev}')
 
-            report.write('\n')
+            report.write('\\\\ \n')
 
 def plot_results(processed_results : pd.DataFrame, differential_results : pd.DataFrame, parameters : list, metrics : list, show_plots : bool, save_plots : bool, overwrite : bool) -> None:
     # create plots directory if necessary
@@ -486,7 +566,7 @@ def plot_results(processed_results : pd.DataFrame, differential_results : pd.Dat
     xs = [
           "Ground Points Accessible",
           "P(Ground Point Accessible)",
-          "Ground-Points Considered",
+          "Ground Points Considered",
           "Percent Ground-Points Considered",
           "Number of Ground-Points",
           "Number of Events per Day",
@@ -495,8 +575,11 @@ def plot_results(processed_results : pd.DataFrame, differential_results : pd.Dat
           "P(Event Observable)"
         ]
     # ys.difference_update(xs)
-       
-    # # SCATTER PLOTS
+
+    # CORRELOGRAM
+    # generate_correlogram(processed_results, ys, xs, show_plots, save_plots, overwrite, 'completed')
+
+    # SCATTER PLOTS
     generate_scatterplots(processed_results, ys, xs, show_plots, save_plots, overwrite, 'completed')
 
     # DENSITY HISTOGRAMS
@@ -515,6 +598,46 @@ def plot_results(processed_results : pd.DataFrame, differential_results : pd.Dat
 
     # HISTOGRAMS
     generate_histograms(differential_results, ys, show_plots, save_plots, overwrite, 'differential')
+
+def generate_correlogram(results_data : pd.DataFrame, ys : set, xs : list, show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
+    # set ouput path
+    scatterplot_path = './plots'
+    for path_element in ['correlogram']:
+        scatterplot_path = os.path.join(scatterplot_path, path_element)
+        if not os.path.isdir(scatterplot_path): os.mkdir(scatterplot_path)
+    
+    # set plot name and path
+    plot_path = os.path.join(scatterplot_path, f'{dir_name}.png')
+
+    # check if plot has already been generated
+    if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: return
+    
+    # apply the default theme
+    sns.set_theme(style="whitegrid", palette="Set2")
+
+    # choose variables
+    # variables : set = {results_data.columns.values}
+    # variables.difference_update([
+    #     'Name',
+    #     'Scenario ID',
+    #     'Constellation',
+
+    # ])
+
+    # create plot
+    sns.pairplot(results_data, 
+                 hue='Replanner', 
+                #  x_vars=xs,
+                 y_vars=ys,
+                 kind='reg', 
+                 diag_kind="kde")
+
+    # save or show graph
+    if show_plots: plt.show()
+    if save_plots: plt.savefig(plot_path)
+
+    # close plot
+    plt.close()
 
 def generate_scatterplots(results_data : pd.DataFrame, ys : set, xs : list, show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
     """ Creates scatter plots from results data """
@@ -585,26 +708,30 @@ def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_pl
         if (show_plots or save_plots) and os.path.isfile(plot_path) and not overwrite: continue
         if all([np.isnan(val) for val in results_data[y_vals].values]): continue
 
+
         # create histogram
         left,right = plt.xlim()
         if 'dif' not in dir_name:
+            assert len(results_data[results_data['Replanner'] == 'acbba']) == len(results_data[results_data['Replanner'] == 'none'])
+            assert len(results_data[results_data['Replanner'] == 'acbba']) + len(results_data[results_data['Replanner'] == 'none']) == len(results_data)
+                        
             sns.displot(results_data, 
                         x=y_vals, 
                         kind="kde", 
-                        col="Grid Type",
+                        # col="Grid Type",
                         # row="Planner", 
                         hue='Replanner',
                         warn_singular=False,
                         )
             plt.xlim(left=0)
-            if right > 0.50: 
+            if right > 0.5: 
                 plt.xlim(right=1)
         else:
             sns.displot(results_data, 
                         x=y_vals, 
                         kind="kde", 
-                        col="Grid Type",
-                        row="Preplanner", 
+                        # col="Grid Type",
+                        # row="Preplanner", 
                         # hue='Replanner',
                         warn_singular=False
                         )
@@ -652,9 +779,10 @@ def generate_histograms(results_data : pd.DataFrame, ys : list,  show_plots : bo
             sns.displot(results_data, 
                         x=y_val, 
                         kind="hist", 
-                        col="Grid Type",
-                        row="Replanner",
+                        # col="Grid Type",
+                        # row="Replanner",
                         bins=10,
+                        hue='Replanner'
                         # size="Number of Grid-points",
                         # palette="flare",
                         # warn_singular=False
@@ -665,8 +793,8 @@ def generate_histograms(results_data : pd.DataFrame, ys : list,  show_plots : bo
             sns.displot(results_data, 
                         x=y_val, 
                         kind="hist", 
-                        col="Grid Type",
-                        row="Preplanner",
+                        # col="Grid Type",
+                        # row="Preplanner",
                         bins=10,
                         # size="Number of Grid-points",
                         # palette="flare",
