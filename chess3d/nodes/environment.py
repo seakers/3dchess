@@ -367,6 +367,8 @@ class SimulationEnvironment(EnvironmentNode):
         # 
         if msg.src not in self.agent_state_update_times: 
             self.agent_state_update_times[msg.src] = -1.0
+
+        # TODO support ground stations
         
         # check if time has passed between state updates
         sat_orbitdata : OrbitData = self.orbitdata[msg.src]

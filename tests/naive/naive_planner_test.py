@@ -154,14 +154,14 @@ class TestToyCase(unittest.TestCase):
         self.assertTrue(isinstance(self.mission, Mission))
         
 
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.mission.execute()
+    def test_planner(self) -> None:
+        # execute mission
+        self.mission.execute()
 
-    #     # print results
-    #     self.mission.print_results()
+        # print results
+        self.mission.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
 class TestBenCase(unittest.TestCase):
     def setUp(self) -> None:

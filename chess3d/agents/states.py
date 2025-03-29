@@ -214,27 +214,64 @@ class GroundStationAgentState(SimulationAgentState):
         self.lon = lon
         self.alt = alt 
 
-        R = 6.3781363e+003 + alt
-        pos = [
-                R * np.cos( lat * np.pi / 180.0) * np.cos( lon * np.pi / 180.0),
-                R * np.cos( lat * np.pi / 180.0) * np.sin( lon * np.pi / 180.0),
-                R * np.sin( lat * np.pi / 180.0)
-        ]
-        vel = [0, 0, 0]
+        self.R = 6.3781363e+003 + alt   # radius of the earth [km]
+        self.W = 360 / (24 * 3600)      # angular speed of Earth [deg/s]
+
+        self.angular_vel = [0, 0, self.W]
+
+        if pos is None:
+            pos = [self.R + self.alt, 0, 0] # in rotating frame
+            pos = GroundStationAgentState._rotating_to_inertial(self, pos, lat, lon)
         
+        if vel is None:
+            vel = np.cross(self.angular_vel, pos)
+         
         super().__init__(agent_name,
                         SimulationAgentTypes.GROUND_STATION.value, 
                         pos, 
                         vel,
                         [0,0,0],
-                        [0,0,0], 
-                        None, 
+                        [0,0,0],  
                         status, 
                         t)
+        
+    def to_rads(self, th : float) -> float:
+        return th * np.pi / 180
+
+    def _inertial_to_rotating(self, v : list, th : float, phi : float) -> list:
+        R_i2a = [[ np.cos(self.to_rads(th)), np.sin(self.to_rads(th)), 0],
+                 [-np.sin(self.to_rads(th)), np.cos(self.to_rads(th)), 0],
+                 [                        0,                        0, 1]]
+        R_a2b = [
+                 [1, 0, 0],
+                 [0, np.cos(self.to_rads(phi)), np.sin(self.to_rads(phi))],
+                 [0, -np.sin(self.to_rads(phi)), np.cos(self.to_rads(phi))],
+                 ]
+        R_i2b = np.dot(R_a2b, R_i2a)
+        return np.dot(R_i2b, v)
+    
+    def _rotating_to_inertial(self, v : list, th : float, phi : float) -> list:
+        R_i2a = [[ np.cos(self.to_rads(th)), np.sin(self.to_rads(th)), 0],
+                 [-np.sin(self.to_rads(th)), np.cos(self.to_rads(th)), 0],
+                 [                        0,                        0, 1]]
+        R_a2b = [
+                 [1, 0, 0],
+                 [0, np.cos(self.to_rads(phi)), np.sin(self.to_rads(phi))],
+                 [0, -np.sin(self.to_rads(phi)), np.cos(self.to_rads(phi))],
+                 ]
+        R_i2b = np.dot(R_a2b, R_i2a)
+        R_b2i = np.transpose(R_i2b)
+        return np.dot(R_b2i, v)
 
     def kinematic_model(self, tf: Union[int, float]) -> tuple:
-        # agent does not move
-        return self.pos, self.vel, self.attitude, self.attitude
+        lon = self.lon * self.W * tf    # longitude "changes" as earth spins 
+        lat = self.lat                  # lattitude stays constant
+
+        pos = [self.R + self.alt, 0, 0] # in rotating frame
+        pos = GroundStationAgentState._rotating_to_inertial(self, pos, lat, lon)
+        vel = np.cross(self.angular_vel, pos)
+        
+        return list(pos), list(vel), self.attitude, self.attitude
 
     def is_failure(self) -> None:
         # agent never fails

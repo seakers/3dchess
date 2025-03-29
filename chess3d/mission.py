@@ -136,6 +136,7 @@ class Mission:
         agent_port = port + 6
         if isinstance(spacecraft_dict, list):
             for spacecraft in spacecraft_dict:
+                # create satellite agents
                 agent = SimulationElementsFactory.generate_agent(
                                                     scenario_name, 
                                                     results_path,
@@ -157,8 +158,23 @@ class Mission:
             raise NotImplementedError('UAV agents not yet implemented.')
 
         if isinstance(gstation_dict, list):
-            # # TODO Implement ground station agents
-            raise NotImplementedError('Ground Station agents not yet implemented.')
+            for gndstat in gstation_dict:
+                # create ground station agents
+                agent = SimulationElementsFactory.generate_agent(
+                                                    scenario_name, 
+                                                    results_path,
+                                                    orbitdata_dir,
+                                                    gndstat,
+                                                    gstation_dict.index(gndstat), 
+                                                    manager_network_config, 
+                                                    agent_port, 
+                                                    SimulationAgentTypes.GROUND_STATION, 
+                                                    clock_config,
+                                                    level,
+                                                    logger
+                                                )
+                agents.append(agent)
+                agent_port += 7
         
         # ------------------------------------
         # create environment
@@ -1027,12 +1043,13 @@ class SimulationElementsFactory:
             = SimulationElementsFactory.create_agent_network_config(manager_network_config, 
                                                             scenario_name, 
                                                             port)
-
-        # load orbitdata
-        agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name) if orbitdata_dir is not None else None
-
+        
         # load payload
         if agent_type == SimulationAgentTypes.SATELLITE:
+            # load orbitdata
+            agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name) if orbitdata_dir is not None else None
+
+            # load satellite specs
             agent_specs : Spacecraft = Spacecraft.from_dict(agent_dict)
         else:
             agent_specs : dict = {key: val for key,val in agent_dict.items()}
@@ -1116,7 +1133,27 @@ class SimulationElementsFactory:
                                       replanner,
                                       reward_grid,
                                       level,
-                                      logger)       
+                                      logger)     
+
+            elif agent_type == SimulationAgentTypes.GROUND_STATION:
+                lat = agent_specs['latitude']
+                lon = agent_specs['longitude']
+                alt = agent_specs.get('altitude', 0.0)
+                initial_state = GroundStationAgentState(agent_name, lat, lon, alt)
+
+                return GroundStationAgent(agent_name,
+                                          results_path,
+                                          agent_network_config,
+                                          manager_network_config,
+                                          initial_state,
+                                          agent_specs, 
+                                          processor,
+                                        #   preplanner,
+                                        #   replanner,
+                                          level=level,
+                                          logger=logger
+                                          )
+
         
         raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")
 

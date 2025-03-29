@@ -1,4 +1,5 @@
 import copy
+import os
 import unittest
 
 import numpy as np
@@ -390,6 +391,14 @@ class ToyTestACBBAReplanner(unittest.TestCase):
             }
         }
 
+        # set outdir
+        orbitdata_dir = os.path.join('./tests', 'acbba', 'orbit_data')
+        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'toy')
+        mission_specs['settings']['outDir'] = scenario_orbitdata_dir
+        if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
+        if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
+
+
         # initialize mission
         self.toy_mission : Mission = Mission.from_dict(mission_specs)
 
@@ -705,6 +714,13 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                 "outDir" : "./tests/acbba/orbit_data/mission"
             }
         }
+
+        # set outdir
+        orbitdata_dir = os.path.join('./tests', 'acbba', 'orbit_data')
+        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'mission')
+        mission_specs['settings']['outDir'] = scenario_orbitdata_dir
+        if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
+        if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
 
         # initialize mission
         self.mission : Mission = Mission.from_dict(mission_specs)
