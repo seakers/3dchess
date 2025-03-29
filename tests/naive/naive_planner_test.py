@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.planners.naive import NaivePlanner
+from chess3d.agents.planning.planners.naive import EarliestAccessPlanner
 from chess3d.agents.states import SimulationAgentState
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
@@ -97,9 +97,9 @@ class TestToyCase(unittest.TestCase):
                         "preplanner" : {
                             "@type" : "naive"
                         },
-                        "replanner" : {
-                            "@type" : "broadcaster"
-                        },
+                        # "replanner" : {
+                        #     "@type" : "broadcaster"
+                        # },
                         "rewardGrid":{
                             "reward_function" : 'event',
                             'initial_reward' : 1.0,
@@ -154,14 +154,14 @@ class TestToyCase(unittest.TestCase):
         self.assertTrue(isinstance(self.mission, Mission))
         
 
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.mission.execute()
+    def test_planner(self) -> None:
+        # execute mission
+        self.mission.execute()
 
-    #     # print results
-    #     self.mission.print_results()
+        # print results
+        self.mission.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
 class TestBenCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -453,28 +453,28 @@ class TestRandomCase(unittest.TestCase):
         # check type of mission object
         self.assertTrue(isinstance(self.mission, Mission))
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.mission.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
 
-        # print results
-        self.mission.print_results()
+    #     # print results
+    #     self.mission.print_results()
 
-        # plot runtime
-        scenarios = [
-            'naive'
-        ]
+    #     # plot runtime
+    #     scenarios = [
+    #         'naive'
+    #     ]
 
-        agents = [
-            'manager',
-            'environment',
-            'thermal_0'
-        ]
+    #     agents = [
+    #         'manager',
+    #         'environment',
+    #         'thermal_0'
+    #     ]
             
-        for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
-            plot_scenario_runtime(scenarios, agent, False, True, './tests/naive/results', './tests/naive')
+    #     for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
+    #         plot_scenario_runtime(scenarios, agent, False, True, './tests/naive/results', './tests/naive')
 
-        print('DONE')
+    #     print('DONE')
 
 if __name__ == '__main__':
     unittest.main()

@@ -11,6 +11,7 @@ from tqdm import tqdm
 import zmq
 import numpy as np
 import pandas as pd
+from typing import Dict
 
 import orbitpy.util
 from instrupy.base import Instrument
@@ -22,25 +23,25 @@ from dmas.clocks import *
 from dmas.network import NetworkConfig
 from dmas.clocks import *
 
-from chess3d.agents.groundstat import GroundStationAgent
+from chess3d.agents.agents import *
 from chess3d.agents.planning.planners.consensus.dynamic import DynamicProgrammingACBBAReplanner
 from chess3d.agents.planning.planners.dynamic import DynamicProgrammingPlanner
 from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.science.processing import LookupProcessor
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
 from chess3d.agents.orbitdata import OrbitData, TimeInterval
 from chess3d.agents.states import *
-from chess3d.agents.agent import SimulationAgent
+from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.planning.planners.consensus.acbba import ACBBAPlanner
-from chess3d.agents.planning.planners.naive import NaivePlanner
+from chess3d.agents.planning.planners.naive import EarliestAccessPlanner
 from chess3d.agents.planning.planners.nadir import NadirPointingPlaner
-from chess3d.agents.satellite import SatelliteAgent
 from chess3d.agents.science.module import *
 from chess3d.agents.science.utility import utility_function, reobservation_strategy
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
-from chess3d.agents.agent import SimulationAgent
+from chess3d.agents.agent import SimulatedAgent
 from chess3d.utils import *
 
 
@@ -58,7 +59,7 @@ class Mission:
         self.orbitdata_dir : str = orbitdata_dir
         self.manager : SimulationManager = manager
         self.environment : SimulationEnvironment = environment
-        self.agents : list[SimulationAgent] = agents
+        self.agents : list[SimulatedAgent] = agents
         self.monitor : ResultsMonitor = monitor
         self.level=level
         
@@ -131,7 +132,7 @@ class Mission:
         
         # ------------------------------------
         # create agents 
-        agents : list[SimulationAgent] = []
+        agents : list[SimulatedAgent] = []
         agent_port = port + 6
         if isinstance(spacecraft_dict, list):
             for spacecraft in spacecraft_dict:
@@ -144,6 +145,7 @@ class Mission:
                                                     manager_network_config, 
                                                     agent_port, 
                                                     SimulationAgentTypes.SATELLITE, 
+                                                    clock_config,
                                                     level,
                                                     logger
                                                 )
@@ -208,7 +210,7 @@ class Mission:
             pool.submit(self.manager.run, *[])
             pool.submit(self.environment.run, *[])
             for agent in self.agents:                
-                agent : SimulationAgent
+                agent : SimulatedAgent
                 pool.submit(agent.run, *[])  
     
     def print_results(self, precission : int = 5) -> None:
@@ -1005,9 +1007,10 @@ class SimulationElementsFactory:
                             manager_network_config : NetworkConfig, 
                             port : int, 
                             agent_type : SimulationAgentTypes,
+                            clock_config : ClockConfig,
                             level : int,
                             logger : logging.Logger
-                        ) -> SimulationAgent:
+                        ) -> SimulatedAgent:
         """
         Creates an agent from a list of parameters
         """
@@ -1026,10 +1029,7 @@ class SimulationElementsFactory:
                                                             port)
 
         # load orbitdata
-        if orbitdata_dir is not None:
-            agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name)
-        else:
-            agent_orbitdata = None
+        agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name) if orbitdata_dir is not None else None
 
         # load payload
         if agent_type == SimulationAgentTypes.SATELLITE:
@@ -1039,71 +1039,85 @@ class SimulationElementsFactory:
             agent_specs['payload'] = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) \
                                      if instruments_dict else []
 
-        # load science module
-        science = SimulationElementsFactory.load_science_module(science_dict,
-                                                        results_path,
-                                                        agent_name,
-                                                        agent_network_config,
-                                                        logger)
+        if isinstance(clock_config, RealTimeClockConfig):
+            # load science module
+            science = SimulationElementsFactory.load_science_module(science_dict,
+                                                            results_path,
+                                                            agent_name,
+                                                            agent_network_config,
+                                                            logger)
 
-        # load planner module
-        planner = SimulationElementsFactory.load_planner_module(planner_dict,
-                                                        results_path,
-                                                        agent_specs,
-                                                        agent_network_config,
-                                                        agent_orbitdata, 
-                                                        level, 
-                                                        logger)
-        
-        # create agent
-        if agent_type == SimulationAgentTypes.SATELLITE:
+            # load planner module
+            planner = SimulationElementsFactory.load_planner_module(planner_dict,
+                                                            results_path,
+                                                            agent_specs,
+                                                            agent_network_config,
+                                                            agent_orbitdata, 
+                                                            level, 
+                                                            logger)
 
-            # define initial state
-            position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
-            time_data =  pd.read_csv(position_file, nrows=3)
-            l : str = time_data.at[1,time_data.axes[1][0]]
-            _, _, _, _, dt = l.split(' '); dt = float(dt)
+            # create agent
+            if agent_type == SimulationAgentTypes.SATELLITE:
 
-            initial_state = SatelliteAgentState(agent_name,
-                                                orbit_state_dict,
-                                                time_step=dt) 
+                # define initial state
+                position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
+                time_data =  pd.read_csv(position_file, nrows=3)
+                l : str = time_data.at[1,time_data.axes[1][0]]
+                _, _, _, _, dt = l.split(' '); dt = float(dt)
+
+                initial_state = SatelliteAgentState(agent_name,
+                                                    orbit_state_dict,
+                                                    time_step=dt) 
+                
+                # return satellite agent
+                return RealtimeSatelliteAgent(
+                                        agent_name,
+                                        results_path,
+                                        manager_network_config,
+                                        agent_network_config,
+                                        initial_state, 
+                                        agent_specs,
+                                        planner,
+                                        science,
+                                        logger=logger
+                                    )
             
-            # return satellite agent
-            return SatelliteAgent(
-                                    agent_name,
-                                    results_path,
-                                    manager_network_config,
-                                    agent_network_config,
-                                    initial_state, 
-                                    agent_specs,
-                                    planner,
-                                    science,
-                                    logger=logger
-                                )
         else:
-            # define initial state
-            lat = agent_dict['latitude']
-            lon = agent_dict['longitude']
-            alt = agent_dict.get('altitude', 0.0)
+            processor : DataProcessor = \
+                SimulationElementsFactory.load_data_processor(science_dict, agent_name)
+            # preplanner : AbstractPreplanner = 
 
-            initial_state = GroundStationAgentState(agent_name, 
-                                                    lat, 
-                                                    lon, 
-                                                    alt)
-            
-            return GroundStationAgent(
-                                    agent_name,
-                                    results_path,
-                                    manager_network_config,
-                                    agent_network_config,
-                                    initial_state, 
-                                    agent_specs,
-                                    planner,
-                                    science,
-                                    logger=logger
-                                )
+            if agent_type == SimulationAgentTypes.SATELLITE:
 
-            raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")
+                # define initial state
+                position_file = os.path.join(orbitdata_dir, 
+                                             f'sat{agent_index}', 
+                                             'state_cartesian.csv')
+                time_data =  pd.read_csv(position_file, nrows=3)
+                l : str = time_data.at[1,time_data.axes[1][0]]
+                _, _, _, _, dt = l.split(' '); dt = float(dt)
+
+                initial_state = SatelliteAgentState(agent_name,
+                                                    orbit_state_dict,
+                                                    time_step=dt) 
+                
+                preplanner, replanner, reward_grid = \
+                    SimulationElementsFactory.load_planners(planner_dict, agent_specs, agent_orbitdata, logger)
+                
+                return SatelliteAgent(agent_name, 
+                                      results_path,
+                                      agent_network_config,
+                                      manager_network_config,
+                                      initial_state,
+                                      agent_specs,
+                                      processor,
+                                      preplanner,
+                                      replanner,
+                                      reward_grid,
+                                      level,
+                                      logger)       
+        
+        raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")
 
     def create_agent_network_config(manager_network_config : NetworkConfig, 
                                     scenario_name : str, 
@@ -1293,12 +1307,7 @@ class SimulationElementsFactory:
             # return path address
             return events_path
         
-    def load_science_module(science_dict : dict, 
-                            results_path : str, 
-                            agent_name : str, 
-                            agent_network_config : NetworkConfig, 
-                            logger : logging.Logger) -> ScienceModule:
-        
+    def load_data_processor(science_dict : dict, agent_name : str) -> DataProcessor:
         if science_dict is not None:
             science_dict : dict
 
@@ -1314,43 +1323,41 @@ class SimulationElementsFactory:
                 if events_path is None: raise ValueError(f'predefined events path not specified in input file.')
 
                 # create science module
-                science = LookupTableScienceModule(results_path, 
-                                              events_path, 
-                                              agent_name, 
-                                              agent_network_config, 
-                                              logger)
-                                              
-            elif science_module_type.lower() == 'oracle':
-                # load events path
-                events_path : str = science_dict.get('eventsPath', None)
-
-                if events_path is None: raise ValueError(f'predefined events path not specified in input file.')
-
-                # create science module
-                science = OracleScienceModule(results_path, 
-                                              events_path, 
-                                              agent_name, 
-                                              agent_network_config, 
-                                              logger)
+                processor = LookupProcessor(events_path, agent_name)
 
             else:
                 raise NotImplementedError(f'science module of type `{science_module_type}` not yet supported.')
             
             # return science module
-            return science
+            return processor
+
+        # return nothing
+        return None          
+
+    def load_science_module(science_dict : dict, 
+                            results_path : str, 
+                            agent_name : str, 
+                            agent_network_config : NetworkConfig, 
+                            logger : logging.Logger) -> ScienceModule:
+        
+        if science_dict is not None:
+            science_dict : dict
+
+            # load selected data processor
+            processor : DataProcessor = SimulationElementsFactory.load_data_processor(science_dict, agent_name)
+
+            if processor is None: return None
+
+            # return science module
+            return ScienceModule(results_path, agent_name, agent_network_config, processor, logger)
 
         # return nothing
         return None            
    
-    def load_planner_module(planner_dict : dict,
-                            results_path : str,
-                            agent_specs : object,
-                            agent_network_config : NetworkConfig,
-                            agent_orbitdata : OrbitData,
-                            level : int,
-                            logger : logging.Logger
-                            ) -> PlanningModule:
-        
+    def load_planners(planner_dict : dict,
+                        agent_specs : object,
+                        agent_orbitdata : OrbitData,
+                        logger : logging.Logger) -> tuple:
         if planner_dict is not None:
             # get reward grid spes
             reward_grid_params : dict = planner_dict.get('rewardGrid', None)
@@ -1394,7 +1401,7 @@ class SimulationElementsFactory:
                 # initialize preplanner
                 if preplanner_type.lower() in ["naive", "fifo"]:
                     points = preplanner_dict.get('numGroundPoints', np.Inf)
-                    preplanner = NaivePlanner(horizon, period, points, sharing, debug, logger)
+                    preplanner = EarliestAccessPlanner(horizon, period, points, sharing, debug, logger)
 
                 elif preplanner_type.lower() == 'nadir':
                     points = preplanner_dict.get('numGroundPoints', np.Inf)
@@ -1454,6 +1461,19 @@ class SimulationElementsFactory:
                 replanner = None
         else:
             preplanner, replanner, reward_grid = None, None, None
+        
+        return preplanner, replanner, reward_grid
+
+    def load_planner_module(planner_dict : dict,
+                            results_path : str,
+                            agent_specs : object,
+                            agent_network_config : NetworkConfig,
+                            agent_orbitdata : OrbitData,
+                            level : int,
+                            logger : logging.Logger
+                            ) -> PlanningModule:
+        
+        preplanner, replanner, reward_grid = SimulationElementsFactory.load_planners(planner_dict, agent_specs, agent_orbitdata, logger)
         
         # create planning module
         return PlanningModule(results_path, 

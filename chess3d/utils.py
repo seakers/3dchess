@@ -3,12 +3,6 @@ from enum import Enum
 import logging
 import os
 import shutil
-from typing import Dict
-
-import numpy as np
-import pandas as pd
-
-from chess3d.agents.science.requests import MeasurementRequest
 
 class CoordinateTypes(Enum):
     """

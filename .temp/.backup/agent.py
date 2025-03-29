@@ -8,42 +8,88 @@ from instrupy.base import Instrument
 from orbitpy.util import Spacecraft
 
 from dmas.agents import *
-from dmas.modules import InternalModule
+from dmas.network import NetworkConfig
 from dmas.utils import runtime_tracker
 from zmq import SocketType
 
-from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
-from chess3d.agents.planning.planners.rewards import RewardGrid
 from chess3d.agents.states import SimulationAgentState
+from .science.requests import MeasurementRequest
+from .planning.module import PlanningModule
+from .science.module import ScienceModule
 from chess3d.agents.actions import *
 from chess3d.messages import *
-from chess3d.agents.planning.module import PlanningModule
-from chess3d.agents.science.module import ScienceModule
-from chess3d.agents.science.processing import DataProcessor
 
-class AbstractAgent(Agent):
+class SimulationAgent(Agent):
     """
     # Abstract Simulation Agent
+
+    #### Attributes:
+        - agent_name (`str`): name of the agent
+        - scenario_name (`str`): name of the scenario being simulated
+        - manager_network_config (:obj:`NetworkCdo(nfig`): netwdo(rk configuration of the simulation manager
+        - agent_network_config (:obj:`NetworkConfig`): network configuration for this agent
+        - initial_state (:obj:`SimulationAgentState`): initial state for this agent
+        - specs (`object`): describes the physical specifications of this agent
+        - planning_module (`PlanningModule`): planning module assigned to this agent
+        - science_module (`ScienceModule): science module assigned to this agent
+        - level (int): logging level
+        - logger (logging.Logger): simulation logger 
     """
-    def __init__(self, 
-                 agent_name, 
-                 results_path : str,
-                 agent_network_config, 
-                 manager_network_config, 
-                 initial_state, 
-                 specs : object,
-                 modules, 
-                 level = logging.INFO, 
-                 logger = None):
-        super().__init__(agent_name, agent_network_config, manager_network_config, initial_state, modules, level, logger)
-        
+    def __init__(   self, 
+                    agent_name: str, 
+                    results_path : str,
+                    manager_network_config: NetworkConfig, 
+                    agent_network_config: NetworkConfig,
+                    initial_state : SimulationAgentState,
+                    specs : object,
+                    planning_module : PlanningModule = None,
+                    science_module : ScienceModule = None,
+                    level: int = logging.INFO, 
+                    logger: logging.Logger = None
+                    ) -> None:
+        """
+        Initializes an instance of a Simulation Agent Object
+
+        #### Arguments:
+            - agent_name (`str`): name of the agent
+            - scenario_name (`str`): name of the scenario being simulated
+            - manager_network_config (:obj:`NetworkConfig`): network configuration of the simulation manager
+            - agent_network_config (:obj:`NetworkConfig`): network configuration for this agent
+            - initial_state (:obj:`SimulationAgentState`): initial state for this agent
+            - payload (`list): list of instruments on-board the spacecraft
+            - planning_module (`PlanningModule`): planning module assigned to this agent
+            - science_module (`ScienceModule): science module assigned to this agent
+            - level (int): logging level
+            - logger (logging.Logger): simulation logger 
+        """
+        # load agent modules
+        modules = []
+        if planning_module is not None:
+            if not isinstance(planning_module, PlanningModule):
+                raise AttributeError(f'`planning_module` must be of type `PlanningModule`; is of type {type(planning_module)}')
+            modules.append(planning_module)
+        if science_module is not None:
+            if not isinstance(science_module, ScienceModule):
+                raise AttributeError(f'`science_module` must be of type `ScienceModule`; is of type {type(science_module)}')
+            modules.append(science_module)
+
+        # initialize agent
+        super().__init__(agent_name, 
+                        agent_network_config, 
+                        manager_network_config, 
+                        initial_state, 
+                        modules, 
+                        level, 
+                        logger)
+
         self.specs = specs
         if isinstance(self.specs, Spacecraft):
             self.payload = {instrument.name: instrument for instrument in self.specs.instrument}
         elif isinstance(self.specs, dict):
-            self.payload = {instrument['name']: instrument for instrument in self.specs['instrument']} if 'instrument' in self.specs else dict()
+            self.payload = {instrument.name: instrument for instrument in self.specs['instrument']} if 'instrument' in self.specs else dict()
         else:
             raise ValueError(f'`specs` must be of type `Spacecraft` or `dict`. Is of type `{type(specs)}`.')
+
 
         self.state_history : list = []
         
@@ -157,6 +203,50 @@ class AbstractAgent(Agent):
     @runtime_tracker
     async def get_agent_broadcasts(self) -> list:
         return await self.__empty_queue(self.external_inbox)
+
+    """
+    --------------------
+            THINK       
+    --------------------
+    """
+    @runtime_tracker
+    async def think(self, senses: list) -> list:
+        # send all sensed messages to planner
+        self.log(f'sending {len(senses)} senses to planning module...', level=logging.DEBUG)
+        senses_dict = []
+        state_dict = None
+        for sense in senses:
+            sense : SimulationMessage
+            if isinstance(sense, AgentStateMessage):
+                state_dict = sense.to_dict()
+            else:
+                senses_dict.append(sense.to_dict())
+
+        senses_msg = SenseMessage( self.get_element_name(), 
+                                    self.get_element_name(),
+                                    state_dict, 
+                                    senses_dict)
+        await self.send_internal_message(senses_msg)
+
+        # wait for planner to send list of tasks to perform
+        self.log(f'senses sent! waiting on response from planner module...')
+        actions = []
+        
+        while True:
+            _, _, content = await self.internal_inbox.get()
+            
+            if content['msg_type'] == SimulationMessageTypes.PLAN.value:
+                msg = PlanMessage(**content)
+
+                # assert self.get_current_time() - msg.t_plan <= 1e-3
+
+                for action_dict in msg.plan:
+                    self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
+                    actions.append(action_dict)  
+                break
+        
+        self.log(f"plan of {len(actions)} actions received from planner module!")
+        return actions
 
     """
     --------------------
@@ -464,6 +554,11 @@ class AbstractAgent(Agent):
 
                 # check if failure or critical state will be reached first
                 self.state : SimulationAgentState
+                if self.state.engineering_module is not None:
+                    t_failure = self.state.engineering_module.predict_failure() 
+                    t_crit = self.state.engineering_module.predict_critical()
+                    t_min = min(t_failure, t_crit)
+                    tf = t_min if t_min < tf else tf
                 
                 # wait for time update        
                 ignored = []   
@@ -528,113 +623,3 @@ class AbstractAgent(Agent):
     @runtime_tracker
     async def send_peer_broadcast(self, msg: SimulationMessage) -> None:
         return await super().send_peer_broadcast(msg)
-    
-
-class RealtimeAgent(AbstractAgent):
-    """
-    Implements 
-    """
-
-    def __init__(self, 
-                 agent_name, 
-                 results_path, 
-                 agent_network_config, 
-                 manager_network_config, 
-                 initial_state, 
-                 specs, 
-                 planning_module : InternalModule = None,
-                 science_module : InternalModule = None,
-                 level=logging.INFO, 
-                 logger=None):
-        # load agent modules
-        modules = []
-        if planning_module is not None:
-            if not isinstance(planning_module, PlanningModule):
-                raise AttributeError(f'`planning_module` must be of type `PlanningModule`; is of type {type(planning_module)}')
-            modules.append(planning_module)
-        if science_module is not None:
-            if not isinstance(science_module, ScienceModule):
-                raise AttributeError(f'`science_module` must be of type `ScienceModule`; is of type {type(science_module)}')
-            modules.append(science_module)
-
-        super().__init__(agent_name, results_path, agent_network_config, manager_network_config, initial_state, specs, modules, level, logger)
-
-    @runtime_tracker
-    async def think(self, senses: list) -> list:
-        # send all sensed messages to planner
-        self.log(f'sending {len(senses)} senses to planning module...', level=logging.DEBUG)
-        senses_dict = []
-        state_dict = None
-        for sense in senses:
-            sense : SimulationMessage
-            if isinstance(sense, AgentStateMessage):
-                state_dict = sense.to_dict()
-            else:
-                senses_dict.append(sense.to_dict())
-
-        senses_msg = SenseMessage( self.get_element_name(), 
-                                    self.get_element_name(),
-                                    state_dict, 
-                                    senses_dict)
-        await self.send_internal_message(senses_msg)
-
-        # wait for planner to send list of tasks to perform
-        self.log(f'senses sent! waiting on response from planner module...')
-        actions = []
-        
-        while True:
-            _, _, content = await self.internal_inbox.get()
-            
-            if content['msg_type'] == SimulationMessageTypes.PLAN.value:
-                msg = PlanMessage(**content)
-
-                # assert self.get_current_time() - msg.t_plan <= 1e-3
-
-                for action_dict in msg.plan:
-                    self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
-                    actions.append(action_dict)  
-                break
-        
-        self.log(f"plan of {len(actions)} actions received from planner module!")
-        return actions
-
-
-class SimulatedAgent(AbstractAgent):
-    def __init__(self, 
-                 agent_name, 
-                 results_path, 
-                 agent_network_config, 
-                 manager_network_config, 
-                 initial_state, 
-                 specs, 
-                 processor : DataProcessor = None, 
-                 preplanner : AbstractPreplanner = None,
-                 replanner : AbstractReplanner = None,
-                 reward_grid : RewardGrid = None,
-                 level=logging.INFO, 
-                 logger=None):
-        
-        super().__init__(agent_name, 
-                         results_path, 
-                         agent_network_config, 
-                         manager_network_config, 
-                         initial_state, 
-                         specs, 
-                         [], 
-                         level, 
-                         logger)
-        
-        self.processor : DataProcessor = processor
-        self.preplanner : AbstractPreplanner = preplanner
-        self.replanner : AbstractReplanner = replanner
-        self.reward_grid : RewardGrid = reward_grid
-
-    @runtime_tracker
-    async def think(self, senses : list):
-        x = 1
-        pass
-
-    async def teardown(self):
-        await super().teardown()
-
-        # TODO output planner and data processor outputs

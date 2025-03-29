@@ -1,4 +1,5 @@
 from logging import Logger
+from numpy import Inf
 from chess3d.agents.planning.planner import *
 
 

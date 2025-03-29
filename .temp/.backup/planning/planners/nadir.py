@@ -2,7 +2,7 @@ from dmas.modules import ClockConfig
 import numpy as np
 from chess3d.agents.actions import ManeuverAction, ObservationAction
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.planners.naive import EarliestAccessPlanner
+from chess3d.agents.planning.planners.naive import NaivePlanner
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.messages import ClockConfig
 
@@ -10,7 +10,7 @@ from orbitpy.util import Spacecraft
 
 from dmas.utils import runtime_tracker
 
-class NadirPointingPlaner(EarliestAccessPlanner):
+class NadirPointingPlaner(NaivePlanner):
     """ Only points agents to """
 
     def is_observation_feasible(self, 

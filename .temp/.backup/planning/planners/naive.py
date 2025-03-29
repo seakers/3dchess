@@ -14,7 +14,7 @@ from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.messages import *
 
-class EarliestAccessPlanner(AbstractPreplanner):
+class NaivePlanner(AbstractPreplanner):
     """ Schedules observations based on the earliest feasible access point and broadcasts plan to all agents in the network """
 
     def __init__(self, 

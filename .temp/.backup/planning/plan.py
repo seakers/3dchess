@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 from chess3d.agents.actions import *
 
+
 class Plan(ABC):
     """ Describes a plan to be performed by an agent """
     

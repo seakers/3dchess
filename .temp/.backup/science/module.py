@@ -1,22 +1,26 @@
+from logging import Logger
 import pandas as pd
 from zmq import asyncio as azmq
 
+from dmas.modules import NetworkConfig
 from dmas.modules import *
 
+from chess3d.agents.actions import ObservationAction
 from chess3d.agents.states import SimulationAgentState
-from chess3d.agents.science.processing import DataProcessor
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
 
 from instrupy.base import Instrument
 
+class ScienceModuleTypes(Enum):
+    LOOKUP = 'LOOKUP'
+    ORACLE = 'ORACLE'
 
 class ScienceModule(InternalModule):
     def __init__(   self, 
                     results_path : str,
                     parent_name : str,
                     parent_network_config: NetworkConfig, 
-                    data_processor : DataProcessor,
                     logger: logging.Logger = None
                 ) -> None:
 
@@ -44,13 +48,13 @@ class ScienceModule(InternalModule):
                             logging.INFO, 
                             logger)
         
-        # initialize
+        # initialize attributes
+        self.events = None
         self.known_reqs : set[MeasurementRequest] = set()
 
         # assign parameters
         self.results_path = results_path
         self.parent_name = parent_name
-        self.data_processor = data_processor
     
     async def sim_wait(self, _: float) -> None:
         # is event-driven; no need to support timed delays
@@ -185,7 +189,7 @@ class ScienceModule(InternalModule):
                 for obs in observation_data:
                     # process observation
                     lat_event,lon_event,t_start,t_end,t_corr,severity,observations_required \
-                        = self.data_processor.process_observation(instrument, **obs)
+                        = self.process_observation(instrument, **obs)
 
                     # generate measurement request 
                     measurement_req = MeasurementRequest(self.get_parent_name(),
@@ -232,6 +236,13 @@ class ScienceModule(InternalModule):
         except asyncio.CancelledError:
             return
         
+    @abstractmethod
+    def process_observation(self, 
+                            instrument : Instrument,
+                            **kwargs
+                            ) -> tuple:
+        """ Processes incoming observation data and returns the characteristics of the event being detected if this exists"""
+
     async def teardown(self) -> None:
         # print out events detected by this module
         columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
@@ -242,3 +253,158 @@ class ScienceModule(InternalModule):
         df = pd.DataFrame(data=data, columns=columns)        
         df.to_csv(f"{self.results_path}/{self.get_parent_name()}/events_detected.csv", index=False)   
     
+class LookupTableScienceModule(ScienceModule):
+    def __init__(self, 
+                 results_path: str, 
+                 events_path : str,
+                 parent_name: str, 
+                 parent_network_config: NetworkConfig, 
+                 logger: Logger = None
+                 ) -> None:
+        """ 
+        ## Lookuup Table Science Module
+
+        Has prior knowledge of all of the events that will occur during the simulation.
+        Compares incoming observations to a predefined list of events to determine whether an event has been observed.
+        """
+        super().__init__(results_path, parent_name, parent_network_config, logger)
+
+        # load predefined events
+        self.events : pd.DataFrame = self.load_events(events_path)
+
+        # initialize empty list of detected events
+        self.events_detected = set()
+
+        # initialize update timer
+        self.t_update = None
+
+    def load_events(self, events_path : str = None) -> pd.DataFrame:
+        
+        if events_path is None: raise ValueError('`events_path` must be of type `str`. Is `None`.')
+
+        return pd.read_csv(events_path)
+                
+    def process_observation(self, 
+                            instrument : Instrument,
+                            t_img : float,
+                            lat : float,
+                            lon : float,
+                            **_
+                            ) -> tuple:
+        
+        # update list of events to ignore expired events
+        if self.t_update is None or abs(self.t_update - t_img) > 100.0:
+            self.events = self.events[self.events['start time [s]'] + self.events['duration [s]'] >= t_img]
+            self.t_update = t_img
+
+        # query known events
+        if len(self.events.columns) <= 6:
+            observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
+                                for lat_event,lon_event,t_start,duration,severity,measurements in self.events.values
+                                # same location as the observation
+                                if abs(lat - lat_event) <= 1e-3
+                                and abs(lon - lon_event) <= 1e-3
+                                # availability during the time of observation
+                                and t_start <= t_img <= t_start+duration
+                                # event requires observations of the same type as the one performed
+                                and instrument.name in measurements
+                                # event has not been detected before
+                                and (lat_event,lon_event,t_start,duration,severity,measurements) not in self.events_detected 
+                                ]
+        else:
+            observed_events = [ (lat_event,lon_event,t_start,duration,severity,measurements)
+                                for _,lat_event,lon_event,t_start,duration,severity,measurements in self.events.values
+                                # same location as the observation
+                                if abs(lat - lat_event) <= 1e-3
+                                and abs(lon - lon_event) <= 1e-3
+                                # availability during the time of observation
+                                and t_start <= t_img <= t_start+duration
+                                # event requires observations of the same type as the one performed
+                                and instrument.name in measurements
+                                # event has not been detected before
+                                and (lat_event,lon_event,t_start,duration,severity,measurements) not in self.events_detected 
+                                ]
+        
+        # sort by severity  
+        observed_events.sort(key= lambda a: a[4])
+
+        if observed_events:
+            # get next highest severity event
+            event = observed_events[-1]
+            
+            # add event to list of detected events
+            self.events_detected.update(event)
+
+            # unpackage event info
+            lat_event,lon_event,t_start,duration,severity,observations_str = event 
+
+            # get list of required observations
+            observations_str : str = observations_str.replace('[','')
+            observations_str : str = observations_str.replace(']','')
+            observations_required : list = observations_str.split(',')
+            observations_required.remove(instrument.name)
+
+            # calculate end of event
+            t_end = t_start+duration
+
+            # estimate decorrelation time:
+            t_corr = t_end-t_img # TODO add scientific reason for this
+
+            return lat_event,lon_event,t_img,t_end,t_corr,severity,observations_required
+
+        return np.NaN,np.NaN,-1,-1,0.0,0.0,[]
+    
+
+class OracleScienceModule(LookupTableScienceModule):
+    def __init__(self, 
+                 results_path: str, 
+                 events_path : str,
+                 parent_name: str, 
+                 parent_network_config: NetworkConfig, 
+                 logger: Logger = None
+                 ) -> None:
+        """ 
+        ## Oracle Science Module
+
+        Has prior knowledge of all of the events that will occur during the simulation.
+        Checks current simulation time 
+        """
+        super().__init__(results_path, events_path, parent_name, parent_network_config, logger)
+        
+    async def make_announcement(self) -> None:
+        # announce presence
+        await super().make_announcement()
+
+        # announce events
+        await self.announce_events()
+
+    async def announce_events(self): 
+        try:
+            # generate measurement requests for all events
+            reqs = []
+            for lat,lon,t_start,duration,severity,measurements in self.events.values:
+                measurements : str = measurements.replace('[','')
+                measurements : str = measurements.replace(']','')
+                observation_types : list = measurements.split(',')
+
+                req = MeasurementRequest(self.get_parent_name(), [lat,lon,0.0], severity, observation_types, t_start, t_start+duration, duration)
+                reqs.append(req)
+
+            # register all events as detected
+            self.events_detected.update([event for event in self.events.values])
+            # for event in self.events.values: self.events_detected.update(event)
+
+            # create request messages
+            msgs = [MeasurementRequestMessage(self.get_parent_name(), 
+                                              self.get_parent_name(), 
+                                              req.to_dict())
+                    for req in reqs]
+            
+            req_dicts = [req.to_dict() for req in msgs]
+            req_bus = BusMessage(self.get_module_name(), self.get_parent_name(), req_dicts)
+
+            # send to parent agent
+            await self._send_manager_msg(req_bus, zmq.PUB)
+            
+        except asyncio.CancelledError:
+            return

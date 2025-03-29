@@ -11,7 +11,7 @@ from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.planners.consensus.bids import Bid
 from chess3d.agents.planning.planners.consensus.consensus import AbstractConsensusReplanner
 from chess3d.agents.science.requests import MeasurementRequest
-from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
+from chess3d.agents.states import MeasurementRequest, SatelliteAgentState, SimulationAgentState
 
 
 class ACBBAPlanner(AbstractConsensusReplanner):
