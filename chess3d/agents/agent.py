@@ -2,7 +2,7 @@ import logging
 import os
 from dmas.messages import SimulationMessage
 import numpy as np
-from pandas import DataFrame
+import pandas as pd
 
 from instrupy.base import Instrument
 from orbitpy.util import Spacecraft
@@ -405,7 +405,7 @@ class AbstractAgent(Agent):
                             ]
                 data.append(line_data)
             
-            state_df = DataFrame(data,columns=headers)
+            state_df = pd.DataFrame(data,columns=headers)
             # self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
             state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
@@ -440,11 +440,11 @@ class AbstractAgent(Agent):
 
                 # save time-series
                 time_series = [[v] for v in self.stats[routine]]
-                routine_df = DataFrame(data=time_series, columns=['dt'])
+                routine_df = pd.DataFrame(data=time_series, columns=['dt'])
                 routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
                 routine_df.to_csv(routine_dir,index=False)
 
-            stats_df = DataFrame(data, columns=headers)
+            stats_df = pd.DataFrame(data, columns=headers)
             # self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
             stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
         except Exception as e:
@@ -851,15 +851,172 @@ class SimulatedAgent(AbstractAgent):
         try:
             await super().teardown()
 
-            # TODO output planner and data processor outputs
-
+            # log known and generated requests
             if self.processor is not None:
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
                 data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
                         for req in self.processor.known_reqs
                         if req.requester == self.get_element_name()]
                 
-                df = DataFrame(data=data, columns=columns)        
+                df = pd.DataFrame(data=data, columns=columns)        
+                df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
+
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
+                data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
+                        for req in self.processor.generated_reqs
+                        if req.requester == self.get_element_name()]
+                
+                df = pd.DataFrame(data=data, columns=columns)        
                 df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
+        
+            # log plan history
+            headers = ['plan_index', 't_plan', 'desc', 't_start', 't_end']
+            data = []
+            
+            for i in range(len(self.plan_history)):
+                t_plan, plan = self.plan_history[i]
+                t_plan : float; plan : list[AgentAction]
+
+                for action in plan:
+                    desc = f'{action.action_type}'
+                    if isinstance(action, ObservationAction):
+                        desc += f'_{action.instrument_name}'
+                        
+                    line_data = [   i,
+                                    np.round(t_plan,3),
+                                    desc,
+                                    np.round(action.t_start,3 ),
+                                    np.round(action.t_end,3 )
+                                ]
+                    data.append(line_data)
+
+            df = pd.DataFrame(data, columns=headers)
+            # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+            df.to_csv(f"{self.results_path}/planner_history.csv", index=False)
+
+            # log reward grid history
+            if self.reward_grid is not None:
+                headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
+                data = self.reward_grid.get_history()
+                df = pd.DataFrame(data, columns=headers)
+                # self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
+                df.to_csv(f"{self.results_path}/reward_grid_history.csv", index=False)
+
+            # log performance stats
+            n_decimals = 5
+            headers = ['routine','t_avg','t_std','t_med', 't_max', 't_min', 'n', 't_total']
+            data = []
+
+            for routine in self.stats:
+                n = len(self.stats[routine])
+                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_max = np.round(max(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_min = np.round(min(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_total = t_avg * n
+
+                line_data = [ 
+                                routine,
+                                t_avg,
+                                t_std,
+                                t_median,
+                                t_max,
+                                t_min,
+                                n,
+                                t_total
+                                ]
+                data.append(line_data)
+
+                # save time-series
+                time_series = [[v] for v in self.stats[routine]]
+                routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-planner_{routine}.csv")
+                routine_df.to_csv(routine_dir,index=False)
+
+            if isinstance(self.preplanner, AbstractPreplanner):
+                for routine in self.preplanner.stats:
+                    n = len(self.preplanner.stats[routine])
+                    t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_std = np.round(np.std(self.preplanner.stats[routine]),n_decimals) if n > 0 else 0.0
+                    t_median = np.round(np.median(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_max = np.round(max(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_min = np.round(min(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_total = t_avg * n
+
+                    line_data = [ 
+                                    f"preplanner/{routine}",
+                                    t_avg,
+                                    t_std,
+                                    t_median,
+                                    t_max,
+                                    t_min,
+                                    n,
+                                    t_total
+                                    ]
+                    data.append(line_data)
+
+                    # save time-series
+                    time_series = [[v] for v in self.preplanner.stats[routine]]
+                    routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                    routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-preplanner_{routine}.csv")
+                    routine_df.to_csv(routine_dir,index=False)
+
+            if isinstance(self.replanner, AbstractReplanner):
+                for routine in self.replanner.stats:
+                    n = len(self.replanner.stats[routine])
+                    t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_std = np.round(np.std(self.replanner.stats[routine]),n_decimals) if n > 0 else 0.0
+                    t_median = np.round(np.median(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_max = np.round(max(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_min = np.round(min(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_total = t_avg * n
+
+                    line_data = [ 
+                                    f"replanner/{routine}",
+                                    t_avg,
+                                    t_std,
+                                    t_median,
+                                    t_max,
+                                    t_min,
+                                    n,
+                                    t_total
+                                    ]
+                    data.append(line_data)
+
+                    # save time-series
+                    time_series = [[v] for v in self.replanner.stats[routine]]
+                    routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                    routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-replanner_{routine}.csv")
+                    routine_df.to_csv(routine_dir,index=False)
+
+            if self.reward_grid:
+                for routine in self.reward_grid.stats:
+                    n = len(self.reward_grid.stats[routine])
+                    t_avg = np.round(np.mean(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                    t_std = np.round(np.std(self.reward_grid.stats[routine]),n_decimals) if n > 0 else 0.0
+                    t_median = np.round(np.median(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                    t_max = np.round(max(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                    t_min = np.round(min(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                    t_total = t_avg * n
+
+                    line_data = [ 
+                                    f"reward_grid/{routine}",
+                                    t_avg,
+                                    t_std,
+                                    t_median,
+                                    t_max,
+                                    t_min,
+                                    n,
+                                    t_total
+                                    ]
+                    data.append(line_data)
+
+            stats_df = pd.DataFrame(data, columns=headers)
+            # self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+            # self.log(f'total: {sum(stats_df["t_total"])}', level=logging.WARNING)
+            stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
+
+
         except Exception as e:
             x = 1
