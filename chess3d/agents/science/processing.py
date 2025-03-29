@@ -17,17 +17,8 @@ class DataProcessor(ABC):
         self.parent_name = parent_name
         self.known_reqs = set()
 
-    def process(self, senses : list) -> list:
-        # unpack and sort incoming senses
-        observations : list[ObservationResultsMessage] = [(Instrument.from_dict(msg.instrument), msg.observation_data) 
-                                                          for msg in senses 
-                                                          if isinstance(msg, ObservationResultsMessage)
-                                                          and msg.src == self.parent_name]
-        incoming_reqs : list[MeasurementRequest] = [MeasurementRequest.from_dict(msg.req) 
-                                                    for msg in senses 
-                                                    if isinstance(msg, MeasurementRequestMessage)
-                                                    and msg.req['severity'] > 0.0]
-
+    def process(self, incoming_reqs : list, observations : list) -> list:
+        
         # update list of known requests
         self.known_reqs.update(incoming_reqs)
 
@@ -42,7 +33,8 @@ class DataProcessor(ABC):
                     = self.process_observation(instrument, **obs)
 
                 # no event in observation; skip
-                if severity < 1e-3: continue
+                if severity < 1e-3: 
+                    continue
 
                 # generate measurement request 
                 measurement_req = MeasurementRequest(self.parent_name,

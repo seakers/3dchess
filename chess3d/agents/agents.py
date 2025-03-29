@@ -144,6 +144,7 @@ class SatelliteAgent(SimulatedAgent):
                  manager_network_config, 
                  initial_state, 
                  specs, 
+                 orbitdata,
                  processor = None, 
                  preplanner = None, 
                  replanner = None, 
@@ -163,6 +164,8 @@ class SatelliteAgent(SimulatedAgent):
                          reward_grid, 
                          level, 
                          logger)
+        
+        self.orbitdata = orbitdata
     
     async def setup(self) -> None:
         # nothing to setup

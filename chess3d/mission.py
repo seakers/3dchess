@@ -1110,6 +1110,7 @@ class SimulationElementsFactory:
                                       manager_network_config,
                                       initial_state,
                                       agent_specs,
+                                      agent_orbitdata,
                                       processor,
                                       preplanner,
                                       replanner,

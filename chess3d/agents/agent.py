@@ -12,8 +12,10 @@ from dmas.modules import InternalModule
 from dmas.utils import runtime_tracker
 from zmq import SocketType
 
+from chess3d.agents.planning.plan import *
 from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
 from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
 from chess3d.messages import *
@@ -624,17 +626,240 @@ class SimulatedAgent(AbstractAgent):
                          level, 
                          logger)
         
+        # set parameters
         self.processor : DataProcessor = processor
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
         self.reward_grid : RewardGrid = reward_grid
 
+        # initialize parameters
+        self.plan : Plan = Preplan(t=-1.0)
+        self.orbitdata = None
+        self.plan_history = []
+
     @runtime_tracker
     async def think(self, senses : list):
-        x = 1
-        pass
+
+        # unpack and sort senses
+        relay_messages, incoming_reqs, observations, \
+            states, action_statuses, misc_messages = self._read_incoming_messages(senses)
+        incoming_reqs : list[MeasurementRequest]
+        states : list[SimulationAgentState]
+
+        # check action completion
+        completed_actions, aborted_actions, pending_actions = self._check_action_completion(action_statuses)
+
+
+        # extract latest state from senses
+        states.sort(key = lambda a : a.state['t'])
+        state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
+
+        # update plan completion
+        self.plan.update_action_completion(completed_actions, 
+                                           aborted_actions, 
+                                           pending_actions, 
+                                           state.t
+                                           )    
+
+        # process performed observations
+        generated_reqs : list[MeasurementRequest] = self.processor.process(incoming_reqs, observations)
+        incoming_reqs.extend(generated_reqs)
+
+        # compile measurements performed by myself or other agents
+        completed_observations = {action for action in completed_actions
+                        if isinstance(action, ObservationAction)}
+        completed_observations.update({action_from_dict(**msg.observation_action) 
+                            for msg in misc_messages
+                            if isinstance(msg, ObservationPerformedMessage)})
+        
+        # update reward grid
+        if self.reward_grid: self.reward_grid.update(self.get_current_time(), completed_observations, incoming_reqs)
+
+        # --- Create plan ---
+        if self.preplanner is not None:
+            # there is a preplanner assigned to this planner
+
+            # update preplanner precepts
+            self.preplanner.update_percepts(state,
+                                            self.plan, 
+                                            incoming_reqs,
+                                            relay_messages,
+                                            misc_messages,
+                                            completed_actions,
+                                            aborted_actions,
+                                            pending_actions
+                                        )
+            
+            # check if there is a need to construct a new plan
+            if self.preplanner.needs_planning(state, 
+                                              self.specs, 
+                                              self.plan):  
+                # initialize plan      
+                self.plan : Plan = self.preplanner.generate_plan(state, 
+                                                            self.specs,
+                                                            self.reward_grid,
+                                                            self._clock_config,
+                                                            self.orbitdata
+                                                            )
+
+                # save copy of plan for post-processing
+                plan_copy = [action for action in self.plan]
+                self.plan_history.append((state.t, plan_copy))
+                
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                x = 1 # breakpoint
+                # -------------------------------------
+
+        t_3 = time.perf_counter()
+
+        # --- Modify plan ---
+        # Check if reeplanning is needed
+        if self.replanner is not None:
+            # there is a replanner assigned to this planner
+
+            # update replanner precepts
+            self.replanner.update_percepts( state,
+                                            self.plan, 
+                                            incoming_reqs,
+                                            relay_messages,
+                                            misc_messages,
+                                            completed_actions,
+                                            aborted_actions,
+                                            pending_actions
+                                        )
+            
+            if self.replanner.needs_planning(state, 
+                                                self.specs,
+                                                self.plan,
+                                                self.orbitdata):    
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                # x = 1 # breakpoint
+                # -------------------------------------
+
+                # Modify current Plan      
+                self.plan : Plan = self.replanner.generate_plan(state, 
+                                                            self.specs,    
+                                                            self.reward_grid,
+                                                            self.plan,
+                                                            self._clock_config,
+                                                            self.orbitdata
+                                                            )
+
+                # update last time plan was updated
+                self.t_plan = self.get_current_time()
+
+                # save copy of plan for post-processing
+                plan_copy = [action for action in self.plan]
+                self.plan_history.append((self.t_plan, plan_copy))
+            
+                # clear pending actions
+                pending_actions = []
+
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                # x = 1 # breakpoint
+                # -------------------------------------
+
+        plan_out : list = self.plan.get_next_actions(state.t)
+        # --- FOR DEBUGGING PURPOSES ONLY: ---
+        # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+        # x = 1 # breakpoint
+        # -------------------------------------
+        
+        return plan_out
+
+    def _read_incoming_messages(self, senses : list) -> tuple:
+        ## extract relay messages
+        relay_messages = [msg for msg in senses if msg.path]
+        for relay_msg in relay_messages: senses.remove(relay_msg)
+
+        ## remove bus messages and add their contents to senses 
+        bus_messages : list[BusMessage] = [msg for msg in senses if isinstance(msg, BusMessage)]
+        for bus_msg in bus_messages: 
+            senses.extend([message_from_dict(**msg) for msg in bus_msg.msgs])
+            senses.remove(bus_msg)
+
+        ## classify senses
+        incoming_reqs : list[MeasurementRequest] = [MeasurementRequest.from_dict(msg.req) 
+                                                    for msg in senses 
+                                                    if isinstance(msg, MeasurementRequestMessage)
+                                                    and msg.req['severity'] > 0.0]
+        observation_msgs : list [ObservationResultsMessage] = [sense for sense in senses 
+                                                                if isinstance(sense, ObservationResultsMessage)]
+        observations : list[tuple] = [(Instrument.from_dict(msg.instrument), msg.observation_data) 
+                                        for msg in senses 
+                                        if isinstance(msg, ObservationResultsMessage)
+                                        and msg.dst == self.get_element_name()]
+        states : list[AgentStateMessage] = [sense for sense in senses 
+                                            if isinstance(sense, AgentStateMessage)
+                                            and sense.src == self.get_element_name()]
+        action_statuses : list[AgentActionMessage] = [sense for sense in senses
+                                                      if isinstance(sense, AgentActionMessage)]
+                
+        misc_messages = set(senses)
+        misc_messages.difference_update(incoming_reqs)
+        misc_messages.difference_update(observation_msgs)
+        misc_messages.difference_update(states)
+        misc_messages.difference_update(action_statuses)
+        misc_messages = list(misc_messages)
+
+        return relay_messages, incoming_reqs, observations, states, action_statuses, misc_messages
+
+    def _check_action_completion(self, action_statuses : list) -> tuple:
+        
+        # collect all action statuses from messages
+        actions = [action_from_dict(**action_msg.action) for action_msg in action_statuses]
+
+        # classify by action completion
+        completed_actions = [action for action in actions
+                            if isinstance(action, AgentAction)
+                            and action.status == AgentAction.COMPLETED] # planned action completed
+                
+        aborted_actions = [action for action in actions 
+                           if isinstance(action, AgentAction)
+                           and action.status == AgentAction.ABORTED]    # planned action aborted
+                
+        pending_actions = [action for action in actions
+                           if isinstance(action, AgentAction)
+                           and action.status == AgentAction.PENDING] # planned action wasn't completed
+
+        # return classified lists
+        return completed_actions, aborted_actions, pending_actions
+
+    def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
+        try:
+            out = f'\n{title}\n'
+
+            if isinstance(plan, Plan):
+                out += str(plan)
+            else:
+                for action in plan:
+                    if isinstance(action, AgentAction):
+                        out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+                    elif isinstance(action, dict):
+                        out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+            
+
+            self.log(out, level)
+        except Exception as e:
+            print(e)
+            raise e
 
     async def teardown(self):
-        await super().teardown()
+        try:
+            await super().teardown()
 
-        # TODO output planner and data processor outputs
+            # TODO output planner and data processor outputs
+
+            if self.processor is not None:
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
+                data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
+                        for req in self.processor.known_reqs
+                        if req.requester == self.get_element_name()]
+                
+                df = DataFrame(data=data, columns=columns)        
+                df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
+        except Exception as e:
+            x = 1

@@ -565,7 +565,7 @@ class PlanningModule(InternalModule):
                 
         pending_actions = [action for action in actions
                            if isinstance(action, AgentAction)
-                           and action_msg.status == AgentAction.PENDING] # planned action wasn't completed
+                           and action.status == AgentAction.PENDING] # planned action wasn't completed
 
         # return classified lists
         return completed_actions, aborted_actions, pending_actions
