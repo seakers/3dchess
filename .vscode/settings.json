@@ -11,5 +11,8 @@
         "-p",
         "*test.py"
     ],
-    "python.testing.autoTestDiscoverOnSaveEnabled": true
+    "python.testing.autoTestDiscoverOnSaveEnabled": true,
+    "python.analysis.extraPaths": [
+        "./tests/preplanners/earliest"
+    ]
 }

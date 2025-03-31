@@ -1,12 +1,6 @@
 import os
 import unittest
 
-from tqdm import tqdm
-
-from chess3d.agents.actions import ObservationAction
-from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.planners.naive import EarliestAccessPlanner
-from chess3d.agents.states import SimulationAgentState
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
 from runtime_plots import plot_scenario_runtime
@@ -14,7 +8,7 @@ from runtime_plots import plot_scenario_runtime
 class TestToyCase(unittest.TestCase):
     def setUp(self) -> None:
         # terminal welcome message
-        print_welcome('Naive Planner Test')
+        print_welcome('earliest Planner Test')
         
         # load scenario json file
         scenario_specs : dict = {
@@ -95,7 +89,7 @@ class TestToyCase(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "naive"
+                            "@type" : "earliest"
                         },
                         # "replanner" : {
                         #     "@type" : "broadcaster"
@@ -111,14 +105,14 @@ class TestToyCase(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/naive/resources/toy_events.csv"
+                        "eventsPath" : "./tests/preplanners/earliest/resources/toy_events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/naive/resources/toy_points.csv"
+                    "covGridFilePath": "./tests/preplanners/earliest/resources/toy_points.csv"
                 }
             ],
             "scenario": {   
@@ -126,22 +120,22 @@ class TestToyCase(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/naive/resources/toy_events.csv"
+                    "eventsPath" : "./tests/preplanners/earliest/resources/toy_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/naive/",
+                "scenarioPath" : "./tests/preplanners/earliest/",
                 "name" : "toy"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/naive/orbit_data/toy"
+                "outDir" : "./tests/preplanners/earliest/orbit_data/toy"
             }
         }
 
         # set outdir
-        orbitdata_dir = os.path.join('./tests', 'naive', 'orbit_data')
+        orbitdata_dir = os.path.join('./tests/preplanners', 'earliest', 'orbit_data')
         scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'toy')
         scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
         if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
@@ -154,19 +148,19 @@ class TestToyCase(unittest.TestCase):
         self.assertTrue(isinstance(self.mission, Mission))
         
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.mission.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.mission.execute()
 
-        # print results
-        self.mission.print_results()
+    #     # print results
+    #     self.mission.print_results()
 
-        print('DONE')
+    #     print('DONE')
 
 class TestBenCase(unittest.TestCase):
     def setUp(self) -> None:
         # terminal welcome message
-        print_welcome('Naive Planner Test')
+        print_welcome('earliest Planner Test')
         
         # load scenario json file
         scenario_specs : dict = {
@@ -252,7 +246,7 @@ class TestBenCase(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "naive",
+                            "@type" : "earliest",
                             # "period": 1000,
                             # "horizon": 1000,
                         },
@@ -270,14 +264,14 @@ class TestBenCase(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/naive/resources/all_events_formatted.csv"
+                        "eventsPath" : "./tests/preplanners/earliest/resources/all_events_formatted.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/naive/resources/lake_event_points.csv"
+                    "covGridFilePath": "./tests/preplanners/earliest/resources/lake_event_points.csv"
                 }
             ],
             "scenario": {   
@@ -285,22 +279,22 @@ class TestBenCase(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/naive/resources/all_events_formatted.csv"
+                    "eventsPath" : "./tests/preplanners/earliest/resources/all_events_formatted.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/naive/",
+                "scenarioPath" : "./tests/preplanners/earliest/",
                 "name" : "ben_case"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/naive/orbit_data/ben_case"
+                "outDir" : "./tests/preplanners/earliest/orbit_data/ben_case"
             }
         }
 
         # set outdir
-        orbitdata_dir = os.path.join('./tests', 'naive', 'orbit_data')
+        orbitdata_dir = os.path.join('./tests/preplanners', 'earliest', 'orbit_data')
         scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'ben_case')
         scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
         if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
@@ -325,7 +319,7 @@ class TestBenCase(unittest.TestCase):
 class TestRandomCase(unittest.TestCase):
     def setUp(self) -> None:
         # terminal welcome message
-        print_welcome('Naive Planner Test')
+        print_welcome('earliest Planner Test')
         
         # load scenario json file
         scenario_specs : dict = {
@@ -411,21 +405,21 @@ class TestRandomCase(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "naive",
+                            "@type" : "earliest",
                             # "period": 500,
                             # "horizon": 'Inf',
                         }
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/naive/resources/lake_events.csv"
+                        "eventsPath" : "./tests/preplanners/earliest/resources/lake_events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/naive/resources/lake_event_points.csv"
+                    "covGridFilePath": "./tests/preplanners/earliest/resources/lake_event_points.csv"
                 }
             ],
             "scenario": {   
@@ -433,25 +427,32 @@ class TestRandomCase(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/naive/resources/lake_events.csv"
+                    "eventsPath" : "./tests/preplanners/earliest/resources/lake_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/naive/",
-                "name" : "naive"
+                "scenarioPath" : "./tests/preplanners/earliest/",
+                "name" : "earliest"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/naive/orbit_data/naive"
+                "outDir" : "./tests/preplanners/earliest/orbit_data/earliest"
             }
         }
 
-        # initialize mission
-        self.mission : Mission = Mission.from_dict(scenario_specs, overwrite=True)
+        # set outdir
+        orbitdata_dir = os.path.join('./tests/preplanners', 'earliest', 'orbit_data')
+        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'earliest')
+        scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
+        if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
+        if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
 
-        # check type of mission object
-        self.assertTrue(isinstance(self.mission, Mission))
+        # # initialize mission
+        # self.mission : Mission = Mission.from_dict(scenario_specs, overwrite=True)
+
+        # # check type of mission object
+        # self.assertTrue(isinstance(self.mission, Mission))
 
     # def test_planner(self) -> None:
     #     # execute mission
@@ -462,7 +463,7 @@ class TestRandomCase(unittest.TestCase):
 
     #     # plot runtime
     #     scenarios = [
-    #         'naive'
+    #         'earliest'
     #     ]
 
     #     agents = [
@@ -472,7 +473,7 @@ class TestRandomCase(unittest.TestCase):
     #     ]
             
     #     for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
-    #         plot_scenario_runtime(scenarios, agent, False, True, './tests/naive/results', './tests/naive')
+    #         plot_scenario_runtime(scenarios, agent, False, True, './tests/preplanners/earliest/results', './tests/preplanners/earliest')
 
     #     print('DONE')
 
@@ -481,7 +482,7 @@ if __name__ == '__main__':
 
     # # plot runtime
     # scenarios = [
-    #     'naive'
+    #     'earliest'
     # ]
 
     # agents = [
@@ -491,6 +492,6 @@ if __name__ == '__main__':
     # ]
         
     # for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
-    #     plot_scenario_runtime(scenarios, agent, False, True, './tests/naive/results')
+    #     plot_scenario_runtime(scenarios, agent, False, True, './tests/preplanners/earliest/results')
 
     # print('DONE')

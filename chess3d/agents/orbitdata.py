@@ -672,14 +672,14 @@ class OrbitData:
             if uav_list:
                 raise NotImplementedError('Orbitdata for UAVs not yet supported')
 
-            # if ground_station_list:
-            #     for ground_station in ground_station_list:
-            #         ground_station : dict
-            #         agent_name = ground_station.get('name')
+            if ground_station_list:
+                for ground_station in ground_station_list:
+                    ground_station : dict
+                    agent_name = ground_station.get('name')
 
-            #         data[agent_name] = OrbitData.load(orbitdata_dir, agent_name)
+                    data[agent_name] = OrbitData.load(orbitdata_dir, agent_name)
 
-            #     raise NotImplementedError('Orbitdata for ground stations not yet supported')
+                raise NotImplementedError('Orbitdata for ground stations not yet supported')
 
             return data
                

@@ -1,8 +1,8 @@
 from dmas.modules import ClockConfig
 import numpy as np
-from chess3d.agents.actions import ManeuverAction, ObservationAction
+from chess3d.agents.actions import ObservationAction
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.planners.naive import EarliestAccessPlanner
+from chess3d.agents.planning.preplanners.earliest import EarliestAccessPlanner
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.messages import ClockConfig
 
@@ -28,7 +28,7 @@ class NadirPointingPlaner(EarliestAccessPlanner):
                 and t_img >= t_prev)                         # is valid if it is done after the previous observation
     
     @runtime_tracker
-    def _schedule_maneuvers(self, state: SimulationAgentState, specs: object, observations: list, clock_config: ClockConfig, orbitdata: OrbitData = None) -> list:
+    def _schedule_maneuvers(self, state: SimulationAgentState, specs: Spacecraft, observations: list, clock_config: ClockConfig, orbitdata: OrbitData = None) -> list:
         # schedule all travel maneuvers
         maneuvers = []
 

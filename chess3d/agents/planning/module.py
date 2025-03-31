@@ -11,7 +11,7 @@ from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.agents.planning.planner import AbstractReplanner
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *

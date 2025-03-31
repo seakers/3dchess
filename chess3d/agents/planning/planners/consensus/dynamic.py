@@ -10,7 +10,7 @@ from chess3d.agents.orbitdata import OrbitData, TimeInterval
 from chess3d.agents.planning.plan import Plan, Replan
 from chess3d.agents.planning.planners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.planning.planners.consensus.bids import Bid
-from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 

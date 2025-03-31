@@ -14,7 +14,7 @@ from zmq import SocketType
 
 from chess3d.agents.planning.plan import *
 from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
-from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *

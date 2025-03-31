@@ -6,6 +6,7 @@ from dmas.clocks import *
 from tqdm import tqdm
 
 from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -14,25 +15,29 @@ from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.messages import *
 
-class EarliestAccessPlanner(AbstractPreplanner):
-    """ Schedules observations based on the earliest feasible access point and broadcasts plan to all agents in the network """
+class HeuristicInsertionPlanner(AbstractPreplanner):
+    """ Schedules observations iteratively based on the highest heuristic-scoring and feasible access point """
 
     def __init__(self, 
                  horizon: float = np.Inf, 
                  period: float = np.Inf, 
                  points : int = np.Inf, 
-                 sharing : bool = True,
+                #  sharing : bool = True,
                  debug: bool = False, 
                  logger: Logger = None
                  ) -> None:
-        super().__init__(horizon, period, sharing, debug, logger)
+        super().__init__(horizon, 
+                         period, 
+                        #  sharing, 
+                         debug, 
+                         logger)
         self.points = points
 
     @runtime_tracker
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
                                specs : object,
-                               _, 
+                               reward_grid : RewardGrid, 
                                __,
                                orbitdata: OrbitData = None
                                ) -> list:
@@ -46,7 +51,7 @@ class EarliestAccessPlanner(AbstractPreplanner):
         access_times : list = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
 
         # sort by observation time
-        access_times.sort(key = lambda a: a[3])
+        access_times : list = self.sort_accesses(access_times, ground_points, reward_grid)
 
         # compile list of instruments available in payload
         payload : dict = {instrument.name: instrument for instrument in specs.instrument}
@@ -64,19 +69,6 @@ class EarliestAccessPlanner(AbstractPreplanner):
         max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
         if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
 
-
-        # DEBUGGER -----
-        # instruments = [instrument for instrument,_ in payload.items()]
-        # steps = 300
-        # duration = 3.0 * 3600
-        # interval = duration / steps
-        # observations = [    ObservationAction(instruments[0], [0,0,0], 0.0, t*interval)
-        #                     for t in range(steps)
-        #                 ]
-        
-        # return observations
-        # --------------
-
         # generate plan
         observations : list[ObservationAction] = []
 
@@ -93,15 +85,19 @@ class EarliestAccessPlanner(AbstractPreplanner):
                 continue
 
             # compare to previous measurement 
-            if not observations:
+            actions_prev = [observation for observation in observations
+                            if observation.t_end <= t[-1]]
+            
+            if actions_prev:
+                # compare with previous scheduled observation
+                action_prev : ObservationAction = actions_prev[-1]
+                
+                t_prev = action_prev.t_end
+                th_prev = action_prev.look_angle
+            else:
                 # no prior observation exists, compare with current state
                 t_prev = state.t
                 th_prev = state.attitude[0]
-            else:
-                # compare with previous scheduled observation
-                action_prev : ObservationAction = observations[-1]
-                t_prev = action_prev.t_end
-                th_prev = action_prev.look_angle
         
             # find if feasible observation times exist
             feasible_obs = [(t[i], th[i]) 
@@ -131,6 +127,30 @@ class EarliestAccessPlanner(AbstractPreplanner):
         assert self.no_redundant_observations(state, observations, orbitdata)
 
         return observations
+    
+    def sort_accesses(self, access_times : list, ground_points : dict, reward_grid : RewardGrid) -> list:
+        """ Sorts available accesses by a defined heuristic metric. By default it is sorted by expected reward """
+        
+        def __estimate_earliest_reward(access_time : tuple):
+            # calculate earliest reward of a given access 
+            grid_index, gp_index, instrument, _, t, th = access_time
+            lat,lon = ground_points[grid_index][gp_index]
+            target = [lat,lon,0.0]
+            observation = ObservationAction(instrument, target, th[0], t[0])
+            
+            return reward_grid.estimate_reward(observation)
+        
+        # self.__print_access_times(access_times)
+        access_times.sort(key=__estimate_earliest_reward)
+        # self.__print_access_times(access_times)
+
+        return access_times
+            
+    def __print_access_times(self, access_times : list):
+        """ printouts for debugging purposes """
+        for access_time in access_times:
+            print(access_time)
+        print()
     
     def is_observation_feasible(self, 
                                 state : SimulationAgentState,
@@ -190,44 +210,5 @@ class EarliestAccessPlanner(AbstractPreplanner):
                              observations : list, 
                              orbitdata: OrbitData) -> list:
         
-        # schedule measurement request broadcasts 
-        broadcasts : list = super()._schedule_broadcasts(state, observations, orbitdata)
-
-        # gather observation plan to be sent out
-        plan_out = [action.to_dict()
-                    for action in observations
-                    if isinstance(action,ObservationAction)]
-
-        # check if broadcasts are enabled 
-        if self.sharing and plan_out:
-            # find best path for broadcasts
-            path, t_start = self._create_broadcast_path(state, orbitdata)
-                
-            # share current plan to other agents
-            if t_start >= 0:
-                # create plan message
-                msg = PlanMessage(state.agent_name, state.agent_name, plan_out, state.t, path=path)
-                
-                # add plan broadcast to list of broadcasts
-                broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
-
-            # add action performance broadcast to plan based on their completion
-            for action_dict in tqdm(plan_out, 
-                    desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
-                    leave=False):
-                
-                # calculate broadcast start time
-                if action_dict['t_end'] > t_start:
-                    path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end'])
-                    
-                # check broadcast feasibility
-                if t_start < 0: continue
-                
-                action_dict['status'] = AgentAction.COMPLETED
-                # t_start = action_dict['t_end'] # TODO temp solution
-                msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
-                if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
-
-        # return broadcast plan
-        return broadcasts
-    
+        # do not schedule broadcasts
+        return super()._schedule_broadcasts(state, observations, orbitdata)

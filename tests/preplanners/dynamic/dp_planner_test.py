@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 from chess3d.mission import Mission
 from chess3d.utils import print_welcome
-from runtime_plots import plot_scenario_runtime
+# from runtime_plots import plot_scenario_runtime
 
 class TestDynamicProgrammingPlannerBen(unittest.TestCase):
     def setUp(self) -> None:
@@ -112,14 +112,14 @@ class TestDynamicProgrammingPlannerBen(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/dynamic/resources/events.csv"
+                        "eventsPath" : "./tests/preplanners/dynamic/resources/events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/dynamic/resources/points.csv"
+                    "covGridFilePath": "./tests/preplanners/dynamic/resources/points.csv"
                 }
             ],
             "scenario": {   
@@ -127,17 +127,17 @@ class TestDynamicProgrammingPlannerBen(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/dynamic/resources/events.csv"
+                    "eventsPath" : "./tests/preplanners/dynamic/resources/events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/dynamic/",
+                "scenarioPath" : "./tests/preplanners/dynamic/",
                 "name" : "dynamic_ben"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/dynamic/orbit_data/dynamic_ben"
+                "outDir" : "./tests/preplanners/dynamic/orbit_data/dynamic_ben"
             }
         }
 
@@ -248,7 +248,7 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
                         "preplanner" : {
                             "@type" : "dynamic",
                             "period" : 500,     # s
-                            "sharing" : "True"
+                            # "sharing" : "True"
                         },
                         # "replanner" : {
                         #     "@type" : "acbba"
@@ -264,14 +264,14 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/dynamic/resources/lake_events.csv"
+                        "eventsPath" : "./tests/preplanners/dynamic/resources/lake_events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/dynamic/resources/lake_event_points.csv"
+                    "covGridFilePath": "./tests/preplanners/dynamic/resources/lake_event_points.csv"
                 }
             ],
             "scenario": {   
@@ -279,17 +279,17 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/dynamic/resources/lake_events.csv"
+                    "eventsPath" : "./tests/preplanners/dynamic/resources/lake_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/dynamic/",
+                "scenarioPath" : "./tests/preplanners/dynamic/",
                 "name" : "dynamic_random"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/dynamic/orbit_data/dynamic_random"
+                "outDir" : "./tests/preplanners/dynamic/orbit_data/dynamic_random"
             }
         }
 
@@ -306,21 +306,21 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
         # print results
         self.mission.print_results()
 
-        # plot runtime
-        scenarios = [
-            'dynamic_random'
-        ]
+        # # plot runtime
+        # scenarios = [
+        #     'dynamic_random'
+        # ]
 
-        agents = [
-            'manager',
-            'environment',
-            'thermal_0'
-        ]
+        # agents = [
+        #     'manager',
+        #     'environment',
+        #     'thermal_0'
+        # ]
             
-        for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
-            plot_scenario_runtime(scenarios, agent, False, True, './tests/dynamic/results', './tests/dynamic')
+        # for agent in tqdm(agents, desc='Generating runtime performance plots for agents'):
+        #     plot_scenario_runtime(scenarios, agent, False, True, './tests/preplanners/dynamic/results', './tests/preplanners/dynamic')
 
-        print('DONE')
+        # print('DONE')
 
 if __name__ == '__main__':
     unittest.main()

@@ -11,7 +11,7 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -22,14 +22,18 @@ from chess3d.messages import *
 
 class DynamicProgrammingPlanner(AbstractPreplanner):
     def __init__(self, 
-                 sharing : bool = True,
+                #  sharing : bool = False,
                  horizon: float = np.Inf, 
                  period : float = np.Inf, 
                 #  points : float = np.Inf,
                  debug : bool = False,
                  logger: Logger = None
                  ) -> None:
-        super().__init__(horizon, period, sharing, debug, logger)
+        super().__init__(horizon, 
+                         period, 
+                        #  sharing, 
+                         debug, 
+                         logger)
         
         # initialize attributes
         self.pending_observations_to_broadcast : set[ObservationAction] = set()     # set of completed observations that have not been broadcasted
@@ -47,24 +51,24 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # update incoming list of percepts
         super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
 
-        # update list of pending observation completion broadcasts
-        if self.sharing:
-            # collect completed observation broadcasts
-            completed_broadcasts = {message_from_dict(**action.msg) 
-                                for action in completed_actions
-                                if isinstance(action, BroadcastMessageAction)}
+        # # update list of pending observation completion broadcasts
+        # if self.sharing:
+        #     # collect completed observation broadcasts
+        #     completed_broadcasts = {message_from_dict(**action.msg) 
+        #                         for action in completed_actions
+        #                         if isinstance(action, BroadcastMessageAction)}
 
-            # update recently performed observation broadcasts list
-            completed_observations : set[ObservationAction]= {  action 
-                                                                for action in completed_actions
-                                                                if isinstance(action, ObservationAction)}
-            self.pending_observations_to_broadcast.update(completed_observations)
+        #     # update recently performed observation broadcasts list
+        #     completed_observations : set[ObservationAction]= {  action 
+        #                                                         for action in completed_actions
+        #                                                         if isinstance(action, ObservationAction)}
+        #     self.pending_observations_to_broadcast.update(completed_observations)
 
-            # remove recently performed observation broadcasts from pending broadcasts list
-            completed_observation_broadcasts : set[ObservationAction] = {action_from_dict(**broadcast.observation_action)
-                                                                        for broadcast in completed_broadcasts
-                                                                        if isinstance(broadcast, ObservationPerformedMessage)}
-            self.pending_observations_to_broadcast.difference_update(completed_observation_broadcasts)
+        #     # remove recently performed observation broadcasts from pending broadcasts list
+        #     completed_observation_broadcasts : set[ObservationAction] = {action_from_dict(**broadcast.observation_action)
+        #                                                                 for broadcast in completed_broadcasts
+        #                                                                 if isinstance(broadcast, ObservationPerformedMessage)}
+        #     self.pending_observations_to_broadcast.difference_update(completed_observation_broadcasts)
 
 
     def needs_planning(self, state: SimulationAgentState, __: object, current_plan: Plan) -> bool:
@@ -77,47 +81,47 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             return not bool(pending_actions)
         return False
 
-    @runtime_tracker
-    def generate_plan(  self, 
-                        state : SimulationAgentState,
-                        specs : object,
-                        reward_grid : RewardGrid,
-                        clock_config : ClockConfig,
-                        orbitdata : OrbitData,
-                    ) -> Plan:
+    # @runtime_tracker
+    # def generate_plan(  self, 
+    #                     state : SimulationAgentState,
+    #                     specs : object,
+    #                     reward_grid : RewardGrid,
+    #                     clock_config : ClockConfig,
+    #                     orbitdata : OrbitData,
+    #                 ) -> Plan:
         
-        # check if broadcasts need to be performed
-        if bool(self.pending_observations_to_broadcast) or bool(self.pending_reqs_to_broadcast):
-            # set next replanning time
-            t_next = state.t
+    #     # check if broadcasts need to be performed
+    #     if bool(self.pending_observations_to_broadcast) or bool(self.pending_reqs_to_broadcast):
+    #         # set next replanning time
+    #         t_next = state.t
 
-            # schedule no observations
-            observations : list = []
+    #         # schedule no observations
+    #         observations : list = []
 
-        else:
-            # set next replanning time
-            t_next = state.t + self.period
+    #     else:
+    #         # set next replanning time
+    #         t_next = state.t + self.period
 
-            # schedule observations
-            observations : list = self._schedule_observations(state, specs, reward_grid, clock_config, orbitdata)
+    #         # schedule observations
+    #         observations : list = self._schedule_observations(state, specs, reward_grid, clock_config, orbitdata)
 
-            assert self.is_observation_path_valid(state, specs, observations)
+    #         assert self.is_observation_path_valid(state, specs, observations)
 
-        # schedule broadcasts to be perfomed
-        broadcasts : list = self._schedule_broadcasts(state, observations, orbitdata)
+    #     # schedule broadcasts to be perfomed
+    #     broadcasts : list = self._schedule_broadcasts(state, observations, orbitdata)
 
-        # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
+    #     # generate maneuver and travel actions from measurements
+    #     maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
         
-        # generate plan from actions
-        self.plan : Preplan = Preplan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=t_next)    
+    #     # generate plan from actions
+    #     self.plan : Preplan = Preplan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=t_next)    
         
-        # wait for next planning period to start
-        replan : list = self._schedule_periodic_replan(state, self.plan, t_next)
-        self.plan.add_all(replan, t=state.t)
+    #     # wait for next planning period to start
+    #     replan : list = self._schedule_periodic_replan(state, self.plan, t_next)
+    #     self.plan.add_all(replan, t=state.t)
 
-        # return plan and save local copy
-        return self.plan.copy()
+    #     # return plan and save local copy
+    #     return self.plan.copy()
 
     @runtime_tracker
     def _schedule_observations(self, 
@@ -170,8 +174,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                         for curr_opportunity in access_opportunities]
                     for prev_opportunity in tqdm(access_opportunities, 
                                                 desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix', 
-                                                leave=False)
-                    ]
+                                                leave=False)]
         
         t_2_1 = time.perf_counter() - t_prev
         t_prev = time.perf_counter()
@@ -195,7 +198,16 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         for j in tqdm(range(len(access_opportunities)), 
                       desc=f'{state.agent_name}-PLANNER: Calculating Optimal Path',
                       leave=False):
-            self.find_optimal_path(state, specs, reward_grid, access_opportunities, ground_points, adjacency, t_imgs, th_imgs, rewards, cumulative_rewards, preceeding_observations, j)
+            self.find_optimal_path(state, 
+                                   specs, 
+                                   reward_grid, 
+                                   access_opportunities, 
+                                   ground_points, 
+                                   adjacency, 
+                                   t_imgs, 
+                                   th_imgs, 
+                                   rewards, 
+                                   cumulative_rewards, preceeding_observations, j)
             
         t_3 = time.perf_counter() - t_prev
         t_prev = time.perf_counter()
@@ -377,31 +389,31 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # schedule measurement requests
         broadcasts : list = super()._schedule_broadcasts(state, observations, orbitdata)
 
-        # set earliest broadcast time to end of replanning period
-        t_broadcast = self.plan.t+self.period
+        # # set earliest broadcast time to end of replanning period
+        # t_broadcast = self.plan.t+self.period
         
-        # gather observation plan to be sent out
-        plan_out = [action.to_dict() for action in self.pending_observations_to_broadcast]
+        # # gather observation plan to be sent out
+        # plan_out = [action.to_dict() for action in self.pending_observations_to_broadcast]
 
-        # check if observations exist in plan
-        if plan_out or self.sharing:
-            # find best path for broadcasts
-            path, t_start = self._create_broadcast_path(state, orbitdata, t_broadcast)
+        # # check if observations exist in plan
+        # if plan_out or self.sharing:
+        #     # find best path for broadcasts
+        #     path, t_start = self._create_broadcast_path(state, orbitdata, t_broadcast)
 
-            # check feasibility of path found
-            if t_start >= 0:
+        #     # check feasibility of path found
+        #     if t_start >= 0:
                 
-                # add performing action broadcast to plan
-                for action_dict in tqdm(plan_out, 
-                                        desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
-                                        leave=False):
-                    # update action dict to indicate completion
-                    action_dict['status'] = AgentAction.COMPLETED
+        #         # add performing action broadcast to plan
+        #         for action_dict in tqdm(plan_out, 
+        #                                 desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
+        #                                 leave=False):
+        #             # update action dict to indicate completion
+        #             action_dict['status'] = AgentAction.COMPLETED
                     
-                    # create message
-                    msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict, path=path)
+        #             # create message
+        #             msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict, path=path)
 
-                    # add message broadcast to plan
-                    broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
+        #             # add message broadcast to plan
+        #             broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
             
         return broadcasts

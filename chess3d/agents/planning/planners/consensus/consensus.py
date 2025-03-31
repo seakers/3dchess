@@ -7,7 +7,7 @@ from tqdm import tqdm
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.planning.plan import Plan, Preplan, Replan
 from chess3d.agents.planning.planners.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults

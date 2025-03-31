@@ -25,8 +25,8 @@ from dmas.clocks import *
 
 from chess3d.agents.agents import *
 from chess3d.agents.planning.planners.consensus.dynamic import DynamicProgrammingACBBAReplanner
-from chess3d.agents.planning.planners.dynamic import DynamicProgrammingPlanner
-from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.planning.preplanners.dynamic import DynamicProgrammingPlanner
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
@@ -36,8 +36,9 @@ from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.planning.planners.consensus.acbba import ACBBAPlanner
-from chess3d.agents.planning.planners.naive import EarliestAccessPlanner
-from chess3d.agents.planning.planners.nadir import NadirPointingPlaner
+from chess3d.agents.planning.preplanners.earliest import EarliestAccessPlanner
+from chess3d.agents.planning.preplanners.nadir import NadirPointingPlaner
+from chess3d.agents.planning.preplanners.heuristic import HeuristicInsertionPlanner
 from chess3d.agents.science.module import *
 from chess3d.agents.science.utility import utility_function, reobservation_strategy
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
@@ -1434,16 +1435,25 @@ class SimulationElementsFactory:
                 horizon = preplanner_dict.get('horizon', period)
                 horizon = np.Inf if isinstance(horizon, str) and 'inf' in horizon.lower() else horizon
                 debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
-                sharing = bool(preplanner_dict.get('sharing', 'true').lower() in ['true', 't'])
+                # sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
 
                 # initialize preplanner
-                if preplanner_type.lower() in ["naive", "fifo"]:
+                if preplanner_type.lower() in ["heuristic"]:
+                    period = preplanner_dict.get('period', 500)
+                    horizon = preplanner_dict.get('horizon', period)
                     points = preplanner_dict.get('numGroundPoints', np.Inf)
-                    preplanner = EarliestAccessPlanner(horizon, period, points, sharing, debug, logger)
+
+                    if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
+
+                    preplanner = HeuristicInsertionPlanner(horizon, period, points, debug, logger)
+
+                elif preplanner_type.lower() in ["naive", "fifo", "earliest"]:
+                    points = preplanner_dict.get('numGroundPoints', np.Inf)
+                    preplanner = EarliestAccessPlanner(horizon, period, points, debug, logger)
 
                 elif preplanner_type.lower() == 'nadir':
                     points = preplanner_dict.get('numGroundPoints', np.Inf)
-                    preplanner = NadirPointingPlaner(horizon, period, points, sharing, debug, logger)
+                    preplanner = NadirPointingPlaner(horizon, period, points, debug, logger)
 
                 elif preplanner_type.lower() in ["dynamic", "dp"]:
                     period = preplanner_dict.get('period', 500)
@@ -1451,9 +1461,9 @@ class SimulationElementsFactory:
                     
                     if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
 
-                    preplanner = DynamicProgrammingPlanner(sharing, horizon, period, debug, logger)
+                    preplanner = DynamicProgrammingPlanner(horizon, period, debug, logger)
                 
-                # elif... # add more planners here
+                # elif... # add more preplanners here
                 
                 else:
                     raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
@@ -1524,3 +1534,4 @@ class SimulationElementsFactory:
                               level,
                               logger
                             )    
+    
