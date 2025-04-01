@@ -223,8 +223,8 @@ if __name__ == "__main__":
 
     # generate grids and plots for all types and number of groundpoints
     with tqdm(range(len(grid_types) * len(points) * len(grid_distribution)), desc='Generating coverage grids') as pbar:
-        for grid_type in grid_types:
-            for distribution in grid_distribution:
+        for distribution in grid_distribution:
+            for grid_type in grid_types:
                 for n_points in points:
                     
                     if grid_type == 'hydrolakes' and n_points > 5000:
