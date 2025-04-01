@@ -23,7 +23,8 @@ def main(n_samples : int = 1, seed : int = 1000):
         ('Event Duration (hrs)',                [0.25, 1, 3, 6]),
         ('Grid Type',                           ['hydrolakes', 'uniform', 'fibonacci']),
         ('Number of Ground-Points',             [1000, 2500, 5000, 10000]),
-        ('Percent Ground-Points Considered',    [1/i for i in range(1,5)])
+        ('Percent Ground-Points Considered',    [1]),
+        ('Grid Distribution',                   ['inland', 'global']),   
     ]
 
     # calculate lowest-common-multiple for estimating number of samples
@@ -83,8 +84,8 @@ def main(n_samples : int = 1, seed : int = 1000):
     # create compiled data frame
     df = pd.DataFrame(data=[], columns=feasible_scenarios.columns.values)
 
-    for preplanner in ['fifo', 'nadir', 'dp']:
-        for replanner in ['acbba', 'none']:
+    for preplanner in ['fifo', 'heuristic', 'dp']:
+        for replanner in ['none', 'broadcaster', 'acbba']:
             df_temp : pd.DataFrame = feasible_scenarios.copy()
 
             df_temp['Preplanner'] = preplanner
