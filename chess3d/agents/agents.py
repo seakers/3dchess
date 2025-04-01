@@ -1,7 +1,7 @@
 import logging
 import asyncio
 
-from agents.agent import RealtimeAgent, SimulatedAgent
+from chess3d.agents.agent import RealtimeAgent, SimulatedAgent
 
 class RealtimeGroundStationAgent(RealtimeAgent):
 
