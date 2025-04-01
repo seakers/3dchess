@@ -6,16 +6,17 @@ from tqdm import tqdm
 
 from chess3d.agents.actions import *
 
-
 class Plan(ABC):
     """ Describes a plan to be performed by an agent """
     
     def __init__(   self, 
                     *actions,  
-                    t : float = 0.0
+                    t : float = 0.0,
+                    t_next : float = np.Inf,
                 ) -> None:
         # initialize values
         self.t = t
+        self.t_next = t_next
         self.actions : list[AgentAction] = []
         
         # load preplan
@@ -32,6 +33,17 @@ class Plan(ABC):
             counts[type(action)] += 1
         
         return counts
+    
+    def empty(self, t : float) -> None:
+        """ rmeoves all actions from plan """
+        self.actions : list[AgentAction] = []
+        self.t = t
+
+    def remove(self, action : AgentAction, t : float) -> None:
+        """ removes action from plan """
+        if action in self.actions: 
+            self.actions.remove(action)
+            self.t = t
 
     def update(self, *action_lists, t : float) -> None:
         """ Updates the current plan to a new list of actions """
@@ -275,11 +287,10 @@ class Plan(ABC):
 
         if plan_out:
             plan_out = [action.to_dict()
-                        for action in plan_out
-                        ]
+                        for action in plan_out]
         else:
             # idle if no more actions can be performed at this time
-            t_idle = self.actions[0].t_start if not self.empty() else np.Inf
+            t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
             action = WaitForMessages(t, t_idle)
             plan_out.append(action.to_dict())     
 
@@ -298,7 +309,7 @@ class Plan(ABC):
     
     def copy(self) -> object:
         """ Copy contructor. Creates a deep copy of this oject. """
-        return Plan(self.actions, t=self.t)
+        return Plan(self.actions, t=self.t, t_next=self.t_next)
 
     def __is_feasible(self, plan : list) -> bool:
         """ Checks if the current plan can be performed by the agent """
@@ -346,7 +357,7 @@ class Plan(ABC):
         out = f't_plan = {self.t}[s]\n'
         out += f'id\t  action type\tt_start\tt_end\n'
 
-        if self.empty():
+        if self.is_empty():
             out += 'EMPTY\n\n'
         else:
             for action in self.actions:
@@ -361,9 +372,9 @@ class Plan(ABC):
 
     def get_horizon(self) -> float:
         """ Returns current planning horizon """
-        return 0.0 if self.empty() else self.actions[-1].t_end - self.actions[0].t_start
+        return 0.0 if self.is_empty() else self.actions[-1].t_end - self.actions[0].t_start
 
-    def empty(self) -> bool:
+    def is_empty(self) -> bool:
         """ Checks if the current plan is empty """
         return not bool(self.actions)
     
@@ -383,9 +394,8 @@ class Preplan(Plan):
                  ) -> None:
         
         self.horizon = horizon
-        self.t_next = t_next
 
-        super().__init__(*actions, t=t)
+        super().__init__(*actions, t=t, t_next=t_next)
 
     def copy(self) -> object:
         return Preplan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
@@ -397,16 +407,6 @@ class Preplan(Plan):
         super().add(action, t)
 
 class Replan(Plan):
-    def __init__(self, 
-                 *actions, 
-                 t: float = 0,
-                 t_next : float = np.Inf
-                 ) -> None:
-        
-        self.t_next = t_next
-
-        super().__init__(*actions, t=t)
-
     def copy(self) -> object:
         return Replan(self.actions, t=self.t, t_next=self.t_next)
     

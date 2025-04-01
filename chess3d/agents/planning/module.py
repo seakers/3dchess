@@ -1,7 +1,5 @@
 import copy
 import os
-import traceback
-from typing import Callable
 import pandas as pd
 
 from orbitpy.util import Spacecraft
@@ -13,7 +11,7 @@ from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.agents.planning.planner import AbstractReplanner
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.planners.rewards import RewardGrid
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -567,7 +565,7 @@ class PlanningModule(InternalModule):
                 
         pending_actions = [action for action in actions
                            if isinstance(action, AgentAction)
-                           and action_msg.status == AgentAction.PENDING] # planned action wasn't completed
+                           and action.status == AgentAction.PENDING] # planned action wasn't completed
 
         # return classified lists
         return completed_actions, aborted_actions, pending_actions

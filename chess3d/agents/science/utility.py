@@ -102,7 +102,9 @@ def event_driven(
                 event_reward : float,
                 t : float, 
                 t_update : float, 
+                instrument : str,
                 **_):
+    """ Reward changes depending on the presense of an event and any prior obervation """
     
     # check if simulation has started yet
     if np.isnan(t_update) and np.isnan(t):
@@ -131,9 +133,12 @@ def event_driven(
                                    if latest_event.t_start <= observation.t_start <= latest_event.t_end]
             
             # calculate reward
-            tp=[latest_event.t_start, latest_event.t_end]
-            rp=[event_reward,min_reward]
-            reward = np.interp(t,tp,rp) * reobservation_strategy(len(latest_observations))
+            if instrument in latest_event.observation_types:
+                tp=[latest_event.t_start, latest_event.t_end]
+                rp=[event_reward,min_reward]
+                reward = np.interp(t,tp,rp) * reobservation_strategy(len(latest_observations))
+            else:
+                reward = min_reward
             
         else: # event has already passed
             # check if an observation has occurred since then
@@ -157,10 +162,11 @@ def event_driven(
         reward = (t - t_init) * unobserved_reward_rate / 3600  + min_reward
         reward = min(reward, max_unobserved_reward) * int((t - t_init) >= 0.0)
 
-    # time penalty
-    # day = 24 * 3600
-    # rho = max(1 - t / day, 0.0)
-    rho = 1
+    return reward
+
+    # TODO time penalty (?)
+    day = 24 * 3600
+    rho = max(1 - t / day, 0.0)
 
     return reward * rho
 

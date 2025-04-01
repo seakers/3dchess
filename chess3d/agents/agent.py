@@ -2,94 +2,50 @@ import logging
 import os
 from dmas.messages import SimulationMessage
 import numpy as np
-from pandas import DataFrame
+import pandas as pd
 
 from instrupy.base import Instrument
 from orbitpy.util import Spacecraft
 
 from dmas.agents import *
-from dmas.network import NetworkConfig
+from dmas.modules import InternalModule
 from dmas.utils import runtime_tracker
 from zmq import SocketType
 
-from chess3d.agents.states import SimulationAgentState
+from chess3d.agents.planning.plan import *
+from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
+from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.requests import MeasurementRequest
-from chess3d.agents.planning.module import PlanningModule
-from chess3d.agents.science.module import ScienceModule
+from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
 from chess3d.messages import *
+from chess3d.agents.planning.module import PlanningModule
+from chess3d.agents.science.module import ScienceModule
+from chess3d.agents.science.processing import DataProcessor
 
-class SimulationAgent(Agent):
+class AbstractAgent(Agent):
     """
     # Abstract Simulation Agent
-
-    #### Attributes:
-        - agent_name (`str`): name of the agent
-        - scenario_name (`str`): name of the scenario being simulated
-        - manager_network_config (:obj:`NetworkCdo(nfig`): netwdo(rk configuration of the simulation manager
-        - agent_network_config (:obj:`NetworkConfig`): network configuration for this agent
-        - initial_state (:obj:`SimulationAgentState`): initial state for this agent
-        - specs (`object`): describes the physical specifications of this agent
-        - planning_module (`PlanningModule`): planning module assigned to this agent
-        - science_module (`ScienceModule): science module assigned to this agent
-        - level (int): logging level
-        - logger (logging.Logger): simulation logger 
     """
-    def __init__(   self, 
-                    agent_name: str, 
-                    results_path : str,
-                    manager_network_config: NetworkConfig, 
-                    agent_network_config: NetworkConfig,
-                    initial_state : SimulationAgentState,
-                    specs : object,
-                    planning_module : PlanningModule = None,
-                    science_module : ScienceModule = None,
-                    level: int = logging.INFO, 
-                    logger: logging.Logger = None
-                    ) -> None:
-        """
-        Initializes an instance of a Simulation Agent Object
-
-        #### Arguments:
-            - agent_name (`str`): name of the agent
-            - scenario_name (`str`): name of the scenario being simulated
-            - manager_network_config (:obj:`NetworkConfig`): network configuration of the simulation manager
-            - agent_network_config (:obj:`NetworkConfig`): network configuration for this agent
-            - initial_state (:obj:`SimulationAgentState`): initial state for this agent
-            - payload (`list): list of instruments on-board the spacecraft
-            - planning_module (`PlanningModule`): planning module assigned to this agent
-            - science_module (`ScienceModule): science module assigned to this agent
-            - level (int): logging level
-            - logger (logging.Logger): simulation logger 
-        """
-        # load agent modules
-        modules = []
-        if planning_module is not None:
-            if not isinstance(planning_module, PlanningModule):
-                raise AttributeError(f'`planning_module` must be of type `PlanningModule`; is of type {type(planning_module)}')
-            modules.append(planning_module)
-        if science_module is not None:
-            if not isinstance(science_module, ScienceModule):
-                raise AttributeError(f'`science_module` must be of type `ScienceModule`; is of type {type(science_module)}')
-            modules.append(science_module)
-
-        # initialize agent
-        super().__init__(agent_name, 
-                        agent_network_config, 
-                        manager_network_config, 
-                        initial_state, 
-                        modules, 
-                        level, 
-                        logger)
-
+    def __init__(self, 
+                 agent_name, 
+                 results_path : str,
+                 agent_network_config, 
+                 manager_network_config, 
+                 initial_state, 
+                 specs : object,
+                 modules, 
+                 level = logging.INFO, 
+                 logger = None):
+        super().__init__(agent_name, agent_network_config, manager_network_config, initial_state, modules, level, logger)
+        
         self.specs = specs
         if isinstance(self.specs, Spacecraft):
             self.payload = {instrument.name: instrument for instrument in self.specs.instrument}
         elif isinstance(self.specs, dict):
-            self.payload = {instrument.name: instrument for instrument in self.specs['instrument']} if 'instrument' in self.specs else dict()
+            self.payload = {instrument['name']: instrument for instrument in self.specs['instrument']} if 'instrument' in self.specs else dict()
         else:
             raise ValueError(f'`specs` must be of type `Spacecraft` or `dict`. Is of type `{type(specs)}`.')
-
 
         self.state_history : list = []
         
@@ -203,50 +159,6 @@ class SimulationAgent(Agent):
     @runtime_tracker
     async def get_agent_broadcasts(self) -> list:
         return await self.__empty_queue(self.external_inbox)
-
-    """
-    --------------------
-            THINK       
-    --------------------
-    """
-    @runtime_tracker
-    async def think(self, senses: list) -> list:
-        # send all sensed messages to planner
-        self.log(f'sending {len(senses)} senses to planning module...', level=logging.DEBUG)
-        senses_dict = []
-        state_dict = None
-        for sense in senses:
-            sense : SimulationMessage
-            if isinstance(sense, AgentStateMessage):
-                state_dict = sense.to_dict()
-            else:
-                senses_dict.append(sense.to_dict())
-
-        senses_msg = SenseMessage( self.get_element_name(), 
-                                    self.get_element_name(),
-                                    state_dict, 
-                                    senses_dict)
-        await self.send_internal_message(senses_msg)
-
-        # wait for planner to send list of tasks to perform
-        self.log(f'senses sent! waiting on response from planner module...')
-        actions = []
-        
-        while True:
-            _, _, content = await self.internal_inbox.get()
-            
-            if content['msg_type'] == SimulationMessageTypes.PLAN.value:
-                msg = PlanMessage(**content)
-
-                # assert self.get_current_time() - msg.t_plan <= 1e-3
-
-                for action_dict in msg.plan:
-                    self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
-                    actions.append(action_dict)  
-                break
-        
-        self.log(f"plan of {len(actions)} actions received from planner module!")
-        return actions
 
     """
     --------------------
@@ -493,7 +405,7 @@ class SimulationAgent(Agent):
                             ]
                 data.append(line_data)
             
-            state_df = DataFrame(data,columns=headers)
+            state_df = pd.DataFrame(data,columns=headers)
             # self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
             state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
@@ -528,11 +440,11 @@ class SimulationAgent(Agent):
 
                 # save time-series
                 time_series = [[v] for v in self.stats[routine]]
-                routine_df = DataFrame(data=time_series, columns=['dt'])
+                routine_df = pd.DataFrame(data=time_series, columns=['dt'])
                 routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
                 routine_df.to_csv(routine_dir,index=False)
 
-            stats_df = DataFrame(data, columns=headers)
+            stats_df = pd.DataFrame(data, columns=headers)
             # self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
             stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
         except Exception as e:
@@ -554,11 +466,6 @@ class SimulationAgent(Agent):
 
                 # check if failure or critical state will be reached first
                 self.state : SimulationAgentState
-                if self.state.engineering_module is not None:
-                    t_failure = self.state.engineering_module.predict_failure() 
-                    t_crit = self.state.engineering_module.predict_critical()
-                    t_min = min(t_failure, t_crit)
-                    tf = t_min if t_min < tf else tf
                 
                 # wait for time update        
                 ignored = []   
@@ -623,3 +530,492 @@ class SimulationAgent(Agent):
     @runtime_tracker
     async def send_peer_broadcast(self, msg: SimulationMessage) -> None:
         return await super().send_peer_broadcast(msg)
+    
+
+class RealtimeAgent(AbstractAgent):
+    """
+    Implements 
+    """
+
+    def __init__(self, 
+                 agent_name, 
+                 results_path, 
+                 agent_network_config, 
+                 manager_network_config, 
+                 initial_state, 
+                 specs, 
+                 planning_module : InternalModule = None,
+                 science_module : InternalModule = None,
+                 level=logging.INFO, 
+                 logger=None):
+        # load agent modules
+        modules = []
+        if planning_module is not None:
+            if not isinstance(planning_module, PlanningModule):
+                raise AttributeError(f'`planning_module` must be of type `PlanningModule`; is of type {type(planning_module)}')
+            modules.append(planning_module)
+        if science_module is not None:
+            if not isinstance(science_module, ScienceModule):
+                raise AttributeError(f'`science_module` must be of type `ScienceModule`; is of type {type(science_module)}')
+            modules.append(science_module)
+
+        super().__init__(agent_name, results_path, agent_network_config, manager_network_config, initial_state, specs, modules, level, logger)
+
+    @runtime_tracker
+    async def think(self, senses: list) -> list:
+        # send all sensed messages to planner
+        self.log(f'sending {len(senses)} senses to planning module...', level=logging.DEBUG)
+        senses_dict = []
+        state_dict = None
+        for sense in senses:
+            sense : SimulationMessage
+            if isinstance(sense, AgentStateMessage):
+                state_dict = sense.to_dict()
+            else:
+                senses_dict.append(sense.to_dict())
+
+        senses_msg = SenseMessage( self.get_element_name(), 
+                                    self.get_element_name(),
+                                    state_dict, 
+                                    senses_dict)
+        await self.send_internal_message(senses_msg)
+
+        # wait for planner to send list of tasks to perform
+        self.log(f'senses sent! waiting on response from planner module...')
+        actions = []
+        
+        while True:
+            _, _, content = await self.internal_inbox.get()
+            
+            if content['msg_type'] == SimulationMessageTypes.PLAN.value:
+                msg = PlanMessage(**content)
+
+                # assert self.get_current_time() - msg.t_plan <= 1e-3
+
+                for action_dict in msg.plan:
+                    self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
+                    actions.append(action_dict)  
+                break
+        
+        self.log(f"plan of {len(actions)} actions received from planner module!")
+        return actions
+
+
+class SimulatedAgent(AbstractAgent):
+    def __init__(self, 
+                 agent_name, 
+                 results_path, 
+                 agent_network_config, 
+                 manager_network_config, 
+                 initial_state, 
+                 specs, 
+                 processor : DataProcessor = None, 
+                 preplanner : AbstractPreplanner = None,
+                 replanner : AbstractReplanner = None,
+                 reward_grid : RewardGrid = None,
+                 level=logging.INFO, 
+                 logger=None):
+        
+        super().__init__(agent_name, 
+                         results_path, 
+                         agent_network_config, 
+                         manager_network_config, 
+                         initial_state, 
+                         specs, 
+                         [], 
+                         level, 
+                         logger)
+        
+        # set parameters
+        self.processor : DataProcessor = processor
+        self.preplanner : AbstractPreplanner = preplanner
+        self.replanner : AbstractReplanner = replanner
+        self.reward_grid : RewardGrid = reward_grid
+
+        # initialize parameters
+        self.plan : Plan = Preplan(t=-1.0)
+        self.orbitdata = None
+        self.plan_history = []
+
+    @runtime_tracker
+    async def think(self, senses : list):
+
+        # unpack and sort senses
+        relay_messages, incoming_reqs, observations, \
+            states, action_statuses, misc_messages = self._read_incoming_messages(senses)
+        incoming_reqs : list[MeasurementRequest]
+        states : list[SimulationAgentState]
+
+        # check action completion
+        completed_actions, aborted_actions, pending_actions = self._check_action_completion(action_statuses)
+
+        # extract latest state from senses
+        states.sort(key = lambda a : a.state['t'])
+        state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
+
+        # update plan completion
+        self.plan.update_action_completion(completed_actions, 
+                                           aborted_actions, 
+                                           pending_actions, 
+                                           state.t
+                                           )    
+
+        # process performed observations
+        generated_reqs : list[MeasurementRequest] = self.processor.process(incoming_reqs, observations)
+        incoming_reqs.extend(generated_reqs)
+
+        # compile measurements performed by myself or other agents
+        completed_observations = {action for action in completed_actions
+                        if isinstance(action, ObservationAction)}
+        completed_observations.update({action_from_dict(**msg.observation_action) 
+                            for msg in misc_messages
+                            if isinstance(msg, ObservationPerformedMessage)})
+        
+        # update reward grid
+        if self.reward_grid: self.reward_grid.update(self.get_current_time(), completed_observations, incoming_reqs)
+
+        # --- Create plan ---
+        if self.preplanner is not None:
+            # there is a preplanner assigned to this planner
+            
+            # update preplanner precepts
+            self.preplanner.update_percepts(state,
+                                            self.plan, 
+                                            incoming_reqs,
+                                            relay_messages,
+                                            misc_messages,
+                                            completed_actions,
+                                            aborted_actions,
+                                            pending_actions
+                                        )
+            
+            # check if there is a need to construct a new plan
+            if self.preplanner.needs_planning(state, 
+                                              self.specs, 
+                                              self.plan):  
+                # initialize plan      
+                self.plan : Plan = self.preplanner.generate_plan(state, 
+                                                            self.specs,
+                                                            self.reward_grid,
+                                                            self._clock_config,
+                                                            self.orbitdata
+                                                            )
+
+                # save copy of plan for post-processing
+                plan_copy = [action for action in self.plan]
+                self.plan_history.append((state.t, plan_copy))
+                
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                # x = 1 # breakpoint
+                # -------------------------------------
+
+        t_3 = time.perf_counter()
+
+        # --- Modify plan ---
+        # Check if reeplanning is needed
+        if self.replanner is not None:
+            # there is a replanner assigned to this planner
+
+            # update replanner precepts
+            self.replanner.update_percepts( state,
+                                            self.plan, 
+                                            incoming_reqs,
+                                            relay_messages,
+                                            misc_messages,
+                                            completed_actions,
+                                            aborted_actions,
+                                            pending_actions
+                                        )
+            
+            if self.replanner.needs_planning(state, 
+                                             self.specs,
+                                             self.plan,
+                                             self.orbitdata):    
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
+                # x = 1 # breakpoint
+                # -------------------------------------
+
+                # Modify current Plan      
+                self.plan : Plan = self.replanner.generate_plan(state, 
+                                                                self.specs,    
+                                                                self.reward_grid,
+                                                                self.plan,
+                                                                self._clock_config,
+                                                                self.orbitdata
+                                                                )
+
+                # update last time plan was updated
+                self.t_plan = self.get_current_time()
+
+                # save copy of plan for post-processing
+                plan_copy = [action for action in self.plan]
+                self.plan_history.append((self.t_plan, plan_copy))
+            
+                # clear pending actions
+                pending_actions = []
+
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                x = 1 # breakpoint
+                # -------------------------------------
+
+        plan_out : list = self.plan.get_next_actions(state.t)
+        # --- FOR DEBUGGING PURPOSES ONLY: ---
+        # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+        # x = 1 # breakpoint
+        # -------------------------------------
+        
+        return plan_out
+
+    def _read_incoming_messages(self, senses : list) -> tuple:
+        ## extract relay messages
+        relay_messages = [msg for msg in senses if msg.path]
+        for relay_msg in relay_messages: senses.remove(relay_msg)
+
+        ## remove bus messages and add their contents to senses 
+        bus_messages : list[BusMessage] = [msg for msg in senses if isinstance(msg, BusMessage)]
+        for bus_msg in bus_messages: 
+            senses.extend([message_from_dict(**msg) for msg in bus_msg.msgs])
+            senses.remove(bus_msg)
+
+        ## classify senses
+        incoming_reqs : list[MeasurementRequest] = [MeasurementRequest.from_dict(msg.req) 
+                                                    for msg in senses 
+                                                    if isinstance(msg, MeasurementRequestMessage)
+                                                    and msg.req['severity'] > 0.0]
+        observation_msgs : list [ObservationResultsMessage] = [sense for sense in senses 
+                                                                if isinstance(sense, ObservationResultsMessage)]
+        observations : list[tuple] = [(Instrument.from_dict(msg.instrument), msg.observation_data) 
+                                        for msg in senses 
+                                        if isinstance(msg, ObservationResultsMessage)
+                                        and msg.dst == self.get_element_name()]
+        states : list[AgentStateMessage] = [sense for sense in senses 
+                                            if isinstance(sense, AgentStateMessage)
+                                            and sense.src == self.get_element_name()]
+        action_statuses : list[AgentActionMessage] = [sense for sense in senses
+                                                      if isinstance(sense, AgentActionMessage)]
+                
+        misc_messages = set(senses)
+        misc_messages.difference_update(incoming_reqs)
+        misc_messages.difference_update(observation_msgs)
+        misc_messages.difference_update(states)
+        misc_messages.difference_update(action_statuses)
+        misc_messages = list(misc_messages)
+
+        return relay_messages, incoming_reqs, observations, states, action_statuses, misc_messages
+
+    def _check_action_completion(self, action_statuses : list) -> tuple:
+        
+        # collect all action statuses from messages
+        actions = [action_from_dict(**action_msg.action) for action_msg in action_statuses]
+
+        # classify by action completion
+        completed_actions = [action for action in actions
+                            if isinstance(action, AgentAction)
+                            and action.status == AgentAction.COMPLETED] # planned action completed
+                
+        aborted_actions = [action for action in actions 
+                           if isinstance(action, AgentAction)
+                           and action.status == AgentAction.ABORTED]    # planned action aborted
+                
+        pending_actions = [action for action in actions
+                           if isinstance(action, AgentAction)
+                           and action.status == AgentAction.PENDING] # planned action wasn't completed
+
+        # return classified lists
+        return completed_actions, aborted_actions, pending_actions
+
+    def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
+        try:
+            out = f'\n{title}\n'
+
+            if isinstance(plan, Plan):
+                out += str(plan)
+            else:
+                for action in plan:
+                    if isinstance(action, AgentAction):
+                        out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+                    elif isinstance(action, dict):
+                        out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
+            
+
+            self.log(out, level)
+        except Exception as e:
+            print(e)
+            raise e
+
+    async def teardown(self):
+        try:
+            await super().teardown()
+
+            # log known and generated requests
+            if self.processor is not None:
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
+                data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
+                        for req in self.processor.known_reqs
+                        if req.requester == self.get_element_name()]
+                
+                df = pd.DataFrame(data=data, columns=columns)        
+                df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
+
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
+                data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
+                        for req in self.processor.generated_reqs
+                        if req.requester == self.get_element_name()]
+                
+                df = pd.DataFrame(data=data, columns=columns)        
+                df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
+        
+            # log plan history
+            headers = ['plan_index', 't_plan', 'desc', 't_start', 't_end']
+            data = []
+            
+            for i in range(len(self.plan_history)):
+                t_plan, plan = self.plan_history[i]
+                t_plan : float; plan : list[AgentAction]
+
+                for action in plan:
+                    desc = f'{action.action_type}'
+                    if isinstance(action, ObservationAction):
+                        desc += f'_{action.instrument_name}'
+                        
+                    line_data = [   i,
+                                    np.round(t_plan,3),
+                                    desc,
+                                    np.round(action.t_start,3 ),
+                                    np.round(action.t_end,3 )
+                                ]
+                    data.append(line_data)
+
+            df = pd.DataFrame(data, columns=headers)
+            # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+            df.to_csv(f"{self.results_path}/planner_history.csv", index=False)
+
+            # log reward grid history
+            if self.reward_grid is not None:
+                headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
+                data = self.reward_grid.get_history()
+                df = pd.DataFrame(data, columns=headers)
+                # self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
+                df.to_csv(f"{self.results_path}/reward_grid_history.csv", index=False)
+
+            # log performance stats
+            n_decimals = 5
+            headers = ['routine','t_avg','t_std','t_med', 't_max', 't_min', 'n', 't_total']
+            data = []
+
+            for routine in self.stats:
+                n = len(self.stats[routine])
+                t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+                t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_max = np.round(max(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_min = np.round(min(self.stats[routine]),n_decimals) if n > 0 else -1
+                t_total = t_avg * n
+
+                line_data = [ 
+                                routine,
+                                t_avg,
+                                t_std,
+                                t_median,
+                                t_max,
+                                t_min,
+                                n,
+                                t_total
+                                ]
+                data.append(line_data)
+
+                # save time-series
+                time_series = [[v] for v in self.stats[routine]]
+                routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-planner_{routine}.csv")
+                routine_df.to_csv(routine_dir,index=False)
+
+            if isinstance(self.preplanner, AbstractPreplanner):
+                for routine in self.preplanner.stats:
+                    n = len(self.preplanner.stats[routine])
+                    t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_std = np.round(np.std(self.preplanner.stats[routine]),n_decimals) if n > 0 else 0.0
+                    t_median = np.round(np.median(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_max = np.round(max(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_min = np.round(min(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_total = t_avg * n
+
+                    line_data = [ 
+                                    f"preplanner/{routine}",
+                                    t_avg,
+                                    t_std,
+                                    t_median,
+                                    t_max,
+                                    t_min,
+                                    n,
+                                    t_total
+                                    ]
+                    data.append(line_data)
+
+                    # save time-series
+                    time_series = [[v] for v in self.preplanner.stats[routine]]
+                    routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                    routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-preplanner_{routine}.csv")
+                    routine_df.to_csv(routine_dir,index=False)
+
+            if isinstance(self.replanner, AbstractReplanner):
+                for routine in self.replanner.stats:
+                    n = len(self.replanner.stats[routine])
+                    t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_std = np.round(np.std(self.replanner.stats[routine]),n_decimals) if n > 0 else 0.0
+                    t_median = np.round(np.median(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_max = np.round(max(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_min = np.round(min(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+                    t_total = t_avg * n
+
+                    line_data = [ 
+                                    f"replanner/{routine}",
+                                    t_avg,
+                                    t_std,
+                                    t_median,
+                                    t_max,
+                                    t_min,
+                                    n,
+                                    t_total
+                                    ]
+                    data.append(line_data)
+
+                    # save time-series
+                    time_series = [[v] for v in self.replanner.stats[routine]]
+                    routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+                    routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-replanner_{routine}.csv")
+                    routine_df.to_csv(routine_dir,index=False)
+
+            if self.reward_grid:
+                for routine in self.reward_grid.stats:
+                    n = len(self.reward_grid.stats[routine])
+                    t_avg = np.round(np.mean(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                    t_std = np.round(np.std(self.reward_grid.stats[routine]),n_decimals) if n > 0 else 0.0
+                    t_median = np.round(np.median(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                    t_max = np.round(max(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                    t_min = np.round(min(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
+                    t_total = t_avg * n
+
+                    line_data = [ 
+                                    f"reward_grid/{routine}",
+                                    t_avg,
+                                    t_std,
+                                    t_median,
+                                    t_max,
+                                    t_min,
+                                    n,
+                                    t_total
+                                    ]
+                    data.append(line_data)
+
+            stats_df = pd.DataFrame(data, columns=headers)
+            # self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+            # self.log(f'total: {sum(stats_df["t_total"])}', level=logging.WARNING)
+            stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
+
+
+        except Exception as e:
+            x = 1

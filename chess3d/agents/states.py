@@ -2,9 +2,7 @@
 from abc import abstractmethod
 import numpy as np
 from typing import Union
-from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.actions import *
-from chess3d.agents.engineering.engineering import EngineeringModule
 from dmas.agents import AbstractAgentState, AgentAction
 from orbitpy.util import OrbitState
 import propcov
@@ -35,7 +33,6 @@ class SimulationAgentState(AbstractAgentState):
                     vel : list,
                     attitude : list,
                     attitude_rates : list,
-                    engineering_module : EngineeringModule = None,
                     status : str = IDLING,
                     t : Union[float, int]=0,
                     **_
@@ -51,7 +48,6 @@ class SimulationAgentState(AbstractAgentState):
         self.vel : list = vel
         self.attitude : list = attitude
         self.attitude_rates : list = attitude_rates
-        self.engineering_module : EngineeringModule = engineering_module
         self.status : str = status
         self.t : float = t
 
@@ -59,9 +55,6 @@ class SimulationAgentState(AbstractAgentState):
                         t : Union[int, float], 
                         status : str = None, 
                         state : dict = None) -> None:
-        # update internal components
-        if self.engineering_module is not None:
-            self.engineering_module.update_state(t)
 
         if t - self.t >= 0:
             # update position and velocity
@@ -88,9 +81,6 @@ class SimulationAgentState(AbstractAgentState):
             - propagated (:obj:`SimulationAgentState`) : propagated state
         """
         propagated : SimulationAgentState = self.copy()
-
-        if propagated.engineering_module is not None:
-            propagated.engineering_module = propagated.engineering_module.propagate(tf)
         
         propagated.pos, propagated.vel, propagated.attitude, propagated.attitude_rates = propagated.kinematic_model(tf)
 
@@ -224,27 +214,64 @@ class GroundStationAgentState(SimulationAgentState):
         self.lon = lon
         self.alt = alt 
 
-        R = 6.3781363e+003 + alt
-        pos = [
-                R * np.cos( lat * np.pi / 180.0) * np.cos( lon * np.pi / 180.0),
-                R * np.cos( lat * np.pi / 180.0) * np.sin( lon * np.pi / 180.0),
-                R * np.sin( lat * np.pi / 180.0)
-        ]
-        vel = [0, 0, 0]
+        self.R = 6.3781363e+003 + alt   # radius of the earth [km]
+        self.W = 360 / (24 * 3600)      # angular speed of Earth [deg/s]
+
+        self.angular_vel = [0, 0, self.W]
+
+        if pos is None:
+            pos = [self.R + self.alt, 0, 0] # in rotating frame
+            pos = GroundStationAgentState._rotating_to_inertial(self, pos, lat, lon)
         
+        if vel is None:
+            vel = np.cross(self.angular_vel, pos)
+         
         super().__init__(agent_name,
                         SimulationAgentTypes.GROUND_STATION.value, 
                         pos, 
                         vel,
                         [0,0,0],
-                        [0,0,0], 
-                        None, 
+                        [0,0,0],  
                         status, 
                         t)
+        
+    def to_rads(self, th : float) -> float:
+        return th * np.pi / 180
+
+    def _inertial_to_rotating(self, v : list, th : float, phi : float) -> list:
+        R_i2a = [[ np.cos(self.to_rads(th)), np.sin(self.to_rads(th)), 0],
+                 [-np.sin(self.to_rads(th)), np.cos(self.to_rads(th)), 0],
+                 [                        0,                        0, 1]]
+        R_a2b = [
+                 [1, 0, 0],
+                 [0, np.cos(self.to_rads(phi)), np.sin(self.to_rads(phi))],
+                 [0, -np.sin(self.to_rads(phi)), np.cos(self.to_rads(phi))],
+                 ]
+        R_i2b = np.dot(R_a2b, R_i2a)
+        return np.dot(R_i2b, v)
+    
+    def _rotating_to_inertial(self, v : list, th : float, phi : float) -> list:
+        R_i2a = [[ np.cos(self.to_rads(th)), np.sin(self.to_rads(th)), 0],
+                 [-np.sin(self.to_rads(th)), np.cos(self.to_rads(th)), 0],
+                 [                        0,                        0, 1]]
+        R_a2b = [
+                 [1, 0, 0],
+                 [0, np.cos(self.to_rads(phi)), np.sin(self.to_rads(phi))],
+                 [0, -np.sin(self.to_rads(phi)), np.cos(self.to_rads(phi))],
+                 ]
+        R_i2b = np.dot(R_a2b, R_i2a)
+        R_b2i = np.transpose(R_i2b)
+        return np.dot(R_b2i, v)
 
     def kinematic_model(self, tf: Union[int, float]) -> tuple:
-        # agent does not move
-        return self.pos, self.vel, self.attitude, self.attitude
+        lon = self.lon * self.W * tf    # longitude "changes" as earth spins 
+        lat = self.lat                  # lattitude stays constant
+
+        pos = [self.R + self.alt, 0, 0] # in rotating frame
+        pos = GroundStationAgentState._rotating_to_inertial(self, pos, lat, lon)
+        vel = np.cross(self.angular_vel, pos)
+        
+        return list(pos), list(vel), self.attitude, self.attitude
 
     def is_failure(self) -> None:
         # agent never fails
@@ -275,7 +302,6 @@ class SatelliteAgentState(SimulationAgentState):
                     keplerian_state : dict = None,
                     t: Union[float, int] = 0.0, 
                     eclipse : int = 0,
-                    engineering_module: EngineeringModule = None, 
                     status: str = SimulationAgentState.IDLING, 
                     **_
                 ) -> None:
@@ -311,7 +337,6 @@ class SatelliteAgentState(SimulationAgentState):
                             vel, 
                             attitude,
                             attitude_rates,
-                            engineering_module, 
                             status, 
                             t
                         )
@@ -377,9 +402,6 @@ class SatelliteAgentState(SimulationAgentState):
         return pos, vel, attitude, self.attitude_rates
 
     def is_failure(self) -> None:
-        if self.engineering_module:
-            # agent only fails if internal components fail
-            return self.engineering_module.is_failure()
         return False
 
     def perform_travel(self, action: TravelAction, t: Union[int, float]) -> tuple:
@@ -413,11 +435,6 @@ class SatelliteAgentState(SimulationAgentState):
             return action.ABORTED, 0.0
 
         else:
-            # TODO include engineering module in attitude maneuvers 
-            # if self.engineering_module:
-            #     # instruct engineering module to perform maneuver
-            #     return self.engineering_module.perform_action(action, t)
-
             # chose new angular velocity
             self.attitude_rates = action.attitude_rates
 
@@ -534,7 +551,6 @@ class UAVAgentState(SimulationAgentState):
                     max_speed: float,
                     vel: list = [0.0,0.0,0.0], 
                     eps : float = 1e-6,
-                    engineering_module: EngineeringModule = None, 
                     status: str = SimulationAgentState.IDLING, 
                     t: Union[float, int] = 0, 
                     **_
@@ -546,7 +562,6 @@ class UAVAgentState(SimulationAgentState):
                             vel, 
                             [0.0,0.0,0.0], 
                             [0.0,0.0,0.0], 
-                            engineering_module, 
                             status, 
                             t)
         self.max_speed = max_speed
@@ -618,7 +633,4 @@ class UAVAgentState(SimulationAgentState):
         return action.ABORTED, 0.0
 
     def is_failure(self) -> None:
-        if self.engineering_module:
-            # agent only fails if internal components fail
-            return self.engineering_module.is_failure()
         return False

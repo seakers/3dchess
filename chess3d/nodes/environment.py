@@ -251,6 +251,19 @@ class SimulationEnvironment(EnvironmentNode):
             # add to list of received measurement requests 
             self.measurement_reqs.append(measurement_req)
 
+        elif content['msg_type'] == SimulationMessageTypes.BUS.value:
+            # an agent made a broadcast of multiple measurements
+            bus_msg : BusMessage = message_from_dict(**content)
+            
+            # filter out measurement request messages
+            measurement_reqs : list[MeasurementRequest] \
+                = [ MeasurementRequest.from_dict(msg['req'])
+                    for msg in bus_msg.msgs
+                    if msg['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value]
+            
+            # add to list of received measurement requests 
+            self.measurement_reqs.extend(measurement_reqs)
+
         # add to list of received broadcasts
         content['t_msg'] = self.get_current_time()
         self.broadcasts_history.append(content)
@@ -367,6 +380,8 @@ class SimulationEnvironment(EnvironmentNode):
         # 
         if msg.src not in self.agent_state_update_times: 
             self.agent_state_update_times[msg.src] = -1.0
+
+        # TODO support ground stations
         
         # check if time has passed between state updates
         sat_orbitdata : OrbitData = self.orbitdata[msg.src]

@@ -107,12 +107,12 @@ class TestGroundStationAgent(unittest.TestCase):
                     "name": "Atl", 
                     "latitude": 0.0, 
                     "longitude": 0.0, 
-                    "minimumElevation":12, 
+                    "minimumElevation":0.0, 
                     "@id": "atl" ,
-                    "science" : {
-                        "@type": "oracle", 
-                        "eventsPath" : "./tests/gstat/resources/events.csv"
-                    }
+                    # "science" : {
+                    #     "@type": "oracle", 
+                    #     "eventsPath" : "./tests/gstat/resources/events.csv"
+                    # }
                 }
             ],
             "grid": [

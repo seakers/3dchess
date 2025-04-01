@@ -15,47 +15,47 @@
             "args": [
             ]
         },
-        {
-            "name": "VISUALIZER TESTER - Plane",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/visualizer.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            }
-        },
-        {
-            "name": "VISUALIZER TESTER - Earth",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/visualizer.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": [
-                "acbba_test_sats",
-                "earth"
-            ]
-        },
-        {
-            "name": "VISUALIZER TEST - SAT SIM",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/chess3d/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}/chess3d/",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            },
-            "args": "visualizer_test"
-        },
+        // {
+        //     "name": "VISUALIZER TESTER - Plane",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/chess3d/visualizer.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}/chess3d",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}"
+        //     }
+        // },
+        // {
+        //     "name": "VISUALIZER TESTER - Earth",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/visualizer.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}/chess3d",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}"
+        //     },
+        //     "args": [
+        //         "acbba_test_sats",
+        //         "earth"
+        //     ]
+        // },
+        // {
+        //     "name": "VISUALIZER TEST - SAT SIM",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/chess3d/main.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}/chess3d/",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}"
+        //     },
+        //     "args": "visualizer_test"
+        // },
         {
             "name": "TEST EVENT GENERATION",
             "type": "debugpy",
@@ -69,10 +69,10 @@
             }
         },
         {
-            "name": "TEST NAIVE PLANNER",
+            "name": "TEST HEURISTIC PREPLANNER",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/naive/naive_planner_test.py",
+            "program": "${workspaceRoot}/tests/preplanners/heuristic/heuristic_planner_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -81,10 +81,34 @@
             }
         },
         {
-            "name": "TEST NADIR PLANNER",
+            "name": "TEST EARLIEST ACCESS PREPLANNER",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/nadir/nadir_planner_test.py",
+            "program": "${workspaceRoot}/tests/preplanners/earliest/earliest_planner_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
+            "name": "TEST NADIR PREPLANNER",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/preplanners/nadir/nadir_planner_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
+            "name": "TEST DYN PROG PREPLANNER",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/preplanners/dynamic/dp_planner_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -96,19 +120,7 @@
             "name": "TEST ACBBA",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/acbba/acbba_replanner_test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            }
-        },
-        {
-            "name": "TEST DYNAMIC PROGRAMMING PLANNER",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/tests/dynamic/dp_planner_test.py",
+            "program": "${workspaceRoot}/tests/replanners/acbba/acbba_replanner_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -140,32 +152,32 @@
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             }
         },
+        // {
+        //     "name": "ALGAL BLOOMS SCENARIO",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/scenarios/algal_blooms/main.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
+        //     }
+        // },
+        // {
+        //     "name": "ALGAL BLOOMS STUDY",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/scenarios/algal_blooms_study/main.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
+        //     }
+        // },
         {
-            "name": "ALGAL BLOOMS SCENARIO",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/scenarios/algal_blooms/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            }
-        },
-        {
-            "name": "ALGAL BLOOMS STUDY",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/scenarios/algal_blooms_study/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            }
-        },
-        {
-            "name": "REPLANNER STUDY",
+            "name": "DEBUG REPLANNER STUDY",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/scenarios/replanner_study/main.py",
@@ -179,22 +191,18 @@
                 "-d", "True"
             ]
         },
-        {
-            "name": "PREPLANNER STUDY",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/scenarios/preplanner_study/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            }
-            // "args": [
-            //     "-l", "0",
-            //     "-u", "1"
-            // ]
-        }
+        // {
+        //     "name": "PREPLANNER STUDY",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/scenarios/preplanner_study/main.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
+        //     }
+        // }
         
     ],
     "compounds": [
