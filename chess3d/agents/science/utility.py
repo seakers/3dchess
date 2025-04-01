@@ -104,6 +104,7 @@ def event_driven(
                 t_update : float, 
                 instrument : str,
                 **_):
+    """ Reward changes depending on the presense of an event and any prior obervation """
     
     # check if simulation has started yet
     if np.isnan(t_update) and np.isnan(t):

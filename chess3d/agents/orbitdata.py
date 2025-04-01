@@ -40,7 +40,7 @@ class TimeInterval:
             raise ValueError("cannot merge two time intervals with no overlap")
 
         self.start = max(self.start, __other.start)
-        self.end = min(self.min, __other.min)
+        self.end = min(self.end, __other.end)
 
     def extend(self, t: float) -> None:
         """ extends time interval """

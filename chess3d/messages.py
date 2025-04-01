@@ -36,7 +36,7 @@ def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
     elif msg_type == SimulationMessageTypes.OBSERVATION_PERFORMED.value:
         return ObservationPerformedMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.BUS.value:
-        return SenseMessage(**kwargs)
+        return BusMessage(**kwargs)
     else:
         raise NotImplementedError(f'Action of type {msg_type} not yet implemented.')
 

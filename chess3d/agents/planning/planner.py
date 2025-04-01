@@ -1,11 +1,9 @@
 
 from logging import Logger
-import math
 import queue
 import random
-from typing import Dict
 
-from instrupy.base import Instrument, BasicSensorModel
+from instrupy.base import BasicSensorModel
 from instrupy.util import ViewGeometry, SphericalGeometry
 from orbitpy.util import Spacecraft
 
@@ -70,7 +68,7 @@ class AbstractPlanner(ABC):
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
                              orbitdata : OrbitData,
-                             t : float = None
+                             **kwargs
                             ) -> list:
         """ 
         Schedules any broadcasts to be done. 
@@ -590,8 +588,14 @@ class AbstractPreplanner(AbstractPlanner):
                         ) -> bool:
         """ Determines whether a new plan needs to be initalized """    
 
-        return (current_plan.t < 0                  # simulation just started
-                or state.t >= self.plan.t_next)     # periodic planning period has been reached
+        if (current_plan.t < 0                  # simulation just started
+            or state.t >= current_plan.t_next):    # or periodic planning period has been reached
+            
+            pending_actions = [action for action in current_plan
+                               if action.t_start <= current_plan.t_next]
+            
+            return not bool(pending_actions)     # no actions left to do before the end of the replanning period 
+        return False
 
     @runtime_tracker
     def generate_plan(  self, 
@@ -673,7 +677,7 @@ class AbstractPreplanner(AbstractPlanner):
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
 
         # find wait start time
-        if prelim_plan.empty():
+        if prelim_plan.is_empty():
             t_wait_start = state.t 
         
         else:

@@ -649,7 +649,6 @@ class SimulatedAgent(AbstractAgent):
         # check action completion
         completed_actions, aborted_actions, pending_actions = self._check_action_completion(action_statuses)
 
-
         # extract latest state from senses
         states.sort(key = lambda a : a.state['t'])
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
@@ -678,7 +677,7 @@ class SimulatedAgent(AbstractAgent):
         # --- Create plan ---
         if self.preplanner is not None:
             # there is a preplanner assigned to this planner
-
+            
             # update preplanner precepts
             self.preplanner.update_percepts(state,
                                             self.plan, 
@@ -730,9 +729,9 @@ class SimulatedAgent(AbstractAgent):
                                         )
             
             if self.replanner.needs_planning(state, 
-                                                self.specs,
-                                                self.plan,
-                                                self.orbitdata):    
+                                             self.specs,
+                                             self.plan,
+                                             self.orbitdata):    
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_plan(plan, "ORIGINAL PLAN", logging.WARNING)
                 # x = 1 # breakpoint
@@ -740,12 +739,12 @@ class SimulatedAgent(AbstractAgent):
 
                 # Modify current Plan      
                 self.plan : Plan = self.replanner.generate_plan(state, 
-                                                            self.specs,    
-                                                            self.reward_grid,
-                                                            self.plan,
-                                                            self._clock_config,
-                                                            self.orbitdata
-                                                            )
+                                                                self.specs,    
+                                                                self.reward_grid,
+                                                                self.plan,
+                                                                self._clock_config,
+                                                                self.orbitdata
+                                                                )
 
                 # update last time plan was updated
                 self.t_plan = self.get_current_time()
@@ -758,8 +757,8 @@ class SimulatedAgent(AbstractAgent):
                 pending_actions = []
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
-                # x = 1 # breakpoint
+                self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                x = 1 # breakpoint
                 # -------------------------------------
 
         plan_out : list = self.plan.get_next_actions(state.t)

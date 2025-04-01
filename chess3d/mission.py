@@ -24,8 +24,7 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
-from chess3d.agents.planning.planners.consensus.dynamic import DynamicProgrammingACBBAReplanner
-from chess3d.agents.planning.preplanners.dynamic import DynamicProgrammingPlanner
+from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
 from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.nodes.manager import SimulationManager
@@ -35,10 +34,12 @@ from chess3d.agents.orbitdata import OrbitData, TimeInterval
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule
-from chess3d.agents.planning.planners.consensus.acbba import ACBBAPlanner
+from chess3d.agents.planning.preplanners.heuristic import HeuristicInsertionPlanner
 from chess3d.agents.planning.preplanners.earliest import EarliestAccessPlanner
 from chess3d.agents.planning.preplanners.nadir import NadirPointingPlaner
-from chess3d.agents.planning.preplanners.heuristic import HeuristicInsertionPlanner
+from chess3d.agents.planning.preplanners.dynamic import DynamicProgrammingPlanner
+from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
+from chess3d.agents.planning.replanners.consensus.dynamic import DynamicProgrammingACBBAReplanner
 from chess3d.agents.science.module import *
 from chess3d.agents.science.utility import utility_function, reobservation_strategy
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes, UAVAgentState
@@ -1478,29 +1479,30 @@ class SimulationElementsFactory:
                 debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
                 if replanner_type.lower() == 'broadcaster':
-                    raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
+                    mode = replanner_dict.get('mode', 'periodic').lower()
+                    period = replanner_dict.get('period', 500) if mode == 'periodic' else np.Inf
+
+                    replanner = BroadcasterReplanner(mode, period, debug, logger)
 
                 elif replanner_type.lower() == 'acbba': 
-                    max_bundle_size = replanner_dict.get('bundle size', 3)
                     threshold = replanner_dict.get('threshold', 1)
-                    horizon = replanner_dict.get('horizon', np.Inf)
 
-                    replanner = ACBBAPlanner(max_bundle_size, 
+                    replanner = ACBBAPlanner(
                                              threshold, 
-                                             horizon,
                                              debug,
-                                             logger)
+                                             logger
+                                             )
                     
-                elif replanner_type.lower() == 'acbba-dp': 
-                    max_bundle_size = replanner_dict.get('bundle size', 3)
-                    threshold = replanner_dict.get('threshold', 1)
-                    horizon = replanner_dict.get('horizon', np.Inf)
+                # elif replanner_type.lower() == 'acbba-dp': 
+                #     max_bundle_size = replanner_dict.get('bundle size', 3)
+                #     threshold = replanner_dict.get('threshold', 1)
+                #     horizon = replanner_dict.get('horizon', np.Inf)
 
-                    replanner = DynamicProgrammingACBBAReplanner(max_bundle_size, 
-                                                                threshold, 
-                                                                horizon,
-                                                                debug,
-                                                                logger)
+                #     replanner = DynamicProgrammingACBBAReplanner(max_bundle_size, 
+                #                                                 threshold, 
+                #                                                 horizon,
+                #                                                 debug,
+                #                                                 logger)
                 
                 else:
                     raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')

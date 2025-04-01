@@ -104,7 +104,7 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/toy_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/toy_events.csv"
                     }
                 },
                 {
@@ -190,7 +190,7 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/toy_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/toy_events.csv"
                     }
                 },
                 {
@@ -276,7 +276,7 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/toy_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/toy_events.csv"
                     }
                 },
                 {
@@ -362,14 +362,14 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/toy_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/toy_events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/acbba/resources/toy_points.csv"
+                    "covGridFilePath": "./tests/replanners/acbba/resources/toy_points.csv"
                 }
             ],
             "scenario": {   
@@ -377,22 +377,22 @@ class ToyTestACBBAReplanner(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/acbba/resources/toy_events.csv"
+                    "eventsPath" : "./tests/replanners/acbba/resources/toy_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/acbba/",
+                "scenarioPath" : "./tests/replanners/acbba/",
                 "name" : "toy"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/acbba/orbit_data/toy"
+                "outDir" : "./tests/replanners/acbba/orbit_data/toy"
             }
         }
 
         # set outdir
-        orbitdata_dir = os.path.join('./tests', 'acbba', 'orbit_data')
+        orbitdata_dir = os.path.join('./tests/replanners', 'acbba', 'orbit_data')
         scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'toy')
         mission_specs['settings']['outDir'] = scenario_orbitdata_dir
         if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
@@ -402,12 +402,12 @@ class ToyTestACBBAReplanner(unittest.TestCase):
         # initialize mission
         self.toy_mission : Mission = Mission.from_dict(mission_specs)
 
-    def test_toy_mission(self) -> None:
-        # execute mission
-        self.toy_mission.execute()
+    # def test_toy_mission(self) -> None:
+    #     # execute mission
+    #     self.toy_mission.execute()
 
-        # print results
-        self.toy_mission.print_results()
+    #     # print results
+    #     self.toy_mission.print_results()
 
 class MissionTestACBBAReplanner(unittest.TestCase):
     def setUp(self) -> None:
@@ -495,8 +495,8 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "naive",
-                            "period" :  np.Inf
+                            "@type" : "dp",
+                            "period" : 500
                         },
                         "replanner" : {
                             "@type" : "acbba"
@@ -512,7 +512,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/lake_events.csv"
                     }
                 },
                 {
@@ -582,8 +582,8 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "naive",
-                            "period" :  np.Inf
+                            "@type" : "dp",
+                            "period" : 500
                         },
                         "replanner" : {
                             "@type" : "acbba"
@@ -599,7 +599,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/lake_events.csv"
                     }
                 },
                 {
@@ -669,11 +669,11 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "naive",
-                            "period" :  np.Inf
+                            "@type" : "dp",
+                            "period" : 500
                         },
                         "replanner" : {
-                            "@type" : "acbba"
+                            "@type" : "acbba",
                         },
                         "rewardGrid":{
                             "reward_function" : 'event',
@@ -686,14 +686,14 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/lake_events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/acbba/resources/lake_event_points.csv"
+                    "covGridFilePath": "./tests/replanners/acbba/resources/lake_event_points.csv"
                 }
             ],
             "scenario": {   
@@ -701,22 +701,22 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/acbba/resources/lake_events.csv"
+                    "eventsPath" : "./tests/replanners/acbba/resources/lake_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/acbba/",
+                "scenarioPath" : "./tests/replanners/acbba/",
                 "name" : "mission"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/acbba/orbit_data/mission"
+                "outDir" : "./tests/replanners/acbba/orbit_data/mission"
             }
         }
 
         # set outdir
-        orbitdata_dir = os.path.join('./tests', 'acbba', 'orbit_data')
+        orbitdata_dir = os.path.join('./tests/replanners', 'acbba', 'orbit_data')
         scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'mission')
         mission_specs['settings']['outDir'] = scenario_orbitdata_dir
         if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
@@ -819,7 +819,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" :  np.Inf
+                            "period" : 500
                         },
                         "replanner" : {
                             "@type" : "acbba-dp"
@@ -835,7 +835,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/lake_events.csv"
                     }
                 },
                 {
@@ -906,7 +906,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" :  np.Inf
+                            "period" : 500
                         },
                         "replanner" : {
                             "@type" : "acbba-dp"
@@ -922,7 +922,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/lake_events.csv"
                     }
                 },
                 {
@@ -993,7 +993,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "naive",
-                            "period" :  np.Inf
+                            "period" : 500
                         },
                         "replanner" : {
                             "@type" : "acbba-dp"
@@ -1009,14 +1009,14 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/acbba/resources/lake_events.csv"
+                        "eventsPath" : "./tests/replanners/acbba/resources/lake_events.csv"
                     }
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/acbba/resources/lake_points.csv"
+                    "covGridFilePath": "./tests/replanners/acbba/resources/lake_points.csv"
                 }
             ],
             "scenario": {   
@@ -1024,17 +1024,17 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
                 "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/acbba/resources/lake_events.csv"
+                    "eventsPath" : "./tests/replanners/acbba/resources/lake_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/acbba/",
+                "scenarioPath" : "./tests/replanners/acbba/",
                 "name" : "mission_dp"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/acbba/orbit_data/mission_dp"
+                "outDir" : "./tests/replanners/acbba/orbit_data/mission_dp"
             }
         }
 

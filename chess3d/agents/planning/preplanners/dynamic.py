@@ -35,51 +35,51 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                          debug, 
                          logger)
         
-        # initialize attributes
-        self.pending_observations_to_broadcast : set[ObservationAction] = set()     # set of completed observations that have not been broadcasted
+        # # initialize attributes
+        # self.pending_observations_to_broadcast : set[ObservationAction] = set()     # set of completed observations that have not been broadcasted
         
-    def update_percepts(self, 
-                        state: SimulationAgentState, 
-                        current_plan: Plan, 
-                        incoming_reqs: list, 
-                        relay_messages: list,
-                        misc_messages: list, 
-                        completed_actions: list, 
-                        aborted_actions: list, 
-                        pending_actions: list
-                        ) -> None:
-        # update incoming list of percepts
-        super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
+    # def update_percepts(self, 
+    #                     state: SimulationAgentState, 
+    #                     current_plan: Plan, 
+    #                     incoming_reqs: list, 
+    #                     relay_messages: list,
+    #                     misc_messages: list, 
+    #                     completed_actions: list, 
+    #                     aborted_actions: list, 
+    #                     pending_actions: list
+    #                     ) -> None:
+    #     # update incoming list of percepts
+    #     super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
 
         # # update list of pending observation completion broadcasts
         # if self.sharing:
-        #     # collect completed observation broadcasts
-        #     completed_broadcasts = {message_from_dict(**action.msg) 
-        #                         for action in completed_actions
-        #                         if isinstance(action, BroadcastMessageAction)}
+            # # collect completed observation broadcasts
+            # completed_broadcasts = {message_from_dict(**action.msg) 
+            #                     for action in completed_actions
+            #                     if isinstance(action, BroadcastMessageAction)}
 
-        #     # update recently performed observation broadcasts list
-        #     completed_observations : set[ObservationAction]= {  action 
-        #                                                         for action in completed_actions
-        #                                                         if isinstance(action, ObservationAction)}
-        #     self.pending_observations_to_broadcast.update(completed_observations)
+            # # update recently performed observation broadcasts list
+            # completed_observations : set[ObservationAction]= {  action 
+            #                                                     for action in completed_actions
+            #                                                     if isinstance(action, ObservationAction)}
+            # self.pending_observations_to_broadcast.update(completed_observations)
 
-        #     # remove recently performed observation broadcasts from pending broadcasts list
-        #     completed_observation_broadcasts : set[ObservationAction] = {action_from_dict(**broadcast.observation_action)
-        #                                                                 for broadcast in completed_broadcasts
-        #                                                                 if isinstance(broadcast, ObservationPerformedMessage)}
-        #     self.pending_observations_to_broadcast.difference_update(completed_observation_broadcasts)
+            # # remove recently performed observation broadcasts from pending broadcasts list
+            # completed_observation_broadcasts : set[ObservationAction] = {action_from_dict(**broadcast.observation_action)
+            #                                                             for broadcast in completed_broadcasts
+            #                                                             if isinstance(broadcast, ObservationPerformedMessage)}
+            # self.pending_observations_to_broadcast.difference_update(completed_observation_broadcasts)
 
 
-    def needs_planning(self, state: SimulationAgentState, __: object, current_plan: Plan) -> bool:
-        if super().needs_planning(state, __, current_plan):
-            # replanning period has passed; check if any actions in the plan are left to be performed 
+    # def needs_planning(self, state: SimulationAgentState, __: object, current_plan: Plan) -> bool:
+    #     if super().needs_planning(state, __, current_plan):
+    #         # replanning period has passed; check if any actions in the plan are left to be performed 
 
-            pending_actions = [action for action in self.plan
-                               if action.t_start <= self.plan.t_next]
+    #         pending_actions = [action for action in self.plan
+    #                            if action.t_start <= self.plan.t_next]
             
-            return not bool(pending_actions)
-        return False
+    #         return not bool(pending_actions)
+    #     return False
 
     # @runtime_tracker
     # def generate_plan(  self, 
@@ -175,21 +175,6 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                     for prev_opportunity in tqdm(access_opportunities, 
                                                 desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix', 
                                                 leave=False)]
-        
-        t_2_1 = time.perf_counter() - t_prev
-        t_prev = time.perf_counter()
-
-        # with tqdm(  total=len(access_opportunities), 
-        #             desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix', 
-        #             leave=False
-        #         ) as pbar:
-        #     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:                                
-        #         # populate adjacency matrix
-        #         futures = [executor.submit(self.populate_adjacency_matrix, state, specs, access_opportunities, ground_points, adjacency, j) 
-        #                    for j in range(len(access_opportunities))]
-                
-        #         # update progress bar
-        #         for _ in concurrent.futures.as_completed(futures): pbar.update(1)
                
         t_2 = time.perf_counter() - t_prev
         t_prev = time.perf_counter()
@@ -241,11 +226,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             target = [lat,lon,0.0]
             observation = ObservationAction(instrument_name, target, th_imgs[j], t_imgs[j])
             observations.append(observation)
-        
-        # # filter out observations that go beyond the replanning period
-        # filtered_observations = [observation for observation in observations 
-        #                 if observation.t_start <= self.plan.t_next+self.period]
-        
+                
         t_5 = time.perf_counter() - t_prev
         t_f = time.perf_counter() - t_0
 
@@ -299,7 +280,6 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                 rewards[j] = reward_grid.estimate_reward(feasible_observation)
 
             return
-
 
         prev_observations : Dict[int, ObservationAction] = {i : ObservationAction(prev_opportunity[2], 
                                                                                     [*ground_points[prev_opportunity[0]][prev_opportunity[1]],0.0], 

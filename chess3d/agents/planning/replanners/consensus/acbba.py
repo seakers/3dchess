@@ -8,21 +8,13 @@ from dmas.utils import runtime_tracker
 
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.planners.consensus.bids import Bid
-from chess3d.agents.planning.planners.consensus.consensus import AbstractConsensusReplanner
+from chess3d.agents.planning.replanners.consensus.bids import Bid
+from chess3d.agents.planning.replanners.consensus.consensus import AbstractConsensusReplanner
 from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 
 
 class ACBBAPlanner(AbstractConsensusReplanner):
-    def __init__(self, 
-                 max_bundle_size: int = 1, 
-                 replan_threshold: int = 1,
-                 planning_horizon: float = np.Inf, 
-                 debug : bool = False,
-                 logger: Logger = None) -> None:
-        super().__init__(max_bundle_size, replan_threshold, planning_horizon, debug, logger)
-
     @runtime_tracker    
     def _generate_bids_from_request(self, 
                                     req: MeasurementRequest, 

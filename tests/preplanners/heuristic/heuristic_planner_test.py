@@ -247,12 +247,13 @@ class TestBenCase(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "heuristic",
-                            # "period": 1000,
+                            "period": 1000,
                             # "horizon": 500,
                         },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster"
-                        # },
+                        "replanner" : {
+                            "@type" : "broadcaster",
+                            "period" : 400
+                        },
                         "rewardGrid":{
                             "reward_function" : 'event',
                             'initial_reward' : 1.0,
