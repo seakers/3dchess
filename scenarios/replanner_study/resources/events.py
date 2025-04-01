@@ -53,6 +53,7 @@ def main(experiments_name : str,
 
         # get grid
         if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
+        if 'inland' in grid_name: grid_name += f'_seed-{seed}'
         grid_path : str = os.path.join('./grids', f'{grid_name}.csv')
         grid : pd.DataFrame = pd.read_csv(grid_path)
 

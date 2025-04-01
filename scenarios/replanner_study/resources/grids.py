@@ -4,23 +4,16 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.basemap import Basemap
 import numpy as np
 import pandas as pd
+from shapely import MultiPoint
 from tqdm import tqdm
-from geopy.geocoders import Nominatim
-
-
-
-def is_land(geolocator, lat, lon):
-    try:
-        location = geolocator.reverse((lat, lon), exactly_one=True)
-        return location is not None  # If reverse geocoding succeeds, it's land
-    except:
-        return False  # If it fails, assume water
+import geopandas as gpd
+from shapely.geometry import Point
 
 def main(
          n_points : int,
          grid_type : str,
-         distribution : str,
-         geolocator : list,
+         world : gpd.GeoDataFrame,
+         rivers : gpd.GeoDataFrame,
          overwrite : bool = True,
          plot : bool = False,
          seed : int = 1000
@@ -28,16 +21,22 @@ def main(
 
     # generate grids
     if grid_type.lower() == 'uniform':
-        grid_path = create_uniform_grid(n_points, distribution, geolocator, overwrite)
+        grid_path = create_uniform_grid(n_points, overwrite)
     
-    elif grid_type.lower() == 'clustered':
-        raise NotImplementedError(f'Cannot generate grid of type `{grid_type}`. Type not yet supported.')
+    # elif grid_type.lower() == 'clustered':
+    #     raise NotImplementedError(f'Cannot generate grid of type `{grid_type}`. Type not yet supported.')
     
     elif grid_type.lower() == 'fibonacci':
-        grid_path = create_fibonacci_grid(n_points, distribution, overwrite)
+        grid_path = create_fibonacci_grid(n_points, overwrite)
     
     elif grid_type.lower() == 'hydrolakes':
-        grid_path = sample_hyrolakes(n_points, distribution, overwrite, seed)
+        grid_path = sample_hyrolakes(n_points, overwrite, seed)
+
+    elif grid_type.lower() == 'inland':
+        grid_path = sample_inland(n_points, world, overwrite, seed)
+
+    elif grid_type.lower() == 'rivers':
+        grid_path = sample_rivers(n_points, rivers, overwrite, seed)
     
     else:
         raise ValueError(f'Cannot generate grid of type `{grid_type}`. Type not supported.')
@@ -47,12 +46,11 @@ def main(
         
         
 def create_uniform_grid(n_points : int,
-                        distribution : str,
-                        geolocator, 
+                        world : gpd.GeoDataFrame, 
                         overwrite : bool
                         ) -> str:
     # set grid name
-    grid_path : str = os.path.join('grids', f'uniform_grid_{distribution}_{n_points}.csv')
+    grid_path : str = os.path.join('grids', f'uniform_grid_{n_points}.csv')
     
     # check if grid already exists
     if os.path.isfile(grid_path) and not overwrite: return grid_path
@@ -73,16 +71,6 @@ def create_uniform_grid(n_points : int,
                     if lon < 180
                     ]
     
-    # remove points that are not on land
-    if 'land' in distribution:
-        new_groundpoints = []
-        for point in tqdm(groundpoints, desc='Checking if points are on land'):
-            if is_land(geolocator, point[0], point[1]):
-                new_groundpoints.append(point)
-        # new_groundpoints = [point for point in groundpoints 
-        #                 if is_land(geolocator, point[0], point[1])]
-        x = 1
-
     assert len(groundpoints) >= n_points
 
     # create dataframe
@@ -95,11 +83,10 @@ def create_uniform_grid(n_points : int,
     return grid_path
 
 def create_fibonacci_grid(n_points : int,
-                          distribution : str,
                           overwrite : bool
                           ) -> str:
     # set grid name
-    grid_path : str = os.path.join('grids', f'fibonacci_grid_{distribution}_{n_points}.csv')
+    grid_path : str = os.path.join('grids', f'fibonacci_grid_{n_points}.csv')
     
     # check if grid already exists
     if os.path.isfile(grid_path) and not overwrite: return grid_path
@@ -120,16 +107,6 @@ def create_fibonacci_grid(n_points : int,
 
         groundpoints.append([lat,lon])
 
-    # remove points that are not on land
-    if 'land' in distribution:
-        new_groundpoints = []
-        for point in tqdm(groundpoints, desc='Checking if points are on land'):
-            if is_land(geolocator, point[0], point[1]):
-                new_groundpoints.append(point)
-        # new_groundpoints = [point for point in groundpoints 
-        #                 if is_land(geolocator, point[0], point[1])]
-        x = 1
-
     # create dataframe
     df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
 
@@ -140,7 +117,6 @@ def create_fibonacci_grid(n_points : int,
     return grid_path
 
 def sample_hyrolakes(n_points : int,
-                     distribution : str,
                      overwrite : bool,
                      seed : int,
                     ) -> str:
@@ -148,13 +124,13 @@ def sample_hyrolakes(n_points : int,
     random.seed(seed)
 
     # set grid name
-    grid_path : str = os.path.join('grids', f'hydrolakes_grid_{distribution}_{n_points}_seed-{seed}.csv')
+    grid_path : str = os.path.join('grids', f'hydrolakes_grid_{n_points}_seed-{seed}.csv')
     
     # check if grid already exists
     if os.path.isfile(grid_path) and not overwrite: return grid_path
 
     # load original hydrolakes dataset
-    original_grid_path = os.path.join('grids', f'hydrolakes_dataset.csv')
+    original_grid_path = os.path.join('grids', 'hydrolakes', f'hydrolakes_dataset.csv')
     hydrolakes : pd.DataFrame = pd.read_csv(original_grid_path)
 
     # check inputs
@@ -163,6 +139,81 @@ def sample_hyrolakes(n_points : int,
     # collect groundpoints
     all_groundpoints = [[lat,lon] for lat,lon in hydrolakes.values]
     groundpoints = random.sample(all_groundpoints, n_points)
+
+    # create dataframe
+    df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
+
+    # save to csv
+    df.to_csv(grid_path,index=False)
+
+    # return address
+    return grid_path
+
+def sample_inland(n_points : int,
+                  world : gpd.GeoDataFrame,
+                  overwrite : bool,
+                  seed : int,
+                  ) -> str:
+    # set random seed
+    random.seed(seed)
+    
+    # set grid name
+    grid_path : str = os.path.join('grids', f'inland_grid_{n_points}_seed-{seed}.csv')
+    
+    # check if grid already exists
+    if os.path.isfile(grid_path) and not overwrite: return grid_path
+    
+    groundpoints = []
+    # collect groundpoints
+    
+    with tqdm(total=n_points, desc='sampling inland points') as pbar:
+        while len(groundpoints) < n_points:
+            # generate random point
+            lat = random.uniform(-90, 90)
+            lon = random.uniform(-180, 180)
+
+            if [lat,lon] in groundpoints: continue
+
+            # check if point is on land
+            if any(world.contains(Point(lon, lat))):
+                groundpoints.append([lat, lon])
+                pbar.update(1)
+
+    # create dataframe
+    df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
+
+    # save to csv
+    df.to_csv(grid_path,index=False)
+
+    # return address
+    return grid_path
+
+def sample_rivers(n_points : int,
+                  rivers : gpd.GeoDataFrame,
+                  overwrite : bool,
+                  seed : int,
+                  ) -> str:
+    # set random seed
+    random.seed(seed)
+    
+    # set grid name
+    grid_path : str = os.path.join('grids', f'rivers_grid_{n_points}_seed-{seed}.csv')
+    
+    # check if grid already exists
+    if os.path.isfile(grid_path) and not overwrite: return grid_path
+    
+    groundpoints = []
+    # collect groundpoints
+    n_samples = int(n_points/len(world))
+    series : gpd.GeoSeries = world.sample_points(n_samples)
+    for multi_point in series:
+        multi_point : MultiPoint
+        for point in multi_point.geoms:
+            lat,lon = point.coords.xy
+            lat = list(lat)[0]
+            lon = list(lon)[0]
+            groundpoints.append([lat,lon])
+            x = 1
 
     # create dataframe
     df = pd.DataFrame(data=groundpoints, columns=['lat [deg]','lon [deg]'])
@@ -200,9 +251,17 @@ def plot_grid(grid_path : str, grid_type : str, n_points : int, overwrite : bool
 
     # close plot
     plt.close()
-
-
+    
 if __name__ == "__main__":
+
+    # Manually specify the path to Natural Earth shapefile (download if needed)
+    WORLD_SHAPEFILE_PATH = "./grids/ne_110m_land/ne_110m_land.shp"  
+    RIVERS_SHAPEFILE_PATH = "./grids/ne_110m_rivers_lake_centerlines/ne_110m_rivers_lake_centerlines.shp"  
+
+    # Load the landmass shapefile
+    world : gpd.GeoDataFrame = gpd.read_file(WORLD_SHAPEFILE_PATH)
+    rivers : gpd.GeoDataFrame = gpd.read_file(RIVERS_SHAPEFILE_PATH)
+
     # set seed
     seed = 1000
 
@@ -213,23 +272,18 @@ if __name__ == "__main__":
     # collect grid types, number of groundpoints and grid distribution
     grid_types : list = experiments['Grid Type'].unique(); grid_types.sort()
     points : list = experiments['Number of Ground-Points'].unique(); points.sort()
-    grid_distribution : list = experiments['Grid Distribution'].unique(); points.sort()
-
-    # Load Natural Earth land shapefile
-    geolocator = Nominatim(user_agent="geo_checker")
 
     # plot original hydrolakes database
-    plot_grid('./grids/hydrolakes_dataset.csv', 'hydrolakes', 5000, overwrite=True)
+    plot_grid('./grids/hydrolakes/hydrolakes_dataset.csv', 'hydrolakes', 5000, overwrite=True)
 
     # generate grids and plots for all types and number of groundpoints
-    with tqdm(range(len(grid_types) * len(points) * len(grid_distribution)), desc='Generating coverage grids') as pbar:
-        for distribution in grid_distribution:
-            for grid_type in grid_types:
-                for n_points in points:
-                    
-                    if grid_type == 'hydrolakes' and n_points > 5000:
-                        pbar.update(1)
-                        continue
-
-                    main(n_points, grid_type, distribution, geolocator, overwrite=False, plot=True)
+    with tqdm(range(len(grid_types) * len(points)), desc='Generating coverage grids') as pbar:
+        for grid_type in grid_types:
+            for n_points in points:
+                
+                if grid_type == 'hydrolakes' and n_points > 5000:
                     pbar.update(1)
+                    continue
+
+                main(n_points, grid_type, world, rivers, overwrite=False, plot=True)
+                pbar.update(1)

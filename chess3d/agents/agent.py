@@ -706,8 +706,8 @@ class SimulatedAgent(AbstractAgent):
                 self.plan_history.append((state.t, plan_copy))
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
-                x = 1 # breakpoint
+                # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                # x = 1 # breakpoint
                 # -------------------------------------
 
         t_3 = time.perf_counter()
@@ -757,7 +757,7 @@ class SimulatedAgent(AbstractAgent):
                 pending_actions = []
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 

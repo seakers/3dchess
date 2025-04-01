@@ -25,8 +25,8 @@ def main(
 
     # stop if debugging mode is on
     if debug: 
-        lower_bound = 220
-        upper_bound = 225
+        lower_bound = 42
+        upper_bound = 43
         print('WARNING: Debug mode activated.')
 
     # get experiments name
@@ -87,16 +87,18 @@ def main(
 
         # extract planner info
         preplanner = row['Preplanner']
-        replanner = row['Replanner'] if row['Replanner'] != 'none' else 'broadcaster'
+        replanner = row['Replanner'] 
         n_points = row['Number of Ground-Points']
         fraction_points_considered = row['Percent Ground-Points Considered']
         grid_name = f"{row['Grid Type']}_grid_{row['Number of Ground-Points']}"
         if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
+        if 'inland' in grid_name: grid_name += f'_seed-{seed}'
         
-        if preplanner in ['dp', 'dynamic']:
-            period, horizon = 500, 500
-        else:
-            period, horizon = np.Inf, np.Inf
+        # if preplanner in ['dp', 'dynamic']:
+        #     period, horizon = 500, 500
+        # else:
+        #     period, horizon = np.Inf, np.Inf
+        period, horizon = 500, 500
 
         # extract satellite capability parameters
         field_of_regard = 1e-6 if preplanner == 'nadir' and replanner == 'broadcaster' else row['Field of Regard (deg)']
@@ -183,7 +185,7 @@ def main(
 
                 # set replanner
                 sat['planner']['replanner']['@type'] = replanner
-                if replanner in ['broadcaster', 'none']: sat['planner'].pop('replanner')
+                if replanner in 'none': sat['planner'].pop('replanner')
 
                 # set science
                 events_path = os.path.join(scenario_dir, 'resources', 'events', experiments_name, f"{scenario_name}_events.csv")

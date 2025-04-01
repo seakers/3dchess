@@ -177,7 +177,7 @@
         //     }
         // },
         {
-            "name": "REPLANNER STUDY",
+            "name": "DEBUG REPLANNER STUDY",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/scenarios/replanner_study/main.py",

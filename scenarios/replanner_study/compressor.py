@@ -4,7 +4,7 @@ import shutil
 from tqdm import tqdm
 
 def main(results_path : str = './results'):
-    """ Removes unnecessary data from results to save hard drive space. """    
+    """ Removes unused data from results to save hard drive space. """    
 
     for experiment in tqdm(os.listdir(results_path), desc='Clearing runtime stats from results'):
         experiment_path : str = os.path.join(results_path, experiment)
