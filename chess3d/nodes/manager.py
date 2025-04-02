@@ -157,7 +157,7 @@ class SimulationManager(AbstractManager):
         except asyncio.CancelledError:
             return
         
-    async def wait_for_tic_requests(self, timeout : float=5*60):
+    async def wait_for_tic_requests(self, timeout : float=10*60):
         """
         Awaits for all agents to send tic requests
         
