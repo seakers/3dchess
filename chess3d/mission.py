@@ -232,6 +232,8 @@ class Mission:
                 pool.submit(agent.run, *[])  
     
     def print_results(self, precission : int = 5) -> None:
+        print(f"\n\n{'#'*20} Compiling Results... {'#'*20}\n")
+
         # define file name
         summary_path = os.path.join(f"{self.results_path}","summary.csv")
 

@@ -203,6 +203,7 @@ def main(
         print_welcome(experiment_name)
 
         # define results output file name
+        results_dir = os.path.join(scenario_dir, 'results', experiment_name)
         results_summary_path = os.path.join(scenario_dir, 'results', experiment_name, 'summary.csv')
 
         # initialize mission
@@ -213,7 +214,11 @@ def main(
         assert os.path.isdir(os.path.join(scenario_dir, 'results', experiment_name))
 
         # execute mission if it hasn't been performed yet or if results need to be overwritten
-        if not os.path.isfile(results_summary_path) or overwrite: mission.execute()
+        if (not os.path.isdir(results_dir) 
+            or all([len(os.listdir(os.path.join(results_dir, d))) == 0 for d in os.listdir(results_dir)]) 
+            or overwrite
+            ): 
+            mission.execute()
 
         # print results if it hasn't been performed yet or if results need to be reevaluated
         if not os.path.isfile(results_summary_path) or reeval: mission.print_results()
