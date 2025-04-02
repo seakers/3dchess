@@ -232,14 +232,16 @@ class Mission:
                 pool.submit(agent.run, *[])  
     
     def print_results(self, precission : int = 5) -> None:
-        print(f"\n\n{'#'*20} Compiling Results... {'#'*20}\n")
+        print(f"\n\n{'#'*20} RESULTS {'#'*20}\n")
 
         # define file name
         summary_path = os.path.join(f"{self.results_path}","summary.csv")
 
         # collect results
+        print('Collecting orbit data...')
         orbitdata : dict = OrbitData.from_directory(self.orbitdata_dir) if self.orbitdata_dir is not None else None
 
+        print('Collecting observations performed data...')
         try:
             observations_performed = pd.read_csv((os.path.join(self.environment.results_path, 'measurements.csv')))
         except pd.errors.EmptyDataError:
@@ -247,12 +249,14 @@ class Mission:
             observations_performed = pd.DataFrame(data=[],columns=columns)
 
         # load all senario events
+        print('Loading event data...')
         events = pd.read_csv(self.environment.events_path) 
 
         # filter out events that do not occurr during this simulation
         events = events[events['start time [s]'] <= self.manager._clock_config.get_total_seconds()] 
 
         # compile events detected
+        print('Collecting event detection data...')
         event_detections = None
         for agent in self.agents:
             _,agent_name = agent.name.split('/')
@@ -265,6 +269,7 @@ class Mission:
                 event_detections = pd.concat([event_detections, events_detected_temp], axis=0)
 
         # compile mesurement requests
+        print('Collecting measurement request data...')
         try:
             measurement_reqs = pd.read_csv((os.path.join(self.environment.results_path, 'requests.csv')))
         except pd.errors.EmptyDataError:
@@ -272,9 +277,11 @@ class Mission:
             measurement_reqs = pd.DataFrame(data=[],columns=columns)
 
         # summarize results
+        print('Generating results summary...')
         results_summary : pd.DataFrame = self.summarize_results(orbitdata, observations_performed, events, event_detections, measurement_reqs, precission)
 
         # log and save results summary
+        # print(f"\n\n{'#'*20}{'#'*20}\n")
         print(f"\nSIMULATION RESULTS SUMMARY:\n{str(results_summary)}\n\n")
         results_summary.to_csv(summary_path, index=False)
 
