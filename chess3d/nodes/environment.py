@@ -644,7 +644,8 @@ class SimulationEnvironment(EnvironmentNode):
             stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
 
             # print final time
-            self.log(f'shutdown with internal clock of {self.get_current_time()}[s]', level=logging.WARNING)
+            print('\n')
+            self.log(f'successfully shutdown', level=logging.WARNING)
         
         except asyncio.CancelledError as e:
             raise e
