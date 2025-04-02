@@ -4,6 +4,7 @@ import datetime
 from datetime import timedelta
 from itertools import repeat
 import logging
+from multiprocessing import Pool
 import os
 import random
 from typing import Any
@@ -467,20 +468,15 @@ class Mission:
                               ) -> tuple:
                
         # classify observations per GP
-        observed_gps = {(lat,lon) for _,_,lat,lon,*_ in tqdm(observations_performed.values, desc='Collecting observed ground points', leave=False)}
-        observations_per_gp : Dict[tuple, list] = { (lat,lon) :   [(observer,t_img,lat_img,lon_img,__,instrument)
-                                                                    for observer,t_img,lat_img,lon_img,*__,instrument in observations_performed.values
-                                                                    if abs(lat - lat_img) <= 1e-3
-                                                                    and abs(lon - lon_img) <= 1e-3]
-                                                                    for lat,lon in tqdm(observed_gps, desc='Classifying observations per ground point', leave=False)}
+        observations_per_gp = {group : [(observer,t_img,lat_img,lon_img,__,instrument) 
+                                        for (observer,t_img,lat_img,lon_img,*__,instrument) in data.values]
+                                 for group,data in observations_performed.groupby(['lat', 'lon'])}
+
         # classify events per ground point
-        gps_with_events = {(lat,lon) for _,_,lat,lon,*_ in tqdm(events.values, desc='Collecting ground points with events', leave=False)}
-        events_per_gp : Dict[tuple, list] = {(lat,lon): [[t_start,duration,severity,observations_req] 
-                                                        for *_,lat_event,lon_event,t_start,duration,severity,observations_req in events.values
-                                                        if abs(lat - lat_event) <= 1e-3
-                                                        and abs(lon - lon_event) <= 1e-3] 
-                                                        for lat,lon in tqdm(gps_with_events, desc='Classifying events per ground point', leave=False)}
-        
+        events_per_gp = {group : [[t_start,duration,severity,observations_req]
+                                  for *_,t_start,duration,severity,observations_req in data.values]
+                        for group,data in events.groupby(['lat [deg]', 'lon [deg]'])}
+
         # count event presense, detections, and observations
         events_observable : Dict[tuple, list] = {}
         events_detected : Dict[tuple, list] = {}
@@ -514,28 +510,21 @@ class Mission:
         events_co_observable_fully : Dict[tuple, list] = {}
         events_co_observable_partially : Dict[tuple, list] = {}
 
-        for event,access_intervals in tqdm(events_observable.items(), desc='Compiling possible co-observations', leave=False):
+        for event, access_intervals in tqdm(events_observable.items(), desc='Compiling possible co-observations', leave=False):
             # get required measurements for a given event
-            *_,observations_req = event
-            observations_req : list = str_to_list(observations_req)
-            
-            # get types of observations that can be performed for this event
-            observation_types = list({instrument
-                                    for *_, instrument in access_intervals
-                                    if instrument in observations_req})
-            
-            # check if there are observations that satisfy the requirements of the request
-            if len(observation_types) > 1:
-                # check if valid co-observations match this event
-                co_observation_opportunities : set = {  (*_, instrument) 
-                                                        for *_, instrument in access_intervals
-                                                        if instrument in observations_req
-                                                    }                
+            observations_req = set(str_to_list(event[-1]))
 
-                if all([observation_req in observation_types for observation_req in observations_req]):
+            # get types of observations that can be performed for this event
+            instruments = {instrument for *_, instrument in access_intervals if instrument in observations_req}
+
+            # check if there are observations that satisfy the requirements of the request
+            if len(instruments) > 1:
+                # check if valid co-observations match this event
+                co_observation_opportunities = {(*_, instrument) for *_, instrument in access_intervals if instrument in observations_req}
+
+                if observations_req.issubset(instruments):
                     # all required observation types were performed; event was fully co-observed
                     events_co_observable_fully[event] = co_observation_opportunities
-
                 else:
                     # some required observation types were performed; event was parially co-observed
                     events_co_observable_partially[event] = co_observation_opportunities
@@ -548,38 +537,30 @@ class Mission:
         events_co_obs_fully : Dict[tuple, list] = {}
         events_co_obs_partially : Dict[tuple, list] = {}
 
-        for event,observations in tqdm(events_observed.items(), desc='Compiling co-observations', leave=False):
+        for event, observations in tqdm(events_observed.items(), desc='Compiling co-observations', leave=False):
             # get required measurements for a given event
-            *_,observations_req = event
-            observations_req : list = str_to_list(observations_req)
-            
-            # get types of observations that were performed for this event
-            observation_types = list({instrument
-                                    for *_, instrument in observations
-                                    if instrument in observations_req})
-            
+            observations_req = set(str_to_list(event[-1]))
+            instruments = {instrument for *_, instrument in observations if instrument in observations_req}
+
             # check if there are observations that satisfy the requirements of the request
-            if len(observation_types) > 1:
-                # check if valid co-observations match this event
-                co_observations : set = {(*_, instrument) 
-                                        for *_, instrument in observations
-                                        if instrument in observations_req}
-                
+            if len(instruments) > 1:
+                # check if valid co-observations match this even
+                co_observations = {(*_, instrument) for *_, instrument in observations if instrument in observations_req}
+
                 # find which observations may have triggered co-observations
                 if event in events_requested:
-                    requesting_observations = {(lat, lon, t_start, duration, severity, observer, t_img, instrument)
-                                            for lat, lon, t_start, duration, severity, observer, t_img, instrument in co_observations
-                                            for _, requester, _, _, _, t_start_req, *_ in events_requested[event]
-                                            if abs(t_start_req - t_img) <= 1e-3
-                                            and requester == observer
-                                            }
+                    requesting_observations = {
+                        (lat, lon, t_start, duration, severity, observer, t_img, instrument)
+                        for lat, lon, t_start, duration, severity, observer, t_img, instrument in co_observations
+                        for _, requester, _, _, _, t_start_req, *_ in events_requested[event]
+                        if abs(t_start_req - t_img) <= 1e-3 and requester == observer
+                    }
                     # remove requesting observations from co-observations (if any)
                     co_observations.difference_update(requesting_observations)
 
-                if all([observation_req in observation_types for observation_req in observations_req]):
+                if observations_req.issubset(instruments):
                     # all required observation types were performed; event was fully co-observed
                     events_co_obs_fully[event] = co_observations
-
                 else:
                     # some required observation types were performed; event was parially co-observed
                     events_co_obs_partially[event] = co_observations
@@ -612,38 +593,47 @@ class Mission:
         matching_accesses = [
                                 (t_index*agent_orbit_data.time_step, agent_name, instrument)
                                 for _, agent_orbit_data in orbitdata.items()
-                                for t_index,gp_index,pnt_opt_index,gp_lat,gp_lon,*_,instrument,agent_name in agent_orbit_data.gp_access_data.values
-                                if abs(lat - gp_lat) < 1e-3 
+                                for t_index,__,___,gp_lat,gp_lon,*____,instrument,agent_name in agent_orbit_data.gp_access_data.values
+                                if t_start <= t_index*agent_orbit_data.time_step <= t_start+duration
+                                and abs(lat - gp_lat) < 1e-3 
                                 and abs(lon - gp_lon) < 1e-3
-                                and t_start <= t_index*agent_orbit_data.time_step <= t_start+duration
                                 and instrument in observations_req
                             ]
-        
+
         # initialize map of compiled access intervals
-        access_intervals : Dict[tuple,TimeInterval] = dict()
+        access_intervals : Dict[tuple,list[TimeInterval]] = dict()
 
         # compile list of accesses
         for t_access, agent_name, instrument in matching_accesses:
             if (agent_name,instrument) not in access_intervals:
                 time_step = orbitdata[agent_name].time_step 
-                access_intervals[(agent_name,instrument)] = TimeInterval(t_access,t_access+time_step)
+                access_intervals[(agent_name,instrument)] = [TimeInterval(t_access,t_access+time_step)]
 
-            elif access_intervals[(agent_name,instrument)].is_during(t_access):
-                access_intervals[(agent_name,instrument)].extend(t_access)
+            else:
+                # check if this access overlaps with any previous access
+                found = False
+                for interval in access_intervals[(agent_name,instrument)]:
+                    interval : TimeInterval
+                    if interval.is_during(t_access): 
+                    # if so, extend the last access interval
+                        interval.extend(t_access)
+                        found = True
+                
+                # otherwise, create a new access interval
+                if not found:
+                    access_intervals[(agent_name,instrument)].append(TimeInterval(t_access,t_access+time_step))
         
         # convert to list
-        access_intervals : list = [ (access_interval,agent_name,instrument) 
-                                    for (agent_name,instrument),access_interval in access_intervals.items()]
-        
-        # sort in chronological order
-        access_intervals.sort()
+        access_intervals : list = sorted([ (access_interval,agent_name,instrument) 
+                                    for agent_name,instrument in access_intervals
+                                    for access_interval in access_intervals[(agent_name,instrument)] ])
 
         # find measurement detections that match this event
         matching_detections = [ (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
                                 for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in event_detections.values
-                                if  abs(lat - lat_req) < 1e-3 
+                                if t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
+                                and abs(lat - lat_req) < 1e-3 
                                 and abs(lon - lon_req) < 1e-3
-                                and t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
                                 and all([instrument in observations_req for instrument in str_to_list(observation_types)])
                             ]       
         matching_detections.sort(key= lambda a : a[5])
@@ -651,9 +641,9 @@ class Mission:
         # find measurement requests that match this event
         matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
                                 for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
-                                if  abs(lat - lat_req) < 1e-3 
+                                if  t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
+                                and abs(lat - lat_req) < 1e-3 
                                 and abs(lon - lon_req) < 1e-3
-                                and t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
                                 and all([instrument in observations_req for instrument in str_to_list(observation_types)])
                             ]       
         matching_requests.sort(key= lambda a : a[5])
@@ -661,9 +651,9 @@ class Mission:
         # find observations that overlooked a given event's location
         matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)
                                     for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
-                                    if abs(lat - lat_img) < 1e-3 
+                                    if t_start <= t_img <= t_start+duration
+                                    and abs(lat - lat_img) < 1e-3 
                                     and abs(lon - lon_img) < 1e-3
-                                    and t_start <= t_img <= t_start+duration
                                     and instrument in observations_req  #TODO include better reasoning!
                                 ]
         matching_observations.sort(key= lambda a : a[6])

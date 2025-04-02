@@ -284,7 +284,7 @@ class SimulationManager(AbstractManager):
         headers = ['routine','t_avg','t_std','t_med', 't_max', 't_min', 'n', 't_total']
         data = []
 
-        for routine in self.stats:
+        for routine in tqdm(self.stats, desc="MANAGER: Compiling runtime statistics", leave=False):
             n = len(self.stats[routine])
             t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
             t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
