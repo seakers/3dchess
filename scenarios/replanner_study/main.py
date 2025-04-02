@@ -25,8 +25,8 @@ def main(
 
     # stop if debugging mode is on
     if debug: 
-        lower_bound = 42
-        upper_bound = 43
+        lower_bound = 91
+        upper_bound = 92
         print('WARNING: Debug mode activated.')
 
     # get experiments name

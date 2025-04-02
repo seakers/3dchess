@@ -996,101 +996,73 @@ class AbstractConsensusReplanner(AbstractReplanner):
                        reward_grid : RewardGrid,
                        orbitdata : OrbitData) -> list:
         
-        # count maximum number of paths to be searched
-        n_max = 0
-        for n in range(1,len(available_reqs)+1):
-            n_max += len(list(itertools.permutations(available_reqs, n)))
-        
-        # initilize search counter
-        n_visited = 0
+        # sort requests by severity in ascending order
+        available_reqs.sort(key=lambda a : a[0].severity, reverse=True)
 
-        # initialize tree search
-        queue = Queue()
-        queue.put([])
+        if len(available_reqs) > 1:
+            x = 1
+
+        # initialize max path
         max_path = []
         max_path_utility = 0.0
 
-        # start tree search
-        with tqdm(total=n_max, 
-                    desc=f'{state.agent_name}-PLANNER: Generating Bundle', 
-                    leave=False) as pbar:
+        # do iterative greedy addition of requests to the path
+        for req, main_measurement in tqdm(available_reqs,
+                                          desc=f'{state.agent_name}-PLANNER: Generating Bundle',
+                                          leave=False):
+            req : MeasurementRequest; main_measurement : str
+            
+            max_path_j = [path_element for path_element in max_path]
+            max_path_utility_j = max_path_utility
 
-            while not queue.empty():
-                # update progress bar
-                pbar.update(1)
-
-                # update counter
-                n_visited += 1 
+            # find best placement for task in path
+            for i in range(len(max_path)+1):
+            
+                # copy current path
+                path_j = [path_element_i for path_element_i in max_path]
                 
-                # get next path on the queue
-                path_i : list = queue.get()
-
-                # create potential bids for observations in the path
-                path_bids : list[Bid] = [Bid(req.id, 
-                                            main_measurement, 
-                                            state.agent_name, 
-                                            u_exp, 
-                                            t_img=t_img, 
-                                            th_img=th_img)
-                                        for req,main_measurement,t_img,th_img,u_exp in path_i
-                                        if isinstance(req,MeasurementRequest)]
-                    
-                # check if it out-performs the current best path
-                if any([results[bid.req_id][bid.main_measurement] >= bid
-                        for bid in path_bids]):
-                    # at least one proposed bid is outbid by existing bid; ignore path
-                    continue
+                # add request to path
+                path_j.insert(i, (req, main_measurement, -1, -1))
                 
-                # calculate path utility 
-                path_utility : float = self.calc_path_utility(state, specs, path_i, reward_grid)
-
-                # check if it outbids competitors
-                if (path_utility > max_path_utility                             # path utility is increased
-                    and all([results[bid.req_id][bid.main_measurement] < bid    # all new bids outbid competitors
-                            for bid in path_bids])
-                    ):
-                    # outbids competitors; set new max utility path
-                    max_path = [path_element for path_element in path_i]
-                    max_path_utility = path_utility
-
-                # check if there is room to be added to the bundle
-                if len(path_i) >= len(available_reqs):
-                    continue
-
-                # add available requests to the path and place it in the queue
-                path_reqs = [(req, main_measurement) 
-                            for req,main_measurement,*_ in path_i]
-                reqs_to_add = [(req, main_measurement) 
-                            for req, main_measurement in available_reqs
-                            if (req, main_measurement) not in path_reqs
-                            ]
+                # estimate observation time and look angle
+                t_img,th_img = self.calc_imaging_time(state, specs, path_j, req, main_measurement, orbitdata)
                 
-                for req, main_measurement in reqs_to_add:
-                    req : MeasurementRequest                
-                    # copy current path
-                    path_j = [path_element_i for path_element_i in path_i]
-                    
-                    # add request to path
-                    path_j.append((req, main_measurement, -1, -1))
-                    
-                    # estimate observation time and look angle
-                    t_img,th_img = self.calc_imaging_time(state, specs, path_j, req, main_measurement, orbitdata)
-                    
-                    # check if imaging time was found
-                    if t_img < 0.0: continue # skip
+                if t_img < 0.0: continue # no valid imaging time found; skip
 
-                    # calculate performance
-                    observation = ObservationAction(main_measurement, req.target, th_img, t_img)
-                    u_exp = reward_grid.estimate_reward(observation)
+                # calculate performance
+                observation = ObservationAction(main_measurement, req.target, th_img, t_img)
+                u_exp = reward_grid.estimate_reward(observation)
 
-                    # update values
-                    path_j[-1] = (req, main_measurement, t_img, th_img, u_exp)
+                # update path values
+                path_j[i] = (req, main_measurement, t_img, th_img, u_exp)
 
-                    # only add to queue if the path can be performed
-                    if self.is_task_path_valid(state, specs, path_j, orbitdata): queue.put(path_j)
+                # only add to queue if the path can be performed
+                if self.is_task_path_valid(state, specs, path_j, orbitdata): 
+                    # create potential bids for observations in the path
+                    path_bids : list[Bid] = [Bid(req.id, 
+                                                main_measurement, 
+                                                state.agent_name, 
+                                                u_exp, 
+                                                t_img=t_img, 
+                                                th_img=th_img)
+                                            for req,main_measurement,t_img,th_img,u_exp in path_j
+                                            if isinstance(req,MeasurementRequest)]
+                                            
+                    # calculate path utility 
+                    path_utility : float = self.calc_path_utility(state, specs, path_j, reward_grid)
 
-            # update progress bar with remaining nodes
-            pbar.update(n_max-n_visited)
+                    # check if it outbids competitors
+                    if (path_utility > max_path_utility_j                           # path utility is increased
+                        and all([results[bid.req_id][bid.main_measurement] < bid    # all new bids outbid competitors
+                                for bid in path_bids])
+                        ):
+                        # outbids competitors; set new max utility path
+                        max_path_j = [path_element for path_element in path_j]
+                        max_path_utility_j = path_utility
+
+            # update best path 
+            if max_path_utility_j > max_path_utility:
+                max_path = [path_element for path_element in max_path_j]
 
         # return path of maximum utility
         return max_path
