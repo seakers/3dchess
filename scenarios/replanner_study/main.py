@@ -216,7 +216,7 @@ def main(
         # execute mission if it hasn't been performed yet or if results need to be overwritten
         
         if (not os.path.isdir(results_dir) 
-            or all([len(os.listdir(os.path.join(results_dir, d))) == 0 
+            or any([len(os.listdir(os.path.join(results_dir, d))) == 0 
                     for d in os.listdir(results_dir)
                     if os.path.isdir(os.path.join(results_dir, d))]) 
             or overwrite
