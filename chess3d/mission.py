@@ -467,19 +467,19 @@ class Mission:
                               ) -> tuple:
                
         # classify observations per GP
+        observed_gps = {(lat,lon) for _,_,lat,lon,*_ in tqdm(observations_performed.values, desc='Collecting observed ground points', leave=False)}
         observations_per_gp : Dict[tuple, list] = { (lat,lon) :   [(observer,t_img,lat_img,lon_img,__,instrument)
                                                                     for observer,t_img,lat_img,lon_img,*__,instrument in observations_performed.values
                                                                     if abs(lat - lat_img) <= 1e-3
                                                                     and abs(lon - lon_img) <= 1e-3]
-                                                                    for _,_,lat,lon,*_ in observations_performed.values
-
-                                                    }
+                                                                    for lat,lon in tqdm(observed_gps, desc='Classifying observations per ground point', leave=False)}
         # classify events per ground point
+        gps_with_events = {(lat,lon) for _,_,lat,lon,*_ in tqdm(events.values, desc='Collecting ground points with events', leave=False)}
         events_per_gp : Dict[tuple, list] = {(lat,lon): [[t_start,duration,severity,observations_req] 
                                                         for *_,lat_event,lon_event,t_start,duration,severity,observations_req in events.values
                                                         if abs(lat - lat_event) <= 1e-3
                                                         and abs(lon - lon_event) <= 1e-3] 
-                                                        for *_,lat,lon,_,_,_,_ in events.values}
+                                                        for lat,lon in tqdm(gps_with_events, desc='Classifying events per ground point', leave=False)}
         
         # count event presense, detections, and observations
         events_observable : Dict[tuple, list] = {}
@@ -693,7 +693,7 @@ class Mission:
         # count number of groundpoints and their accessibility
         n_gps = None
         gps_accessible_compiled = set()
-        for _,agent_orbitdata in orbitdata.items():
+        for _,agent_orbitdata in tqdm(orbitdata.items(), desc='Counting total and accessible ground points', leave=False):
             agent_orbitdata : OrbitData
 
             # count number of ground points
@@ -704,6 +704,7 @@ class Mission:
 
             # update set of accessible ground points
             gps_accessible_compiled.update(gps_accessible)
+
         n_gps_accessible = len(gps_accessible_compiled)
         n_gps_observed = len(observations_per_gp)
         
