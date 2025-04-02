@@ -210,23 +210,15 @@ class SimulationEnvironment(EnvironmentNode):
         
 
         if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
-            if abs(float(content['agent_state']['t']) - 6291.53) < 1e-3:
-                x=1
-            
             resp = self.handle_observation(content)
 
         elif content['msg_type'] == SimulationMessageTypes.AGENT_STATE.value:
-            if abs(float(content['state']['t']) - 6291.53) < 1e-3:
-                 x=1
             resp = self.handle_agent_state(content)
 
         else:
             # message is of an unsopported type. send blank response
             self.log(f"received message of type {content['msg_type']}. ignoring message...")
             resp = NodeReceptionIgnoredMessage(self.get_element_name(), src)
-
-            # respond to request
-            await self.respond_peer_message(resp)
 
         await self.respond_peer_message(resp)
                             
