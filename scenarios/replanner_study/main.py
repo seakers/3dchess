@@ -222,6 +222,8 @@ def main(
             or overwrite
             ): 
             mission.execute()
+        else:
+            print('Simulation data found!')
 
         # print results if it hasn't been performed yet or if results need to be reevaluated
         if not os.path.isfile(results_summary_path) or reeval: mission.print_results()
