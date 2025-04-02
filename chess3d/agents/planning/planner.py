@@ -554,7 +554,7 @@ class AbstractPreplanner(AbstractPlanner):
         super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
 
         # update completion of current plan
-        self.plan.update_action_completion(completed_actions, aborted_actions, pending_actions, state.t)
+        # self.plan.update_action_completion(completed_actions, aborted_actions, pending_actions, state.t)
 
         # # update list of pending observation requests to broadcasts
         # if self.sharing:
