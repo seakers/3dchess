@@ -132,10 +132,10 @@ class SimulationManager(AbstractManager):
 
                         await self.send_manager_broadcast(toc)
 
-                        # announce new time to simulation monitor
-                        self.log(f'sending toc for time {t_next}[s] to monitor...')
-                        toc.dst = SimulationElementRoles.MONITOR.value
-                        await self.send_monitor_message(toc) 
+                        # # announce new time to simulation monitor
+                        # self.log(f'sending toc for time {t_next}[s] to monitor...')
+                        # toc.dst = SimulationElementRoles.MONITOR.value
+                        # await self.send_monitor_message(toc) 
 
                         self.log(f'toc for time {t_next}[s] sent!')
                         

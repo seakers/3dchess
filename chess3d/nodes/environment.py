@@ -206,9 +206,6 @@ class SimulationEnvironment(EnvironmentNode):
     async def handle_agent_request(self) -> bool:
         _, src, content = await self.listen_peer_message()
 
-        t_0 = time.perf_counter()
-        
-
         if content['msg_type'] == SimulationMessageTypes.OBSERVATION.value:
             resp = self.handle_observation(content)
 
@@ -222,10 +219,6 @@ class SimulationEnvironment(EnvironmentNode):
 
         await self.respond_peer_message(resp)
                             
-        dt = time.perf_counter() - t_0
-        if src not in self.stats: self.stats[src] = []
-        self.stats[src].append(dt)
-
         return True
     
     @runtime_tracker
