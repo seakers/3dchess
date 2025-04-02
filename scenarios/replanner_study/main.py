@@ -1,6 +1,7 @@
 import argparse
 import copy
 import json
+import multiprocessing
 import os
 import shutil
 
@@ -57,7 +58,7 @@ def main(
     if len(experiments_df) <= lower_bound: raise ValueError('Lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
-    sim_duration = 0.5 / 24.0 if debug else 1.0 # in days
+    sim_duration = 0.25 / 24.0 if debug else 1.0 # in days
 
     # count number of runs to be made
     experiments_to_eval = [ (i,row) for i,row in experiments_df.iterrows()
@@ -222,6 +223,7 @@ def main(
                     and 'manager' not in d]) 
             or overwrite
             ): 
+            
             mission.execute()
         else:
             print('Simulation data found!')
@@ -260,6 +262,8 @@ def get_scenario_name(experiment_name : str, debug : bool) -> str:
 
 if __name__ == "__main__":
     
+    multiprocessing.set_start_method("fork")  # Reduces overhead
+
     # create argument parser
     parser = argparse.ArgumentParser(prog='3D-CHESS - Replanner Parametric Study',
                                      description='Study performance of ACBBA as a reactive planning strategy in the context of Earth-observing missions.',

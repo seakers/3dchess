@@ -110,12 +110,19 @@ class AbstractAgent(Agent):
 
     @runtime_tracker
     async def sense_environment(self) -> dict:
+        # create message
         state_msg = AgentStateMessage(  self.get_element_name(), 
                                         SimulationElementRoles.ENVIRONMENT.value,
                                         self.state.to_dict()
                                     )
+        
+        # add randomness to avoid sync issues
+        await asyncio.sleep(np.random.random() * 1e-6) 
+
+        # send state message to environment and await response
         _, _, content = await self.send_peer_message(state_msg)
 
+        # return response
         return content
     
     @runtime_tracker
@@ -244,20 +251,24 @@ class AbstractAgent(Agent):
     
     @runtime_tracker
     async def perform_broadcast(self, action : BroadcastMessageAction) -> str:
-        # unpackage action
+        # extract message from action
         msg_out : SimulationMessage = message_from_dict(**action.msg)
 
         # update state
         self.state.update_state(self.get_current_time(), status=SimulationAgentState.MESSAGING)
         self.state_history.append(self.state.to_dict())
         
-        # perform action
+        # add randomness to avoid sync issues
+        await asyncio.sleep(np.random.random() * 1e-6) 
+
+        # perform broadcast
         msg_out.src = self.get_element_name()
         msg_out.dst = self.get_network_name()
         await self.send_peer_broadcast(msg_out)
 
         self.log(f'\n\tSent broadcast!\n\tfrom:\t{msg_out.src}\n\tto:\t{msg_out.dst}',level=logging.DEBUG)
 
+        # return completion status
         return AgentAction.COMPLETED
     
     @runtime_tracker
@@ -471,10 +482,12 @@ class AbstractAgent(Agent):
                 ignored = []   
 
                 while self.get_current_time() <= t0:
-                    # send tic request
-                    tic_req = TicRequest(self.get_element_name(), t0, tf)
+                    # initiate tic request
                     toc_msg = None
                     confirmation = None
+
+                    # send tic request
+                    tic_req = TicRequest(self.get_element_name(), t0, tf)
                     confirmation = await self._send_manager_msg(tic_req, zmq.PUB)
 
                     self.log(f'tic request for {tf}[s] sent! waiting on toc broadcast...')

@@ -5,6 +5,7 @@ from datetime import timedelta
 from itertools import repeat
 import logging
 from multiprocessing import Pool
+import multiprocessing
 import os
 import random
 from typing import Any
@@ -47,6 +48,22 @@ from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes, UAV
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.utils import *
 
+
+def run_monitor(monitor : ResultsMonitor):
+    monitor.run()
+
+def run_manager(manager : SimulationManager):
+    manager.run()
+
+def run_environment(environment : SimulationEnvironment):
+    # print(f"Environment starting...\n")
+    environment.run()
+    # print(f"Environment finished.\n")
+
+def run_agent(agent : SimulatedAgent):
+    # print(f"Agent {agent} starting...\n")
+    agent.run()
+    # print(f"Agent {agent} finished.\n")
 
 class Mission:
     def __init__(self,
@@ -231,6 +248,43 @@ class Mission:
             for agent in self.agents:                
                 agent : SimulatedAgent
                 pool.submit(agent.run, *[])  
+
+
+    # def execute(self, plot_results: bool = False, save_plot: bool = False) -> None:
+    #     """Executes the simulation using multiprocessing."""
+        
+    #     t_0 = time.perf_counter()
+
+    #     # n_pools = len(self.agents) + 3
+    #     # with concurrent.futures.ThreadPoolExecutor(n_pools) as pool:
+    #     #     pool.submit(self.monitor.run, *[])
+    #     #     pool.submit(self.manager.run, *[])
+    #     #     pool.submit(self.environment.run, *[])
+    #     #     for agent in self.agents:                
+    #     #         agent : SimulatedAgent
+    #     #         pool.submit(agent.run, *[])  
+
+    #     t_1 = time.perf_counter() - t_0
+    #     # time.sleep(1)
+    #     t_0 = time.perf_counter()
+
+    #     # Determine number of worker processes
+    #     n_pools = min(len(self.agents) + 3, multiprocessing.cpu_count())  
+
+    #     with concurrent.futures.ProcessPoolExecutor(max_workers=n_pools) as proc_pool, \
+    #         concurrent.futures.ThreadPoolExecutor(max_workers=len(self.agents)) as thread_pool:
+            
+    #         # Run environment, manager, and monitor in threads
+    #         proc_pool.submit(self.environment.run)
+    #         proc_pool.submit(self.manager.run)
+    #         proc_pool.submit(self.monitor.run)
+
+    #         # Use multiprocessing for CPU-intensive agent tasks
+    #         proc_pool.map(run_agent, self.agents)
+        
+    #     t_2 = time.perf_counter() - t_0
+        
+    #     x  =1
     
     def print_results(self, precission : int = 5) -> None:
         print(f"\n\n{'='*22} RESULTS {'='*23}\n")
