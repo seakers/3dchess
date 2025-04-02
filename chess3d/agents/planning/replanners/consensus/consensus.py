@@ -861,6 +861,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                             and abs(req.target[0] - action.target[0]) <= 1e-3
                             and abs(req.target[1] - action.target[1]) <= 1e-3
                             and abs(req.target[2] - action.target[2]) <= 1e-3
+                            and action.instrument_name in req.observation_types
                             ]
         
         for req,observation in preplanned_tasks:
