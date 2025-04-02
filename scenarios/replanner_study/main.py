@@ -94,10 +94,6 @@ def main(
         if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
         if 'inland' in grid_name: grid_name += f'_seed-{seed}'
         
-        # if preplanner in ['dp', 'dynamic']:
-        #     period, horizon = 500, 500
-        # else:
-        #     period, horizon = np.Inf, np.Inf
         period, horizon = 500, 500
 
         # extract satellite capability parameters

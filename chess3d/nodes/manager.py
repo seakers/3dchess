@@ -73,7 +73,7 @@ class SimulationManager(AbstractManager):
                 t = 0
                 tf = t + delay
                 
-                with tqdm(total=delay, desc=desc) as pbar:
+                with tqdm(total=delay, desc=desc, leave=True) as pbar:
 
                     while t < tf:
                         t_0 = time.perf_counter()
@@ -110,7 +110,7 @@ class SimulationManager(AbstractManager):
                 t = 0
                 tf = self._clock_config.get_total_seconds()
                 iter_counter = 0
-                with tqdm(total=tf , desc=desc) as pbar:
+                with tqdm(total=tf , desc=desc, leave=True) as pbar:
                     while t < tf:
                         
                         t_0 = time.perf_counter()
@@ -157,7 +157,7 @@ class SimulationManager(AbstractManager):
         except asyncio.CancelledError:
             return
         
-    async def wait_for_tic_requests(self):
+    async def wait_for_tic_requests(self, timeout : float=5*60):
         """
         Awaits for all agents to send tic requests
         
@@ -177,9 +177,23 @@ class SimulationManager(AbstractManager):
                 # reset tasks
                 read_task = None
 
-                # wait for incoming messages
+                # wait for incoming messages with a timeout
+                timeout_task = asyncio.create_task( asyncio.sleep(timeout) )
                 read_task = asyncio.create_task( self._receive_manager_msg(zmq.SUB) )
-                await read_task
+                done,pending = await asyncio.wait([read_task, timeout_task], return_when=asyncio.FIRST_COMPLETED)
+
+                if timeout_task in done:
+                    # timeout task is done
+                    self.log(f'wait_for_tic_requests: timeout task done')
+                    # for task in pending: 
+                    #     task.cancel()
+                    #     await task
+
+                    missing_reqs = [sim_element for sim_element in self._simulation_element_name_list
+                                    if sim_element not in received_messages
+                                    and sim_element != self.get_element_name()]
+                    raise asyncio.TimeoutError(f'wait for tic request timed out. Missing requests from {missing_reqs}.')
+
                 _, src, msg_dict = read_task.result()
                 msg_type = msg_dict['msg_type']
 
