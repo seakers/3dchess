@@ -218,7 +218,8 @@ def main(
         if (not os.path.isdir(results_dir) 
             or any([len(os.listdir(os.path.join(results_dir, d))) <= 2 
                     for d in os.listdir(results_dir)
-                    if os.path.isdir(os.path.join(results_dir, d))]) 
+                    if os.path.isdir(os.path.join(results_dir, d))
+                    and 'manager' not in d]) 
             or overwrite
             ): 
             mission.execute()
