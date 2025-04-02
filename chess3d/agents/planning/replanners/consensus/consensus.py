@@ -999,9 +999,6 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # sort requests by severity in ascending order
         available_reqs.sort(key=lambda a : a[0].severity, reverse=True)
 
-        if len(available_reqs) > 1:
-            x = 1
-
         # initialize max path
         max_path = []
         max_path_utility = 0.0
