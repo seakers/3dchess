@@ -41,7 +41,13 @@ class GridPoint(object):
 
     def update_observations(self, observation_datum : dict, t_update : float) -> None:
         assert self.is_update_time_valid(t_update)
-        self.observations.append(observation_datum)
+
+        if self.observations:
+            if observation_datum['t_img'] > self.observations[-1]['t_img']:
+                # update latest observation
+                self.observations[-1] = observation_datum
+        else:
+            self.observations.append(observation_datum)
         self.t_update = t_update
 
     def update_events(self, event : MeasurementRequest, t_update : float) -> None:
@@ -157,6 +163,14 @@ class RewardGrid(object):
                 decimals.append(max(lat_decimals,lon_decimals))
         
         return min(max(decimals), 3)
+
+    def get_target_data(self, lat : float, lon : float) -> dict:
+        # get appropriate grid point object
+        grid_index,gp_index = self.__get_target_indeces(lat,lon)
+
+        # get corresponding grid point
+        return self.rewards[grid_index][gp_index]
+        
 
     @runtime_tracker
     def __get_target_indeces(self, lat : float, lon : float) -> tuple:

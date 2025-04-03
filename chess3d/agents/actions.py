@@ -293,7 +293,7 @@ class WaitForMessages(AgentAction):
         """
         super().__init__(ActionTypes.WAIT.value, t_start, t_end, status, id)
 
-class Replan(AgentAction):
+class TriggerReplan(AgentAction):
     """
     ## Replan Action
 

@@ -7,7 +7,7 @@ from tqdm import tqdm
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from chess3d.agents.planning.rewards import RewardGrid
+from chess3d.agents.planning.rewards import GridPoint, RewardGrid
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.planning.plan import Plan, Preplan, Replan
 from chess3d.agents.planning.replanners.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
@@ -45,6 +45,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # set paremeters
         self.replan_threshold = replan_threshold
         self.planning_horizon = np.Inf
+        self.t_share = -1
 
     @runtime_tracker
     def update_percepts(self, 
@@ -281,7 +282,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
         maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
 
         # schedule broadcasts
-        broadcasts : list = self._schedule_broadcasts(state, current_plan, orbitdata)       
+        broadcasts : list = self._schedule_broadcasts(state, current_plan, reward_grid, orbitdata)       
 
         # generate wait actions 
         waits : list = self._schedule_waits(state)
@@ -426,6 +427,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def _schedule_broadcasts(self, 
                              state: SimulationAgentState, 
                              current_plan: Plan, 
+                             reward_grid : RewardGrid,
                              orbitdata: dict
                              ) -> list:
         # initiate broadcasts action list     
@@ -491,6 +493,40 @@ class AbstractConsensusReplanner(AbstractReplanner):
         # reset broadcast list
         self.bids_to_rebroadcast = []
 
+        # schedule reward grid sharing
+        # collect relevant targets
+        bidded_reqs : set[Bid] = {req for req in self.known_reqs 
+                                    if req.id in bids}
+        bidded_targets : set[tuple] = {(req.target[0], req.target[1])
+                                        for req in bidded_reqs
+                                        if isinstance(req, MeasurementRequest)}
+        
+        # collect latest known observations from targets
+        latest_observations : list[ObservationAction] = []
+        for lat,lon in bidded_targets:
+            for instrument,grid_point in reward_grid.get_target_data(lat,lon).items():
+                grid_point : GridPoint
+
+                # collect latest known observation for each ground point
+                if grid_point.observations:
+                    observations : list[dict] = list(grid_point.observations)
+                    observations.sort(key= lambda a: a['t_img'])
+                    latest_observations.append((instrument, observations[-1]))
+
+        # prepare reward grid info broadcasts
+        instruments_used : set = {instrument for instrument,_ in latest_observations}
+        obs_msgs = [ObservationResultsMessage(state.agent_name, 
+                                            state.agent_name, 
+                                            state.to_dict(), 
+                                            {}, 
+                                            instrument_used,
+                                            [observation_data
+                                            for instrument, observation_data in latest_observations
+                                            if instrument == instrument_used]
+                                            )
+                for instrument_used in instruments_used]
+        broadcasts.extend([BroadcastMessageAction(msg.to_dict(), t_start) for msg in obs_msgs])
+
         # ensure the right number of broadcasts were created
         assert len(bids_out) <= len(compiled_bids)
 
@@ -522,6 +558,10 @@ class AbstractConsensusReplanner(AbstractReplanner):
                     t_start = action_dict['t_end'] # TODO temp solution
                     msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
                     if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
+
+        if len(broadcasts) > 1:
+            bus_msg = BusMessage(state.agent_name, state.agent_name, [action.msg for action in broadcasts])
+            broadcasts = [BroadcastMessageAction(bus_msg.to_dict(), t_start)]
 
         return broadcasts
 

@@ -495,7 +495,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "dp",
+                            "@type" : "heuristic",
                             "period" : 500
                         },
                         "replanner" : {
@@ -582,7 +582,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "dp",
+                            "@type" : "heuristic",
                             "period" : 500
                         },
                         "replanner" : {
@@ -669,7 +669,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "dp",
+                            "@type" : "heuristic",
                             "period" : 500
                         },
                         "replanner" : {

@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.orbitdata import OrbitData, TimeInterval
-from chess3d.agents.planning.rewards import RewardGrid
+from chess3d.agents.planning.rewards import GridPoint, RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -831,9 +831,49 @@ class AbstractReplanner(AbstractPlanner):
                     ) -> Plan:
         pass
 
-    @abstractmethod
     def get_broadcast_contents(self,
                                broadcast_action : FutureBroadcastMessageAction,
+                               state : SimulationAgentState,
+                               reward_grid : RewardGrid,
                                **kwargs
                                ) -> BroadcastMessageAction:
         """  Generates a broadcast message to be sent to other agents """
+        if broadcast_action.broadcast_type == FutureBroadcastTypes.REWARD:
+            latest_observations : list[ObservationAction] = []
+            for grid in reward_grid.rewards:
+                for target in grid:
+                    for instrument,grid_point in target.items():
+                        grid_point : GridPoint
+                        
+                        # collect latest known observation for each ground point
+                        if grid_point.observations:
+                            observations : list[dict] = list(grid_point.observations)
+                            observations.sort(key= lambda a: a['t_img'])
+                            latest_observations.append((instrument, observations[-1]))
+
+            instruments_used : set = {instrument for instrument,_ in latest_observations}
+
+            msgs = [ObservationResultsMessage(state.agent_name, 
+                                              state.agent_name, 
+                                              state.to_dict(), 
+                                              {}, 
+                                              instrument_used,
+                                              [observation_data
+                                                for instrument, observation_data in latest_observations
+                                                if instrument == instrument_used]
+                                              )
+                    for instrument_used in instruments_used]
+            
+        elif broadcast_action.broadcast_type == FutureBroadcastTypes.REQUESTS:
+            msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+                    for req in self.known_reqs
+                    if isinstance(req, MeasurementRequest)
+                    and req.t_start <= state.t <= req.t_end]
+        else:
+            raise ValueError(f'`{broadcast_action.broadcast_type}` broadcast type not supported.')
+
+        # construct bus message
+        bus_msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+
+        # return bus message broadcast (if not empty)
+        return BroadcastMessageAction(bus_msg.to_dict(), broadcast_action.t_start)
