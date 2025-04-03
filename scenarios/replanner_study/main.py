@@ -26,8 +26,8 @@ def main(
 
     # stop if debugging mode is on
     if debug: 
-        lower_bound = 91
-        upper_bound = 92
+        lower_bound = 3
+        upper_bound = 4
         print('WARNING: Debug mode activated.')
 
     # get experiments name
@@ -58,7 +58,7 @@ def main(
     if len(experiments_df) <= lower_bound: raise ValueError('Lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
-    sim_duration = 0.25 / 24.0 if debug else 1.0 # in days
+    sim_duration = 12.0 / 24.0 if debug else 1.0 # in days
 
     # count number of runs to be made
     experiments_to_eval = [ (i,row) for i,row in experiments_df.iterrows()

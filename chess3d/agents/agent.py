@@ -490,23 +490,32 @@ class AbstractAgent(Agent):
                     # send tic request
                     tic_req = TicRequest(self.get_element_name(), t0, tf)
                     confirmation = await self._send_manager_msg(tic_req, zmq.PUB)
+                    timeout = asyncio.create_task(asyncio.sleep(1*60))
 
                     # wait for response
                     self.log(f'tic request for {tf}[s] sent! waiting on toc broadcast...')
                     wait_for_response = asyncio.create_task(self.manager_inbox.get())
-                    await wait_for_response
-                    dst, src, content = wait_for_response.result()
                     
-                    if content['msg_type'] == ManagerMessageTypes.TOC.value:
-                        # update clock
-                        toc_msg = TocMessage(**content)
-                        await self.update_current_time(toc_msg.t)
-                        self.log(f'toc received! time updated to: {self.get_current_time()}[s]')
+                    done,pending = await asyncio.wait([wait_for_response, timeout], return_when=asyncio.FIRST_COMPLETED)
+                    
+                    if wait_for_response in done:
+                        dst, src, content = wait_for_response.result()
+                        
+                        if content['msg_type'] == ManagerMessageTypes.TOC.value:
+                            # update clock
+                            toc_msg = TocMessage(**content)
+                            await self.update_current_time(toc_msg.t)
+                            self.log(f'toc received! time updated to: {self.get_current_time()}[s]')
+                            break
 
-                    else:
-                        # ignore message
-                        self.log(f'some other manager message was received. ignoring...')
-                        ignored.append((dst, src, content))
+                        else:
+                            # ignore message
+                            self.log(f'some other manager message was received. ignoring...')
+                            ignored.append((dst, src, content))
+                    
+                    for task in pending:
+                        task.cancel()
+                        await task
 
             elif isinstance(self._clock_config, AcceleratedRealTimeClockConfig):
                 await asyncio.sleep(delay / self._clock_config.sim_clock_freq)
