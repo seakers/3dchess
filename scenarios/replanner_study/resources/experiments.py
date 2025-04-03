@@ -14,19 +14,54 @@ def main(n_samples : int = 1, seed : int = 1000):
     """
     
     # set parameters
+    # params = [
+    #     ('Constellation',                       [
+    #                                              (1,8), 
+    #                                              (2,4), 
+    #                                              (3,4), 
+    #                                             #  (8,3)
+    #                                              ]),
+    #     ('Field of Regard (deg)',               [30,60]),
+    #     ('Field of View (deg)',                 [1,10]),
+    #     ('Maximum Slew Rate (deg/s)',           [1,10]),
+    #     ('Number of Events per Day',            [10**(i) for i in range(2,5)]),
+    #     ('Event Duration (hrs)',                [
+    #                                             #  0.25, 
+    #                                              1, 
+    #                                              3, 
+    #                                              6
+    #                                             ]),
+    #     ('Grid Type',                           [
+    #                                              'fibonacci', 
+    #                                             #  'inland', 
+    #                                             #  'hydrolakes'
+    #                                              ]),
+    #     ('Number of Ground-Points',             [
+    #                                              1000, 
+    #                                             #  2500, 
+    #                                              5000, 
+    #                                              10000
+    #                                              ]),
+    #     ('Percent Ground-Points Considered',    [1]),
+    #     ('Preplanning Period',                  [
+    #                                             #  500, 
+    #                                              np.Inf
+    #                                              ])
+    # ]
+
     params = [
         ('Constellation',                       [
                                                  (1,8), 
                                                  (2,4), 
                                                  (3,4), 
-                                                #  (8,3)
+                                                 (8,3)
                                                  ]),
         ('Field of Regard (deg)',               [30,60]),
         ('Field of View (deg)',                 [1,10]),
         ('Maximum Slew Rate (deg/s)',           [1,10]),
         ('Number of Events per Day',            [10**(i) for i in range(2,5)]),
         ('Event Duration (hrs)',                [
-                                                 0.25, 
+                                                #  0.25, 
                                                  1, 
                                                  3, 
                                                  6
@@ -110,9 +145,9 @@ def main(n_samples : int = 1, seed : int = 1000):
     df = pd.DataFrame(data=[], columns=feasible_scenarios.columns.values)
 
     preplanners = [
-                    # 'fifo', 
+                    'fifo', 
                     'heuristic', 
-                    'dp'
+                    # 'dp'
                     ]
     replanners = [
                     'none', 
@@ -136,6 +171,7 @@ def main(n_samples : int = 1, seed : int = 1000):
 
     name_column = df.pop('Name')
     df.insert(0, 'Name', name_column)
+    df = df.sort_values('Scenario ID')
 
     # make dir if it doesn't exist
     if not os.path.isdir('./experiments'): os.mkdir('./experiments')
