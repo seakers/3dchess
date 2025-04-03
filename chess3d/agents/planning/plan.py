@@ -137,6 +137,9 @@ class Plan(ABC):
     def add(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
 
+        if action.t_end < t:
+            x =1
+
         # check argument types
         if not isinstance(action, AgentAction):
             raise ValueError(f"Cannot place action of type `{type(action)}` in plan. Must be of type `{AgentAction}`.")
@@ -285,27 +288,32 @@ class Plan(ABC):
         # sort plan in order of ascending start time 
         plan_out.sort(key=lambda a: (a.t_start, a.t_end))
 
+        # check if actions are contained in output plan
         if plan_out:
-            plan_out = [action.to_dict()
-                        for action in plan_out]
+            # there are actions in output plan; return plan
+            return plan_out
         else:
-            # idle if no more actions can be performed at this time
+            # no actions in output plan; wait for future actions
             t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
-            action = WaitForMessages(t, t_idle)
-            plan_out.append(action.to_dict())     
+            if t > t_idle:
+                x =1
+            return [WaitForMessages(t, t_idle)]
 
-        if (len(plan_out) > 1 and 
-            any([action_out['t_start'] == action_out['t_end'] for action_out in plan_out])):
-            plan_out = [action_out for action_out in plan_out
-                       if action_out['t_start'] == action_out['t_end']]
-
-        # check plan feasibility
-        # try:
-        #     self.__is_feasible(plan_out)
-        # except ValueError as e:
-        #     raise RuntimeError(f"Unfeasible plan. {e}")
+        # if plan_out:
+        #     plan_out = [action.to_dict()
+        #                 for action in plan_out]
+        # else:
+        #     # idle if no more actions can be performed at this time
+        #     t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
+        #     action = WaitForMessages(t, t_idle)
+        #     plan_out.append(action.to_dict())     
         
-        return plan_out    
+        # if (len(plan_out) > 1 and 
+        #     any([action_out['t_start'] == action_out['t_end'] for action_out in plan_out])):
+        #     plan_out = [action_out for action_out in plan_out
+                    #    if action_out['t_start'] == action_out['t_end']]
+        
+        # return plan_out    
     
     def copy(self) -> object:
         """ Copy contructor. Creates a deep copy of this oject. """

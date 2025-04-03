@@ -133,7 +133,7 @@ class ObservationResultsMessage(SimulationMessage):
         super().__init__(src, dst, SimulationMessageTypes.OBSERVATION.value, id, path)
         
         if not isinstance(observation_action, dict):
-            raise AttributeError(f'`measurement_req` must be of type `dict`; is of type {type(observation_action)}.')
+            raise AttributeError(f'`observation_action` must be of type `dict`; is of type {type(observation_action)}.')
         if not isinstance(agent_state, dict):
             raise AttributeError(f'`agent_state` must be of type `dict`; is of type {type(agent_state)}.')
 

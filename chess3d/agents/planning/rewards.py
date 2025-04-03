@@ -3,6 +3,7 @@ from typing import  Callable
 import numpy as np
 import pandas as pd
 
+from instrupy.base import Instrument
 from orbitpy.util import Spacecraft
 
 from dmas.utils import runtime_tracker
@@ -32,15 +33,15 @@ class GridPoint(object):
         self.initial_reward : float = initial_reward
 
         # set variable parameters
-        self.observations : set[ObservationAction] = {observation for observation in observations}
+        self.observations : list[ObservationAction] = [observation for observation in observations]
         self.events : set[MeasurementRequest] = {event for event in events}
         self.reward : float = initial_reward
         self.t_update : float = t_update
         self.history : list = []
 
-    def update_observations(self, observation : ObservationAction, t_update : float) -> None:
+    def update_observations(self, observation_datum : dict, t_update : float) -> None:
         assert self.is_update_time_valid(t_update)
-        self.observations.add(observation)
+        self.observations.append(observation_datum)
         self.t_update = t_update
 
     def update_events(self, event : MeasurementRequest, t_update : float) -> None:
@@ -192,9 +193,14 @@ class RewardGrid(object):
                     grid_point.reset()
 
     @runtime_tracker
-    def update(self, t : float, observations : list = [], events : list = []) -> None:
+    def update(self, 
+               t : float, 
+               observations : list = [], 
+               events : list = []) -> None:
         # update observations
-        for observation in observations: self.update_observation(observation, t)
+        for instrument,observation_data in observations: 
+            for observation_datum in observation_data:
+                self.update_observation(instrument, observation_datum, t)
 
         # update events
         for event in events: self.update_event(event, t)
@@ -210,19 +216,25 @@ class RewardGrid(object):
         #             grid_point.update_reward(reward, t)
 
     @runtime_tracker
-    def update_observation(self, observation : ObservationAction, t : float) -> None:
+    def update_observation(self, 
+                           instrument : str,
+                           observation_datum : dict, 
+                           t : float) -> None:
+        
+        
         # get appropriate grid point object
-        lat,lon,_ = observation.target
+        lat = observation_datum['lat']
+        lon = observation_datum['lon']
         grid_index,gp_index = self.__get_target_indeces(lat,lon)
 
         # check if reward grid point exists
-        if observation.instrument_name not in self.rewards[grid_index][gp_index]:
+        if instrument not in self.rewards[grid_index][gp_index]:
             # add if needed
-            self.rewards[grid_index][gp_index][observation.instrument_name] \
-                = GridPoint(observation.instrument_name, lat, lon, grid_index, gp_index, self.initial_reward)
+            self.rewards[grid_index][gp_index][instrument] \
+                = GridPoint(instrument, lat, lon, grid_index, gp_index, self.initial_reward)
 
         # get corresponding grid point
-        grid_point : GridPoint = self.rewards[grid_index][gp_index][observation.instrument_name]
+        grid_point : GridPoint = self.rewards[grid_index][gp_index][instrument]
         
         # estimate current reward
         reward : float = self.propagate_reward(grid_point, t)
@@ -231,7 +243,7 @@ class RewardGrid(object):
         grid_point.update_reward(reward, t)
 
         # update grid point observation list
-        grid_point.update_observations(observation, t)
+        grid_point.update_observations(observation_datum, t)
 
         # estimate reward
         reward : float = self.propagate_reward(grid_point, t)

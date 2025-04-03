@@ -119,8 +119,8 @@ def event_driven(
     latest_event : MeasurementRequest = latest_events.pop() if latest_events else None
 
     # find latest observations
-    observations : list[ObservationAction] = list(observations)
-    observations.sort(key= lambda a : a.t_end)
+    observations : list[dict] = list(observations)
+    observations.sort(key= lambda a : a['t_img'])
     
     # calculate utility
     if latest_event:
@@ -130,7 +130,7 @@ def event_driven(
         if t <= latest_event.t_end: # event is current
             # count previous observations
             latest_observations = [observation for observation in observations
-                                   if latest_event.t_start <= observation.t_start <= latest_event.t_end]
+                                   if latest_event.t_start <= observation['t_img'] <= latest_event.t_end]
             
             # calculate reward
             if instrument in latest_event.observation_types:
@@ -143,18 +143,18 @@ def event_driven(
         else: # event has already passed
             # check if an observation has occurred since then
             latest_observations = [observation for observation in observations
-                                   if latest_event.t_end <= observation.t_start <= t]
+                                   if latest_event.t_end <= observation['t_img'] <= t]
             latest_observation = latest_observations.pop() if latest_observations else None
 
             # calculate reward
-            t_init = max(latest_event.t_end, latest_observation.t_end) if latest_observation else latest_event.t_end
+            t_init = max(latest_event.t_end, latest_observation['t_img']) if latest_observation else latest_event.t_end
             reward = (t - t_init) * unobserved_reward_rate / 3600  + min_reward
             reward = min(reward, max_unobserved_reward)
 
     else: # no events have been detected for this ground point
         # get latest observation if it exists
         latest_observation = observations.pop() if observations else None
-        t_init = latest_observation.t_end if latest_observation else 0.0
+        t_init = latest_observation['t_img'] if latest_observation else 0.0
         
         # assert (t - t_init) >= 0.0 # TODO fix acbba triggering this
 

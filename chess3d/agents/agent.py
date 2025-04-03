@@ -12,7 +12,7 @@ from dmas.modules import InternalModule
 from dmas.utils import runtime_tracker
 from zmq import SocketType
 
-from chess3d.agents.planning.plan import *
+from chess3d.agents.planning.plan import Replan, Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
 from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.requests import MeasurementRequest
@@ -179,7 +179,7 @@ class AbstractAgent(Agent):
         # perform each action and record action status
         statuses = []
         for action_dict in actions:
-            action : AgentAction = action_from_dict(**action_dict)
+            action : AgentAction = action_from_dict(**action_dict) if isinstance(action_dict, dict) else action_dict
 
             # check action start time
             if (action.t_start - self.get_current_time()) > 1e-6:
@@ -708,9 +708,9 @@ class SimulatedAgent(AbstractAgent):
         completed_observations.update({action_from_dict(**msg.observation_action) 
                             for msg in misc_messages
                             if isinstance(msg, ObservationPerformedMessage)})
-        
+                
         # update reward grid
-        if self.reward_grid: self.reward_grid.update(self.get_current_time(), completed_observations, incoming_reqs)
+        if self.reward_grid: self.reward_grid.update(self.get_current_time(), observations, incoming_reqs)
 
         # --- Create plan ---
         if self.preplanner is not None:
@@ -745,7 +745,7 @@ class SimulatedAgent(AbstractAgent):
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
-                # x = 1 # breakpoint
+                x = 1 # breakpoint
                 # -------------------------------------
 
         t_3 = time.perf_counter()
@@ -799,9 +799,35 @@ class SimulatedAgent(AbstractAgent):
                 x = 1 # breakpoint
                 # -------------------------------------
 
-        plan_out : list = self.plan.get_next_actions(state.t)
+        plan_out : list[AgentAction] = self.plan.get_next_actions(state.t)
+
+        future_broadcasts = [action for action in plan_out
+                             if isinstance(action, FutureBroadcastMessageAction)]
+        if future_broadcasts:
+            if self.replanner is not None:
+                for action in future_broadcasts:
+                    # get index of current future broadcast message action in output plan
+                    i_action = plan_out.index(action)
+                    # get contents of future broadcast message action
+                    broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.reward_grid)
+                    # replace future message action with broadcast action
+                    plan_out[i_action] = broadcast
+                    # remove future message action from current plan
+                    self.plan.remove(action, state.t)
+                    # add broadcast message action from current plan
+                    self.plan.add(broadcast, state.t)
+                
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
+                x = 1 # breakpoint
+                # -------------------------------------
+            else:
+                # ignore unknown plan types
+                for action in future_broadcasts: plan_out.remove(action)
+
         # --- FOR DEBUGGING PURPOSES ONLY: ---
-        # self.__log_plan(plan_out, "PLAN OUT", logging.WARNING)
+        # plan_out_dict = [action.to_dict() for action in plan_out]
+        # self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
         # x = 1 # breakpoint
         # -------------------------------------
         
@@ -823,12 +849,19 @@ class SimulatedAgent(AbstractAgent):
                                                     for msg in senses 
                                                     if isinstance(msg, MeasurementRequestMessage)
                                                     and msg.req['severity'] > 0.0]
+        
         observation_msgs : list [ObservationResultsMessage] = [sense for sense in senses 
                                                                 if isinstance(sense, ObservationResultsMessage)]
-        observations : list[tuple] = [(Instrument.from_dict(msg.instrument), msg.observation_data) 
-                                        for msg in senses 
-                                        if isinstance(msg, ObservationResultsMessage)
-                                        and msg.dst == self.get_element_name()]
+        external_observations : list[tuple] = [(msg.instrument, msg.observation_data) 
+                                                for msg in senses 
+                                                if isinstance(msg, ObservationResultsMessage)
+                                                and isinstance(msg.instrument, str)]
+        own_observations : list[tuple] = [(msg.instrument['name'], msg.observation_data) 
+                                          for msg in senses 
+                                          if isinstance(msg, ObservationResultsMessage)
+                                          and isinstance(msg.instrument, dict)]
+        observations = []; observations.extend(external_observations); observations.extend(own_observations)
+
         states : list[AgentStateMessage] = [sense for sense in senses 
                                             if isinstance(sense, AgentStateMessage)
                                             and sense.src == self.get_element_name()]
@@ -892,16 +925,14 @@ class SimulatedAgent(AbstractAgent):
             if self.processor is not None:
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
                 data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
-                        for req in self.processor.known_reqs
-                        if req.requester == self.get_element_name()]
+                        for req in self.processor.known_reqs]
                 
                 df = pd.DataFrame(data=data, columns=columns)        
                 df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
 
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
                 data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
-                        for req in self.processor.generated_reqs
-                        if req.requester == self.get_element_name()]
+                        for req in self.processor.generated_reqs]
                 
                 df = pd.DataFrame(data=data, columns=columns)        
                 df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   

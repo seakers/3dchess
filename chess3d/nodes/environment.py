@@ -106,7 +106,7 @@ class SimulationEnvironment(EnvironmentNode):
                 self.agent_connectivity[src][target] = -1
         self.agent_state_update_times = {}
 
-        self.measurement_reqs = []
+        self.measurement_reqs : set[MeasurementRequest] = set()
         self.stats = {}
         self.t_0 = None
         self.t_f = None
@@ -234,7 +234,7 @@ class SimulationEnvironment(EnvironmentNode):
             measurement_req : MeasurementRequest = MeasurementRequest.from_dict(content['req'])
 
             # add to list of received measurement requests 
-            self.measurement_reqs.append(measurement_req)
+            self.measurement_reqs.add(measurement_req)
 
         elif content['msg_type'] == SimulationMessageTypes.BUS.value:
             # an agent made a broadcast of multiple measurements
@@ -247,7 +247,7 @@ class SimulationEnvironment(EnvironmentNode):
                     if msg['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value]
             
             # add to list of received measurement requests 
-            self.measurement_reqs.extend(measurement_reqs)
+            self.measurement_reqs.update(measurement_reqs)
 
         # add to list of received broadcasts
         content['t_msg'] = self.get_current_time()
@@ -317,7 +317,7 @@ class SimulationEnvironment(EnvironmentNode):
         msg = ObservationResultsMessage(**content)
         self.log(f'received masurement data request from {msg.src}. quering measurement results...')
         agent_state = SimulationAgentState.from_dict(msg.agent_state)
-        instrument = Instrument.from_dict(msg.instrument)
+        instrument = Instrument.from_dict(msg.instrument) if isinstance(msg.instrument, dict) else msg.instrument
 
         # find/generate measurement results
         observation_data = self.query_measurement_data(agent_state, instrument)

@@ -1,4 +1,7 @@
+from typing import Dict
 import numpy as np
+
+from instrupy.base import Instrument
 
 from dmas.modules import ClockConfig
 from dmas.messages import SimulationMessage
@@ -10,7 +13,7 @@ from chess3d.agents.planning.planner import AbstractReplanner
 from chess3d.agents.planning.rewards import GridPoint, RewardGrid
 from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SimulationAgentState
-from chess3d.messages import BusMessage, MeasurementRequestMessage, ObservationPerformedMessage, message_from_dict
+from chess3d.messages import BusMessage, MeasurementRequestMessage, ObservationPerformedMessage, ObservationResultsMessage, message_from_dict
 
 
 class BroadcasterReplanner(AbstractReplanner):
@@ -47,29 +50,14 @@ class BroadcasterReplanner(AbstractReplanner):
                                 aborted_actions, 
                                 pending_actions)
         
-        # # collect completed observation broadcasts
-        # completed_broadcasts = {message_from_dict(**action.msg) 
-        #                         for action in completed_actions
-        #                         if isinstance(action, BroadcastMessageAction)}
-
-        # # update recently performed observation broadcasts list
-        # completed_observations : set[ObservationAction]= {action 
-        #                                                   for action in completed_actions
-        #                                                   if isinstance(action, ObservationAction)}
-        # self.pending_observations_to_broadcast.update(completed_observations)
-
-        # # remove recently performed observation broadcasts from pending broadcasts list
-        # completed_observation_broadcasts : set[ObservationAction] = {action_from_dict(**broadcast.observation_action)
-        #                                                             for broadcast in completed_broadcasts
-        #                                                             if isinstance(broadcast, ObservationPerformedMessage)}
-        # self.pending_observations_to_broadcast.difference_update(completed_observation_broadcasts)
-
     def needs_planning(self, 
                        state : SimulationAgentState,
                        specs : object,
                        current_plan : Plan,
                        orbitdata : OrbitData
                        ) -> bool:
+        
+        # return isinstance(current_plan, Preplan)
 
         # check if a new preplan was just generated
         if isinstance(current_plan, Preplan): return True
@@ -93,25 +81,76 @@ class BroadcasterReplanner(AbstractReplanner):
                 # update next broadcast time
                 self.t_next += self.period
                 
-                # generate messages to broadcast
-                broadcasts = self._schedule_broadcasts(state, reward_grid, orbitdata)
+            #     # generate messages to broadcast
+            #     broadcasts = self._schedule_broadcasts(state, reward_grid, orbitdata)
             
-                # insert wait to trigger next broadcasts
-                waits = [WaitForMessages(self.t_next, self.t_next)]
+            #     # insert wait to trigger next broadcasts
+            #     waits = [WaitForMessages(self.t_next, self.t_next)]
 
-            elif isinstance(current_plan, Preplan):
-                # replanning was triggered because of a new preplan was generated
+            # elif isinstance(current_plan, Preplan):
+            #     # replanning was triggered because of a new preplan was generated
                 
-                # do not broadcast yet
-                broadcasts = []
+            #     # do not broadcast yet
+            #     broadcasts = []
                 
-                # insert wait to trigger next broadcasts
-                waits = [WaitForMessages(self.t_next, self.t_next)]                
+            #     # insert wait to trigger next broadcasts
+            #     waits = [WaitForMessages(self.t_next, self.t_next)]                
 
-            return Replan.from_preplan(current_plan, broadcasts, waits, t=state.t)
+            # return Replan.from_preplan(current_plan, broadcasts, waits, t=state.t)
+
+            broadcasts = [FutureBroadcastMessageAction(FutureBroadcastTypes.REWARD,self.t_next),
+                          FutureBroadcastMessageAction(FutureBroadcastTypes.REQUESTS,self.t_next)]
+            return Replan.from_preplan(current_plan, broadcasts, t=state.t)
         else:
             raise NotImplementedError(f'`{self.mode}` information broadcaster not supported.')
+    
+    def get_broadcast_contents(self,
+                               broadcast_action : FutureBroadcastMessageAction,
+                               state : SimulationAgentState,
+                               reward_grid : RewardGrid,
+                               ) -> BroadcastMessageAction:
         
+        if broadcast_action.broadcast_type == FutureBroadcastTypes.REWARD:
+            latest_observations : list[ObservationAction] = []
+            for grid in reward_grid.rewards:
+                for target in grid:
+                    for instrument,grid_point in target.items():
+                        grid_point : GridPoint
+                        
+                        # collect latest known observation for each ground point
+                        if grid_point.observations:
+                            observations : list[dict] = list(grid_point.observations)
+                            observations.sort(key= lambda a: a['t_img'])
+                            latest_observations.append((instrument, observations[-1]))
+
+            instruments_used : set = {instrument for instrument,_ in latest_observations}
+
+            msgs = [ObservationResultsMessage(state.agent_name, 
+                                              state.agent_name, 
+                                              state.to_dict(), 
+                                              {}, 
+                                              instrument_used,
+                                              [observation_data
+                                                for instrument, observation_data in latest_observations
+                                                if instrument == instrument_used]
+                                              )
+                    for instrument_used in instruments_used]
+            x = 1
+            
+        elif broadcast_action.broadcast_type == FutureBroadcastTypes.REQUESTS:
+            msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+                    for req in self.known_reqs
+                    if isinstance(req, MeasurementRequest)
+                    and req.t_start <= state.t <= req.t_end]
+        else:
+            raise ValueError(f'`{broadcast_action.broadcast_type}` broadcast type not supported.')
+
+        # construct bus message
+        bus_msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+
+        # return bus message broadcast (if not empty)
+        return BroadcastMessageAction(bus_msg.to_dict(), broadcast_action.t_start)
+
     def _schedule_broadcasts(self, state : SimulationAgentState, reward_grid : RewardGrid, orbitdata : OrbitData):
         msgs : list[SimulationMessage] = []
 

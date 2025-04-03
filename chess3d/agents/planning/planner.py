@@ -830,3 +830,10 @@ class AbstractReplanner(AbstractPlanner):
                         orbitdata : OrbitData,
                     ) -> Plan:
         pass
+
+    @abstractmethod
+    def get_broadcast_contents(self,
+                               broadcast_action : FutureBroadcastMessageAction,
+                               **kwargs
+                               ) -> BroadcastMessageAction:
+        """  Generates a broadcast message to be sent to other agents """

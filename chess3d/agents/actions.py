@@ -12,10 +12,12 @@ class ActionTypes(Enum):
     BROADCAST = 'BROADCAST'
     WAIT = 'WAIT'
     OBSERVE = 'OBSERVE'
+    REPLAN = 'REPLAN'
 
 class FutureBroadcastTypes(Enum):
     PLAN = 'PLAN'                   # broadcast latest planner information
     BIDS = 'BIDS'                   # broadcast latest bids for a task
+    REQUESTS = 'REQUESTS'           # broadcast latest known active measurement requests 
     OBSERVATIONS = 'OBSERVATIONS'   # broadcast latest observation info
     REWARD = 'REWARD'               # broadcast latest reward grid information
 
@@ -290,3 +292,17 @@ class WaitForMessages(AgentAction):
             - id (`str`) : identifying number for this task in uuid format
         """
         super().__init__(ActionTypes.WAIT.value, t_start, t_end, status, id)
+
+class Replan(AgentAction):
+    """
+    ## Replan Action
+
+    Instructs the planner to generate a new plan for the agent. Used to schedule future replanning events.
+    """
+    def __init__(self, 
+                t_start: Union[float, int], 
+                status: str = 'PENDING', 
+                id: str = None, 
+                **_
+            ) -> None:
+        super().__init__(ActionTypes.REPLAN.value, t_start, t_start, status, id)
