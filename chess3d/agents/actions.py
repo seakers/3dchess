@@ -13,6 +13,12 @@ class ActionTypes(Enum):
     WAIT = 'WAIT'
     OBSERVE = 'OBSERVE'
 
+class FutureBroadcastTypes(Enum):
+    PLAN = 'PLAN'                   # broadcast latest planner information
+    BIDS = 'BIDS'                   # broadcast latest bids for a task
+    OBSERVATIONS = 'OBSERVATIONS'   # broadcast latest observation info
+    REWARD = 'REWARD'               # broadcast latest reward grid information
+
 def action_from_dict(action_type : str, **kwargs) -> AgentAction:
     if action_type == ActionTypes.IDLE.value:
         return IdleAction(**kwargs)
@@ -176,6 +182,38 @@ class BroadcastMessageAction(AgentAction):
         """
         super().__init__(ActionTypes.BROADCAST.value, t_start, t_start, status=status, id=id)
         self.msg = msg
+
+class FutureBroadcastMessageAction(BroadcastMessageAction):
+    """
+    ## Future Broadcast Message Action 
+
+    Instructs an agent that a message is to be broadcast to all of its peers but the contents are not yet kown
+
+    ### Attributes:
+        - broadcast_type (`str`): type of broadcast to be performed
+        - t_start (`float`): start time of this action in [s] from the beginning of the simulation
+        - t_end (`float`): start time of this actrion in[s] from the beginning of the simulation
+        - status (`str`): completion status of the task
+        - id (`str`) : identifying number for this task in uuid format
+    """
+        
+    def __init__(self, 
+                broadcast_type : str,
+                t_start : Union[float, int],
+                status : str = 'PENDING',
+                id: str = None, 
+                **_) -> None:
+        """
+        Creates an instance of a Future Broadcast Message Action
+
+        ### Arguments
+            - broadcast_type (`dict`): type of broadcast to be performed
+            - t_start (`float`): start time of this action in [s] from the beginning of the simulation
+            - status (`str`): completion status of the task
+            - id (`str`) : identifying number for this task in uuid format
+        """
+        super().__init__(dict(), t_start, status, id, **_)
+        self.broadcast_type = broadcast_type
 
 class ObservationAction(AgentAction):
     """

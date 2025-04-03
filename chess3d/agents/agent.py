@@ -461,7 +461,7 @@ class AbstractAgent(Agent):
         except Exception as e:
             x = 1
 
-    async def sim_wait(self, delay: float) -> None:
+    async def sim_wait(self, delay: float, timeout : float=1*60) -> None:
         try:  
             if (
                 isinstance(self._clock_config, FixedTimesStepClockConfig) 
@@ -486,33 +486,36 @@ class AbstractAgent(Agent):
                     toc_msg = None
                     confirmation = None
                     wait_for_response = None
+                    pending = None
 
                     # send tic request
                     tic_req = TicRequest(self.get_element_name(), t0, tf)
                     confirmation = await self._send_manager_msg(tic_req, zmq.PUB)
-                    timeout = asyncio.create_task(asyncio.sleep(1*60))
 
                     # wait for response
                     self.log(f'tic request for {tf}[s] sent! waiting on toc broadcast...')
                     wait_for_response = asyncio.create_task(self.manager_inbox.get())
+                    done,pending = await asyncio.wait([wait_for_response], timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
                     
-                    done,pending = await asyncio.wait([wait_for_response, timeout], return_when=asyncio.FIRST_COMPLETED)
-                    
+                    # check if response was received
                     if wait_for_response in done:
+                        # get response
                         dst, src, content = wait_for_response.result()
                         
+                        # check contents of response
                         if content['msg_type'] == ManagerMessageTypes.TOC.value:
-                            # update clock
+                            # toc received; update clock
                             toc_msg = TocMessage(**content)
                             await self.update_current_time(toc_msg.t)
                             self.log(f'toc received! time updated to: {self.get_current_time()}[s]')
                             break
 
                         else:
-                            # ignore message
+                            # unrelated message received; ignore message
                             self.log(f'some other manager message was received. ignoring...')
                             ignored.append((dst, src, content))
                     
+                    # cancel wait for response if timed out
                     for task in pending:
                         task.cancel()
                         await task
@@ -532,6 +535,11 @@ class AbstractAgent(Agent):
             if wait_for_response is not None and not wait_for_response.done():
                 wait_for_response.cancel()
                 await wait_for_response
+
+            if pending is not None:
+                for task in pending:
+                        task.cancel()
+                        await task
 
             raise e
 
