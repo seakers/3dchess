@@ -195,7 +195,8 @@ class SimulationManager(AbstractManager):
 
                         missing_reqs = [sim_element for sim_element in self._simulation_element_name_list
                                         if sim_element not in received_messages
-                                        and sim_element != self.get_element_name()]
+                                        and sim_element != self.get_element_name()
+                                        and sim_element != SimulationElementRoles.ENVIRONMENT.value]
                         raise asyncio.TimeoutError(f'wait for tic request timed out. Missing requests from {missing_reqs}.')
 
                     _, src, msg_dict = read_task.result()

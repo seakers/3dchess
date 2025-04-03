@@ -485,13 +485,17 @@ class AbstractAgent(Agent):
                     # initiate tic request
                     toc_msg = None
                     confirmation = None
+                    wait_for_response = None
 
                     # send tic request
                     tic_req = TicRequest(self.get_element_name(), t0, tf)
                     confirmation = await self._send_manager_msg(tic_req, zmq.PUB)
 
+                    # wait for response
                     self.log(f'tic request for {tf}[s] sent! waiting on toc broadcast...')
-                    dst, src, content = await self.manager_inbox.get()
+                    wait_for_response = asyncio.create_task(self.manager_inbox.get())
+                    await wait_for_response
+                    dst, src, content = wait_for_response.result()
                     
                     if content['msg_type'] == ManagerMessageTypes.TOC.value:
                         # update clock
@@ -515,6 +519,10 @@ class AbstractAgent(Agent):
             if confirmation is not None and toc_msg is None:
                 tic_cancel = CancelTicRequest(self.get_element_name(), t0, tf)
                 await self._send_manager_msg(tic_cancel, zmq.PUB)
+
+            if wait_for_response is not None and not wait_for_response.done():
+                wait_for_response.cancel()
+                await wait_for_response
 
             raise e
 
