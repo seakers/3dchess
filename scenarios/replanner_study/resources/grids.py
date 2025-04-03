@@ -266,7 +266,7 @@ if __name__ == "__main__":
     seed = 1000
 
     # load experiments
-    experiments_path = os.path.join('experiments', f'experiments_seed-{seed}.csv')
+    experiments_path = os.path.join('experiments', f'test_case_2_seed-{seed}.csv')
     experiments : pd.DataFrame = pd.read_csv(experiments_path)
 
     # collect grid types, number of groundpoints and grid distribution

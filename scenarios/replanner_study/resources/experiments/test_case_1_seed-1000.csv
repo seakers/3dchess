@@ -1,0 +1,25 @@
+Name,Scenario ID,Constellation,Number Planes,Number of Satellites per Plane,Field of Regard (deg),Field of View (deg),Maximum Slew Rate (deg/s),Number of Events per Day,Event Duration (hrs),Grid Type,Number of Ground-Points,Percent Ground-Points Considered,Preplanning Period,Preplanner,Replanner
+scenario_fifo-none_0,0,2,3,4,60,10,1,100,1.0,fibonacci,2500,1,inf,fifo,none
+scenario_fifo-none_1,1,0,1,8,60,10,10,1000,3.0,fibonacci,2500,1,inf,fifo,none
+scenario_fifo-none_2,2,0,1,8,60,1,1,100,0.25,fibonacci,5000,1,inf,fifo,none
+scenario_fifo-none_3,3,1,2,4,30,1,10,1000,3.0,fibonacci,1000,1,inf,fifo,none
+scenario_fifo-none_4,4,1,2,4,30,1,1,10000,1.0,fibonacci,5000,1,inf,fifo,none
+scenario_fifo-none_5,5,2,3,4,30,10,10,10000,0.25,fibonacci,1000,1,inf,fifo,none
+scenario_fifo-acbba_0,0,2,3,4,60,10,1,100,1.0,fibonacci,2500,1,inf,fifo,acbba
+scenario_fifo-acbba_1,1,0,1,8,60,10,10,1000,3.0,fibonacci,2500,1,inf,fifo,acbba
+scenario_fifo-acbba_2,2,0,1,8,60,1,1,100,0.25,fibonacci,5000,1,inf,fifo,acbba
+scenario_fifo-acbba_3,3,1,2,4,30,1,10,1000,3.0,fibonacci,1000,1,inf,fifo,acbba
+scenario_fifo-acbba_4,4,1,2,4,30,1,1,10000,1.0,fibonacci,5000,1,inf,fifo,acbba
+scenario_fifo-acbba_5,5,2,3,4,30,10,10,10000,0.25,fibonacci,1000,1,inf,fifo,acbba
+scenario_heuristic-none_0,0,2,3,4,60,10,1,100,1.0,fibonacci,2500,1,inf,heuristic,none
+scenario_heuristic-none_1,1,0,1,8,60,10,10,1000,3.0,fibonacci,2500,1,inf,heuristic,none
+scenario_heuristic-none_2,2,0,1,8,60,1,1,100,0.25,fibonacci,5000,1,inf,heuristic,none
+scenario_heuristic-none_3,3,1,2,4,30,1,10,1000,3.0,fibonacci,1000,1,inf,heuristic,none
+scenario_heuristic-none_4,4,1,2,4,30,1,1,10000,1.0,fibonacci,5000,1,inf,heuristic,none
+scenario_heuristic-none_5,5,2,3,4,30,10,10,10000,0.25,fibonacci,1000,1,inf,heuristic,none
+scenario_heuristic-acbba_0,0,2,3,4,60,10,1,100,1.0,fibonacci,2500,1,inf,heuristic,acbba
+scenario_heuristic-acbba_1,1,0,1,8,60,10,10,1000,3.0,fibonacci,2500,1,inf,heuristic,acbba
+scenario_heuristic-acbba_2,2,0,1,8,60,1,1,100,0.25,fibonacci,5000,1,inf,heuristic,acbba
+scenario_heuristic-acbba_3,3,1,2,4,30,1,10,1000,3.0,fibonacci,1000,1,inf,heuristic,acbba
+scenario_heuristic-acbba_4,4,1,2,4,30,1,1,10000,1.0,fibonacci,5000,1,inf,heuristic,acbba
+scenario_heuristic-acbba_5,5,2,3,4,30,10,10,10000,0.25,fibonacci,1000,1,inf,heuristic,acbba

@@ -26,12 +26,12 @@ def main(
 
     # stop if debugging mode is on
     if debug: 
-        lower_bound = 3
-        upper_bound = 4
+        # lower_bound = 0
+        # upper_bound = 1
         print('WARNING: Debug mode activated.')
 
     # get experiments name
-    _,seeds = experiments_name.split('_')
+    *_,seeds = experiments_name.split('_')
     _,seed =  seeds.split('-')
 
     # set scenario name
@@ -58,7 +58,7 @@ def main(
     if len(experiments_df) <= lower_bound: raise ValueError('Lower bound exceeds number of experiments. None will be run.')
 
     # set fixed parameters
-    sim_duration = 12.0 / 24.0 if debug else 1.0 # in days
+    sim_duration = 1 / 24.0 if debug else 1.0 # in days
 
     # count number of runs to be made
     experiments_to_eval = [ (i,row) for i,row in experiments_df.iterrows()
@@ -95,7 +95,8 @@ def main(
         if 'hydrolakes' in grid_name: grid_name += f'_seed-{seed}'
         if 'inland' in grid_name: grid_name += f'_seed-{seed}'
         
-        period, horizon = 500, 500
+        period = row['Preplanning Period']
+        horizon = period
 
         # extract satellite capability parameters
         field_of_regard = 1e-6 if preplanner == 'nadir' and replanner == 'broadcaster' else row['Field of Regard (deg)']

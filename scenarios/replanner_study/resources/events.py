@@ -210,7 +210,7 @@ if __name__ == "__main__":
                         help='name of scenario being used to select the location of events',
                         type=str,
                         required=False,
-                        default='experiments_seed-1000')
+                        default='test_case_2_seed-1000')
     parser.add_argument('-o', 
                         '--overwrite',
                         default=False,

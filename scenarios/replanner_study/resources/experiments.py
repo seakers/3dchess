@@ -15,15 +15,38 @@ def main(n_samples : int = 1, seed : int = 1000):
     
     # set parameters
     params = [
-        ('Constellation',                       [(1,8), (2,4), (3,4), (8,3)]),
+        ('Constellation',                       [
+                                                 (1,8), 
+                                                 (2,4), 
+                                                 (3,4), 
+                                                #  (8,3)
+                                                 ]),
         ('Field of Regard (deg)',               [30,60]),
         ('Field of View (deg)',                 [1,10]),
         ('Maximum Slew Rate (deg/s)',           [1,10]),
         ('Number of Events per Day',            [10**(i) for i in range(2,5)]),
-        ('Event Duration (hrs)',                [0.25, 1, 3, 6]),
-        ('Grid Type',                           ['fibonacci', 'inland', 'hydrolakes']),
-        ('Number of Ground-Points',             [1000, 2500, 5000, 10000]),
-        ('Percent Ground-Points Considered',    [1])
+        ('Event Duration (hrs)',                [
+                                                 0.25, 
+                                                 1, 
+                                                 3, 
+                                                 6
+                                                ]),
+        ('Grid Type',                           [
+                                                #  'fibonacci', 
+                                                 'inland', 
+                                                 'hydrolakes'
+                                                 ]),
+        ('Number of Ground-Points',             [
+                                                 1000, 
+                                                 2500, 
+                                                 5000, 
+                                                 10000
+                                                 ]),
+        ('Percent Ground-Points Considered',    [1]),
+        ('Preplanning Period',                  [
+                                                 500, 
+                                                #  np.Inf
+                                                 ])
     ]
 
     # calculate lowest-common-multiple for estimating number of samples
@@ -53,6 +76,9 @@ def main(n_samples : int = 1, seed : int = 1000):
         data = []
         j = 0
         for sample in tqdm(samples, desc='Generating experiments'):
+            if len(data) >= lcm*n_samples_init: 
+                continue
+            
             # create row of values 
             row = [j]
             for i in range(len(sample)):
@@ -83,8 +109,23 @@ def main(n_samples : int = 1, seed : int = 1000):
     # create compiled data frame
     df = pd.DataFrame(data=[], columns=feasible_scenarios.columns.values)
 
-    for preplanner in ['fifo', 'heuristic', 'dp']:
-        for replanner in ['none', 'broadcaster', 'acbba']:
+    preplanners = [
+                    # 'fifo', 
+                    'heuristic', 
+                    'dp'
+                    ]
+    replanners = [
+                    'none', 
+                    # 'broadcaster', 
+                    'acbba'
+                ]
+
+    for preplanner in preplanners:
+        for replanner in replanners:
+            
+            if preplanner == 'fifo' and replanner == 'broadcaster':
+                continue
+
             df_temp : pd.DataFrame = feasible_scenarios.copy()
 
             df_temp['Preplanner'] = preplanner
@@ -100,7 +141,7 @@ def main(n_samples : int = 1, seed : int = 1000):
     if not os.path.isdir('./experiments'): os.mkdir('./experiments')
 
     # save to csv
-    df.to_csv(f'./experiments/experiments_seed-{seed}.csv',index=False)
+    df.to_csv(f'./experiments/test_case_2_seed-{seed}.csv',index=False)
 
 def is_feasible(row : list) -> bool:
 
@@ -134,4 +175,4 @@ if __name__ == "__main__":
     print_welcome('Experiment generator for Preplanner Parametric Study')
 
     # generate experiments
-    main(3)
+    main(1)
