@@ -299,8 +299,8 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
                 t : list
                 th : list
 
-                if (   interval.is_during(t_img - orbitdata.time_step) 
-                    or interval.is_during(t_img + orbitdata.time_step)):
+                if (   interval.contains(t_img - orbitdata.time_step) 
+                    or interval.contains(t_img + orbitdata.time_step)):
                     interval.extend(t_img)
                     t.append(t_img)
                     th.append(look_angle)

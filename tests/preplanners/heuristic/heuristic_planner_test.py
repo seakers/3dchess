@@ -176,7 +176,7 @@ class TestBenCase(unittest.TestCase):
             "duration": 3.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
-                "stepSize": 10
+                # "stepSize": 10
             },
             "spacecraft": [
                 {
@@ -366,7 +366,6 @@ class TestBenCase(unittest.TestCase):
             ],
             "scenario": {   
                 "connectivity" : "FULL", 
-                "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
                     "eventsPath" : "./tests/preplanners/heuristic/resources/all_events_formatted.csv"
@@ -514,7 +513,6 @@ class TestRandomCase(unittest.TestCase):
             ],
             "scenario": {   
                 "connectivity" : "FULL", 
-                "utility" : "LINEAR",
                 "events" : {
                     "@type": "PREDEF", 
                     "eventsPath" : "./tests/preplanners/heuristic/resources/lake_events.csv"

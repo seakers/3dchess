@@ -3,10 +3,12 @@ from orbitpy.util import Spacecraft
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
+from sympy import Interval
 from tqdm import tqdm
 
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.rewards import RewardGrid
+from chess3d.agents.planning.tasks import ObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -33,6 +35,54 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                          logger)
         self.points = points
 
+    def get_coordinates(self, ground_points : dict, grid_index : int, gp_index : int) -> list:
+        """ Returns the coordinates of the ground points. """
+        lat,lon = ground_points[grid_index][gp_index]
+        return [lat, lon, 0.0]
+
+    def create_tasks_from_accesses(self, 
+                                     access_times : list, 
+                                     ground_points : dict, 
+                                     reward_grid : RewardGrid,
+                                     cross_track_fovs : dict) -> list:
+        """ Creates tasks from access times. """
+        
+        # create one task per each access opportinity
+        tasks : list[ObservationTask] = [ObservationTask(instrument, 
+                                        Interval(min(t), max(t)), 
+                                        Interval(np.mean(th)-cross_track_fovs[instrument]/2, np.mean(th)+cross_track_fovs[instrument]/2), 
+                                        [self.get_coordinates(ground_points, grid_index, gp_index)], 
+                                        reward_grid.estimate_reward(ObservationAction(instrument,
+                                                                                      self.get_coordinates(ground_points, grid_index, gp_index),
+                                                                                       th[0], 
+                                                                                       t[0],
+                                                                                       t[-1] - t[0])),
+                                        )
+                        for grid_index, gp_index, instrument, _, t, th in tqdm(access_times, desc="Creating tasks from access times", leave=False)
+                        ]
+        
+        # check if tasks are clusterable
+        cluster_adjacency = [[task_i.can_cluster(task_j) 
+                            for task_j in tasks
+                            if task_i.id != task_j.id] 
+                           for task_i in tqdm(tasks, desc="Checking task clusterability", leave=False)
+                           ]
+
+        # merge tasks with overlapping time intervals and slew angles
+
+        for i in range(len(tasks)):
+            for j in range(i + 1, len(tasks)):
+                if tasks[i].can_cluster(tasks[j]):
+                    x = 1
+                    # tasks[i].time_interval = tasks[i].time_interval.union(tasks[j].time_interval)
+                    # tasks[i].slew_angles = tasks[i].slew_angles.union(tasks[j].slew_angles)
+                    # tasks[i].targets.extend(tasks[j].targets)
+                    # tasks[i].reward += tasks[j].reward
+                    # tasks.pop(j)
+                    # break
+
+        return tasks
+
     @runtime_tracker
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
@@ -58,6 +108,9 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         
         # compile instrument field of view specifications   
         cross_track_fovs : dict = self.collect_fov_specs(specs)
+
+        # create tasks from access times
+        tasks : list = self.create_tasks_from_accesses(access_times, ground_points, reward_grid, cross_track_fovs)
         
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)

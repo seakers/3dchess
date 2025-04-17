@@ -17,17 +17,24 @@ class TimeInterval:
         if self.end < self.start:
             raise Exception('The end of time interval must be later than beginning of the interval.')
 
-    def is_after(self, t):
+    def is_after(self, t : float) -> bool:
+        """ checks if the time interval starts after time `t` """
         return t < self.start
 
-    def is_before(self, t):
+    def is_before(self, t : float) -> bool:
+        """ checks if the time interval ends before time `t` """
         return self.end < t
 
-    def is_during(self, t):
+    def contains(self, t : float) -> bool:
+        """ checks if `t` is in the time interval """
         return self.start <= t <= self.end
     
-    def has_overlap(self, __other : object) -> bool:
-        """ checks if a this time interval has an overlap with another """
+    def overlaps(self, __other : object) -> bool:
+        """ checks if this time interval has an overlap with another """
+        
+        if not isinstance(__other, TimeInterval):
+            raise TypeError(f'Cannot check overlap with object of type `{type(__other)}`.')
+
         return (    __other.start <= self.start <= __other.end
                 or  __other.start <= self.end <= __other.end 
                 or  (self.start <= __other.start and __other.end <= self.end)) 
@@ -35,8 +42,10 @@ class TimeInterval:
     def merge(self, __other : object) -> object:
         """ merges two time intervals and returns their intersect """
 
-        __other : TimeInterval
-        if not self.has_overlap(__other):
+        if not isinstance(__other, TimeInterval):
+            raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
+
+        if not self.overlaps(__other):
             raise ValueError("cannot merge two time intervals with no overlap")
 
         self.start = max(self.start, __other.start)
@@ -53,28 +62,44 @@ class TimeInterval:
     def duration(self) -> int:
         return self.end - self.start
 
-    def __eq__(self, __value: object) -> bool:
-        return abs(self.start - __value.start) < 1e-6 and abs(self.end - __value.end) < 1e-6
+    def __eq__(self, __other: object) -> bool:
+
+        if not isinstance(__other, TimeInterval):
+            raise TypeError(f'Cannot compare with object of type `{type(__other)}`.')
+
+        return abs(self.start - __other.start) < 1e-6 and abs(self.end - __other.end) < 1e-6
 
     def __gt__(self, __value: object) -> bool:
+        if not isinstance(__value, TimeInterval):
+            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+
         if abs(self.start - __value.start) < 1e-6:
             return self.duration() > __value.duration()
         
         return self.start > __value.start
 
     def __ge__(self, __value: object) -> bool:
+        if not isinstance(__value, TimeInterval):
+            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+
         if abs(self.start - __value.start) < 1e-6:
             return self.duration() >= __value.duration()
         
         return self.start >= __value.start
     
     def __lt__(self, __value: object) -> bool:
+        if not isinstance(__value, TimeInterval):
+            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+        
         if abs(self.start - __value.start) < 1e-6:
             return self.duration() < __value.duration()
         
         return self.start < __value.start
 
     def __le__(self, __value: object) -> bool:
+        if not isinstance(__value, TimeInterval):
+            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+        
         if abs(self.start - __value.start) < 1e-6:
             return self.duration() <= __value.duration()
         

@@ -668,7 +668,7 @@ class Mission:
                 found = False
                 for interval in access_intervals[(agent_name,instrument)]:
                     interval : TimeInterval
-                    if interval.is_during(t_access): 
+                    if interval.contains(t_access): 
                     # if so, extend the last access interval
                         interval.extend(t_access)
                         found = True
