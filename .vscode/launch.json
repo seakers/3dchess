@@ -188,10 +188,10 @@
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             },
             "args": [
-                "-d", "True",
-                "-s", "test_case_1_seed-1000",
-                "-l", "0",
-                "-u", "1",
+                // "-d", "True",
+                "-s", "test_case_2_seed-1000",
+                "-l", "21",
+                "-u", "22",
             ]
         },
         // {

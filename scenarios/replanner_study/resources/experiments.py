@@ -145,14 +145,14 @@ def main(n_samples : int = 1, seed : int = 1000):
     df = pd.DataFrame(data=[], columns=feasible_scenarios.columns.values)
 
     preplanners = [
-                    'fifo', 
+                    # 'fifo', 
                     'heuristic', 
-                    # 'dp'
+                    'dp'
                     ]
     replanners = [
                     'none', 
                     # 'broadcaster', 
-                    'acbba'
+                    # 'acbba'
                 ]
 
     for preplanner in preplanners:
@@ -177,7 +177,7 @@ def main(n_samples : int = 1, seed : int = 1000):
     if not os.path.isdir('./experiments'): os.mkdir('./experiments')
 
     # save to csv
-    df.to_csv(f'./experiments/test_case_2_seed-{seed}.csv',index=False)
+    df.to_csv(f'./experiments/satplan_test_case_2_seed-{seed}.csv',index=False)
 
 def is_feasible(row : list) -> bool:
 

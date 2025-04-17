@@ -16,8 +16,8 @@ from tqdm import tqdm
 def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : bool) -> None:
     
     # load and compile data
-    experiments_path = './resources/experiments/experiments_seed-1000.csv'
-    parameters, results_data = compile_data(results_path, experiments_path)
+    experiments_path = './resources/experiments/test_case_2_seed-1000.csv'
+    parameters, results_data = compile_data(results_path, experiments_path, overwrite)
     results_data : pd.DataFrame
 
     # define preformance metrics and their optimality
@@ -146,10 +146,10 @@ def main(results_path : str, show_plots : bool, save_plots : bool, overwrite : b
     generate_experiment_report(results_path, processed_results, parameters, metrics)
 
     # create plots
-    plot_results(processed_results, differential_results, parameters, metrics, show_plots, save_plots, overwrite)    
+    plot_results(results_path, processed_results, differential_results, parameters, metrics, show_plots, save_plots, overwrite)    
 
 
-def compile_data(results_path : str, experiments_path : str) -> tuple:
+def compile_data(results_path : str, experiments_path : str, overwrite : bool) -> tuple:
     # get run names
     run_names = list({run_name for run_name in os.listdir(results_path)
                  if os.path.isfile(os.path.join(results_path, run_name, 'summary.csv'))})
@@ -162,7 +162,7 @@ def compile_data(results_path : str, experiments_path : str) -> tuple:
     # set compiled results file name
     compiled_results_path = os.path.join(results_path, 'study_results_compiled.csv')
 
-    if os.path.isfile(compiled_results_path):
+    if os.path.isfile(compiled_results_path) and not overwrite:
         df : pd.DataFrame = pd.read_csv(compiled_results_path)
 
     else:
@@ -495,45 +495,20 @@ def generate_experiment_report(results_path : str, processed_results : pd.DataFr
                             for preplanner in processed_data['Preplanner'].unique() 
                             for replanner in processed_data['Replanner'].unique()]
         
-        # report.write(f'\n| Performance Metric |')
-        # for preplanner,replanner in scenario_planners:
-        #     report.write(f' {preplanner}-{replanner} | ')
-        # report.write('\n| - |')
-        # for preplanner,replanner in scenario_planners:
-        #     report.write(f'- | ')
-        # report.write('\n')
-            
-        # # generate compiled table
-        # for metric,optimum in metrics:
-        #     if 'P(' not in metric and 'Percent' not in metric: continue
-
-        #     metric_name = metric.replace("|","\|")
-        #     report.write(f'| {metric_name} |')
-
-        #     for preplanner,replanner in scenario_planners:
-        #         data = processed_data[processed_data['Preplanner'] == preplanner]
-        #         data = data[data['Replanner'] == replanner]
-                
-        #         vals = [val for val in data[metric] 
-        #                 if not np.isnan(val)
-        #                 ]
-        #         avg = np.round(np.average(vals),3)
-        #         dev = np.round(np.std(vals),3)
-
-        #         report.write(f' {avg} ± {dev} | ')
-
-        #     report.write('\n')
-
-        # USE TO GENERATE LATEX TABLE
-        report.write(f'\n Performance Metric ')
+        report.write(f'\n| Performance Metric |')
         for preplanner,replanner in scenario_planners:
-            report.write(f'& {preplanner}-{replanner} ')
-        report.write('\\\\\\hline \n')
-        
+            report.write(f' {preplanner}-{replanner} | ')
+        report.write('\n| - |')
+        for preplanner,replanner in scenario_planners:
+            report.write(f'- | ')
+        report.write('\n')
+            
         # generate compiled table
         for metric,optimum in metrics:
             if 'P(' not in metric and 'Percent' not in metric: continue
-            report.write(f' {metric}')
+
+            metric_name = metric.replace("|","\|")
+            report.write(f'| {metric_name} |')
 
             for preplanner,replanner in scenario_planners:
                 data = processed_data[processed_data['Preplanner'] == preplanner]
@@ -545,13 +520,47 @@ def generate_experiment_report(results_path : str, processed_results : pd.DataFr
                 avg = np.round(np.average(vals),3)
                 dev = np.round(np.std(vals),3)
 
-                report.write(f' & {avg} ± {dev}')
+                report.write(f' {avg} ± {dev} | ')
 
-            report.write('\\\\ \n')
+            report.write('\n')
 
-def plot_results(processed_results : pd.DataFrame, differential_results : pd.DataFrame, parameters : list, metrics : list, show_plots : bool, save_plots : bool, overwrite : bool) -> None:
+        # # USE TO GENERATE LATEX TABLE
+        # report.write(f'\n Performance Metric ')
+        # for preplanner,replanner in scenario_planners:
+        #     report.write(f'& {preplanner}-{replanner} ')
+        # report.write('\\\\\\hline \n')
+        
+        # # generate compiled table
+        # for metric,optimum in metrics:
+        #     if 'P(' not in metric and 'Percent' not in metric: continue
+        #     report.write(f' {metric}')
+
+        #     for preplanner,replanner in scenario_planners:
+        #         data = processed_data[processed_data['Preplanner'] == preplanner]
+        #         data = data[data['Replanner'] == replanner]
+                
+        #         vals = [val for val in data[metric] 
+        #                 if not np.isnan(val)
+        #                 ]
+        #         avg = np.round(np.average(vals),3)
+        #         dev = np.round(np.std(vals),3)
+
+        #         report.write(f' & {avg} ± {dev}')
+
+        #     report.write('\\\\ \n')
+
+def plot_results(results_path : str,
+                 processed_results : pd.DataFrame, 
+                 differential_results : pd.DataFrame, 
+                 parameters : list, 
+                 metrics : list, 
+                 show_plots : bool, 
+                 save_plots : bool, 
+                 overwrite : bool) -> None:
+    
     # create plots directory if necessary
-    if not os.path.isdir('./plots'): os.mkdir('./plots')
+    plots_path = os.path.join(results_path, 'plots')
+    if not os.path.isdir(plots_path): os.mkdir(plots_path)
     
     # select data to be plotted
     ys : set[str] = {val for val in processed_results.columns.values}
@@ -580,13 +589,13 @@ def plot_results(processed_results : pd.DataFrame, differential_results : pd.Dat
     # generate_correlogram(processed_results, ys, xs, show_plots, save_plots, overwrite, 'completed')
 
     # SCATTER PLOTS
-    generate_scatterplots(processed_results, ys, xs, show_plots, save_plots, overwrite, 'completed')
+    # generate_scatterplots(plots_path, processed_results, ys, xs, show_plots, save_plots, overwrite, 'completed')
 
     # DENSITY HISTOGRAMS
-    generate_density_histograms(processed_results, ys, show_plots, save_plots, overwrite, 'completed')
+    generate_density_histograms(plots_path, processed_results, ys, show_plots, save_plots, overwrite, 'completed')
 
     # HISTOGRAMS
-    generate_histograms(processed_results, ys, show_plots, save_plots, overwrite, 'completed')
+    generate_histograms(plots_path, processed_results, ys, show_plots, save_plots, overwrite, 'completed')
 
     # Plot differential data
     ys : set[str] = {val for val in differential_results.columns.values}
@@ -594,10 +603,10 @@ def plot_results(processed_results : pd.DataFrame, differential_results : pd.Dat
     ys.difference_update(xs)
 
     # DENSITY HISTOGRAMS
-    generate_density_histograms(differential_results, ys, show_plots, save_plots, overwrite, 'differential')
+    generate_density_histograms(plots_path, differential_results, ys, show_plots, save_plots, overwrite, 'differential')
 
     # HISTOGRAMS
-    generate_histograms(differential_results, ys, show_plots, save_plots, overwrite, 'differential')
+    generate_histograms(plots_path, differential_results, ys, show_plots, save_plots, overwrite, 'differential')
 
 def generate_correlogram(results_data : pd.DataFrame, ys : set, xs : list, show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
     # set ouput path
@@ -639,10 +648,10 @@ def generate_correlogram(results_data : pd.DataFrame, ys : set, xs : list, show_
     # close plot
     plt.close()
 
-def generate_scatterplots(results_data : pd.DataFrame, ys : set, xs : list, show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
+def generate_scatterplots(plots_path : str,results_data : pd.DataFrame, ys : set, xs : list, show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
     """ Creates scatter plots from results data """
     # set ouput path
-    scatterplot_path = './plots'
+    scatterplot_path = plots_path
     for path_element in ['scatterplots', dir_name]:
         scatterplot_path = os.path.join(scatterplot_path, path_element)
         if not os.path.isdir(scatterplot_path): os.mkdir(scatterplot_path)
@@ -687,9 +696,9 @@ def generate_scatterplots(results_data : pd.DataFrame, ys : set, xs : list, show
         # close plot
         plt.close()
 
-def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
+def generate_density_histograms(plots_path : str, results_data : pd.DataFrame, ys : list,  show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
     # set ouput path
-    kde_histogram_path = './plots'
+    kde_histogram_path = plots_path
     for path_element in ['kde_histograms', dir_name]:
         kde_histogram_path = os.path.join(kde_histogram_path, path_element)
         if not os.path.isdir(kde_histogram_path): os.mkdir(kde_histogram_path)
@@ -710,7 +719,7 @@ def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_pl
 
 
         # create histogram
-        left,right = plt.xlim()
+        
         if 'dif' not in dir_name:
             assert len(results_data[results_data['Replanner'] == 'acbba']) == len(results_data[results_data['Replanner'] == 'none'])
             assert len(results_data[results_data['Replanner'] == 'acbba']) + len(results_data[results_data['Replanner'] == 'none']) == len(results_data)
@@ -718,11 +727,12 @@ def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_pl
             sns.displot(results_data, 
                         x=y_vals, 
                         kind="kde", 
-                        # col="Grid Type",
-                        # row="Planner", 
+                        # row ="Grid Type",
+                        row="Preplanner", 
                         hue='Replanner',
                         warn_singular=False,
                         )
+            left,right = plt.xlim()
             plt.xlim(left=0)
             if right > 0.5: 
                 plt.xlim(right=1)
@@ -730,12 +740,13 @@ def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_pl
             sns.displot(results_data, 
                         x=y_vals, 
                         kind="kde", 
-                        # col="Grid Type",
-                        # row="Preplanner", 
+                        # row ="Grid Type",
+                        row="Preplanner", 
                         # hue='Replanner',
                         warn_singular=False
                         )
             
+            left,right = plt.xlim()
             if left < -1 or 1 < right:
                 plt.xlim(left=-1)
                 plt.xlim(right=1)
@@ -753,9 +764,9 @@ def generate_density_histograms(results_data : pd.DataFrame, ys : list,  show_pl
         # close plot
         plt.close()
 
-def generate_histograms(results_data : pd.DataFrame, ys : list,  show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
+def generate_histograms(plots_path : str, results_data : pd.DataFrame, ys : list,  show_plots : bool, save_plots : bool, overwrite : bool, dir_name : str) -> None:
     # set ouput path
-    histogram_path = './plots'
+    histogram_path = plots_path
     for path_element in ['histograms', dir_name]:
         histogram_path = os.path.join(histogram_path, path_element)
         if not os.path.isdir(histogram_path): os.mkdir(histogram_path)
@@ -780,7 +791,7 @@ def generate_histograms(results_data : pd.DataFrame, ys : list,  show_plots : bo
                         x=y_val, 
                         kind="hist", 
                         # col="Grid Type",
-                        # row="Replanner",
+                        # col="Preplanner",
                         bins=10,
                         hue='Replanner'
                         # size="Number of Grid-points",
@@ -793,7 +804,7 @@ def generate_histograms(results_data : pd.DataFrame, ys : list,  show_plots : bo
             sns.displot(results_data, 
                         x=y_val, 
                         kind="hist", 
-                        # col="Grid Type",
+                        # col="Preplanner",
                         # row="Preplanner",
                         bins=10,
                         # size="Number of Grid-points",
@@ -882,7 +893,7 @@ def generate_box_plots(results_data : pd.DataFrame, ys : list, show_plots : bool
 
 if __name__  == "__main__":
     # set params
-    results_path = './results'
+    results_path = './results/case_2'
     show_plots = False
     save_plots = True
     overwrite = False

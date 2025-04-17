@@ -538,7 +538,7 @@ class AbstractPreplanner(AbstractPlanner):
                 
         # initialize attributes
         self.pending_reqs_to_broadcast : set[MeasurementRequest] = set()            # set of observation requests that have not been broadcasted
-        
+
     @runtime_tracker
     def update_percepts(self, 
                         state : SimulationAgentState,

@@ -796,6 +796,8 @@ class AbstractConsensusReplanner(AbstractReplanner):
             # get matching request
             req : MeasurementRequest = self._get_matching_request(their_bid.req_id)
 
+            if req is None: continue
+
             # check bids are for new requests
             is_new_req : bool = their_bid.req_id not in results
 
