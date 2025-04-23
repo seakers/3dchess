@@ -1,6 +1,6 @@
 import uuid
 import numpy as np
-from sympy import Interval
+from chess3d.utils import Interval
 
 from chess3d.agents.actions import ObservationAction
 
@@ -42,17 +42,18 @@ class ObservationTask:
             # Check if the time intervals overlap
             time_overlap : Interval = self.time_interval.intersection(other_task.time_interval)
 
-            if not time_overlap.is_empty:
+            if not time_overlap.is_empty():
                 # Check if the time intervals are within the maximum duration
-                if (time_overlap.measure) > min(self.max_duration, other_task.max_duration):
+                if time_overlap.span() > min(self.max_duration, other_task.max_duration):
                     return False
 
             # Check if the slew angles overlap
             slew_angle_overlap : Interval = self.slew_angles.intersection(other_task.slew_angles) 
 
-            return not (time_overlap.is_empty or slew_angle_overlap.is_empty)
+            return not (time_overlap.is_empty() or slew_angle_overlap.is_empty())
         except Exception as e:
             x = 1
+            raise e
 
     def to_observation_action(self) -> ObservationAction:
         """ Convert the task to an observation action. """

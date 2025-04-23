@@ -27,7 +27,7 @@ class ModuleTypes(Enum):
 class Interval:
     """ Represents an linear interval set of real numbers """
 
-    def __init__(self, left : float, right : float, left_open : bool=False, right_open : bool=False):
+    def __init__(self, left:float, right:float, left_open:bool=False, right_open:bool=False):
         self.left : float = left
         self.left_open : bool = left_open
 
@@ -60,18 +60,15 @@ class Interval:
                 or __other.left in self
                 or __other.right in self)
 
-        # return (    __other.left <= self.left <= __other.right
-        #         or  __other.left <= self.right <= __other.right 
-        #         or  (self.left <= __other.left and __other.right <= self.right)) 
-
-    def intersect(self, __other : object) -> object:
-        """ merges intervals and returns their intersect """
+    def intersection(self, __other : object) -> object:
+        """ returns the intersect of two intervals """
 
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
 
         if not self.overlaps(__other):
-            raise ValueError("cannot merge intervals with no overlap")
+            return EmptyInterval()
+            # raise ValueError("cannot merge intervals with no overlap")
 
         # find the left and right bounds of the intersection
         left = max(self.left, __other.left)
@@ -91,6 +88,7 @@ class Interval:
             raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
 
         if not self.overlaps(__other):
+            # return EmptyInterval()
             raise ValueError("cannot merge intervals with no overlap")
 
         # find the left and right bounds of the union
@@ -104,24 +102,26 @@ class Interval:
         # create a new interval object
         return Interval(left, right, left_open, right_open)
 
+    def extend(self, x: float, open:bool=False) -> None:
+        """ extends interval """
 
-    def extend(self, t: float) -> None:
-        """ extends time interval """
-
-        if t < self.left:
-            self.left = t
-        elif t > self.right:
-            self.right = t
+        if x < self.left:
+            self.left = x
+            self.left_open = open
+        elif x > self.right:
+            self.right = x
+            self.right_open = open
 
         return
     
-    def __len__(self) -> int:
-        return self.right - self.left
+    def span(self) -> float:
+        """ returns the span of the interval """       
+        return np.NAN if self.is_empty() else self.right - self.left
     
     def __contains__(self, x: float) -> bool:
         """ checks if `x` is contained in the interval """
         l = self.left < x if self.left_open else self.left <= x
-        r = x < self.right  if self.right_open else x <= self.right
+        r = x < self.right if self.right_open else x <= self.right
         
         return l and r
 
@@ -169,9 +169,9 @@ class Interval:
         return self.left <= __value.left
     
     def __repr__(self) -> str:
-        l = '(' if self.left_open else '['
-        r = ')' if self.left_open else ']'
-        return f'Interval{l}{self.left},{self.right}{r}'
+        l_bracket = '(' if self.left_open else '['
+        r_bracket = ')' if self.left_open else ']'
+        return f'Interval{l_bracket}{self.left},{self.right}{r_bracket}'
     
     def __hash__(self) -> int:
         return hash(str(self))

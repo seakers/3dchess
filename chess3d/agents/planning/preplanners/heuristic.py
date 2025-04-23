@@ -3,7 +3,6 @@ from orbitpy.util import Spacecraft
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
-from sympy import Interval
 from tqdm import tqdm
 
 from chess3d.agents.orbitdata import OrbitData
@@ -15,6 +14,7 @@ from chess3d.agents.science.requests import *
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.planner import AbstractPreplanner
+from chess3d.utils import Interval
 from chess3d.messages import *
 
 class HeuristicInsertionPlanner(AbstractPreplanner):
@@ -62,14 +62,14 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                         ]
         
         # check if tasks are clusterable
-        cluster_adjacency = [[task_i.can_cluster(task_j) 
-                            for task_j in tasks
-                            if task_i.id != task_j.id] 
-                           for task_i in tqdm(tasks, desc="Checking task clusterability", leave=False)
-                           ]
+        cluster_adjacency = [[False for _ in range(len(tasks))] for _ in range(len(tasks))]
+        for i in tqdm(range(len(tasks)), leave=False, desc="Checking task clusterability"):
+            for j in range(i + 1, len(tasks)):
+                if tasks[i].can_cluster(tasks[j]):
+                    cluster_adjacency[i][j] = True
+                    cluster_adjacency[j][i] = True        
 
         # merge tasks with overlapping time intervals and slew angles
-
         for i in range(len(tasks)):
             for j in range(i + 1, len(tasks)):
                 if tasks[i].can_cluster(tasks[j]):
@@ -80,6 +80,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                     # tasks[i].reward += tasks[j].reward
                     # tasks.pop(j)
                     # break
+
 
         return tasks
 
