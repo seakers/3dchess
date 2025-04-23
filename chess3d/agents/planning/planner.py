@@ -12,11 +12,12 @@ from dmas.utils import runtime_tracker
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.orbitdata import OrbitData, TimeInterval
+from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.rewards import GridPoint, RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
+from chess3d.utils import Interval
 
 class AbstractPlanner(ABC):
     """ 
@@ -108,12 +109,12 @@ class AbstractPlanner(ABC):
         earliest_accesses = [   orbitdata.get_next_agent_access(target_agent, t_init) 
                                 for target_agent in target_agents]           
         
-        same_access_start = [   abs(access.start - earliest_accesses[0].start) < 1e-3
+        same_access_start = [   abs(access.left - earliest_accesses[0].left) < 1e-3
                                 for access in earliest_accesses 
-                                if isinstance(access, TimeInterval)]
-        same_access_end = [     abs(access.end - earliest_accesses[0].end) < 1e-3
+                                if isinstance(access, Interval)]
+        same_access_end = [     abs(access.right - earliest_accesses[0].right) < 1e-3
                                 for access in earliest_accesses 
-                                if isinstance(access, TimeInterval)]
+                                if isinstance(access, Interval)]
 
         if all(same_access_start) and all(same_access_end):
             # all agents are accessing eachother at the same time; no need for mesasge relays
@@ -152,13 +153,13 @@ class AbstractPlanner(ABC):
                 # query next access interval to children nodes
                 t_access : float = state.t + path_cost
 
-                access_interval : TimeInterval = orbitdata.get_next_agent_access(receiver_agent, t_access)
+                access_interval : Interval = orbitdata.get_next_agent_access(receiver_agent, t_access)
                 
-                if access_interval.start < np.Inf:
+                if access_interval.left < np.Inf:
                     new_path = [path_element for path_element in current_path]
                     new_path.append(receiver_agent)
 
-                    new_cost = access_interval.start - state.t
+                    new_cost = access_interval.left - state.t
 
                     new_times = [path_time for path_time in current_times]
                     new_times.append(new_cost + state.t)
@@ -183,7 +184,7 @@ class AbstractPlanner(ABC):
         
         # query next access interval to children nodes
         sender_orbitdata : OrbitData = orbitdata[state.agent_name]
-        access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(next_dst, state.t)
+        access_interval : Interval = sender_orbitdata.get_next_agent_access(next_dst, state.t)
         t_start : float = access_interval.start
 
         if t_start < np.Inf:
@@ -768,12 +769,12 @@ class AbstractPreplanner(AbstractPlanner):
             # compile time interval information 
             found = False
             for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
-                interval : TimeInterval
+                interval : Interval
                 t : list
                 th : list
 
-                if (   interval.contains(t_img - orbitdata.time_step) 
-                    or interval.contains(t_img + orbitdata.time_step)):
+                if (   (t_img - orbitdata.time_step) in interval 
+                    or (t_img + orbitdata.time_step) in interval):
                     interval.extend(t_img)
                     t.append(t_img)
                     th.append(look_angle)
@@ -781,7 +782,7 @@ class AbstractPreplanner(AbstractPlanner):
                     break                        
 
             if not found:
-                access_opportunities[grid_index][gp_index][instrument].append([TimeInterval(t_img, t_img), [t_img], [look_angle]])
+                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
 
         # convert to `list`
         access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)

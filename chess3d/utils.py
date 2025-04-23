@@ -4,6 +4,8 @@ import logging
 import os
 import shutil
 
+import numpy as np
+
 class CoordinateTypes(Enum):
     """
     # Coordinate Type
@@ -21,6 +23,176 @@ class ModuleTypes(Enum):
     PLANNER = 'PLANNER'
     SCIENCE = 'SCIENCE'
     ENGINEERING = 'ENGINEERING'
+
+class Interval:
+    """ Represents an linear interval set of real numbers """
+
+    def __init__(self, left : float, right : float, left_open : bool=False, right_open : bool=False):
+        self.left : float = left
+        self.left_open : bool = left_open
+
+        self.right : float = right
+        self.right_open : bool = right_open
+
+        if self.right < self.left:
+            raise Exception('The right side of interval must be later than the left side of the interval.')
+
+    def is_after(self, x : float) -> bool:
+        """ checks if the interval starts after the value `x` """
+        return x < self.left
+
+    def is_before(self, x : float) -> bool:
+        """ checks if the time ends before the value `x` """
+        return self.right < x
+    
+    def is_empty(self) -> bool:
+        """ checks if the interval is empty """
+        return self.left == self.right
+        
+    def overlaps(self, __other : object) -> bool:
+        """ checks if this interval has an overlap with another """
+        
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot check overlap with object of type `{type(__other)}`.')
+
+        return ( self.left in __other
+                or self.right in __other
+                or __other.left in self
+                or __other.right in self)
+
+        # return (    __other.left <= self.left <= __other.right
+        #         or  __other.left <= self.right <= __other.right 
+        #         or  (self.left <= __other.left and __other.right <= self.right)) 
+
+    def intersect(self, __other : object) -> object:
+        """ merges intervals and returns their intersect """
+
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
+
+        if not self.overlaps(__other):
+            raise ValueError("cannot merge intervals with no overlap")
+
+        # find the left and right bounds of the intersection
+        left = max(self.left, __other.left)
+        right = min(self.right, __other.right)
+
+        # check if the left and right bounds are open
+        left_open = self.left_open if left == self.left else __other.left_open
+        right_open = __other.right_open if right == __other.right else self.right_open
+
+        # create a new interval object
+        return Interval(left, right, left_open, right_open)
+
+    def union(self, __other : object) -> object:
+        """ merges overlapping intervals and returns their union """
+
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
+
+        if not self.overlaps(__other):
+            raise ValueError("cannot merge intervals with no overlap")
+
+        # find the left and right bounds of the union
+        left = min(self.left, __other.left)
+        right = max(self.right, __other.right)
+
+        # check if the left and right bounds are open
+        left_open = self.left_open if left == self.left else __other.left_open
+        right_open = __other.right_open if right == __other.right else self.right_open
+
+        # create a new interval object
+        return Interval(left, right, left_open, right_open)
+
+
+    def extend(self, t: float) -> None:
+        """ extends time interval """
+
+        if t < self.left:
+            self.left = t
+        elif t > self.right:
+            self.right = t
+
+        return
+    
+    def __len__(self) -> int:
+        return self.right - self.left
+    
+    def __contains__(self, x: float) -> bool:
+        """ checks if `x` is contained in the interval """
+        l = self.left < x if self.left_open else self.left <= x
+        r = x < self.right  if self.right_open else x <= self.right
+        
+        return l and r
+
+    def __eq__(self, __other: object) -> bool:
+
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__other)}`.')
+
+        return abs(self.left - __other.left) < 1e-6 and abs(self.right - __other.right) < 1e-6
+
+    def __gt__(self, __value: object) -> bool:
+        if not isinstance(__value, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+
+        if abs(self.left - __value.left) < 1e-6:
+            return len(self) > len(__value)
+        
+        return self.left > __value.left
+
+    def __ge__(self, __value: object) -> bool:
+        if not isinstance(__value, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+
+        if abs(self.left - __value.left) < 1e-6:
+            return len(self) >= len(__value)
+        
+        return self.left >= __value.left
+    
+    def __lt__(self, __value: object) -> bool:
+        if not isinstance(__value, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+        
+        if abs(self.left - __value.left) < 1e-6:
+            return len(self) < len(__value)
+        
+        return self.left < __value.left
+
+    def __le__(self, __value: object) -> bool:
+        if not isinstance(__value, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+        
+        if abs(self.left - __value.left) < 1e-6:
+            return len(self) <= len(__value)
+        
+        return self.left <= __value.left
+    
+    def __repr__(self) -> str:
+        l = '(' if self.left_open else '['
+        r = ')' if self.left_open else ']'
+        return f'Interval{l}{self.left},{self.right}{r}'
+    
+    def __hash__(self) -> int:
+        return hash(str(self))
+    
+class EmptyInterval(Interval):
+    """ Represents an empty interval """
+
+    def __init__(self):
+        super().__init__(np.NAN, np.NAN)
+        self.left_open = True
+        self.right_open = True
+
+    def is_empty(self) -> bool:
+        return True
+
+    def __repr__(self) -> str:
+        return 'EmptyInterval()'
+
+    def __contains__(self, x: float) -> bool:
+        return False
+    
 
 def setup_results_directory(scenario_path : str, scenario_name : str, agent_names : list, overwrite : bool = True) -> str:
     """

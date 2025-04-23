@@ -32,7 +32,7 @@ from chess3d.agents.science.processing import LookupProcessor
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
-from chess3d.agents.orbitdata import OrbitData, TimeInterval
+from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule
@@ -655,27 +655,27 @@ class Mission:
                             ]
 
         # initialize map of compiled access intervals
-        access_intervals : Dict[tuple,list[TimeInterval]] = dict()
+        access_intervals : Dict[tuple,list[Interval]] = dict()
 
         # compile list of accesses
         for t_access, agent_name, instrument in matching_accesses:
             if (agent_name,instrument) not in access_intervals:
                 time_step = orbitdata[agent_name].time_step 
-                access_intervals[(agent_name,instrument)] = [TimeInterval(t_access,t_access+time_step)]
+                access_intervals[(agent_name,instrument)] = [Interval(t_access,t_access+time_step)]
 
             else:
                 # check if this access overlaps with any previous access
                 found = False
                 for interval in access_intervals[(agent_name,instrument)]:
-                    interval : TimeInterval
-                    if interval.contains(t_access): 
+                    interval : Interval
+                    if t_access in interval: 
                     # if so, extend the last access interval
                         interval.extend(t_access)
                         found = True
                 
                 # otherwise, create a new access interval
                 if not found:
-                    access_intervals[(agent_name,instrument)].append(TimeInterval(t_access,t_access+time_step))
+                    access_intervals[(agent_name,instrument)].append(Interval(t_access,t_access+time_step))
         
         # convert to list
         access_intervals : list = sorted([ (access_interval,agent_name,instrument) 

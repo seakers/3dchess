@@ -6,13 +6,14 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 from chess3d.agents.actions import ObservationAction
-from chess3d.agents.orbitdata import OrbitData, TimeInterval
+from chess3d.agents.orbitdata import OrbitData 
 from chess3d.agents.planning.plan import Plan, Replan
 from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.planning.replanners.consensus.bids import Bid
 from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
+from chess3d.utils import Interval
 
 from orbitpy.util import Spacecraft
 
@@ -295,12 +296,12 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
             # compile time interval information 
             found = False
             for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
-                interval : TimeInterval
+                interval : Interval
                 t : list
                 th : list
 
-                if (   interval.contains(t_img - orbitdata.time_step) 
-                    or interval.contains(t_img + orbitdata.time_step)):
+                if (   (t_img - orbitdata.time_step) in interval
+                    or (t_img + orbitdata.time_step)in interval):
                     interval.extend(t_img)
                     t.append(t_img)
                     th.append(look_angle)
@@ -308,7 +309,7 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
                     break                        
 
             if not found:
-                access_opportunities[grid_index][gp_index][instrument].append([TimeInterval(t_img, t_img), [t_img], [look_angle]])
+                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
 
         # convert to `list`
         access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)
