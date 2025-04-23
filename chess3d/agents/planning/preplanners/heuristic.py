@@ -1,4 +1,5 @@
 from logging import Logger
+from typing import Dict
 from orbitpy.util import Spacecraft
 
 from dmas.utils import runtime_tracker
@@ -39,6 +40,21 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         """ Returns the coordinates of the ground points. """
         lat,lon = ground_points[grid_index][gp_index]
         return [lat, lon, 0.0]
+    
+    def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:
+        """ Sorts tasks by degree of adjacency. """
+        # calculate degree of each task
+        degrees : dict = {task : len(adjacency[task]) for task in tasks}
+
+        # DEBUGGING-print sorted tasks
+        # for task in sorted(tasks, key=lambda p: (degrees[p], p.reward, p.time_interval), reverse=True):
+        #     i = tasks.index(task)
+        #     degree = degrees[i]
+
+        #     print(f"Task: {i}, Degree: {degree}, Times: {task.time_interval}, Angles: {task.slew_angles}, Reward: {np.round(task.reward,3)}")
+
+        # sort tasks by degree and return
+        return sorted(tasks, key=lambda p: (degrees[p], p.reward, p.time_interval), reverse=True)
 
     def create_tasks_from_accesses(self, 
                                      access_times : list, 
@@ -60,29 +76,70 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                                         )
                         for grid_index, gp_index, instrument, _, t, th in tqdm(access_times, desc="Creating tasks from access times", leave=False)
                         ]
+        original_tasks : list[ObservationTask] = [task.copy() for task in tasks]
         
         # check if tasks are clusterable
-        cluster_adjacency = [[False for _ in range(len(tasks))] for _ in range(len(tasks))]
+        adjacency : Dict[ObservationTask, set[ObservationTask]] = {task : set() for task in tasks}
+        original_adjacency : Dict[ObservationTask, set[ObservationTask]] = {task : set() for task in original_tasks}
         for i in tqdm(range(len(tasks)), leave=False, desc="Checking task clusterability"):
             for j in range(i + 1, len(tasks)):
                 if tasks[i].can_cluster(tasks[j]):
-                    cluster_adjacency[i][j] = True
-                    cluster_adjacency[j][i] = True        
+                    adjacency[tasks[i]].add(tasks[j])
+                    adjacency[tasks[j]].add(tasks[i]) 
 
-        # merge tasks with overlapping time intervals and slew angles
-        for i in range(len(tasks)):
-            for j in range(i + 1, len(tasks)):
-                if tasks[i].can_cluster(tasks[j]):
-                    x = 1
-                    # tasks[i].time_interval = tasks[i].time_interval.union(tasks[j].time_interval)
-                    # tasks[i].slew_angles = tasks[i].slew_angles.union(tasks[j].slew_angles)
-                    # tasks[i].targets.extend(tasks[j].targets)
-                    # tasks[i].reward += tasks[j].reward
-                    # tasks.pop(j)
-                    # break
+                    original_adjacency[original_tasks[i]].add(original_tasks[j])
+                    original_adjacency[original_tasks[j]].add(original_tasks[i])     
+
+        # sort tasks by degree of adjacency 
+        tasks = self.sort_tasks_by_degree(tasks, adjacency)
+        original_tasks = self.sort_tasks_by_degree(original_tasks, original_adjacency)
+        
+        v : list[ObservationTask] = self.sort_tasks_by_degree(tasks, adjacency)
+        
+        # combine tasks based on adjacency
+        combined_tasks : list[ObservationTask] = []
+        while len(v) > 0:
+            p : ObservationTask = v[0]
+            n_p : list[ObservationTask] = self.sort_tasks_by_degree(list(adjacency[p]), adjacency)
+
+            # clique : set = set()
+            clique : set = {p}
+
+            while len(n_p) > 0:
+                # Pick a neighbor q of p, q \in n_p, such that the number of their common neighbors is maximum: If such p are not unique, pick the p with least edges being deleted
+                q : ObservationTask = n_p.pop(0)
+
+                # Combine q and p into a new p
+                # p.combine(q)
+                clique.add(q)
+
+                # Delete edges from q and p that are not connected to their common neighbors
+                common_neighbors : set[ObservationTask] = adjacency[p].intersection(adjacency[q])
+
+                neighbors_to_delete_p : set[ObservationTask] = adjacency[p].difference(common_neighbors)
+                for neighbor in neighbors_to_delete_p: adjacency[p].remove(neighbor)
+
+                neighbors_to_delete_q : set[ObservationTask] = adjacency[q].difference(common_neighbors)
+                for neighbor in neighbors_to_delete_q: adjacency[q].remove(neighbor)
+
+                # Reset neighbor collection N_p for the new p;
+                n_p : list[ObservationTask] = self.sort_tasks_by_degree(list(adjacency[p]), adjacency)
+
+                x = 1
+
+            for q in clique: 
+                p.combine(q)
+                adjacency.pop(q)
+                v.remove(q)
+
+            v : list[ObservationTask] = self.sort_tasks_by_degree(v, adjacency)
+
+            # Add p to the list of combined tasks
+            combined_tasks.append(p)
+            x = 1
 
 
-        return tasks
+        raise NotImplementedError('Not yet ready for deployment')
 
     @runtime_tracker
     def _schedule_observations(self, 

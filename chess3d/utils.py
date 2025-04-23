@@ -88,8 +88,8 @@ class Interval:
             raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
 
         if not self.overlaps(__other):
-            # return EmptyInterval()
-            raise ValueError("cannot merge intervals with no overlap")
+            return EmptyInterval()
+            # raise ValueError("cannot merge intervals with no overlap")
 
         # find the left and right bounds of the union
         left = min(self.left, __other.left)
@@ -137,7 +137,7 @@ class Interval:
             raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
 
         if abs(self.left - __value.left) < 1e-6:
-            return len(self) > len(__value)
+            return self.span() > __value.span()
         
         return self.left > __value.left
 
@@ -146,7 +146,7 @@ class Interval:
             raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
 
         if abs(self.left - __value.left) < 1e-6:
-            return len(self) >= len(__value)
+            return self.span() >= __value.span()
         
         return self.left >= __value.left
     
@@ -155,7 +155,7 @@ class Interval:
             raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
         
         if abs(self.left - __value.left) < 1e-6:
-            return len(self) < len(__value)
+            return self.span() < __value.span()
         
         return self.left < __value.left
 
@@ -164,7 +164,7 @@ class Interval:
             raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
         
         if abs(self.left - __value.left) < 1e-6:
-            return len(self) <= len(__value)
+            return self.span() <= __value.span()
         
         return self.left <= __value.left
     
@@ -173,8 +173,13 @@ class Interval:
         r_bracket = ')' if self.left_open else ']'
         return f'Interval{l_bracket}{self.left},{self.right}{r_bracket}'
     
+    def __str__(self) -> str:
+        l_bracket = '(' if self.left_open else '['
+        r_bracket = ')' if self.left_open else ']'
+        return f'{l_bracket}{np.round(self.left,3)},{np.round(self.right,3)}{r_bracket}'
+    
     def __hash__(self) -> int:
-        return hash(str(self))
+        return hash(repr(self))
     
 class EmptyInterval(Interval):
     """ Represents an empty interval """
