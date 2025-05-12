@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from chess3d.mission import Mission
+from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome, LEVELS
 
 
@@ -201,7 +201,7 @@ def main(
 
         # initialize mission
         if not os.path.isfile(results_summary_path) or overwrite or reeval:
-            mission : Mission = Mission.from_dict(scenario_specs, overwrite=overwrite, level=level)
+            mission : Simulation = Simulation.from_dict(scenario_specs, overwrite=overwrite, level=level)
 
         # check if output directory was properly initalized
         assert os.path.isdir(os.path.join(scenario_dir, 'results', experiment_name))

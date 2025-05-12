@@ -1,0 +1,10 @@
+
+Qué tal dani, unas dudas de lo que hablamos ayer:
+
+Estamos usando la utility de U_ij = S_j M_ij P_ij - C_ij donde U_ij es la utility, S_j es el reward intrínsico de la task, M_ij es el priority de la task, P_ij es el performance de la task según los requirements de la misión y C_ij es el costo de hacer la task (calculando el torque de la maneobra necesaria * 1e-4)
+
+So far calculamos el S_j en función de las observaciones anteriores cuando no había un evento presente en plan incrementaba hasta un valor máximo y se mantenía ahi hasta ser observado de nuevo. En caso de que haya uno presente se le asignaba el valor de la severity del evento. Si no se detecta algo, regresa a un valor mínimo e incrementa lineal mente hasta llegar a un valor máximo.
+
+Q1: Ya que introducimos el valor de priority en función de la misión, qué valor le asignamos? Si digamos hay dos misiones en la simulación y el agente A tiene es asignado a la misión 1, cuál sería el valor de M_ij cuando la mission sea 1 y cuando sea digamos la 2? Pensaba en decir M_ij = 1  si la misión hacía match y M_ij = 1/3 otherwise. What do you think?
+
+Q2: Para calcular P_ij se necesita saber los requirements de la misión a la cual pertenece la task para así poder cuantificar la performance de la observación. Por ejemplo, si un agente está asignado a la misión 1 y tiene la posibilidad de observar una task de la misión 2, entonces tendría que estár enterado de los requirements de la misión 2 para poder calcular las métricas. Pensaba en darles a todos los agentes las SATMs de todas las misiones disponibles y simplemente decirle a cada agente a cuál misión pertence. Los mission_requests entonces sólo le indicarían a los satélites a cuál misión pertenece ahora, pero los SATMs ya los tendría pre-loaded 

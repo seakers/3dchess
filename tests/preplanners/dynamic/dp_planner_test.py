@@ -2,7 +2,7 @@ import unittest
 
 from tqdm import tqdm
 
-from chess3d.mission import Mission
+from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 # from runtime_plots import plot_scenario_runtime
 
@@ -142,10 +142,10 @@ class TestDynamicProgrammingPlannerBen(unittest.TestCase):
         }
 
         # initialize mission
-        self.mission : Mission = Mission.from_dict(scenario_specs)
+        self.mission : Simulation = Simulation.from_dict(scenario_specs)
 
         # check type of mission object
-        self.assertTrue(isinstance(self.mission, Mission))
+        self.assertTrue(isinstance(self.mission, Simulation))
 
     # def test_planner(self) -> None:
     #     # execute mission
@@ -294,10 +294,10 @@ class TestDynamicProgrammingPlannerRandom(unittest.TestCase):
         }
 
         # initialize mission
-        self.mission : Mission = Mission.from_dict(scenario_specs)
+        self.mission : Simulation = Simulation.from_dict(scenario_specs)
 
         # check type of mission object
-        self.assertTrue(isinstance(self.mission, Mission))
+        self.assertTrue(isinstance(self.mission, Simulation))
 
     def test_planner(self) -> None:
         # execute mission
