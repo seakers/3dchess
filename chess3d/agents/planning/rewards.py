@@ -9,7 +9,7 @@ from orbitpy.util import Spacecraft
 from dmas.utils import runtime_tracker
 
 from chess3d.agents.actions import ObservationAction
-from chess3d.agents.science.requests import MeasurementRequest
+from chess3d.agents.science.requests import *
 
 class GridPoint(object):
     """ Describes the reward of performing an observation of a given ground point """
@@ -34,7 +34,7 @@ class GridPoint(object):
 
         # set variable parameters
         self.observations : list[ObservationAction] = [observation for observation in observations]
-        self.events : set[MeasurementRequest] = {event for event in events}
+        self.events : set[GeophysicalEvent] = {event for event in events}
         self.reward : float = initial_reward
         self.t_update : float = t_update
         self.history : list = []
@@ -42,15 +42,25 @@ class GridPoint(object):
     def update_observations(self, observation_datum : dict, t_update : float) -> None:
         assert self.is_update_time_valid(t_update)
 
+        # chekc if there are any prior observations
         if self.observations:
-            if observation_datum['t_img'] > self.observations[-1]['t_img']:
-                # update latest observation
-                self.observations[-1] = observation_datum
+            # check if observation is more recent than the last one
+            if observation_datum['t'] > self.observations[-1]['t']:
+                # check if an active event exists
+                if any(event.is_active(observation_datum['t']) for event in self.events):
+                    # add latest observation to the list
+                    self.observations.append(observation_datum)
+                else:
+                    # update to latest observation
+                    self.observations[-1] = observation_datum
         else:
+            # add first observation
             self.observations.append(observation_datum)
+        
+        # update latest update time
         self.t_update = t_update
 
-    def update_events(self, event : MeasurementRequest, t_update : float) -> None:
+    def update_events(self, event : GeophysicalEvent, t_update : float) -> None:
         assert self.is_update_time_valid(t_update)
         self.events.add(event)
         self.t_update = t_update
@@ -105,10 +115,17 @@ class RewardGrid(object):
 
         # load grid data
         self.grid_data : list[pd.DataFrame] = grid_data
+        
+        # remove unwanted columns in grid data if any
+        for grid in self.grid_data:
+            grid : pd.DataFrame
+            _ = [grid.pop(unwanted_column) for unwanted_column in grid.columns 
+                 if unwanted_column not in ['lat [deg]', 'lon [deg]', 'grid index', 'GP index']]
+            # for unwanted_column in unwanted_columns: grid.pop(unwanted_column)
 
         # ensure no repeats on grid indeces
-        assert all([len([int(gp_index) for _,_,_,gp_index in grid_datum.values]) \
-                    == len({int(gp_index) for _,_,_,gp_index in grid_datum.values})
+        assert all([len([int(gp_index) for *_,gp_index in grid_datum.values]) \
+                    == len({int(gp_index) for *_,gp_index in grid_datum.values})
                    for grid_datum in self.grid_data])
         
         # save additional parameters
@@ -127,7 +144,7 @@ class RewardGrid(object):
                                                            int(gp_index),
                                                            initial_reward) 
                                for instrument in specs.instrument} 
-                              for lat,lon,grid_index,gp_index in grid_datum.values] 
+                              for lat,lon,*_,grid_index,gp_index in grid_datum.values] 
                             for grid_datum in self.grid_data]
         elif isinstance(specs, dict):
             self.rewards = [ [{instrument['name'] : GridPoint(instrument['name'], 
@@ -146,7 +163,7 @@ class RewardGrid(object):
         self.n_decimals = self.count_decimals(grid_data)
         self.coordinate_map = {(round(lat, self.n_decimals),round(lon, self.n_decimals)) : (int(grid_index),int(gp_index))
                                for grid_datum in self.grid_data
-                               for lat,lon,grid_index,gp_index in grid_datum.values}
+                               for lat,lon,*_,grid_index,gp_index in grid_datum.values}
 
         # update previous observations and events (if they exist)
         prev_observations = grid_params.get('prev_observations', [])
@@ -211,23 +228,13 @@ class RewardGrid(object):
                t : float, 
                observations : list = [], 
                events : list = []) -> None:
+        # update events
+        for event in events: self.update_event(event, t)
+
         # update observations
         for instrument,observation_data in observations: 
             for observation_datum in observation_data:
                 self.update_observation(instrument, observation_datum, t)
-
-        # update events
-        for event in events: self.update_event(event, t)
-
-        # update values for the entire grid
-        # for grid_rewards in self.rewards:
-        #     for gp_rewards in grid_rewards:
-        #         for _, grid_point in gp_rewards.items():
-        #             # estimate reward
-        #             reward : float = self.propagate_reward(grid_point, t)
-
-        #             # update grid point reward
-        #             grid_point.update_reward(reward, t)
 
     @runtime_tracker
     def update_observation(self, 
@@ -237,8 +244,8 @@ class RewardGrid(object):
         
         
         # get appropriate grid point object
-        lat = observation_datum['lat']
-        lon = observation_datum['lon']
+        lat = observation_datum['lat [deg]']
+        lon = observation_datum['lon [deg]']
         grid_index,gp_index = self.__get_target_indeces(lat,lon)
 
         # check if reward grid point exists
@@ -266,10 +273,12 @@ class RewardGrid(object):
         grid_point.update_reward(reward, t)
 
     @runtime_tracker
-    def update_event(self, event : MeasurementRequest, t : float) -> None:
+    def update_event(self, event : GeophysicalEvent, t : float) -> None:
         # get appropriate grid point object
-        lat,lon,_ = event.target
+        lat,lon,_ = event.location
         grid_index,gp_index = self.__get_target_indeces(lat,lon)
+
+        raise NotImplementedError('Update event not implemented yet.')
 
         for instrument in event.observation_types:
             # check if reward grid point exists
@@ -305,7 +314,7 @@ class RewardGrid(object):
     
     @runtime_tracker
     def estimate_reward(self, observation : ObservationAction) -> float:
-        lat,lon,_ = observation.target
+        lat,lon,_ = observation.targets
         grid_index,gp_index = self.__get_target_indeces(lat,lon)
         grid_point : GridPoint = self.rewards[grid_index][gp_index][observation.instrument_name]
 

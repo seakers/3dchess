@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from chess3d.mission import Mission
+from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
 class ToyTestACBBAReplanner(unittest.TestCase):
@@ -400,7 +400,7 @@ class ToyTestACBBAReplanner(unittest.TestCase):
 
 
         # initialize mission
-        self.toy_mission : Mission = Mission.from_dict(mission_specs)
+        self.toy_mission : Simulation = Simulation.from_dict(mission_specs)
 
     # def test_toy_mission(self) -> None:
     #     # execute mission
@@ -723,7 +723,7 @@ class MissionTestACBBAReplanner(unittest.TestCase):
         if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
 
         # initialize mission
-        self.mission : Mission = Mission.from_dict(mission_specs)
+        self.mission : Simulation = Simulation.from_dict(mission_specs)
 
     def test_mission(self) -> None:
         # execute mission
@@ -1039,7 +1039,7 @@ class MissionTestDynamicACBBAReplanner(unittest.TestCase):
         }
 
         # initialize mission
-        self.mission : Mission = Mission.from_dict(mission_specs)
+        self.mission : Simulation = Simulation.from_dict(mission_specs)
 
     # def test_mission(self) -> None:
     #     # execute mission
