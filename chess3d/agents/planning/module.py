@@ -238,7 +238,7 @@ class PlanningModule(InternalModule):
             self.log(f"received measurement request message!")
 
             # unapack measurement request
-            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
+            req : TaskRequest = TaskRequest.from_dict(msg.req)
             
             # send to planner
             await self.req_inbox.put(req)
@@ -487,7 +487,7 @@ class PlanningModule(InternalModule):
                     # check if an outlier was deteced
                     if internal_msg.req['severity'] > 0.0:
                         # event was detected and an observation was requested
-                        requests.append(MeasurementRequest.from_dict(internal_msg.req))
+                        requests.append(TaskRequest.from_dict(internal_msg.req))
 
                 else:
                     # the science module generated a different response; process later
@@ -510,7 +510,7 @@ class PlanningModule(InternalModule):
                     # check if an outlier was deteced
                     if internal_msg.req['severity'] > 0.0:
                         # event was detected and an observation was requested
-                        requests.append(MeasurementRequest.from_dict(internal_msg.req))
+                        requests.append(TaskRequest.from_dict(internal_msg.req))
                         
                     # request : MeasurementRequest = MeasurementRequest.from_dict(internal_msg.req)
                     

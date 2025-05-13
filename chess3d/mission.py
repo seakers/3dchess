@@ -60,6 +60,18 @@ class GeophysicalEvent:
         self.t_corr : float = t_corr if t_corr is not None else (t_end - t_start)
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
+    def is_active(self, t: float) -> bool:
+        """Check if the event is active at time t."""
+        return self.t_start <= t <= self.t_end
+    
+    def is_expired(self, t: float) -> bool:
+        """Check if the event is expired at time t."""
+        return t > self.t_end
+    
+    def is_future(self, t: float) -> bool:
+        """Check if the event is in the future at time t."""
+        return t < self.t_start
+
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the event to a dictionary."""
         return self.__dict__
@@ -88,7 +100,7 @@ class GeophysicalEvent:
     
 
 class MeasurementRequirement:
-    def __init__(self, attribute: str, thresholds: list, scores: list):
+    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None):
         """
         ### Measurement Requirement 
         
@@ -108,9 +120,10 @@ class MeasurementRequirement:
         assert all(0 <= score <= 1 for score in scores), "Scores must be between 0 and 1"
 
         # Set attributes
-        self.attribute : str = attribute
+        self.attribute : str = attribute.lower()
         self.thresholds : list = thresholds
         self.scores : list[float] = scores
+        self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
         # Determine if thresholds are categorical or numeric
         if isinstance(thresholds[0], str): # Categorical thresholds          
@@ -165,9 +178,13 @@ class MeasurementRequirement:
 
     def calc_preference_value(self, value: float) -> float:
         return self.preference_function(value)
+    
+    def copy(self) -> 'MeasurementRequirement':
+        """Create a copy of the measurement requirement."""
+        return MeasurementRequirement(self.attribute, self.thresholds, self.scores, self.id)
 
-class Objective:
-    def __init__(self, parameter: str, priority: float, requirements: list):
+class MissionObjective:
+    def __init__(self, parameter: str, priority: float, requirements: list, id : str = None):
         """ 
         ### Objective
          
@@ -182,11 +199,13 @@ class Objective:
         assert isinstance(parameter, str), "Parameter must be a string"
         assert len(requirements) > 0, "At least one requirement is needed"
         assert all(isinstance(req, MeasurementRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
+        assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
 
         # Set attributes
         self.priority : float = priority
         self.parameter : str = parameter
         self.requirements : Dict[str, MeasurementRequirement] = {requirement.attribute : requirement for requirement in requirements}
+        self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def eval_performance(self, measurement: dict) -> float:
         """Evaluate the product of satisfaction scores given a measurement dict {attr: value}"""
@@ -200,14 +219,27 @@ class Objective:
                 scores.append(req.calc_preference_value(measurement[attribute]))
         
         return np.prod(scores)
+    
+    def __repr__(self):
+        """String representation of the objective."""
+        return f"MissionObjective({self.parameter}, priority={self.priority}, requirements={self.requirements})"
+    
+    def __str__(self):
+        """String representation of the objective."""
+        return f"Objective: {self.parameter}, Priority: {self.priority}, Requirements: {self.requirements}"
 
-class EventDrivenObjective(Objective):
+    def copy(self) -> 'MissionObjective':
+        """Create a copy of the objective."""
+        return MissionObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.id)
+
+class EventDrivenObjective(MissionObjective):
     def __init__(self, 
                  parameter: str, 
                  priority: float, 
                  requirements: list, 
                  event_type: str,
-                 reobservation_strategy: str = "no_change"
+                 reobservation_strategy: str = "no_change",
+                 id : str = None
                  ):
         """ 
         ### Event Driven Objective
@@ -225,7 +257,7 @@ class EventDrivenObjective(Objective):
             - "immediate_decrease"
             - "no_change"
         """
-        super().__init__(parameter, priority, requirements)
+        super().__init__(parameter, priority, requirements, id)
         
         # Validate inputs
         assert isinstance(event_type, str), "Event type must be a string"
@@ -236,21 +268,52 @@ class EventDrivenObjective(Objective):
         self.reobservation_strategy = reobservation_strategy
 
     def eval_performance(self, measurement):
-        return super().eval_performance(measurement) * RO[self.reobservation_strategy](measurement["n_obs"]) * self.event.severity
+        return super().eval_performance(measurement) * RO[self.reobservation_strategy](measurement["n_obs"])
+
+    def __repr__(self):
+        """String representation of the objective."""
+        return f"EventDrivenObjective({self.parameter}, priority={self.priority}, requirements={self.requirements})"
+    
+    def __str__(self):
+        """String representation of the objective."""
+        return f"Event-driven Objective: {self.parameter}, Priority: {self.priority}, Requirements: {self.requirements}"
+
+    def copy(self):
+        return EventDrivenObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.event_type, self.reobservation_strategy, self.id)
 
 class Mission:
     def __init__(self, name : str, objectives: list):
         # Validate inputs
         assert isinstance(name, str), "Mission name must be a string"
         assert len(objectives) > 0, "At least one objective is needed"
-        assert all(isinstance(obj, Objective) for obj in objectives), "All objectives must be instances of `Objective`"
+        assert all(isinstance(obj, MissionObjective) for obj in objectives), "All objectives must be instances of `Objective`"
 
         # Set attributes
-        self.name : str = name
-        self.objectives : list[Objective] = objectives
+        self.name : str = name.lower()
+        self.objectives : list[MissionObjective] = objectives
 
     def evaluate_measurement(self, measurements: dict) -> float:
         """Sum weighted objective scores across all objectives"""
         return sum([obj.priority * obj.eval_performance(measurements) 
-                    for obj in self.objectives])
+                    for obj in self.objectives
+                    if not isinstance(obj, EventDrivenObjective)
+                    ])
+    
+    def evaluate_event_measurement(self, measurements: dict) -> float:
+        """Sum weighted objective scores across all objectives"""
+        return sum([obj.priority * obj.eval_performance(measurements) 
+                    for obj in self.objectives
+                    if isinstance(obj, EventDrivenObjective)
+                    ])
 
+    def __repr__(self):
+        """String representation of the mission."""
+        return f"Mission({self.name}, objectives={self.objectives})"
+    
+    def __str__(self):
+        """String representation of the mission."""
+        return f"Mission: {self.name}, Objectives: {self.objectives}"
+    
+    def copy(self) -> 'Mission':
+        """Create a copy of the mission."""
+        return Mission(self.name, [obj.copy() for obj in self.objectives])

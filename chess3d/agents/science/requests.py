@@ -2,7 +2,9 @@ from typing import Union
 import numpy as np
 import uuid
 
-class MeasurementRequest(object):
+from chess3d.mission import *
+
+class TaskRequest(object):
     """
     Indicates the existance of an event of interest at a given target point
     and requests agents to perform an observatrion with a given set of instruments
@@ -85,10 +87,10 @@ class MeasurementRequest(object):
         return dict(self.__dict__)
 
     def from_dict(d : dict) -> object:
-        return MeasurementRequest(**d)
+        return TaskRequest(**d)
     
     def __eq__(self, other : object) -> bool:
-        if not isinstance(other, MeasurementRequest):
+        if not isinstance(other, TaskRequest):
             raise ValueError(f'cannot compare `MeasurementRequest` object to an object of type {type(other)}.')
         
         my_dict : dict = self.to_dict()
@@ -102,7 +104,7 @@ class MeasurementRequest(object):
     def same_event(self, other : object) -> bool:
         """ compares the events being requested for observation between two measurement requests """
 
-        if not isinstance(other, MeasurementRequest):
+        if not isinstance(other, TaskRequest):
             raise ValueError(f'cannot compare `MeasurementRequest` object to an object of type {type(other)}.')
 
         same_target = all([abs(self.target[i]-other.target[i]) <= 1e-3 for i in range(len(self.target))])
@@ -127,90 +129,85 @@ class MeasurementRequest(object):
         return hash(repr(self))
 
     def copy(self) -> object:
-        return MeasurementRequest.from_dict(self.to_dict())
+        return TaskRequest.from_dict(self.to_dict())
     
-    # FOLLOWING 3 LINES WOULD GO WITHIN THE CONSTRUCTOR
-    #     self.observation_groups = self.generate_observations_groups(observations_types)
-    #     self.dependency_matrix = self.generate_dependency_matrix()
-    #     self.time_dependency_matrix = self.generate_time_dependency_matrix()
+class TaskRequest:
+    """
+        Indicates the existance of an event of interest at a given target point
+    """
+    def __init__(self,
+                 requester : str,
+                 event : Union[GeophysicalEvent, dict],
+                 objectives : list,
+                 t_req : Union[float, int],
+                 id : str = None,
+                 **_ 
+                 ):
+        """
+        Creates an instance of a measurement request
 
-    # def generate_observations_groups(self, observations_types : list) -> list:
-    #     """
-    #     Generates all combinations of groups of obvservations to be performed by a single or multiple agents
-
-    #     ### Arguments:
-    #         - observations_types (`list`): list of the observations that are needed to fully perform this task
-
-    #     ### Returns:
-    #         - observations_groups (`list`): list of observations group tuples containing the main observation type and a list of all dependent observations
-    #     """
-    #     # create measurement groups
-    #     n_types = len(observations_types)
-    #     observation_groups = []
-    #     for r in range(1, n_types+1):
-    #         combs = list(combinations(observations_types, r))
-            
-    #         for comb in combs:
-    #             measurement_group = list(comb)
-    #             main_measurement_permutations = list(permutations(comb, 1))
-
-    #             for main_measurement in main_measurement_permutations:
-    #                 main_measurement = list(main_measurement).pop()
-
-    #                 dependend_measurements = copy.deepcopy(measurement_group)
-    #                 dependend_measurements.remove(main_measurement)
-
-    #                 if len(dependend_measurements) > 0:
-    #                     observation_groups.append((main_measurement, dependend_measurements))
-    #                 else:
-    #                     observation_groups.append((main_measurement, []))
+        ### Arguments:
+            - requester (`str`): name of agent requesting the observations
+            - event (`GeophysicalEvent` or `dict`): event being requested for observation
+            - parameters (`list`): list of parameters to be observed
+            - t_req (`float`): time at which the request is made in [s] from the beginning of the simulation
+            - id (`str`) : identifying number for this task in uuid format
         
-    #     return observation_groups     
+        """
+        if not isinstance(requester, str):
+            raise ValueError(f'`requester` must be of type `str`. Is of type {type(requester)}.')
+        if isinstance(event, dict):
+            event = GeophysicalEvent.from_dict(event)
+        if not isinstance(event, GeophysicalEvent):
+            raise ValueError(f'`event` must be of type `GeophysicalEvent`. Is of type {type(event)}.')
+        if not isinstance(objectives, list):
+            raise ValueError(f'`objectives` must be of type `list`. Is of type {type(objectives)}.')
+        if any([not isinstance(objective, dict) for objective in objectives]) or any([not isinstance(objective, MissionObjective) for objective in objectives]):
+            raise ValueError(f'`objectives` must be a `list` of elements of type `dict` or `MissionObjective`.')
+        if len(objectives) == 0:
+            raise ValueError(f'`objectives` must be a non-empty `list` of elements of type `dict` or `MissionObjective`.')
+        if isinstance(t_req, str) and t_req.lower() == "inf": t_req = np.Inf
+        if not isinstance(t_req, float) and not isinstance(t_req, int):
+            raise ValueError(f'`t_req` must be of type `float` or `int`. Is of type {type(t_req)}.')
+        if t_req < 0: raise ValueError(f"`t_req` must have a non-negative value.")
+
+        # initialize attributes
+        self.requester : str = requester
+        self.event : GeophysicalEvent= event
+        # convert list of dicts to list of MissionObjectives if needed 
+        if isinstance(objectives[0], dict): objectives = [EventDrivenObjective(**objective) for objective in objectives]
+        self.objectives : list[EventDrivenObjective] = [objective for objective in objectives]
+        self.t_req : float = t_req
+        self.id : str = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
+
+    def __repr__(self):
+        task_id = self.id.split('-')
+        return f'TaskRequest_{task_id[0]}'
+
+    def to_dict(self) -> dict:
+        """
+        Crates a dictionary containing all information contained in this measurement request object
+        """
+        return dict(self.__dict__)
+
+    def from_dict(d : dict) -> object:
+        return TaskRequest(**d)
     
-    # def generate_dependency_matrix(self) -> list:
-    #     # create dependency matrix
-    #     dependency_matrix = []
-    #     for index_a in range(len(self.observation_groups)):
-    #         main_a, dependents_a = self.observation_groups[index_a]
+    def same_event(self, other : object) -> bool:
+        """ compares the events being requested for observation between two measurement requests """
 
-    #         dependencies = []
-    #         for index_b in range(len(self.observation_groups)):
-    #             main_b, dependents_b = self.observation_groups[index_b]
+        if not isinstance(other, TaskRequest):
+            raise ValueError(f'cannot compare `TaskRequest` object to an object of type {type(other)}.')
 
-    #             if index_a == index_b:
-    #                 dependencies.append(0)
+        same_type = self.event.event_type == other.event.event_type
+        same_target = all([abs(self.event.location[i]-other.event.location[i]) <= 1e-3 
+                           for i in range(len(self.event.location))])
+        same_severity = abs(self.event.severity - other.event.severity) <= 1e-3
+        same_time = abs(self.event.t_end - other.event.t_end) <= 1e-3
 
-    #             elif main_a not in dependents_b or main_b not in dependents_a:
-    #                 dependencies.append(-1)
-
-    #             elif main_a == main_b:
-    #                 dependencies.append(-1)
-                    
-    #             else:
-    #                 dependents_a_extended : list = copy.deepcopy(dependents_a)
-    #                 dependents_a_extended.remove(main_b)
-    #                 dependents_b_extended : list = copy.deepcopy(dependents_b)
-    #                 dependents_b_extended.remove(main_a)
-
-    #                 if dependents_a_extended == dependents_b_extended:
-    #                     dependencies.append(1)
-    #                 else:
-    #                     dependencies.append(-1)
-            
-    #         dependency_matrix.append(dependencies)
-       
-    #     return dependency_matrix
-
-    # def generate_time_dependency_matrix(self) -> list:
-    #     time_dependency_matrix = []
-
-    #     for index_a in range(len(self.observation_groups)):
-    #         time_dependencies = []
-    #         for index_b in range(len(self.observation_groups)):
-    #             if self.dependency_matrix[index_a][index_b] > 0:
-    #                 time_dependencies.append(self.t_corr)
-    #             else:
-    #                 time_dependencies.append(numpy.Inf)
-    #         time_dependency_matrix.append(time_dependencies)
-
-    #     return time_dependency_matrix
+        return (
+                same_type
+                and same_target
+                and same_severity
+                and same_time
+                )

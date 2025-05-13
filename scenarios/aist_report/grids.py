@@ -61,7 +61,7 @@ def create_grid(filename : str, spacing : float = 0.1, n_points : int = 10000):
 
     # convert to DataFrame
     df = pd.DataFrame(all_points, columns=["lat [deg]","lon [deg]", "area [m^2]"])
-    df.to_csv(f"./grids/{filename}.csv", index=False)
+    df.to_csv(f"./grids/{filename}_{n_points}.csv", index=False)
 
 
 def main(grids_polygon_names : list, n_points : int = 10000):
@@ -75,8 +75,8 @@ def main(grids_polygon_names : list, n_points : int = 10000):
             os.makedirs("./grids")
 
         # Check if the grid already exists
-        if not os.path.exists(f"./grids/{filename}.csv"):
-            print(f"Creating grid for `{filename}`...")
+        if not os.path.exists(f"./grids/{filename}_{n_points}.csv"):
+            print(f"Creating grid of {n_points} points for `{filename}`...")
             
             # Create grid with specified spacing
             create_grid(filename, -1, n_points)
@@ -109,5 +109,8 @@ if __name__ == "__main__":
         # "ne_110m_rivers_lake_centerlines",
     ]
     
+    # Number of points to generate
+    n_points = 1000
+
     # Create grids
-    main(grids_polygon_names)
+    main(grids_polygon_names, n_points)

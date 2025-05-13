@@ -7,37 +7,45 @@ from chess3d.agents.actions import ObservationAction
 class ObservationTask:
     def __init__(self, 
                  instrument_name : str,
-                 time_interval : Interval,
+                 availability : Interval,
                  slew_angles : Interval,
                  targets : list,
-                 reward : float,
+                 reward : float = np.NINF,
+                #  min_duration : float = 0.0,
                  max_duration: float = np.Inf,
+                #  t_latest : float = None,
                  id: str = None,
                  ):
         """ Represents an observation task in a planning system. """
 
         self.instrument_name = instrument_name              # name of instrument being used
-        self.time_interval = time_interval                  # start and end time of the observation task
+        self.availability = availability                    # time interval during which the task is available
         self.slew_angles = slew_angles                      # feasible slew angles for the instrument at the time of observation
         self.targets = targets                              # list of target ground points to be observed        
         self.reward = reward                                # reward associated with the observation task
+        # self.min_duration = min_duration                    # minimum duration of the observation task (0.0 by default)
         self.max_duration = max_duration                    # maximum duration of the observation task
+        # self.t_latest = availability.right - self.min_duration \
+        #     if t_latest is None else t_latest               # latest start time of the task
+        
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1()) # unique identifier for the task
 
     def copy(self) -> object:
         """ Create a copy of the task WITH DIFFERENT ID. """
         return ObservationTask(
             instrument_name=self.instrument_name,
-            time_interval=self.time_interval,
+            availability=self.availability,
             slew_angles=self.slew_angles,
             targets=self.targets,
             reward=self.reward,
+            # min_duration=self.min_duration,
             max_duration=self.max_duration,
+            # t_latest=self.t_latest,
             id=None
         )
 
-    def can_cluster(self, other_task : object) -> bool:
-        """ Check if two tasks can be clustered based on their time and slew angle. """
+    def can_combine(self, other_task : object) -> bool:
+        """ Check if two tasks can be combined based on their time and slew angle. """
         
         # Check if the other task is an instance of ObservationTask
         if not isinstance(other_task, ObservationTask):
@@ -50,18 +58,20 @@ class ObservationTask:
         if self.id == other_task.id:
             return False
 
-        # Check if the time intervals overlap
-        time_overlap : Interval = self.time_interval.union(other_task.time_interval)
+        # Check if the availability time intervals overlap
+        availability_overlap : Interval = self.availability.union(other_task.availability)
 
-        if not time_overlap.is_empty():
+        if not availability_overlap.is_empty():
             # Check if the time intervals are within the maximum duration
-            if time_overlap.span() > min(self.max_duration, other_task.max_duration):
+            if availability_overlap.span() > min(self.max_duration, other_task.max_duration):
                 return False
+            # elif availability_overlap.span() < max(self.min_duration, other_task.min_duration):
+            #     return False
 
         # Check if the slew angles overlap
         slew_angle_overlap : Interval = self.slew_angles.intersection(other_task.slew_angles) 
 
-        return not (time_overlap.is_empty() or slew_angle_overlap.is_empty())
+        return not (availability_overlap.is_empty() or slew_angle_overlap.is_empty())
         
 
     def to_observation_action(self) -> ObservationAction:
@@ -70,10 +80,10 @@ class ObservationTask:
         # calculate look angle and action duration
         targets = [target for target in self.targets]
         look_angle = (self.slew_angles.start + self.slew_angles.end) / 2
-        duration = self.time_interval.end - self.time_interval.start
+        duration = self.availability.end - self.availability.start
         
         # Create an ObservationAction object
-        return ObservationAction(self.instrument_name, targets, look_angle, self.time_interval.start, duration)
+        return ObservationAction(self.instrument_name, targets, look_angle, self.availability.start, duration)
     
     def combine(self, other_task : object) -> None:
         """ Combine two tasks into one. """
@@ -81,7 +91,7 @@ class ObservationTask:
             raise ValueError("The other task must be an instance of ObservationTask.")
         
         # Combine the time intervals and slew angles
-        combined_time_interval : Interval = self.time_interval.union(other_task.time_interval)
+        combined_time_interval : Interval = self.availability.union(other_task.availability)
         combined_slew_angles : Interval  = self.slew_angles.intersection(other_task.slew_angles)
         
         # Check if the combined time interval exceeds the maximum duration
@@ -94,11 +104,13 @@ class ObservationTask:
                                 if self.__unique_target(target, combined_targets)])
         
         # Update the task attributes
-        self.time_interval = combined_time_interval
+        self.availability = combined_time_interval
         self.slew_angles = combined_slew_angles
         self.targets = combined_targets
         self.reward += other_task.reward
-        self.max_duration = min(self.max_duration, other_task.max_duration)
+        # self.min_duration = max(self.min_duration, other_task.min_duration)
+        # self.max_duration = min(self.max_duration, other_task.max_duration)
+        # self.t_latest = min(self.t_latest, other_task.t_latest)
     
     def __unique_target(self, target : list, known_targets : list) -> bool:
         """ Check if the target is unique in the known targets. """

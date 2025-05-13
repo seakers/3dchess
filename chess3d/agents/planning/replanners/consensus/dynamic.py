@@ -11,7 +11,7 @@ from chess3d.agents.planning.plan import Plan, Replan
 from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.planning.replanners.consensus.bids import Bid
 from chess3d.agents.planning.rewards import RewardGrid
-from chess3d.agents.science.requests import MeasurementRequest
+from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.utils import Interval
 
@@ -146,7 +146,7 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
                                             if self.is_observation_path_valid(state, specs, [possible_observation])]
 
                     if possible_observations:
-                        req : MeasurementRequest = self.get_matching_request_from_observation(possible_observations[0])
+                        req : TaskRequest = self.get_matching_request_from_observation(possible_observations[0])
                         r_exp = reward_grid.estimate_reward(possible_observations[0])
 
                         if req:
@@ -179,7 +179,7 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
 
                     # check if an observation is possible
                     for possible_observation in possible_observations:
-                        req : MeasurementRequest = self.get_matching_request_from_observation(possible_observation)
+                        req : TaskRequest = self.get_matching_request_from_observation(possible_observation)
                         r_exp = reward_grid.estimate_reward(possible_observation)
 
                         if req:
@@ -235,15 +235,15 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
         finally:
             assert self.is_observation_path_valid(state, specs, observations)
     
-    def get_matching_request_from_observation(self, observation : ObservationAction) -> MeasurementRequest:
+    def get_matching_request_from_observation(self, observation : ObservationAction) -> TaskRequest:
         # extract info from observation
-        lat,lon,_ = observation.target
+        lat,lon,_ = observation.targets
         main_measurement = observation.instrument_name
         t = observation.t_start
 
         # find matching requests
         matching_requests = {req for req in self.known_reqs
-                             if isinstance(req, MeasurementRequest)
+                             if isinstance(req, TaskRequest)
                              and (req.target[0] - lat) <= 1e-3
                              and (req.target[1] - lon) <= 1e-3
                              and main_measurement in req.observation_types
@@ -414,7 +414,7 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
             path_reqs = set()
             for observation in observations:
                 observation : ObservationAction
-                req : MeasurementRequest = self.get_matching_request_from_observation(observation)
+                req : TaskRequest = self.get_matching_request_from_observation(observation)
 
                 if req and len(bundle) < self.max_bundle_size: # and len(bundle) < self.max_bundle_size:
                     # update list of requests in path

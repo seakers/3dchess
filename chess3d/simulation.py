@@ -26,6 +26,7 @@ from chess3d.agents.agents import *
 from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
 from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.processing import LookupProcessor
+from chess3d.mission import *
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
@@ -102,8 +103,12 @@ class Simulation:
         # load simulation clock configuration
         clock_config : ClockConfig = SimulationElementFactory.generate_clock(mission_specs, spacecraft_dict, orbitdata_dir)
         
+        # load missions
+        nominal_missions : Dict[str, Mission] = SimulationElementFactory.load_missions(scenario_dict)
+        event_missions : Dict[str, Mission] = SimulationElementFactory.load_event_missions(scenario_dict)
+
         # load events
-        events_path = SimulationElementFactory.load_events(scenario_dict, grid_dict, clock_config)
+        events_path = SimulationElementFactory.generate_events(scenario_dict, grid_dict, clock_config)
 
         # ------------------------------------
         # initialize manager
@@ -142,6 +147,8 @@ class Simulation:
                                                     orbitdata_dir,
                                                     spacecraft,
                                                     spacecraft_dict.index(spacecraft), 
+                                                    nominal_missions,
+                                                    event_missions,
                                                     manager_network_config, 
                                                     agent_port, 
                                                     SimulationAgentTypes.SATELLITE, 
@@ -157,23 +164,27 @@ class Simulation:
             raise NotImplementedError('UAV agents not yet implemented.')
 
         if isinstance(gstation_dict, list):
-            for gndstat in gstation_dict:
-                # create ground station agents
-                agent = SimulationElementFactory.generate_agent(
-                                                    scenario_name, 
-                                                    results_path,
-                                                    orbitdata_dir,
-                                                    gndstat,
-                                                    gstation_dict.index(gndstat), 
-                                                    manager_network_config, 
-                                                    agent_port, 
-                                                    SimulationAgentTypes.GROUND_STATION, 
-                                                    clock_config,
-                                                    level,
-                                                    logger
-                                                )
-                agents.append(agent)
-                agent_port += 7
+            raise NotImplementedError('UAV agents not yet implemented.')
+        
+            # for gndstat in gstation_dict:
+            #     # create ground station agents
+            #     agent = SimulationElementFactory.generate_agent(
+            #                                         scenario_name, 
+            #                                         results_path,
+            #                                         orbitdata_dir,
+            #                                         gndstat,
+            #                                         gstation_dict.index(gndstat), 
+                                                    # nominal_missions,
+                                                    # event_missions,
+            #                                         manager_network_config, 
+            #                                         agent_port, 
+            #                                         SimulationAgentTypes.GROUND_STATION, 
+            #                                         clock_config,
+            #                                         level,
+            #                                         logger
+            #                                     )
+            #     agents.append(agent)
+            #     agent_port += 7
         
         # ------------------------------------
         # create environment
@@ -228,42 +239,6 @@ class Simulation:
                 agent : SimulatedAgent
                 pool.submit(agent.run, *[])  
 
-
-    # def execute(self, plot_results: bool = False, save_plot: bool = False) -> None:
-    #     """Executes the simulation using multiprocessing."""
-        
-    #     t_0 = time.perf_counter()
-
-    #     # n_pools = len(self.agents) + 3
-    #     # with concurrent.futures.ThreadPoolExecutor(n_pools) as pool:
-    #     #     pool.submit(self.monitor.run, *[])
-    #     #     pool.submit(self.manager.run, *[])
-    #     #     pool.submit(self.environment.run, *[])
-    #     #     for agent in self.agents:                
-    #     #         agent : SimulatedAgent
-    #     #         pool.submit(agent.run, *[])  
-
-    #     t_1 = time.perf_counter() - t_0
-    #     # time.sleep(1)
-    #     t_0 = time.perf_counter()
-
-    #     # Determine number of worker processes
-    #     n_pools = min(len(self.agents) + 3, multiprocessing.cpu_count())  
-
-    #     with concurrent.futures.ProcessPoolExecutor(max_workers=n_pools) as proc_pool, \
-    #         concurrent.futures.ThreadPoolExecutor(max_workers=len(self.agents)) as thread_pool:
-            
-    #         # Run environment, manager, and monitor in threads
-    #         proc_pool.submit(self.environment.run)
-    #         proc_pool.submit(self.manager.run)
-    #         proc_pool.submit(self.monitor.run)
-
-    #         # Use multiprocessing for CPU-intensive agent tasks
-    #         proc_pool.map(run_agent, self.agents)
-        
-    #     t_2 = time.perf_counter() - t_0
-        
-    #     x  =1
     
     def print_results(self, precission : int = 5) -> None:
         print(f"\n\n{'='*22} RESULTS {'='*23}\n")
@@ -1050,11 +1025,86 @@ class SimulationElementFactory:
     Generates simulation elements according to input file
     """
 
+    def load_missions(scenario_dict : dict) -> dict:
+        missions_path = scenario_dict['missionsPath']
+        with open(missions_path, 'r') as missions_file:
+            missions_dict : dict = json.load(missions_file)
+
+        missions = dict()
+        for mission_spec in missions_dict['missions']:
+            name : str = mission_spec['name']
+            
+            # only load mission objectives, not event-driven objectives
+            objectives = []
+            for objective_spec in mission_spec['objectives']:
+                parameter = objective_spec['parameter']
+                priority = objective_spec['priority']
+
+                requirements = []
+                for requirement in objective_spec['requirements']:
+                    attribute = requirement['attribute']
+                    thresholds = requirement['thresholds']
+                    scores = requirement['scores']
+                    requirements.append(MeasurementRequirement(attribute, thresholds, scores))
+                
+                objectives.append(MissionObjective(parameter, priority, requirements))
+
+            # for event_objectives_specs in mission_spec['event_objectives']:
+            #     event_type = event_objectives_specs['event_type']
+            #     parameter = event_objectives_specs['parameter']
+            #     priority = event_objectives_specs['priority']
+            #     reobservation_strategy = event_objectives_specs['reobservation_strategy']
+
+            #     requirements = []
+            #     for requirement in event_objectives_specs['requirements']:
+            #         attribute = requirement['attribute']
+            #         thresholds = requirement['thresholds']
+            #         scores = requirement['scores']
+            #         requirements.append(MeasurementRequirement(attribute, thresholds, scores))
+                
+            #     objectives.append(EventDrivenObjective(parameter, priority, requirements, event_type, reobservation_strategy))
+
+            missions[name.lower()] = Mission(name, objectives)
+        
+        return missions
+
+    def load_event_missions(scenario_dict : dict) -> dict:
+        missions_path = scenario_dict['missionsPath']
+        with open(missions_path, 'r') as missions_file:
+            missions_dict : dict = json.load(missions_file)
+
+        missions = dict()
+        for mission_spec in missions_dict['missions']:
+            name : str = mission_spec['name']
+            
+            # only load mission objectives, not event-driven objectives
+            objectives = []
+            for event_objectives_specs in mission_spec['event_objectives']:
+                event_type = event_objectives_specs['event_type']
+                parameter = event_objectives_specs['parameter']
+                priority = event_objectives_specs['priority']
+                reobservation_strategy = event_objectives_specs['reobservation_strategy']
+
+                requirements = []
+                for requirement in event_objectives_specs['requirements']:
+                    attribute = requirement['attribute']
+                    thresholds = requirement['thresholds']
+                    scores = requirement['scores']
+                    requirements.append(MeasurementRequirement(attribute, thresholds, scores))
+                
+                objectives.append(EventDrivenObjective(parameter, priority, requirements, event_type, reobservation_strategy))
+
+            missions[name.lower()] = Mission(name, objectives)
+        
+        return missions
+
     def generate_agent(     scenario_name : str, 
                             results_path : str,
                             orbitdata_dir : Any,
                             agent_dict : dict, 
                             agent_index : int,
+                            nominal_missions : dict,
+                            event_missions : dict,
                             manager_network_config : NetworkConfig, 
                             port : int, 
                             agent_type : SimulationAgentTypes,
@@ -1091,11 +1141,19 @@ class SimulationElementFactory:
             agent_specs['payload'] = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) \
                                      if instruments_dict else []
 
-        if isinstance(clock_config, RealTimeClockConfig):
+        # load specific mission assigned to this satellite
+        nominal_mission : Mission = nominal_missions[agent_dict['mission'].lower()]
+        nominal_mission = nominal_mission.copy()
+
+        event_mission : Mission = event_missions[agent_dict['mission'].lower()]
+        event_mission = event_mission.copy()
+
+        if isinstance(clock_config, RealTimeClockConfig):            
             # load science module
             science = SimulationElementFactory.load_science_module(science_dict,
                                                             results_path,
                                                             agent_name,
+                                                            event_mission,
                                                             agent_network_config,
                                                             logger)
 
@@ -1129,6 +1187,7 @@ class SimulationElementFactory:
                                         agent_network_config,
                                         initial_state, 
                                         agent_specs,
+                                        nominal_mission,
                                         planner,
                                         science,
                                         logger=logger
@@ -1136,7 +1195,7 @@ class SimulationElementFactory:
             
         else:
             processor : DataProcessor = \
-                SimulationElementFactory.load_data_processor(science_dict, agent_name)
+                SimulationElementFactory.load_data_processor(science_dict, agent_name, event_mission)
             # preplanner : AbstractPreplanner = 
 
             if agent_type == SimulationAgentTypes.SATELLITE:
@@ -1163,6 +1222,7 @@ class SimulationElementFactory:
                                       initial_state,
                                       agent_specs,
                                       agent_orbitdata,
+                                      nominal_mission,
                                       processor,
                                       preplanner,
                                       replanner,
@@ -1272,7 +1332,7 @@ class SimulationElementFactory:
             # return event-driven clock config
             return EventDrivenClockConfig(start_date, end_date)
 
-    def load_events(scenario_dict : dict, 
+    def generate_events(scenario_dict : dict, 
                     grid_dict : list,
                     clock_config : ClockConfig
                     ) -> str:
@@ -1296,6 +1356,8 @@ class SimulationElementFactory:
                 return events_path
             
         if events_type.lower() == 'random': # generate random events
+            raise NotImplementedError('Random events generation not yet implemented.')
+            
             # get path to resources directory
             scenario_path = scenario_dict['scenarioPath']
             resources_path = os.path.join(scenario_path, 'resources')
@@ -1378,9 +1440,32 @@ class SimulationElementFactory:
             events_df.to_csv(events_path,index=False)
 
             # return path address
-            return events_path
+            return events_path      
+
+    def load_science_module(science_dict : dict, 
+                            results_path : str, 
+                            agent_name : str, 
+                            event_mission : Mission,
+                            agent_network_config : NetworkConfig, 
+                            logger : logging.Logger) -> ScienceModule:
         
-    def load_data_processor(science_dict : dict, agent_name : str) -> DataProcessor:
+        if science_dict is not None:
+            science_dict : dict
+
+            # load selected data processor
+            processor : DataProcessor = SimulationElementFactory.load_data_processor(science_dict, agent_name, event_mission)
+
+            if processor is None: return None
+
+            # return science module
+            return ScienceModule(results_path, agent_name, agent_network_config, processor, logger)
+
+        # return nothing
+        return None            
+   
+    def load_data_processor(science_dict : dict, 
+                            agent_name : str,
+                            event_mission : Mission,) -> DataProcessor:
         if science_dict is not None:
             science_dict : dict
 
@@ -1396,7 +1481,7 @@ class SimulationElementFactory:
                 if events_path is None: raise ValueError(f'predefined events path not specified in input file.')
 
                 # create science module
-                processor = LookupProcessor(events_path, agent_name)
+                processor = LookupProcessor(events_path, agent_name, event_mission)
 
             else:
                 raise NotImplementedError(f'science module of type `{science_module_type}` not yet supported.')
@@ -1405,28 +1490,8 @@ class SimulationElementFactory:
             return processor
 
         # return nothing
-        return None          
+        return None  
 
-    def load_science_module(science_dict : dict, 
-                            results_path : str, 
-                            agent_name : str, 
-                            agent_network_config : NetworkConfig, 
-                            logger : logging.Logger) -> ScienceModule:
-        
-        if science_dict is not None:
-            science_dict : dict
-
-            # load selected data processor
-            processor : DataProcessor = SimulationElementFactory.load_data_processor(science_dict, agent_name)
-
-            if processor is None: return None
-
-            # return science module
-            return ScienceModule(results_path, agent_name, agent_network_config, processor, logger)
-
-        # return nothing
-        return None            
-   
     def load_planners(planner_dict : dict,
                         agent_specs : object,
                         agent_orbitdata : OrbitData,

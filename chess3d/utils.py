@@ -116,7 +116,7 @@ class Interval:
     
     def span(self) -> float:
         """ returns the span of the interval """       
-        return np.NAN if self.is_empty() else self.right - self.left
+        return self.right - self.left
     
     def __contains__(self, x: float) -> bool:
         """ checks if `x` is contained in the interval """

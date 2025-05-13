@@ -109,23 +109,17 @@ class TestMission(unittest.TestCase):
                                        [1.0, 0.5, 0.1])
         
         # create objectives
-        o_1 = Objective('Chlorophyll-A',
+        o_1 = MissionObjective('Chlorophyll-A',
                         1.0, 
-                        [req_1, req_2], 
-                        [
-                            (0.0,0.0,0.0),
-                            (1.0,1.0,0.0)
-                        ] 
+                        [req_1, req_2]
                     )
-        o_2 = Objective('Water Temperature',
+        o_2 = MissionObjective('Water Temperature',
                         1.0, 
-                        [req_1], 
-                        [(0.0,0.0,0.0)] 
+                        [req_1]
                     )
-        o_3 = Objective('Water Level',
+        o_3 = MissionObjective('Water Level',
                         1.0, 
-                        [req_1, req_3], 
-                        [(0.0,0.0,0.0)] 
+                        [req_1, req_3]
                     )
         
         # create example measurement
@@ -155,9 +149,6 @@ class TestMission(unittest.TestCase):
         req_2 = MeasurementRequirement('spectral_resolution', 
                                        ["Hyperspectral", "Multispectral"], 
                                        [1.0, 0.5])
-        req_3 = MeasurementRequirement('accuracy', 
-                                       [10, 50, 100], # [cm] 
-                                       [1.0, 0.5, 0.1])
         
         # create event
         event = GeophysicalEvent('Algal Bloom',
@@ -174,7 +165,7 @@ class TestMission(unittest.TestCase):
         o_4_1 = EventDrivenObjective('Chlorophyll-A',
                                      10.0,
                                      [req_1, req_2],
-                                     event,
+                                     event.event_type,
                                      'linear_increase'
                                      )
         
@@ -239,31 +230,34 @@ class TestSingleSatCase(unittest.TestCase):
                         }
                     },
                     "instrument": {
-                        "name": "thermal",
-                        "mass": 10,
-                        "volume": 12.45,
-                        "dataRate": 40,
-                        "bitsPerPixel": 8,
-                        "power": 12,
-                        "snr": 33,
-                        "spatial_res": 50,
-                        "spectral_res": 7e-09,
-                        "orientation": {
-                            "referenceFrame": "NADIR_POINTING",
-                            "convention": "REF_FRAME_ALIGNED"
-                        },
-                        "fieldOfViewGeometry": {
-                            "shape": "RECTANGULAR",
-                            "angleHeight": 5,
-                            "angleWidth": 10
+                        "name": "VNIR",
+                        "@id" : "vnir_skysat",
+                        "@type": "Passive Optical Scanner",
+                        "scanTechnique": "MATRIX_IMAGER", 
+                        "numberDetectorRows": 1080, 
+                        "numberDetectorCols": 2560, 
+                        "detectorWidth": 6.6e-6,
+                        "focalLength": 3.6,  
+                        "operatingWavelength": 490e-9,  
+                        "bandwidth": 50e-9, 
+                        "quantumEff": 0.35, 
+                        "targetBlackBodyTemp": 290,
+                        "opticsSysEff": 0.6, 
+                        "numOfReadOutE": 5, 
+                        "apertureDia": 350e-3, 
+                        "Fnum": 10.3, 
+                        "maxDetectorExposureTime": 20e-3, 
+                        "atmosLossModel": "LOWTRAN7",
+                        "fieldOfViewGeometry": { 
+                            "shape": "RECTANGULAR", 
+                            "angleHeight": 0.1116, 
+                            "angleWidth":0.2645 
                         },
                         "maneuver" : {
                             "maneuverType":"SINGLE_ROLL_ONLY",
                             "A_rollMin": -50,
                             "A_rollMax": 50
                         },
-                        "@id": "therm1",
-                        "@type": "Basic Sensor"
                     },
                     "orbitState": {
                         "date": {
@@ -282,7 +276,7 @@ class TestSingleSatCase(unittest.TestCase):
                             "inc": 67,
                             "raan": 0.0,
                             "aop": 0.0,
-                            "ta": 0.0
+                            "ta": 90.0
                         }
                     },
                     "planner" : {
@@ -291,10 +285,10 @@ class TestSingleSatCase(unittest.TestCase):
                             "period": 1000,
                             # "horizon": 500,
                         },
-                        "replanner" : {
-                            "@type" : "broadcaster",
-                            "period" : 400
-                        },
+                        # "replanner" : {
+                        #     "@type" : "broadcaster",
+                        #     "period" : 400
+                        # },
                         "rewardGrid":{
                             "reward_function" : 'event',
                             'initial_reward' : 1.0,
@@ -306,27 +300,27 @@ class TestSingleSatCase(unittest.TestCase):
                     },
                     "science" : {
                         "@type": "lookup", 
-                        "eventsPath" : "./tests/preplanners/heuristic/resources/all_events_formatted.csv"
+                        "eventsPath" : "./tests/missions/resources/events/lake_events_seed-1000.csv"
                     },
-                    "mission" : "algal_bloom"
+                    "mission" : "Algal blooms monitoring"
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/preplanners/heuristic/resources/lake_event_points.csv"
+                    "covGridFilePath": "./tests/missions/resources/grids/lake_event_points.csv"
                 }
             ],
             "scenario": {   
                 "connectivity" : "FULL", 
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/preplanners/heuristic/resources/all_events_formatted.csv"
+                    "eventsPath" : "./tests/missions/resources/events/lake_events_seed-1000.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
-                "scenarioPath" : "./tests/preplanners/heuristic/",
+                "scenarioPath" : "./tests/missions/",
                 "name" : "single_sat_case",
                 "missionsPath" : "./tests/missions/resources/missions/missions.json"
             },
@@ -355,7 +349,7 @@ class TestSingleSatCase(unittest.TestCase):
         self.simulation.execute()
 
         # print results
-        self.simulation.print_results()
+        # self.simulation.print_results()
 
         print('DONE')
 

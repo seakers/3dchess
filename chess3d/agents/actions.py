@@ -231,7 +231,7 @@ class ObservationAction(AgentAction):
     """  
     def __init__(   self,
                     instrument_name : str,
-                    target : list, 
+                    targets : list, 
                     look_angle : float, 
                     t_start: Union[float, int], 
                     duration: Union[float, int] = 0.0, 
@@ -242,7 +242,7 @@ class ObservationAction(AgentAction):
         Creates an instance of an Observation Action
         ### Arguments:
             - instrument_name (`str`): name of the instrument_name that will perform this action
-            - target (`list`): coordinates for the intended observation target in (lat [deg], lon [deg], alt [km]) 
+            - targets (`list`): list of coordinates for the intended observation target in (lat [deg], lon [deg], alt [km]) 
             - look_angle (`float`): look angle of the observation in [deg]
             - t_start (`float`): start time of the measurement of this action in [s] from the beginning of the simulation
             - t_end (`float`): end time of the measurment of this action in [s] from the beginning of the simulation
@@ -253,13 +253,15 @@ class ObservationAction(AgentAction):
         
         # check parameters
         if not isinstance(instrument_name,str): raise ValueError(f'`instrument_name` must be of type `str`. Is of type `{type(instrument_name)}`.')
-        if not isinstance(target, list): raise ValueError(f'`target` must be of type `list`. Is of type `{type(target)}`.')
-        if len(target) != 3: raise ValueError(f'`target` must be a `list` of length 3 (lat, lon, alt). Is of length {len(target)}.')
+        if not isinstance(targets, list): raise ValueError(f'`targets` must be of type `list`. Is of type `{type(targets)}`.')
+        
+        if not all(isinstance(target, list) for target in targets): raise ValueError(f'`target` must be a `list` of numerical values of type `float`. Is of type `{type(targets)}`.')
+        if any([len(target) != 3 for target in targets]): raise ValueError(f'`target` must be a `list` of length 3 (lat, lon, alt). Is of length {len(targets)}.')
         if not isinstance(look_angle,float) and not isinstance(look_angle,int): raise ValueError(f'`look_angle` must be a numerical value of type `float`. Is of type `{type(look_angle)}`')
 
         # set parameters
         self.instrument_name = instrument_name
-        self.target = [coordinate for coordinate in target]
+        self.targets = [[coordinate for coordinate in target] for target in targets]
         self.look_angle = look_angle
 
 class WaitForMessages(AgentAction):

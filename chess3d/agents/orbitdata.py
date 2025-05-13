@@ -171,6 +171,7 @@ class OrbitData:
     def get_orbit_state(self, t: float):
         is_eclipse = self.is_eclipse(t)
 
+        t_original = t
         t = t / self.time_step
         t_u = t + 0.5
         t_l = t - 0.5
@@ -180,6 +181,10 @@ class OrbitData:
                 if t_l < t_i <= t_u]
         
         if not data:
+            if t_u > self.position_data['time index'].max():
+                data = [(self.position_data.values[-1])]
+                x = 1
+        if len(data) > 1:
             x = 1
 
         _,x,y,z,vx,vy,vz = data[0]
