@@ -152,8 +152,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         assert self.no_redundant_observations(state, observations_sorted, orbitdata)
 
         return observations_sorted
-
-    # @abstractmethod
+    
     def sort_tasks_by_heuristic(self, tasks : list, specs : Spacecraft, cross_track_fovs : dict, orbitdata : OrbitData, observation_history : ObservationHistory) -> list:
         def reward_heuristic(task : SchedulableObservationTask) -> float:
             """ Heuristic function to sort tasks by their heuristic value. """
@@ -162,64 +161,12 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                                 for parent_task in task.parent_tasks])
             # calculate task duration
             duration = task.accessibility.span()
+            
             # calculate task start time
             t_start = task.accessibility.left
             
-            # estimate observation look angle
-            th_img = np.average((task.slew_angles.left, task.slew_angles.right))
-            
-            t_l = task.accessibility.left / orbitdata.time_step - 0.5
-            t_u = task.accessibility.right / orbitdata.time_step + 0.5
-
-            # calculate task performance
-            observation_performances = [row 
-                                       for _,row in orbitdata.gp_access_data.iterrows()
-                                       if row['instrument'] == task.instrument_name
-                                       and any([(row['GP index'] == gp_index and row['grid index'] == grid_index)
-                                                 for parent_task in task.parent_tasks
-                                                 for *_,grid_index,gp_index in parent_task.targets])
-                                       and t_l <= row['time index'] <= t_u
-                                       and abs(row['look angle [deg]'] - th_img) <= cross_track_fovs[task.instrument_name] / 2
-                                       ]
-            if not observation_performances:
-                return 0.0, -priority, -duration, t_start
-            
-            instrument_specs = [instr for instr in specs.instrument
-                                if instr.name == task.instrument_name][0]
-            observation_performance = observation_performances[0]
-            grid_index = int(observation_performance['grid index'])
-            gp_index = int(observation_performance['GP index'])
-
-            prev_obs = observation_history.get_observation_history(grid_index, gp_index)
-
-            measurement = {
-                "instrument" : task.instrument_name,    
-                "t_start" : task.accessibility.left,
-                "t_end" : task.accessibility.right,
-                "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
-                "accuracy" : 50.0,
-                "n_obs" : prev_obs.n_obs,
-                "t_prev" : prev_obs.t_last,
-            }
-
-            if 'vnir' in task.instrument_name.lower():
-                if 'hyp' in task.instrument_name.lower():
-                    measurement['spectral_resolution'] = "Hyperspectral"
-                elif 'multi' in task.instrument_name.lower():
-                    measurement['spectral_resolution'] = "Multispectral"
-                else:
-                    measurement['spectral_resolution'] = "None"
-
-            # calculate total task reward          
-            task_reward = 0
-            for parent_task in task.parent_tasks:
-                task_priority = parent_task.objective.priority
-                task_performance = parent_task.objective.eval_performance(measurement)
-                task_score = parent_task.objective.calc_reward(measurement)
-                task_severity = parent_task.event.severity if isinstance(parent_task, EventObservationTask) else 1.0
-                
-                u_ijk = task_priority * task_performance * task_score * task_severity
-                task_reward += u_ijk
+            # calculate task reward
+            task_reward = self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
 
             # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
             return -task_reward, -priority, -duration, t_start

@@ -66,6 +66,196 @@ class AbstractPlanner(ABC):
     def generate_plan(self, **kwargs) -> Plan:
         """ Creates a plan for the agent to perform """
 
+    @runtime_tracker
+    def create_tasks_from_accesses(self, 
+                                     available_tasks : list,
+                                     access_times : list, 
+                                     cross_track_fovs : dict
+                                     ) -> list:
+        """ Creates tasks from access times. """
+        
+        # create one task per each access opportinity
+        schedulable_tasks : list[SchedulableObservationTask] = []
+        for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
+            task : GenericObservationTask
+
+            # find access time for this task
+            for *__,gp_index,grid_index in task.targets:
+                matching_access_times = [(access_grid_index,access_gp_index,*_) 
+                                         for access_grid_index,access_gp_index,*_ in access_times
+                                         if access_grid_index == int(gp_index) and access_gp_index == int(grid_index)]
+                
+                # create a schedulable task for each access time
+                for access_time in matching_access_times:
+                    # unpack access time
+                    instrument = access_time[2]
+                    accessibility = access_time[3]
+                    th = access_time[-1]
+                    slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
+                                           np.mean(th)+cross_track_fovs[instrument]/2)
+
+                    # check if instrument can perform the task                    
+                    if not task.objective.can_perform(instrument): 
+                        continue # skip if not
+
+                    # create and add schedulable task to list of schedulable tasks
+                    schedulable_tasks.append(SchedulableObservationTask(task, 
+                                                             instrument,
+                                                             accessibility,
+                                                             slew_angles))
+
+        # check if tasks are clusterable
+        adj : Dict[SchedulableObservationTask, set[SchedulableObservationTask]] = {task : set() for task in schedulable_tasks}
+        
+        for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
+            for j in range(i + 1, len(schedulable_tasks)):
+                if schedulable_tasks[i].can_combine(schedulable_tasks[j]):
+                    adj[schedulable_tasks[i]].add(schedulable_tasks[j])
+                    adj[schedulable_tasks[j]].add(schedulable_tasks[i]) 
+   
+        # sort tasks by degree of adjacency 
+        v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
+        
+        # only keep tasks that have at least one clusterable task
+        v = [task for task in v if len(adj[task]) > 0]
+        # print(f'\n\n{len(v)} tasks are clusterable out of {len(tasks)} tasks.')
+        
+        # combine tasks into clusters
+        combined_tasks : list[SchedulableObservationTask] = []
+
+        with tqdm(total=len(v), desc="Merging overlapping tasks", leave=False) as pbar:
+            while len(v) > 0:
+                p : SchedulableObservationTask = v.pop(0)
+                n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(list(adj[p]), adj)
+
+                clique : set = {p}
+                pbar.update(1)
+
+                while len(n_p) > 0:
+                    # Pick a neighbor q of p, q \in n_p, such that the number of their common neighbors is maximum: If such p are not unique, pick the p with least edges being deleted
+                    q : SchedulableObservationTask = n_p.pop(0)
+
+                    # Combine q and p into a new p
+                    # p.combine(q)
+                    clique.add(q)
+
+                    # Delete edges from q and p that are not connected to their common neighbors
+                    common_neighbors : set[SchedulableObservationTask] = adj[p].intersection(adj[q])
+
+                    neighbors_to_delete_p : set[SchedulableObservationTask] = adj[p].difference(common_neighbors)
+                    for neighbor in neighbors_to_delete_p: 
+                        adj[p].remove(neighbor)
+                        adj[neighbor].remove(p)
+
+                    neighbors_to_delete_q : set[SchedulableObservationTask] = adj[q].difference(common_neighbors)
+                    for neighbor in neighbors_to_delete_q: 
+                        adj[q].remove(neighbor)
+                        adj[neighbor].remove(q)
+
+                    # Reset neighbor collection N_p for the new p;
+                    n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(n_p, adj)
+
+                for q in clique: 
+                    p = p.merge(q)
+                    adj.pop(q)
+                    if q in v: 
+                        v.remove(q)
+                        pbar.update(1)
+
+                v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(v, adj)
+
+                # Add p to the list of combined tasks
+                combined_tasks.append(p)
+
+        # add clustered tasks to the final list of tasks available for scheduling
+        schedulable_tasks.extend(combined_tasks)
+
+        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] for task in schedulable_tasks]), \
+            f"Tasks have slew angles larger than the maximum allowed field of view."
+
+        # return tasks
+        return schedulable_tasks
+        
+    # def get_coordinates(self, ground_points : dict, grid_index : int, gp_index : int) -> list:
+    #     """ Returns the coordinates of the ground points. """
+    #     lat,lon = ground_points[grid_index][gp_index]
+    #     return [lat, lon, 0.0]
+    
+    def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:
+        """ Sorts tasks by degree of adjacency. """
+        # calculate degree of each task
+        degrees : dict = {task : len(adjacency[task]) for task in tasks}
+
+        # sort tasks by degree and return
+        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.reward for parent_task in p.parent_tasks]), p.accessibility), reverse=True)
+
+    @runtime_tracker
+    def calc_task_reward(self, 
+                         task : SchedulableObservationTask, 
+                         specs : Spacecraft, 
+                         cross_track_fovs : dict,
+                         orbitdata : OrbitData,
+                         observation_history : ObservationHistory
+                         ) -> float:
+        # estimate observation look angle
+        th_img = np.average((task.slew_angles.left, task.slew_angles.right))
+        
+        t_l = task.accessibility.left / orbitdata.time_step - 0.5
+        t_u = task.accessibility.right / orbitdata.time_step + 0.5
+
+        # calculate task performance
+        observation_performances = [row 
+                                    for _,row in orbitdata.gp_access_data.iterrows()
+                                    if row['instrument'] == task.instrument_name
+                                    and any([(row['GP index'] == gp_index and row['grid index'] == grid_index)
+                                                for parent_task in task.parent_tasks
+                                                for *_,grid_index,gp_index in parent_task.targets])
+                                    and t_l <= row['time index'] <= t_u
+                                    and abs(row['look angle [deg]'] - th_img) <= cross_track_fovs[task.instrument_name] / 2
+                                    ]
+        if not observation_performances: return 0.0
+        
+        instrument_specs = [instr for instr in specs.instrument
+                            if instr.name == task.instrument_name][0].mode[0]
+        observation_performance = observation_performances[0]
+        grid_index = int(observation_performance['grid index'])
+        gp_index = int(observation_performance['GP index'])
+
+        prev_obs = observation_history.get_observation_history(grid_index, gp_index)
+
+        measurement = {
+            "instrument" : task.instrument_name,    
+            "t_start" : task.accessibility.left,
+            "t_end" : task.accessibility.right,
+            "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
+            "accuracy" : instrument_specs.accuracy,
+            "n_obs" : prev_obs.n_obs,
+            "t_prev" : prev_obs.t_last,
+            'spectral_resolution' : instrument_specs.spectral_resolution
+        }
+
+        # if 'vnir' in task.instrument_name.lower():
+        #     if 'hyp' in task.instrument_name.lower():
+        #         measurement['spectral_resolution'] = "Hyperspectral"
+        #     elif 'multi' in task.instrument_name.lower():
+        #         measurement['spectral_resolution'] = "Multispectral"
+        #     else:
+        #         measurement['spectral_resolution'] = "None"
+
+        # calculate total task reward          
+        task_reward = 0
+        for parent_task in task.parent_tasks:
+            task_priority = parent_task.objective.priority
+            task_performance = parent_task.objective.eval_performance(measurement)
+            task_score = parent_task.objective.calc_reward(measurement)
+            task_severity = parent_task.event.severity if isinstance(parent_task, EventObservationTask) else 1.0
+            
+            u_ijk = task_priority * task_performance * task_score * task_severity
+            task_reward += u_ijk
+
+        # return total task reward
+        return task_reward
+
     @abstractmethod
     def _schedule_broadcasts(self, 
                              state : SimulationAgentState, 
@@ -618,6 +808,81 @@ class AbstractPreplanner(AbstractPlanner):
 
         # return plan and save local copy
         return self.plan.copy()
+    
+    @runtime_tracker
+    def calculate_access_opportunities(self, 
+                                       state : SimulationAgentState, 
+                                       specs : Spacecraft,
+                                       ground_points : dict,
+                                       orbitdata : OrbitData
+                                    ) -> dict:
+        # define planning horizon
+        t_start = state.t
+        t_end = self.plan.t_next+self.horizon
+        t_index_start = t_start / orbitdata.time_step
+        t_index_end = t_end / orbitdata.time_step
+
+        # compile coverage data
+        orbitdata_columns : list = list(orbitdata.gp_access_data.columns.values)
+        raw_coverage_data = [(t_index*orbitdata.time_step, *_)
+                             for t_index, *_ in orbitdata.gp_access_data.values
+                             if t_index_start <= t_index <= t_index_end]
+        raw_coverage_data.sort(key=lambda a : a[0])
+
+        # initiate accestimes 
+        access_opportunities = {}
+        
+        for data in tqdm(raw_coverage_data, 
+                         desc='PREPLANNER: Compiling access opportunities', 
+                         leave=False):
+            t_img = data[orbitdata_columns.index('time index')]
+            grid_index = data[orbitdata_columns.index('grid index')]
+            gp_index = data[orbitdata_columns.index('GP index')]
+            instrument = data[orbitdata_columns.index('instrument')]
+            look_angle = data[orbitdata_columns.index('look angle [deg]')]
+
+            # only consider ground points from the pedefined list of important groundopints
+            if grid_index not in ground_points or gp_index not in ground_points[grid_index]:
+                continue
+            
+            # initialize dictionaries if needed
+            if grid_index not in access_opportunities:
+                access_opportunities[grid_index] = {}
+                
+            if gp_index not in access_opportunities[grid_index]:
+                access_opportunities[grid_index][gp_index] = {instr.name : [] 
+                                                        for instr in specs.instrument}
+
+            # compile time interval information 
+            found = False
+            for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
+                interval : Interval
+                t : list
+                th : list
+
+                overlap_interval = Interval(t_img - orbitdata.time_step, 
+                                            t_img + orbitdata.time_step)
+                
+                if overlap_interval.overlaps(interval):
+                    interval.extend(t_img)
+                    t.append(t_img)
+                    th.append(look_angle)
+                    found = True
+                    break      
+
+            if not found:
+                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
+
+        # convert to `list`
+        access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)
+                                    for grid_index in access_opportunities
+                                    for gp_index in access_opportunities[grid_index]
+                                    for instrument in access_opportunities[grid_index][gp_index]
+                                    for interval, t, th in access_opportunities[grid_index][gp_index][instrument]
+                                ]
+                
+        # return access times and grid information
+        return access_opportunities
         
     @abstractmethod
     def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list, observation_history : ObservationHistory) -> list:
@@ -709,199 +974,6 @@ class AbstractPreplanner(AbstractPlanner):
 
         # return grid information
         return ground_points
-
-    @runtime_tracker
-    def calculate_access_opportunities(self, 
-                                       state : SimulationAgentState, 
-                                       specs : Spacecraft,
-                                       ground_points : dict,
-                                       orbitdata : OrbitData
-                                    ) -> dict:
-        # define planning horizon
-        t_start = state.t
-        t_end = self.plan.t_next+self.horizon
-        t_index_start = t_start / orbitdata.time_step
-        t_index_end = t_end / orbitdata.time_step
-
-        # compile coverage data
-        orbitdata_columns : list = list(orbitdata.gp_access_data.columns.values)
-        raw_coverage_data = [(t_index*orbitdata.time_step, *_)
-                             for t_index, *_ in orbitdata.gp_access_data.values
-                             if t_index_start <= t_index <= t_index_end]
-        raw_coverage_data.sort(key=lambda a : a[0])
-
-        # initiate accestimes 
-        access_opportunities = {}
-        
-        for data in tqdm(raw_coverage_data, 
-                         desc='PREPLANNER: Compiling access opportunities', 
-                         leave=False):
-            t_img = data[orbitdata_columns.index('time index')]
-            grid_index = data[orbitdata_columns.index('grid index')]
-            gp_index = data[orbitdata_columns.index('GP index')]
-            instrument = data[orbitdata_columns.index('instrument')]
-            look_angle = data[orbitdata_columns.index('look angle [deg]')]
-
-            # only consider ground points from the pedefined list of important groundopints
-            if grid_index not in ground_points or gp_index not in ground_points[grid_index]:
-                continue
-            
-            # initialize dictionaries if needed
-            if grid_index not in access_opportunities:
-                access_opportunities[grid_index] = {}
-                
-            if gp_index not in access_opportunities[grid_index]:
-                access_opportunities[grid_index][gp_index] = {instr.name : [] 
-                                                        for instr in specs.instrument}
-
-            # compile time interval information 
-            found = False
-            for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
-                interval : Interval
-                t : list
-                th : list
-
-                overlap_interval = Interval(t_img - orbitdata.time_step, 
-                                            t_img + orbitdata.time_step)
-                
-                if overlap_interval.overlaps(interval):
-                    interval.extend(t_img)
-                    t.append(t_img)
-                    th.append(look_angle)
-                    found = True
-                    break      
-
-            if not found:
-                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
-
-        # convert to `list`
-        access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)
-                                    for grid_index in access_opportunities
-                                    for gp_index in access_opportunities[grid_index]
-                                    for instrument in access_opportunities[grid_index][gp_index]
-                                    for interval, t, th in access_opportunities[grid_index][gp_index][instrument]
-                                ]
-                
-        # return access times and grid information
-        return access_opportunities
-    
-    @runtime_tracker
-    def create_tasks_from_accesses(self, 
-                                     available_tasks : list,
-                                     access_times : list, 
-                                     cross_track_fovs : dict
-                                     ) -> list:
-        """ Creates tasks from access times. """
-        
-        # create one task per each access opportinity
-        schedulable_tasks : list[SchedulableObservationTask] = []
-        for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
-            task : GenericObservationTask
-
-            # find access time for this task
-            for *__,gp_index,grid_index in task.targets:
-                matching_access_times = [(access_grid_index,access_gp_index,*_) 
-                                         for access_grid_index,access_gp_index,*_ in access_times
-                                         if access_grid_index == int(gp_index) and access_gp_index == int(grid_index)]
-                
-                # create a schedulable task for each access time
-                for access_time in matching_access_times:
-                    # unpack access time
-                    instrument = access_time[2]
-                    accessibility = access_time[3]
-                    th = access_time[-1]
-                    slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
-                                           np.mean(th)+cross_track_fovs[instrument]/2)
-
-                    # check if instrument can perform the task                    
-                    if not task.objective.can_perform(instrument): 
-                        continue # skip if not
-
-                    # create and add schedulable task to list of schedulable tasks
-                    schedulable_tasks.append(SchedulableObservationTask(task, 
-                                                             instrument,
-                                                             accessibility,
-                                                             slew_angles))
-
-        # check if tasks are clusterable
-        adj : Dict[SchedulableObservationTask, set[SchedulableObservationTask]] = {task : set() for task in schedulable_tasks}
-        
-        for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
-            for j in range(i + 1, len(schedulable_tasks)):
-                if schedulable_tasks[i].can_combine(schedulable_tasks[j]):
-                    adj[schedulable_tasks[i]].add(schedulable_tasks[j])
-                    adj[schedulable_tasks[j]].add(schedulable_tasks[i]) 
-   
-        # sort tasks by degree of adjacency 
-        v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
-        
-        # only keep tasks that have at least one clusterable task
-        v = [task for task in v if len(adj[task]) > 0]
-        # print(f'\n\n{len(v)} tasks are clusterable out of {len(tasks)} tasks.')
-        
-        # combine tasks into clusters
-        combined_tasks : list[SchedulableObservationTask] = []
-        while len(v) > 0:
-            p : SchedulableObservationTask = v.pop(0)
-            n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(list(adj[p]), adj)
-
-            clique : set = {p}
-
-            while len(n_p) > 0:
-                # Pick a neighbor q of p, q \in n_p, such that the number of their common neighbors is maximum: If such p are not unique, pick the p with least edges being deleted
-                q : SchedulableObservationTask = n_p.pop(0)
-
-                # Combine q and p into a new p
-                # p.combine(q)
-                clique.add(q)
-
-                # Delete edges from q and p that are not connected to their common neighbors
-                common_neighbors : set[SchedulableObservationTask] = adj[p].intersection(adj[q])
-
-                neighbors_to_delete_p : set[SchedulableObservationTask] = adj[p].difference(common_neighbors)
-                for neighbor in neighbors_to_delete_p: 
-                    adj[p].remove(neighbor)
-                    adj[neighbor].remove(p)
-
-                neighbors_to_delete_q : set[SchedulableObservationTask] = adj[q].difference(common_neighbors)
-                for neighbor in neighbors_to_delete_q: 
-                    adj[q].remove(neighbor)
-                    adj[neighbor].remove(q)
-
-                # Reset neighbor collection N_p for the new p;
-                n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(n_p, adj)
-
-            for q in clique: 
-                p = p.merge(q)
-                adj.pop(q)
-                if q in v: v.remove(q)
-
-            v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(v, adj)
-
-            # Add p to the list of combined tasks
-            combined_tasks.append(p)
-
-        # add clustered tasks to the final list of tasks available for scheduling
-        schedulable_tasks.extend(combined_tasks)
-
-        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] for task in schedulable_tasks]), \
-            f"Tasks have slew angles larger than the maximum allowed field of view."
-
-        # return tasks
-        return schedulable_tasks
-    
-    def get_coordinates(self, ground_points : dict, grid_index : int, gp_index : int) -> list:
-        """ Returns the coordinates of the ground points. """
-        lat,lon = ground_points[grid_index][gp_index]
-        return [lat, lon, 0.0]
-    
-    def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:
-        """ Sorts tasks by degree of adjacency. """
-        # calculate degree of each task
-        degrees : dict = {task : len(adjacency[task]) for task in tasks}
-
-        # sort tasks by degree and return
-        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.reward for parent_task in p.parent_tasks]), p.accessibility), reverse=True)
 
 
 class AbstractReplanner(AbstractPlanner):
