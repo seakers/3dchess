@@ -702,9 +702,23 @@ class SimulationEnvironment(EnvironmentNode):
                 if columns is None:
                     columns = [key for key in obs]
                     columns.insert(0, 'observer')
-                    
+                    columns.insert(2, 't_img')
+                    columns.remove('t_start')
+                    columns.remove('t_end')
+
                 # add observation to data list
                 obs['observer'] = observer
+                for key in columns:
+                    val = obs.get(key, None)
+                    if isinstance(val, list):
+                        if len(val) == 1:
+                            obs[key] = val[0]
+                        else:
+                            obs[key] = [val[0], val[-1]]
+
+                obs['t_img'] = [obs['t_start'], obs['t_end']]
+                obs.pop('t_start')
+                obs.pop('t_end')
                 data.append([obs[key] for key in columns])
 
         return pd.DataFrame(data=data, columns=columns)

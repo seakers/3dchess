@@ -976,16 +976,16 @@ class SimulatedAgent(AbstractAgent):
 
             # log known and generated requests
             if self.processor is not None:
-                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
-                data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
-                        for req in self.processor.known_reqs]
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, event.t_corr, event.event_type)
+                        for event in self.processor.known_events]
                 
                 df = pd.DataFrame(data=data, columns=columns)        
                 df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
 
-                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
-                data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
-                        for req in self.processor.generated_reqs]
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, event.t_corr, event.event_type)
+                        for event in self.processor.detected_events]
                 
                 df = pd.DataFrame(data=data, columns=columns)        
                 df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
@@ -1014,15 +1014,7 @@ class SimulatedAgent(AbstractAgent):
             df = pd.DataFrame(data, columns=headers)
             # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
             df.to_csv(f"{self.results_path}/planner_history.csv", index=False)
-
-            # log reward grid history
-            if self.reward_grid is not None:
-                headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
-                data = self.reward_grid.get_history()
-                df = pd.DataFrame(data, columns=headers)
-                # self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
-                df.to_csv(f"{self.results_path}/reward_grid_history.csv", index=False)
-
+            
             # log performance stats
             n_decimals = 5
             headers = ['routine','t_avg','t_std','t_med', 't_max', 't_min', 'n', 't_total']
@@ -1110,28 +1102,6 @@ class SimulatedAgent(AbstractAgent):
                     routine_df = pd.DataFrame(data=time_series, columns=['dt'])
                     routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-replanner_{routine}.csv")
                     routine_df.to_csv(routine_dir,index=False)
-
-            if self.reward_grid:
-                for routine in self.reward_grid.stats:
-                    n = len(self.reward_grid.stats[routine])
-                    t_avg = np.round(np.mean(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
-                    t_std = np.round(np.std(self.reward_grid.stats[routine]),n_decimals) if n > 0 else 0.0
-                    t_median = np.round(np.median(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
-                    t_max = np.round(max(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
-                    t_min = np.round(min(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
-                    t_total = t_avg * n
-
-                    line_data = [ 
-                                    f"reward_grid/{routine}",
-                                    t_avg,
-                                    t_std,
-                                    t_median,
-                                    t_max,
-                                    t_min,
-                                    n,
-                                    t_total
-                                    ]
-                    data.append(line_data)
 
             stats_df = pd.DataFrame(data, columns=headers)
             # self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)

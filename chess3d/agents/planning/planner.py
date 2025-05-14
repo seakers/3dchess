@@ -597,7 +597,7 @@ class AbstractPreplanner(AbstractPlanner):
         access_opportunities = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
 
         # create schedulable tasks from known tasks and future access opportunities
-        schedulable_tasks : list[SchedulableObservationTask] = self.create_tasks_from_accesses(tasks, access_opportunities, cross_track_fovs, orbitdata)
+        schedulable_tasks : list[SchedulableObservationTask] = self.create_tasks_from_accesses(tasks, access_opportunities, cross_track_fovs)
         
         # schedule observation tasks
         observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, observation_history)
@@ -789,8 +789,7 @@ class AbstractPreplanner(AbstractPlanner):
     def create_tasks_from_accesses(self, 
                                      available_tasks : list,
                                      access_times : list, 
-                                     cross_track_fovs : dict,
-                                     orbitdata : OrbitData
+                                     cross_track_fovs : dict
                                      ) -> list:
         """ Creates tasks from access times. """
         

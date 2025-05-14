@@ -199,6 +199,16 @@ class SchedulableObservationTask:
         if any([type(task) != parent_task_type for task in other_task.parent_tasks]):
             return False
 
+        # Check if parent tasks have the same valid instruments
+        my_valid_instruments = {instrument_name 
+                                for task in self.parent_tasks
+                                for instrument_name in task.objective.valid_instruments}
+        their_valid_instruments = {instrument_name 
+                                for task in other_task.parent_tasks
+                                for instrument_name in task.objective.valid_instruments}
+        if my_valid_instruments != their_valid_instruments: 
+            return False
+
         # Check if the availability time intervals overlap
         accessibility_overlap : Interval = self.accessibility.union(other_task.accessibility)
 
