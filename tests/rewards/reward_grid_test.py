@@ -9,7 +9,7 @@ from orbitpy.util import Spacecraft
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.planning.rewards import RewardGrid, GridPoint
 from chess3d.agents.science.requests import TaskRequest
-from chess3d.agents.science.utility import event_driven
+from chess3d.agents.science.reward import event_driven
 
 class RewardGridTester(unittest.TestCase):
     def __init__(self, methodName: str = "runTest") -> None:

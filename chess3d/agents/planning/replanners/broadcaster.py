@@ -10,7 +10,7 @@ import pandas as pd
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.plan import *
 from chess3d.agents.planning.planner import AbstractReplanner
-from chess3d.agents.planning.rewards import  RewardGrid
+# from chess3d.agents.planning.rewards import  RewardGrid
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import BusMessage
 from chess3d.utils import Interval
@@ -68,7 +68,7 @@ class BroadcasterReplanner(AbstractReplanner):
     def generate_plan(self, 
                       state : SimulationAgentState,
                       specs : object,
-                      reward_grid : RewardGrid,
+                      reward_grid ,
                       current_plan : Plan,
                       clock_config : ClockConfig,
                       orbitdata : OrbitData,
@@ -88,7 +88,7 @@ class BroadcasterReplanner(AbstractReplanner):
         else:
             raise NotImplementedError(f'`{self.mode}` information broadcaster not supported.')
     
-    def _schedule_broadcasts(self, state : SimulationAgentState, reward_grid : RewardGrid, orbitdata : OrbitData):
+    def _schedule_broadcasts(self, state : SimulationAgentState, reward_grid , orbitdata : OrbitData):
         msgs : list[SimulationMessage] = []
 
         # # prepare broadcasts latest known and active requests # <= MOVED TO ABSTRACT PREPLANNER CLASS

@@ -14,7 +14,7 @@ from zmq import SocketType
 
 from chess3d.agents.planning.plan import Replan, Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
-from chess3d.agents.planning.rewards import RewardGrid
+from chess3d.agents.planning.tasks import GenericObservationTask
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
@@ -673,7 +673,6 @@ class SimulatedAgent(AbstractAgent):
                  processor : DataProcessor = None, 
                  preplanner : AbstractPreplanner = None,
                  replanner : AbstractReplanner = None,
-                 reward_grid : RewardGrid = None,
                  level=logging.INFO, 
                  logger=None):
         
@@ -692,12 +691,12 @@ class SimulatedAgent(AbstractAgent):
         self.processor : DataProcessor = processor
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
-        self.reward_grid : RewardGrid = reward_grid
 
         # initialize parameters
         self.plan : Plan = Preplan(t=-1.0)
         self.orbitdata = None
         self.plan_history = []
+        self.tasks : list[GenericObservationTask] = []
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -733,11 +732,15 @@ class SimulatedAgent(AbstractAgent):
                             for msg in misc_messages
                             if isinstance(msg, ObservationPerformedMessage)})
                 
-        # TODO update mission objectives
+        # TODO update mission objectives from requests
         # for objective in self.mission.objectives:
 
-        # update reward grid
-        if self.reward_grid: self.reward_grid.update(self.get_current_time(), observations, incoming_reqs)
+        # TODO update observation history
+
+        # TODO update tasks from incoming requests
+
+        # remove expired tasks
+        self.tasks = [task for task in self.tasks if task.available(state.t)]
 
         # --- Create plan ---
         if self.preplanner is not None:
@@ -761,10 +764,10 @@ class SimulatedAgent(AbstractAgent):
                 # initialize plan      
                 self.plan : Plan = self.preplanner.generate_plan(state, 
                                                             self.specs,
-                                                            self.reward_grid,
                                                             self._clock_config,
                                                             self.orbitdata,
-                                                            self.mission
+                                                            self.mission,
+                                                            self.tasks
                                                             )
 
                 # save copy of plan for post-processing
@@ -806,7 +809,6 @@ class SimulatedAgent(AbstractAgent):
                 # Modify current Plan      
                 self.plan : Plan = self.replanner.generate_plan(state, 
                                                                 self.specs,    
-                                                                self.reward_grid,
                                                                 self.plan,
                                                                 self._clock_config,
                                                                 self.orbitdata

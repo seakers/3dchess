@@ -7,12 +7,12 @@ from tqdm import tqdm
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from chess3d.agents.planning.rewards import GridPoint, RewardGrid
+# from chess3d.agents.planning.rewards import GridPoint, RewardGrid
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.planning.plan import Plan, Preplan, Replan
 from chess3d.agents.planning.replanners.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
 from chess3d.agents.planning.planner import AbstractReplanner
-from chess3d.agents.science.utility import *
+from chess3d.agents.science.reward import *
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.science.requests import *
 from chess3d.agents.states import *
@@ -248,7 +248,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         specs : object,
-                        reward_grid : RewardGrid,
+                        reward_grid ,
                         current_plan : Plan,
                         clock_config : ClockConfig,
                         orbitdata : dict = None
@@ -427,7 +427,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
     def _schedule_broadcasts(self, 
                              state: SimulationAgentState, 
                              current_plan: Plan, 
-                             reward_grid : RewardGrid,
+                             reward_grid ,
                              orbitdata: dict
                              ) -> list:
         # initiate broadcasts action list     
@@ -875,7 +875,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
     """
     def _get_bundle_from_preplan(self, 
                                  state : SimulationAgentState, 
-                                 reward_grid : RewardGrid,
+                                 reward_grid ,
                                  results : dict, 
                                  bundle : list, 
                                  changes : list) -> tuple:
@@ -945,7 +945,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                         specs : object,
                         results : dict, 
                         bundle : list,
-                        reward_grid : RewardGrid,
+                        reward_grid ,
                         orbitdata : OrbitData
                     ) -> tuple:
         """
@@ -1035,7 +1035,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                        specs : object, 
                        results : dict, 
                        available_reqs : list, 
-                       reward_grid : RewardGrid,
+                       reward_grid ,
                        orbitdata : OrbitData) -> list:
         
         # sort requests by severity in ascending order
@@ -1111,7 +1111,7 @@ class AbstractConsensusReplanner(AbstractReplanner):
                           state : SimulationAgentState, 
                           specs : object, 
                           path : list, 
-                          reward_grid : RewardGrid
+                          reward_grid 
                           ) -> float:
         # merge current path with preplan
         observations : list[ObservationAction] = self.merge_plans(state, specs, path)

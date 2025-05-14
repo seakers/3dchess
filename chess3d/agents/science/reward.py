@@ -5,7 +5,7 @@ from chess3d.agents.actions import ObservationAction
 from chess3d.agents.science.requests import TaskRequest
 
 """
-List of utility functions used to evalute the value of observations
+List of reward functions used to evalute the value of observing a particular target
 """
 
 # def synergy_factor(req : dict, subtask_index : int, **_) -> float:
@@ -23,17 +23,17 @@ List of utility functions used to evalute the value of observations
 def no_utility(**_) -> float:
     return 0.0
 
-def fixed_utility(req : dict, t_img : float, **_) -> float:
+def fixed_reward(req : dict, t_img : float, **_) -> float:
     # unpack request
     req : TaskRequest = TaskRequest.from_dict(req)
 
-    return req.severity if req.t_start <= t_img <= req.t_end else 0.0
+    return req.event.severity if req.event.is_active(t_img) else 0.0
 
-def random_utility(req : dict, **_) -> float:    
+def random_reward(req : dict, **_) -> float:    
     # unpack request
     req : TaskRequest = TaskRequest.from_dict(req)
 
-    return req.severity * random.random()
+    return req.event.severity * random.random()
 
 def linear_utility(   
                     req : dict, 
@@ -57,9 +57,9 @@ def linear_utility(
     req : TaskRequest = TaskRequest.from_dict(req)
     
     # calculate urgency factor from task
-    utility = req.severity * (t_img - req.t_end) / (req.t_start - req.t_end)
+    utility = req.event.severity * (t_img - req.event.t_end) / (req.event.t_start - req.event.t_end)
 
-    return utility if req.t_start <= t_img <= req.t_end else 0.0
+    return utility if req.event.is_active(t_img) else 0.0
 
 def exp_utility(   
                     req : dict, 
@@ -83,11 +83,11 @@ def exp_utility(
     req : TaskRequest = TaskRequest.from_dict(req)
 
     # check time constraints
-    if t_img < req.t_start or req.t_end < t_img:
+    if t_img < req.event.t_start or req.event.t_end < t_img:
         return 0.0
     
     # calculate urgency factor from task
-    utility = req.severity * np.exp( - (t_img - req.t_start) )
+    utility = req.event.severity * np.exp( - (t_img - req.event.t_start) )
 
     return utility
 
@@ -172,8 +172,8 @@ def event_driven(
 
 utility_function = {
     "none" : no_utility,
-    "fixed" : fixed_utility,
-    "random" : random_utility,
+    "fixed" : fixed_reward,
+    "random" : random_reward,
     "linear" : linear_utility,
     "exponential" : exp_utility,
     "event" : event_driven

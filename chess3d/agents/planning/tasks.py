@@ -1,49 +1,152 @@
-import uuid
+from abc import ABC, abstractmethod
 import numpy as np
+from chess3d.mission import *
 from chess3d.utils import Interval
 
-from chess3d.agents.actions import ObservationAction
+
+class GenericObservationTask(ABC):
+    def __init__(self,
+                 mission : str,
+                 objective : MissionObjective,
+                 targets: list,
+                 availability: Interval,
+                 reward : float,
+                 reobservation_strategy : str,
+                 id : str = None,
+                 duration_requirements : Interval = Interval(0.0, np.Inf),
+                ):
+        
+        # validate inputs
+        assert isinstance(mission, str), "Mission must be a string."
+        assert isinstance(objective, MissionObjective), "Objective must be a MissionObjective."
+        assert isinstance(targets, list), "Targets must be a list."
+        assert all([isinstance(target, tuple) for target in targets]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert all([len(target) == 4 for target in targets]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert isinstance(availability, Interval), "Availability must be an Interval."
+        assert availability.left >= 0.0, "Start of availability must be non-negative."
+        assert isinstance(reward, (int, float)), "Reward must be a number."
+        assert reward >= 0.0, "Reward must be non-negative."
+        assert isinstance(reobservation_strategy, str), "Reobservation strategy must be a string."
+        assert isinstance(duration_requirements, Interval), "Duration requirements must be an Interval."
+
+        self.mission = mission
+        self.objective = objective
+        self.targets = targets
+        self.availability = availability
+        self.reward = reward
+        self.reobservation_strategy = reobservation_strategy
+        self.duration_requirements = duration_requirements
+        self.id = id if id is not None else self.generate_id()
+
+    @abstractmethod
+    def generate_id(self) -> str:
+        """ Generate a unique identifier for the task. """
+        pass
+
+    @abstractmethod
+    def copy(self) -> object:
+        """ Create a deep copy of the task. """
+        pass
+
+    def calculate_utility(self, **kargs) -> float:
+        """ Calculate the utility of the task based on the observation. """
+        # Placeholder for utility calculation logic
+        return self.reward
+    
+    def available(self, time : float) -> bool:
+        """ Check if the task is available at a given time. """
+        return time in self.availability    
+        
+class MonitoringObservationTask(GenericObservationTask):
+    def __init__(self,
+                 mission : str,
+                 objective : MissionObjective,
+                 target: list,
+                 reward : float,
+                 mission_duration : float,           # in [s]
+                 id : str = None,
+                 duration_requirements = Interval(0.0, np.Inf)
+                ):
+        # validate inputs
+        assert isinstance(target, tuple), "Target must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
+        assert len(target) == 4, "Target must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
+        assert all([isinstance(coordinate, float) or isinstance(coordinate, int) for coordinate in target]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+
+        # initialte default values
+        target = [target]
+        availability = Interval(0.0, mission_duration)
+        duration_requirements = Interval(0.0, mission_duration)
+        reobservation_strategy = "monitoring"
+
+        # initialte parent class
+        super().__init__(mission, objective, target, availability, reward, reobservation_strategy, id, duration_requirements)
+
+    def generate_id(self) -> str:
+        """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
+        return f"{self.mission}_{self.objective.parameter}_{self.targets[0][2]}_{self.targets[0][3]}"
+    
+    def copy(self) -> object:
+        """ Create a deep copy of the task. """
+        return MonitoringObservationTask(
+            self.mission,
+            self.objective,
+            self.targets[0],
+            self.reward,
+            self.availability.right,
+            id=self.id,
+            duration_requirements=self.duration_requirements
+        )
+    
+    def __repr__(self):
+        return f"MonitoringObservationTask(mission={self.mission}, objective={self.objective}, targets={self.targets}, availability={self.availability}, reward={self.reward}, reobservation_strategy={self.reobservation_strategy}, id={self.id})"
+
+class EventObservationTask(GenericObservationTask):
+    def __init__(self,
+                 event : GeophysicalEvent,
+                 mission : str,
+                 objective : MissionObjective,
+                 reobservation_strategy : str,
+                 id : str = None,
+                 duration_requirements = Interval(0.0, np.Inf)
+                ):
+        # validate inputs
+        assert isinstance(event, GeophysicalEvent), "Event must be a GeophysicalEvent."
+        
+        # set default values
+        targets = [target for target in event.location]
+        availability = Interval(event.t_start, event.t_end)
+        reward = event.severity
+
+        # initialte default values
+        super().__init__(mission, objective, targets, availability, reward, reobservation_strategy, id, duration_requirements)
 
 class ObservationTask:
-    def __init__(self, 
-                 instrument_name : str,
-                 availability : Interval,
+    def __init__(self,
+                 parent_tasks : Union[GenericObservationTask, set],
+                 instrument_name : str, 
+                 accessibility : Interval,
                  slew_angles : Interval,
-                 targets : list,
-                 reward : float = np.NINF,
-                #  min_duration : float = 0.0,
-                 max_duration: float = np.Inf,
-                #  t_latest : float = None,
-                 id: str = None,
                  ):
-        """ Represents an observation task in a planning system. """
+        """ Represents an observation task to be scheduled by a particular agent """
 
-        self.instrument_name = instrument_name              # name of instrument being used
-        self.availability = availability                    # time interval during which the task is available
-        self.slew_angles = slew_angles                      # feasible slew angles for the instrument at the time of observation
-        self.targets = targets                              # list of target ground points to be observed        
-        self.reward = reward                                # reward associated with the observation task
-        # self.min_duration = min_duration                    # minimum duration of the observation task (0.0 by default)
-        self.max_duration = max_duration                    # maximum duration of the observation task
-        # self.t_latest = availability.right - self.min_duration \
-        #     if t_latest is None else t_latest               # latest start time of the task
+        # format inputs
+        if isinstance(parent_tasks, GenericObservationTask): parent_tasks = {parent_tasks}
         
-        self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1()) # unique identifier for the task
+        # validate inputs
+        assert isinstance(parent_tasks, set), "Parent tasks must be a set of GenericObservationTask."
+        assert all([isinstance(task, GenericObservationTask) for task in parent_tasks]), "All parent tasks must be instances of GenericObservationTask."
+        parent_tasks : set[GenericObservationTask]
 
-    def copy(self) -> object:
-        """ Create a copy of the task WITH DIFFERENT ID. """
-        return ObservationTask(
-            instrument_name=self.instrument_name,
-            availability=self.availability,
-            slew_angles=self.slew_angles,
-            targets=self.targets,
-            reward=self.reward,
-            # min_duration=self.min_duration,
-            max_duration=self.max_duration,
-            # t_latest=self.t_latest,
-            id=None
-        )
+        assert isinstance(accessibility, Interval), "Accessibility must be an Interval."
+        assert isinstance(slew_angles, Interval), "Slew angles must be an Interval."
+        assert all([not accessibility.intersection(parent_task.availability).is_empty() for parent_task in parent_tasks]), "Accesibility interval must be within the parent tasks' availability interval."
 
+        # set parameters
+        self.parent_tasks : set[GenericObservationTask] = parent_tasks
+        self.instrument_name : str = instrument_name
+        self.accessibility : Interval = accessibility
+        self.slew_angles : Interval = slew_angles
+    
     def can_combine(self, other_task : object) -> bool:
         """ Check if two tasks can be combined based on their time and slew angle. """
         
@@ -51,91 +154,48 @@ class ObservationTask:
         if not isinstance(other_task, ObservationTask):
             raise ValueError("The other task must be an instance of Task.")
         
-        # Check if the tasks have the same instrument name
+        # Check if the instrument names are the same
         if self.instrument_name != other_task.instrument_name:
-            raise ValueError("Tasks must have the same instrument name to be clustered.")
-
-        if self.id == other_task.id:
             return False
 
         # Check if the availability time intervals overlap
-        availability_overlap : Interval = self.availability.union(other_task.availability)
+        accessibility_overlap : Interval = self.accessibility.union(other_task.accessibility)
 
-        if not availability_overlap.is_empty():
+        if not accessibility_overlap.is_empty():
             # Check if the time intervals are within the maximum duration
-            if availability_overlap.span() > min(self.max_duration, other_task.max_duration):
+            max_parent_duration_self = min([task.duration_requirements.right for task in self.parent_tasks])
+            max_parent_duration_other = min([task.duration_requirements.right for task in other_task.parent_tasks])
+            
+            if accessibility_overlap.span() > min(max_parent_duration_self, max_parent_duration_other):
                 return False
-            # elif availability_overlap.span() < max(self.min_duration, other_task.min_duration):
-            #     return False
 
         # Check if the slew angles overlap
         slew_angle_overlap : Interval = self.slew_angles.intersection(other_task.slew_angles) 
 
-        return not (availability_overlap.is_empty() or slew_angle_overlap.is_empty())
-        
+        if accessibility_overlap.is_empty() or slew_angle_overlap.is_empty():
+            return False
 
-    def to_observation_action(self) -> ObservationAction:
-        """ Convert the task to an observation action. """
-        
-        # calculate look angle and action duration
-        targets = [target for target in self.targets]
-        look_angle = (self.slew_angles.start + self.slew_angles.end) / 2
-        duration = self.availability.end - self.availability.start
-        
-        # Create an ObservationAction object
-        return ObservationAction(self.instrument_name, targets, look_angle, self.availability.start, duration)
-    
-    def combine(self, other_task : object) -> None:
-        """ Combine two tasks into one. """
-        if not isinstance(other_task, ObservationTask):
-            raise ValueError("The other task must be an instance of ObservationTask.")
-        
+        return not (accessibility_overlap.is_empty() or slew_angle_overlap.is_empty())
+
+    def merge(self, other_task : object) -> object:
+        """ Merge two tasks into one. """
+        assert isinstance(other_task, ObservationTask), "The other task must be an instance of ObservationTask."
+        assert self.can_combine(other_task), "The tasks cannot be combined."
+
         # Combine the time intervals and slew angles
-        combined_time_interval : Interval = self.availability.union(other_task.availability)
+        combined_time_interval : Interval = self.accessibility.union(other_task.accessibility)
         combined_slew_angles : Interval  = self.slew_angles.intersection(other_task.slew_angles)
-        
-        # Check if the combined time interval exceeds the maximum duration
-        if combined_time_interval.span() > min(self.max_duration, other_task.max_duration):
-            raise ValueError("Combined time interval exceeds maximum duration.")
-        
-        # Combine the targets
-        combined_targets = [target for target in self.targets]
-        combined_targets.extend([target for target in other_task.targets 
-                                if self.__unique_target(target, combined_targets)])
-        
+                
         # Update the task attributes
-        self.availability = combined_time_interval
-        self.slew_angles = combined_slew_angles
-        self.targets = combined_targets
-        self.reward += other_task.reward
-        # self.min_duration = max(self.min_duration, other_task.min_duration)
-        # self.max_duration = min(self.max_duration, other_task.max_duration)
-        # self.t_latest = min(self.t_latest, other_task.t_latest)
+        parent_tasks = {task for task in self.parent_tasks}
+        parent_tasks.update({task for task in other_task.parent_tasks})
+        accessibility = combined_time_interval
+        slew_angles = combined_slew_angles
+        
+        return ObservationTask(parent_tasks, self.instrument_name, accessibility, slew_angles)
     
-    def __unique_target(self, target : list, known_targets : list) -> bool:
-        """ Check if the target is unique in the known targets. """
-        for known_target in known_targets:
-            if (abs(known_target[0] - target[0]) < 1e-6
-                and abs(known_target[1] - target[1]) < 1e-6
-                and abs(known_target[2] - target[2]) < 1e-6
-            ):
-                return False
-        return True
+    def __repr__(self):
+        return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
     
     def __str__(self):
-        return str(self.__dict__)
-
-    def __repr__(self):
-        return f"ObservationTask_{str.split(self.id,'-')[0]}"
-        # return f"ObservationTask_{str.split(self.id)[0]}"
-
-    def __hash__(self) -> int:
-        return hash(repr(self))
-    
-if __name__ == "__main__":
-    # Example usage
-    # task = Task("Sample Task", "This is a sample task description.")
-    x = 1
-    # print(f"Task Name: {task.name}")
-    # print(f"Task Description: {task.description}")
-    # task.execute()  # This will raise NotImplementedError
+        return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"

@@ -11,7 +11,6 @@ from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.agents.planning.planner import AbstractReplanner
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -21,7 +20,6 @@ class PlanningModule(InternalModule):
                 results_path : str, 
                 parent_agent_specs : object,
                 parent_network_config: NetworkConfig, 
-                reward_grid : RewardGrid,
                 preplanner : AbstractPreplanner = None,
                 replanner : AbstractReplanner = None,
                 orbitdata : OrbitData = None,
@@ -61,7 +59,6 @@ class PlanningModule(InternalModule):
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
         self.orbitdata : OrbitData = orbitdata
-        self.reward_grid : RewardGrid = reward_grid
 
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
         """ Sets up network configuration for intra-agent module communication """

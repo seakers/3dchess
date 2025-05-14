@@ -11,7 +11,7 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.planning.rewards import RewardGrid
+# from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -39,7 +39,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
                                specs: object, 
-                               reward_grid: RewardGrid,
+                               reward_grid,
                                _: ClockConfig, 
                                orbitdata: OrbitData = None
                                ) -> list:
@@ -149,7 +149,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
     def find_optimal_path(self, 
                           state : SimulationAgentState, 
                           specs : dict, 
-                          reward_grid : RewardGrid,
+                          reward_grid ,
                           access_opportunities : list, 
                           ground_points : list, 
                           adjancency : list, 

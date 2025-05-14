@@ -55,6 +55,12 @@ class Interval:
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot check overlap with object of type `{type(__other)}`.')
 
+        if not ( self.left in __other
+                or self.right in __other
+                or __other.left in self
+                or __other.right in self):
+            x =1
+
         return ( self.left in __other
                 or self.right in __other
                 or __other.left in self
@@ -120,9 +126,8 @@ class Interval:
     
     def __contains__(self, x: float) -> bool:
         """ checks if `x` is contained in the interval """
-        l = self.left < x if self.left_open else self.left <= x
-        r = x < self.right if self.right_open else x <= self.right
-        
+        l = self.left < x if self.left_open else self.left < x or abs(self.left - x) < 1e-6
+        r = x < self.right if self.right_open else x < self.right or abs(self.right - x) < 1e-6        
         return l and r
 
     def __eq__(self, __other: object) -> bool:
@@ -181,6 +186,10 @@ class Interval:
     def __hash__(self) -> int:
         return hash(repr(self))
     
+    def copy(self) -> object:
+        """ Create a deep copy of the interval. """
+        return Interval(self.left, self.right, self.left_open, self.right_open)
+
 class EmptyInterval(Interval):
     """ Represents an empty interval """
 

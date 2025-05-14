@@ -190,7 +190,7 @@ class TestMission(unittest.TestCase):
         self.assertAlmostEqual(o_4_1.eval_performance(measurement_3), 0.0)
 
 
-class TestSingleSatCase(unittest.TestCase):
+class TestToySatCase(unittest.TestCase):
     def setUp(self) -> None:
         # terminal welcome message
         print_welcome('Simulation Loading Test')
@@ -206,7 +206,7 @@ class TestSingleSatCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 3.0 / 24.0,
+            "duration": 1.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
             },
@@ -248,10 +248,14 @@ class TestSingleSatCase(unittest.TestCase):
                         "Fnum": 10.3, 
                         "maxDetectorExposureTime": 20e-3, 
                         "atmosLossModel": "LOWTRAN7",
+                        "orientation": {
+                            "referenceFrame": "NADIR_POINTING",
+                            "convention": "REF_FRAME_ALIGNED"
+                        },
                         "fieldOfViewGeometry": { 
                             "shape": "RECTANGULAR", 
-                            "angleHeight": 0.1116, 
-                            "angleWidth":0.2645 
+                            "angleHeight": 2.5, 
+                            "angleWidth": 45.0
                         },
                         "maneuver" : {
                             "maneuverType":"SINGLE_ROLL_ONLY",
@@ -273,10 +277,10 @@ class TestSingleSatCase(unittest.TestCase):
                             "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                             "sma": 7078,
                             "ecc": 0.01,
-                            "inc": 67,
+                            "inc": 0.0,
                             "raan": 0.0,
                             "aop": 0.0,
-                            "ta": 90.0
+                            "ta": 95.0
                         }
                     },
                     "planner" : {
@@ -289,51 +293,42 @@ class TestSingleSatCase(unittest.TestCase):
                         #     "@type" : "broadcaster",
                         #     "period" : 400
                         # },
-                        "rewardGrid":{
-                            "reward_function" : 'event',
-                            'initial_reward' : 1.0,
-                            'min_reward' : 1.0,
-                            'unobserved_reward_rate' : 2.0, # pts/hrs
-                            'max_unobserved_reward' : 10.0,
-                            'event_reward' : 10.0
-                        }
                     },
-                    "science" : {
-                        "@type": "lookup", 
-                        "eventsPath" : "./tests/missions/resources/events/lake_events_seed-1000.csv"
-                    },
+                    # "science" : {
+                    #     "@type": "lookup", 
+                    #     "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
+                    # },
                     "mission" : "Algal blooms monitoring"
                 }
             ],
             "grid": [
                 {
                     "@type": "customGrid",
-                    "covGridFilePath": "./tests/missions/resources/grids/lake_event_points.csv"
+                    "covGridFilePath": "./tests/missions/resources/grids/toy_points.csv"
                 }
             ],
             "scenario": {   
                 "connectivity" : "FULL", 
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/missions/resources/events/lake_events_seed-1000.csv"
+                    "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
                 "scenarioPath" : "./tests/missions/",
-                "name" : "single_sat_case",
+                "name" : "toy_sat_case",
                 "missionsPath" : "./tests/missions/resources/missions/missions.json"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/missions/orbit_data/single_sat_case",
+                "outDir" : "./tests/missions/orbit_data/toy_sat_case",
             }
         }
 
         # set outdir
         orbitdata_dir = os.path.join('./tests/missions', 'orbit_data')
-        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'single_sat_case')
-        scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
+        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'toy_sat_case')
         if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
         if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
 
@@ -352,6 +347,161 @@ class TestSingleSatCase(unittest.TestCase):
         # self.simulation.print_results()
 
         print('DONE')
+
+# class TestSingleSatCase(unittest.TestCase):
+    # def setUp(self) -> None:
+    #     # terminal welcome message
+    #     print_welcome('Simulation Loading Test')
+        
+    #     # load scenario json file
+    #     scenario_specs : dict = {
+    #         "epoch": {
+    #             "@type": "GREGORIAN_UT1",
+    #             "year": 2020,
+    #             "month": 1,
+    #             "day": 1,
+    #             "hour": 0,
+    #             "minute": 0,
+    #             "second": 0
+    #         },
+    #         "duration": 3.0 / 24.0,
+    #         "propagator": {
+    #             "@type": "J2 ANALYTICAL PROPAGATOR",
+    #         },
+    #         "spacecraft": [
+    #             {
+    #                 "@id": "thermal_sat_0_0",
+    #                 "name": "thermal_0",
+    #                 "spacecraftBus": {
+    #                     "name": "BlueCanyon",
+    #                     "mass": 20,
+    #                     "volume": 0.5,
+    #                     "orientation": {
+    #                         "referenceFrame": "NADIR_POINTING",
+    #                         "convention": "REF_FRAME_ALIGNED"
+    #                     },
+    #                     "components": {
+    #                         "adcs" : {
+    #                             "maxTorque" : 1000,
+    #                             "maxRate" : 1
+    #                         }
+    #                     }
+    #                 },
+    #                 "instrument": {
+    #                     "name": "VNIR",
+    #                     "@id" : "vnir_skysat",
+    #                     "@type": "Passive Optical Scanner",
+    #                     "scanTechnique": "MATRIX_IMAGER", 
+    #                     "numberDetectorRows": 1080, 
+    #                     "numberDetectorCols": 2560, 
+    #                     "detectorWidth": 6.6e-6,
+    #                     "focalLength": 3.6,  
+    #                     "operatingWavelength": 490e-9,  
+    #                     "bandwidth": 50e-9, 
+    #                     "quantumEff": 0.35, 
+    #                     "targetBlackBodyTemp": 290,
+    #                     "opticsSysEff": 0.6, 
+    #                     "numOfReadOutE": 5, 
+    #                     "apertureDia": 350e-3, 
+    #                     "Fnum": 10.3, 
+    #                     "maxDetectorExposureTime": 20e-3, 
+    #                     "atmosLossModel": "LOWTRAN7",
+    #                     "fieldOfViewGeometry": { 
+    #                         "shape": "RECTANGULAR", 
+    #                         "angleHeight": 0.1116, 
+    #                         "angleWidth":0.2645 
+    #                     },
+    #                     "maneuver" : {
+    #                         "maneuverType":"SINGLE_ROLL_ONLY",
+    #                         "A_rollMin": -50,
+    #                         "A_rollMax": 50
+    #                     },
+    #                 },
+    #                 "orbitState": {
+    #                     "date": {
+    #                         "@type": "GREGORIAN_UT1",
+    #                         "year": 2020,
+    #                         "month": 1,
+    #                         "day": 1,
+    #                         "hour": 0,
+    #                         "minute": 0,
+    #                         "second": 0
+    #                     },
+    #                     "state": {
+    #                         "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+    #                         "sma": 7078,
+    #                         "ecc": 0.01,
+    #                         "inc": 67,
+    #                         "raan": 0.0,
+    #                         "aop": 0.0,
+    #                         "ta": 90.0
+    #                     }
+    #                 },
+    #                 "planner" : {
+    #                     "preplanner" : {
+    #                         "@type" : "heuristic",
+    #                         "period": 1000,
+    #                         # "horizon": 500,
+    #                     },
+    #                     # "replanner" : {
+    #                     #     "@type" : "broadcaster",
+    #                     #     "period" : 400
+    #                     # },
+    #                 },
+    #                 # "science" : {
+    #                 #     "@type": "lookup", 
+    #                 #     "eventsPath" : "./tests/missions/resources/events/lake_events_seed-1000.csv"
+    #                 # },
+    #                 "mission" : "Algal blooms monitoring"
+    #             }
+    #         ],
+    #         "grid": [
+    #             {
+    #                 "@type": "customGrid",
+    #                 "covGridFilePath": "./tests/missions/resources/grids/lake_event_points.csv"
+    #             }
+    #         ],
+    #         "scenario": {   
+    #             "connectivity" : "FULL", 
+    #             "events" : {
+    #                 "@type": "PREDEF", 
+    #                 "eventsPath" : "./tests/missions/resources/events/lake_events_seed-1000.csv"
+    #             },
+    #             "clock" : {
+    #                 "@type" : "EVENT"
+    #             },
+    #             "scenarioPath" : "./tests/missions/",
+    #             "name" : "single_sat_case",
+    #             "missionsPath" : "./tests/missions/resources/missions/missions.json"
+    #         },
+    #         "settings": {
+    #             "coverageType": "GRID COVERAGE",
+    #             "outDir" : "./tests/missions/orbit_data/single_sat_case",
+    #         }
+    #     }
+
+    #     # set outdir
+    #     orbitdata_dir = os.path.join('./tests/missions', 'orbit_data')
+    #     scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'single_sat_case')
+    #     scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
+    #     if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
+    #     if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
+
+    #     # initialize mission
+    #     self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+    #     # check type of mission object
+    #     self.assertTrue(isinstance(self.simulation, Simulation))
+
+
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.simulation.execute()
+
+    #     # print results
+    #     # self.simulation.print_results()
+
+    #     print('DONE')
 
 if __name__ == '__main__':
     # terminal welcome message

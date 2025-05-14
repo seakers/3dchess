@@ -24,7 +24,6 @@ from dmas.clocks import *
 
 from chess3d.agents.agents import *
 from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
-from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -40,7 +39,6 @@ from chess3d.agents.planning.preplanners.nadir import NadirPointingPlaner
 from chess3d.agents.planning.preplanners.dynamic import DynamicProgrammingPlanner
 from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.science.module import *
-from chess3d.agents.science.utility import utility_function, reobservation_strategy
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.utils import *
@@ -1212,8 +1210,8 @@ class SimulationElementFactory:
                                                     orbit_state_dict,
                                                     time_step=dt) 
                 
-                preplanner, replanner, reward_grid = \
-                    SimulationElementFactory.load_planners(planner_dict, agent_specs, agent_orbitdata, logger)
+                preplanner, replanner = \
+                    SimulationElementFactory.load_planners(planner_dict, logger)
                 
                 return SatelliteAgent(agent_name, 
                                       results_path,
@@ -1226,11 +1224,12 @@ class SimulationElementFactory:
                                       processor,
                                       preplanner,
                                       replanner,
-                                      reward_grid,
                                       level,
                                       logger)     
 
             elif agent_type == SimulationAgentTypes.GROUND_STATION:
+                raise NotImplementedError('Ground station agents not yet implemented.')
+
                 lat = agent_specs['latitude']
                 lon = agent_specs['longitude']
                 alt = agent_specs.get('altitude', 0.0)
@@ -1492,125 +1491,96 @@ class SimulationElementFactory:
         # return nothing
         return None  
 
-    def load_planners(planner_dict : dict,
-                        agent_specs : object,
-                        agent_orbitdata : OrbitData,
-                        logger : logging.Logger) -> tuple:
-        if planner_dict is not None:
-            # get reward grid spes
-            reward_grid_params : dict = planner_dict.get('rewardGrid', None)
+    def load_planners(planner_dict : dict, logger : logging.Logger) -> tuple:
+        # check if planner dictionary is empty
+        if planner_dict is None: return None, None
 
-            if reward_grid_params:
-                assert agent_orbitdata is not None
-
-                # get utility function 
-                reward_func_name = reward_grid_params.get('reward_function', 'fixed')
-                reward_func = utility_function[reward_func_name]
-
-                # get observation startegy
-                reobsevation_strategy_name = reward_grid_params.get('reobservation', 'constant')
-                reobs_strategy = reobservation_strategy[reobsevation_strategy_name]
-
-                # add parameters
-                reward_grid_params['reward_function'] = reward_func
-                reward_grid_params['specs'] = agent_specs
-                reward_grid_params['grid_data'] = agent_orbitdata.grid_data
-                reward_grid_params['reobservation_strategy'] = reobs_strategy
-
-                # create reward gri
-                reward_grid = RewardGrid(**reward_grid_params)
-            else:
-                reward_grid = None
-
-            # get preplanner specs
-            preplanner_dict = planner_dict.get('preplanner', None)
-            
-            if isinstance(preplanner_dict, dict): # preplanner exists
-                # get preplanner parameters
-                preplanner_type : str = preplanner_dict.get('@type', None)
-                if preplanner_type is None: raise ValueError(f'preplanner type within planner module not specified in input file.')
-
-                period = preplanner_dict.get('period', np.Inf)
-                horizon = preplanner_dict.get('horizon', period)
-                horizon = np.Inf if isinstance(horizon, str) and 'inf' in horizon.lower() else horizon
-                debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
-                # sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
-
-                # initialize preplanner
-                if preplanner_type.lower() in ["heuristic"]:
-                    period = preplanner_dict.get('period', 500)
-                    horizon = preplanner_dict.get('horizon', period)
-                    points = preplanner_dict.get('numGroundPoints', np.Inf)
-
-                    if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
-
-                    preplanner = HeuristicInsertionPlanner(horizon, period, points, debug, logger)
-
-                elif preplanner_type.lower() in ["naive", "fifo", "earliest"]:
-                    points = preplanner_dict.get('numGroundPoints', np.Inf)
-                    preplanner = EarliestAccessPlanner(horizon, period, points, debug, logger)
-
-                elif preplanner_type.lower() == 'nadir':
-                    points = preplanner_dict.get('numGroundPoints', np.Inf)
-                    preplanner = NadirPointingPlaner(horizon, period, points, debug, logger)
-
-                elif preplanner_type.lower() in ["dynamic", "dp"]:
-                    period = preplanner_dict.get('period', 500)
-                    horizon = preplanner_dict.get('horizon', period)
-                    
-                    if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
-
-                    preplanner = DynamicProgrammingPlanner(horizon, period, debug, logger)
-                
-                # elif... # add more preplanners here
-                
-                else:
-                    raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
-            
-            else: # no preplanner exists in agent specs
-                preplanner = None
-
-            replanner_dict = planner_dict.get('replanner', None)
-            if isinstance(replanner_dict, dict):
-                replanner_type : str = replanner_dict.get('@type', None)
-                if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
-                debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
-
-                if replanner_type.lower() == 'broadcaster':
-                    mode = replanner_dict.get('mode', 'periodic').lower()
-                    period = replanner_dict.get('period', 500) if mode == 'periodic' else np.Inf
-
-                    replanner = BroadcasterReplanner(mode, period, debug, logger)
-
-                elif replanner_type.lower() == 'acbba': 
-                    threshold = replanner_dict.get('threshold', 1)
-
-                    replanner = ACBBAPlanner(
-                                             threshold, 
-                                             debug,
-                                             logger
-                                             )
-                    
-                # elif replanner_type.lower() == 'acbba-dp': 
-                #     max_bundle_size = replanner_dict.get('bundle size', 3)
-                #     threshold = replanner_dict.get('threshold', 1)
-                #     horizon = replanner_dict.get('horizon', np.Inf)
-
-                #     replanner = DynamicProgrammingACBBAReplanner(max_bundle_size, 
-                #                                                 threshold, 
-                #                                                 horizon,
-                #                                                 debug,
-                #                                                 logger)
-                
-                else:
-                    raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
-            else:
-                # replanner = None
-                replanner = None
-        else:
-            preplanner, replanner, reward_grid = None, None, None
+        # get preplanner specs
+        preplanner_dict = planner_dict.get('preplanner', None)
         
-        return preplanner, replanner, reward_grid
+        if isinstance(preplanner_dict, dict): # preplanner exists
+            # get preplanner parameters
+            preplanner_type : str = preplanner_dict.get('@type', None)
+            if preplanner_type is None: raise ValueError(f'preplanner type within planner module not specified in input file.')
+
+            period = preplanner_dict.get('period', np.Inf)
+            horizon = preplanner_dict.get('horizon', period)
+            horizon = np.Inf if isinstance(horizon, str) and 'inf' in horizon.lower() else horizon
+            debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
+            # sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
+
+            # initialize preplanner
+            if preplanner_type.lower() in ["heuristic"]:
+                period = preplanner_dict.get('period', 500)
+                horizon = preplanner_dict.get('horizon', period)
+
+                if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
+
+                preplanner = HeuristicInsertionPlanner(horizon, period, debug, logger)
+
+            elif preplanner_type.lower() in ["naive", "fifo", "earliest"]:
+                preplanner = EarliestAccessPlanner(horizon, period, debug, logger)
+
+            elif preplanner_type.lower() == 'nadir':
+                preplanner = NadirPointingPlaner(horizon, period, debug, logger)
+
+            elif preplanner_type.lower() in ["dynamic", "dp"]:
+                period = preplanner_dict.get('period', 500)
+                horizon = preplanner_dict.get('horizon', period)
+                
+                if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
+
+                preplanner = DynamicProgrammingPlanner(horizon, period, debug, logger)
+            
+            # elif... # add more preplanners here
+            
+            else:
+                raise NotImplementedError(f'preplanner of type `{preplanner_dict}` not yet supported.')
+        
+        else: # no preplanner exists in agent specs
+            preplanner = None
+
+        # get replanner specs
+        replanner_dict = planner_dict.get('replanner', None)
+
+        if isinstance(replanner_dict, dict):
+            replanner_type : str = replanner_dict.get('@type', None)
+            if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
+            debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
+
+            if replanner_type.lower() == 'broadcaster':
+                mode = replanner_dict.get('mode', 'periodic').lower()
+                period = replanner_dict.get('period', 500) if mode == 'periodic' else np.Inf
+
+                replanner = BroadcasterReplanner(mode, period, debug, logger)
+
+            elif replanner_type.lower() == 'acbba': 
+                threshold = replanner_dict.get('threshold', 1)
+
+                replanner = ACBBAPlanner(
+                                            threshold, 
+                                            debug,
+                                            logger
+                                            )
+                
+            # elif replanner_type.lower() == 'acbba-dp': 
+            #     max_bundle_size = replanner_dict.get('bundle size', 3)
+            #     threshold = replanner_dict.get('threshold', 1)
+            #     horizon = replanner_dict.get('horizon', np.Inf)
+
+            #     replanner = DynamicProgrammingACBBAReplanner(max_bundle_size, 
+            #                                                 threshold, 
+            #                                                 horizon,
+            #                                                 debug,
+            #                                                 logger)
+            
+            else:
+                raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
+        
+        else: # no preplanner exists in agent specs
+            replanner = None
+
+        return preplanner, replanner
 
     def load_planner_module(planner_dict : dict,
                             results_path : str,
@@ -1621,13 +1591,12 @@ class SimulationElementFactory:
                             logger : logging.Logger
                             ) -> PlanningModule:
         
-        preplanner, replanner, reward_grid = SimulationElementFactory.load_planners(planner_dict, agent_specs, agent_orbitdata, logger)
+        preplanner, replanner = SimulationElementFactory.load_planners(planner_dict, logger)
         
         # create planning module
         return PlanningModule(results_path, 
                               agent_specs,
                               agent_network_config, 
-                              reward_grid,
                               preplanner,
                               replanner,
                               agent_orbitdata,

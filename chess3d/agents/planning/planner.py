@@ -14,8 +14,7 @@ from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.rewards import GridPoint, RewardGrid
-from chess3d.agents.planning.tasks import ObservationTask
+from chess3d.agents.planning.tasks import GenericObservationTask, ObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -584,14 +583,23 @@ class AbstractPreplanner(AbstractPlanner):
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         specs : object,
-                        reward_grid : RewardGrid,
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
-                        mission : Mission
+                        mission : Mission,
+                        tasks : list
                     ) -> Plan:
+        # compile instrument field of view specifications   
+        cross_track_fovs : dict = self.collect_fov_specs(specs)
+
+        # calculate coverage opportunities for tasks
+        ground_points : dict = self.get_ground_points(orbitdata)
+        access_opportunities = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
+
+        # create schedulable tasks from known tasks and future access opportunities
+        schedulable_tasks : list[ObservationTask] = self.create_tasks_from_accesses(tasks, access_opportunities, ground_points, cross_track_fovs)
         
-        # schedule observations
-        observations : list = self._schedule_observations(state, specs, reward_grid, clock_config, orbitdata, mission)
+        # schedule observation tasks
+        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks)
         assert self.is_observation_path_valid(state, specs, observations)
 
         # schedule broadcasts to be perfomed
@@ -611,7 +619,7 @@ class AbstractPreplanner(AbstractPlanner):
         return self.plan.copy()
         
     @abstractmethod
-    def _schedule_observations(self, state : SimulationAgentState, specs : object, reward_grid : RewardGrid, clock_config : ClockConfig, orbitdata : OrbitData = None) -> list:
+    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list) -> list:
         """ Creates a list of observation actions to be performed by the agent """    
 
     @abstractmethod
@@ -681,8 +689,7 @@ class AbstractPreplanner(AbstractPlanner):
     
     @runtime_tracker
     def get_ground_points(self,
-                          orbitdata : OrbitData,
-                          max_points : int = np.Inf,
+                          orbitdata : OrbitData
                         ) -> dict:
         # initiate accestimes 
         all_ground_points = list({
@@ -691,12 +698,9 @@ class AbstractPreplanner(AbstractPlanner):
             for lat, lon, grid_index, gp_index in grid_datum.values
         })
         
-        # sample required number of points to consider
-        ground_point_set : list = random.sample(all_ground_points, max_points) if max_points < np.Inf else all_ground_points
-    
         # organize into a `dict`
         ground_points = dict()
-        for grid_index, gp_index, lat, lon in ground_point_set: 
+        for grid_index, gp_index, lat, lon in all_ground_points: 
             if grid_index not in ground_points: ground_points[grid_index] = dict()
             if gp_index not in ground_points[grid_index]: ground_points[grid_index][gp_index] = dict()
 
@@ -756,13 +760,15 @@ class AbstractPreplanner(AbstractPlanner):
                 t : list
                 th : list
 
-                if (   (t_img - orbitdata.time_step) in interval 
-                    or (t_img + orbitdata.time_step) in interval):
+                overlap_interval = Interval(t_img - orbitdata.time_step, 
+                                            t_img + orbitdata.time_step)
+                
+                if overlap_interval.overlaps(interval):
                     interval.extend(t_img)
                     t.append(t_img)
                     th.append(look_angle)
                     found = True
-                    break                        
+                    break      
 
             if not found:
                 access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
@@ -780,6 +786,7 @@ class AbstractPreplanner(AbstractPlanner):
     
     @runtime_tracker
     def create_tasks_from_accesses(self, 
+                                     available_tasks : list,
                                      access_times : list, 
                                      ground_points : dict, 
                                      cross_track_fovs : dict
@@ -787,25 +794,40 @@ class AbstractPreplanner(AbstractPlanner):
         """ Creates tasks from access times. """
         
         # create one task per each access opportinity
-        tasks : list[ObservationTask] = [ObservationTask(instrument, 
-                                        Interval(min(t), max(t)), 
-                                        Interval(np.mean(th)-cross_track_fovs[instrument]/2, np.mean(th)+cross_track_fovs[instrument]/2), 
-                                        [self.get_coordinates(ground_points, grid_index, gp_index)]                                        
-                                        )
-                        for grid_index, gp_index, instrument, _, t, th in tqdm(access_times, desc="Creating tasks from access times", leave=False)
-                        ]       
-        
+        schedulable_tasks : list[ObservationTask] = []
+        for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
+            task : GenericObservationTask
+
+            # find access time for this task
+            for *__,gp_index,grid_index in task.targets:
+                matching_access_times = [(access_grid_index,access_gp_index,*_) 
+                                         for access_grid_index,access_gp_index,*_ in access_times
+                                         if access_grid_index == int(gp_index) and access_gp_index == int(grid_index)]
+                
+                # create a schedulable task for each access time
+                for access_time in matching_access_times:
+                    instrument = access_time[2]
+                    accessibility = access_time[3]
+                    th = access_time[-1]
+                    slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
+                                           np.mean(th)+cross_track_fovs[instrument]/2)
+                    schedulable_tasks.append(ObservationTask(task, 
+                                                             instrument,
+                                                             accessibility,
+                                                             slew_angles))
+       
+         
         # check if tasks are clusterable
-        adj : Dict[ObservationTask, set[ObservationTask]] = {task : set() for task in tasks}
+        adj : Dict[ObservationTask, set[ObservationTask]] = {task : set() for task in schedulable_tasks}
         
-        for i in tqdm(range(len(tasks)), leave=False, desc="Checking task clusterability"):
-            for j in range(i + 1, len(tasks)):
-                if tasks[i].can_combine(tasks[j]):
-                    adj[tasks[i]].add(tasks[j])
-                    adj[tasks[j]].add(tasks[i]) 
+        for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
+            for j in range(i + 1, len(schedulable_tasks)):
+                if schedulable_tasks[i].can_combine(schedulable_tasks[j]):
+                    adj[schedulable_tasks[i]].add(schedulable_tasks[j])
+                    adj[schedulable_tasks[j]].add(schedulable_tasks[i]) 
    
         # sort tasks by degree of adjacency 
-        v : list[ObservationTask] = self.sort_tasks_by_degree(tasks, adj)
+        v : list[ObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
         
         # only keep tasks that have at least one clusterable task
         v = [task for task in v if len(adj[task]) > 0]
@@ -840,7 +862,7 @@ class AbstractPreplanner(AbstractPlanner):
                 n_p : list[ObservationTask] = self.sort_tasks_by_degree(n_p, adj)
 
             for q in clique: 
-                p.combine(q)
+                p = p.merge(q)
                 adj.pop(q)
                 if q in v: v.remove(q)
 
@@ -850,13 +872,13 @@ class AbstractPreplanner(AbstractPlanner):
             combined_tasks.append(p)
 
         # add clustered tasks to the final list of tasks available for scheduling
-        tasks.extend(combined_tasks)
+        schedulable_tasks.extend(combined_tasks)
 
-        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] for task in tasks]), \
+        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] for task in schedulable_tasks]), \
             f"Tasks have slew angles larger than the maximum allowed field of view."
 
         # return tasks
-        return tasks
+        return schedulable_tasks
     
     def get_coordinates(self, ground_points : dict, grid_index : int, gp_index : int) -> list:
         """ Returns the coordinates of the ground points. """
@@ -869,7 +891,7 @@ class AbstractPreplanner(AbstractPlanner):
         degrees : dict = {task : len(adjacency[task]) for task in tasks}
 
         # sort tasks by degree and return
-        return sorted(tasks, key=lambda p: (degrees[p], p.reward, p.availability), reverse=True)
+        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.reward for parent_task in p.parent_tasks]), p.accessibility), reverse=True)
 
 
 class AbstractReplanner(AbstractPlanner):
@@ -902,7 +924,6 @@ class AbstractReplanner(AbstractPlanner):
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         specs : object,
-                        reward_grid : RewardGrid,
                         current_plan : Plan,
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
@@ -912,11 +933,13 @@ class AbstractReplanner(AbstractPlanner):
     def get_broadcast_contents(self,
                                broadcast_action : FutureBroadcastMessageAction,
                                state : SimulationAgentState,
-                               reward_grid : RewardGrid,
+                               reward_grid ,
                                **kwargs
                                ) -> BroadcastMessageAction:
         """  Generates a broadcast message to be sent to other agents """
         if broadcast_action.broadcast_type == FutureBroadcastTypes.REWARD:
+            raise NotImplementedError('Reward broadcast not yet implemented.')
+
             latest_observations : list[ObservationAction] = []
             for grid in reward_grid.rewards:
                 for target in grid:

@@ -255,7 +255,8 @@ class ObservationAction(AgentAction):
         if not isinstance(instrument_name,str): raise ValueError(f'`instrument_name` must be of type `str`. Is of type `{type(instrument_name)}`.')
         if not isinstance(targets, list): raise ValueError(f'`targets` must be of type `list`. Is of type `{type(targets)}`.')
         
-        if not all(isinstance(target, list) for target in targets): raise ValueError(f'`target` must be a `list` of numerical values of type `float`. Is of type `{type(targets)}`.')
+        if not all(isinstance(target, list) for target in targets): 
+            raise ValueError(f'`target` must be a `list` of numerical values of type `float`. Is of type `{type(targets)}`.')
         if any([len(target) != 3 for target in targets]): raise ValueError(f'`target` must be a `list` of length 3 (lat, lon, alt). Is of length {len(targets)}.')
         if not isinstance(look_angle,float) and not isinstance(look_angle,int): raise ValueError(f'`look_angle` must be a numerical value of type `float`. Is of type `{type(look_angle)}`')
 

@@ -7,7 +7,6 @@ from dmas.clocks import *
 from tqdm import tqdm
 
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.planning.tasks import ObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
@@ -16,33 +15,18 @@ from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.messages import *
+from chess3d.utils import Interval
 
 class HeuristicInsertionPlanner(AbstractPreplanner):
     """ Schedules observations iteratively based on the highest heuristic-scoring and feasible access point """
 
-    def __init__(self, 
-                 horizon: float = np.Inf, 
-                 period: float = np.Inf, 
-                 points : int = np.Inf, 
-                #  sharing : bool = True,
-                 debug: bool = False, 
-                 logger: Logger = None
-                 ) -> None:
-        super().__init__(horizon, 
-                         period, 
-                        #  sharing, 
-                         debug, 
-                         logger)
-        self.points = points
-
     @runtime_tracker
     def _schedule_observations(self, 
-                               state: SimulationAgentState, 
-                               specs : object,
-                               reward_grid : RewardGrid, 
-                               __,
-                               orbitdata: OrbitData = None,
-                               mission: Mission = None
+                               state : SimulationAgentState, 
+                               specs : object, 
+                               _ : ClockConfig, 
+                               orbitdata : OrbitData, 
+                               schedulable_tasks : list
                                ) -> list:
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
@@ -54,47 +38,51 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         
         # compile instrument field of view specifications   
         cross_track_fovs : dict = self.collect_fov_specs(specs)
-
-        # compile access times for this planning horizon
-        ground_points : dict = self.get_ground_points(orbitdata, self.points)
-        access_times : list = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
-
-        # create tasks from access times
-        tasks : list[ObservationTask] = self.create_tasks_from_accesses(access_times, ground_points, cross_track_fovs)
-
-        # sort tasks by heuristic metric
-        tasks = self.sort_tasks_by_heuristic(tasks, reward_grid, orbitdata, mission)
+        
+        # sort tasks by heuristic
+        schedulable_tasks : list[ObservationTask] = self.sort_tasks_by_heuristic(schedulable_tasks, orbitdata)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
-        if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
+        assert adcs_specs, 'ADCS component specifications missing from agent specs object.'
 
         max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
-        if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
+        assert max_slew_rate, 'ADCS `maxRate` specification missing from agent specs object.'
 
         max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
-        if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
+        assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
         # generate plan
         observations : list[ObservationAction] = []
 
-        for task in tqdm(tasks,
+        for task in tqdm(schedulable_tasks,
                          desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 
                          leave=False):
             
-            if len(observations) == 9:
-                x =1
-
             # check if agent has the payload to peform observation
             if task.instrument_name not in payload:
                 continue
+            
+            # calculate task observation angle
+            th_img = np.average((task.slew_angles.left, task.slew_angles.right))
+            
+            # check if there is overlap with previous scheduled observation
+            potential_overlap = [Interval(observation.t_start,  observation.t_end) 
+                                 for observation in observations
+                                 if observation.t_start in task.accessibility 
+                                  or observation.t_end in task.accessibility]
+            if any([overlap.overlaps(task.accessibility)
+                    for overlap in potential_overlap]):
+                continue
 
-            # compare to previous measurement 
+            # compare with previous scheduled observation
             actions_prev = [observation for observation in observations
-                            if observation.t_end <= task.availability.left]
+                            if observation.t_end <= task.accessibility.left]
             
             if actions_prev:
-                # compare with previous scheduled observation
+                # sort by end time 
+                actions_prev.sort(key=lambda a : a.t_end)
+
                 action_prev : ObservationAction = actions_prev[-1]
                 
                 t_prev = action_prev.t_end
@@ -103,94 +91,84 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                 # no prior observation exists, compare with current state
                 t_prev = state.t
                 th_prev = state.attitude[0]
-        
-            if len(task.targets) > 1:
-                t_img = task.availability.left
-                th_img = np.average((task.slew_angles.left, task.slew_angles.right))
-                if self.is_observation_feasible(state, 
-                                                t_img, th_img,
-                                                t_prev, th_prev, 
-                                                max_slew_rate, max_torque, 
-                                                cross_track_fovs[task.instrument_name]):
-                    
-                    action = ObservationAction(task.instrument_name, task.targets, th_img, t_img, task.availability.span())
 
-                    # check if another observation was already scheduled at this time
-                    if not observations:
-                        observations.append(action)
-                        
-                    else:
-                        action_prev : ObservationAction = observations[-1]
-                        if abs(action_prev.t_end - action.t_start) > 1e-3 and action_prev.t_end <= action.t_start:
-                            observations.append(action)
-                            
-            else:
-                # find if feasible observation times exist
-                t = [task.availability.left]
-                while t[-1] < task.availability.right:
-                    t.append(t[-1] + orbitdata.time_step)
+            # check if there is a potential previous observation conflict
+            t_img = task.accessibility.left
+            prev_action_feasible = self.is_observation_feasible(state,
+                                                                t_img,
+                                                                th_img,
+                                                                t_prev,
+                                                                th_prev,
+                                                                max_slew_rate,
+                                                                max_torque,
+                                                                cross_track_fovs[task.instrument_name]
+                                                                )
+
+            # compare with future scheduled observation
+            actions_next = [observation for observation in observations
+                            if observation.t_start >= task.accessibility.right]
+            if actions_next:
+                # sort by start times
+                actions_next.sort(key=lambda a : a.t_start)
+
+                action_next : ObservationAction = actions_next[0]
                 
-                th = [np.average((task.slew_angles.left, task.slew_angles.right)) for _ in range(len(t))]
+                t_next = action_next.t_start
+                th_next = action_next.look_angle
+            else:
+                # no future observation exists, compare with current state
+                t_next = task.accessibility.right
+                th_next = np.average((task.slew_angles.left, task.slew_angles.right))
 
-                feasible_obs = [(t[i], th[i]) 
-                                for i in range(len(t))
-                                if self.is_observation_feasible(state, 
-                                                                t[i], th[i], 
-                                                                t_prev, th_prev, 
-                                                                max_slew_rate, max_torque, 
-                                                                cross_track_fovs[task.instrument_name])]
-                feasible_obs.sort(key=lambda a : a[0])
+            # check if there is a potential future observation conflict
+            t_img = task.accessibility.right
+            next_action_feasible = self.is_observation_feasible(state,
+                                                                t_next,
+                                                                th_next,
+                                                                t_img,
+                                                                th_img,
+                                                                max_slew_rate,
+                                                                max_torque,
+                                                                cross_track_fovs[task.instrument_name]
+                                                                )
+            
+            # check if the observation is feasible
+            if prev_action_feasible and next_action_feasible:
+                targets = [[lat,lon,0.0] for parent_task in task.parent_tasks
+                                        for lat,lon,*_ in parent_task.targets]
+                action = ObservationAction(task.instrument_name, 
+                                           targets, 
+                                           th_img, 
+                                           task.accessibility.left, 
+                                           task.accessibility.span())
+                observations.append(action)
+        
+        # sort by start time
+        observations_sorted = sorted(observations, key=lambda a : a.t_start)
 
-                while feasible_obs:
-                    # is feasible; create observation action with the earliest observation
-                    t_img, th_img = feasible_obs.pop(0)
-                    action = ObservationAction(task.instrument_name, task.targets, th_img, t_img, duration=task.availability.span())
+        assert self.no_redundant_observations(state, observations_sorted, orbitdata)
 
-                    # check if another observation was already scheduled at this time
-                    if not observations:
-                        observations.append(action)
-                        break
-                    else:
-                        action_prev : ObservationAction = observations[-1]
-                        if abs(action_prev.t_end - action.t_start) > 1e-3 and action_prev.t_end <= action.t_start:
-                            observations.append(action)
-                            break
-
-        assert self.no_redundant_observations(state, observations, orbitdata)
-
-        return observations
+        return observations_sorted
 
     # @abstractmethod
-    def sort_tasks_by_heuristic(self, tasks : list, reward_grid : RewardGrid, orbitdata : OrbitData, mission : Mission) -> list:
-        # TODO make heuristic adaptable
+    def sort_tasks_by_heuristic(self, tasks : list, orbitdata : OrbitData) -> list:
+        def reward_heuristic(task : ObservationTask) -> float:
+            """ Heuristic function to sort tasks by their heuristic value. """
+            # calculate total task reward
+            reward = sum([parent_task.reward for parent_task in task.parent_tasks])
+            # calculate task priority
+            priority = np.prod([parent_task.objective.priority  
+                                for parent_task in task.parent_tasks])
+            # calculate task duration
+            duration = task.accessibility.span()
+            # calculate task start time
+            t_start = task.accessibility.left
+
+            return -reward, -priority, -duration, t_start
 
         # TEMP SOLUTION schedule based on largest duration and earliest start time
-        return sorted(tasks, key= lambda a : (-a.availability.span(), a.availability.left) )
+        return sorted(tasks, key=reward_heuristic)
 
-    # def sort_accesses(self, access_times : list, ground_points : dict, reward_grid : RewardGrid) -> list:
-    #     """ Sorts available accesses by a defined heuristic metric. By default it is sorted by expected reward """
-        
-    #     def __estimate_earliest_reward(access_time : tuple):
-    #         # calculate earliest reward of a given access 
-    #         grid_index, gp_index, instrument, _, t, th = access_time
-    #         lat,lon = ground_points[grid_index][gp_index]
-    #         target = [lat,lon,0.0]
-    #         observation = ObservationAction(instrument, target, th[0], t[0])
-            
-    #         return reward_grid.estimate_reward(observation)
-        
-    #     # self.__print_access_times(access_times)
-    #     access_times.sort(key=__estimate_earliest_reward)
-    #     # self.__print_access_times(access_times)
-
-    #     return access_times
-            
-    def __print_access_times(self, access_times : list):
-        """ printouts for debugging purposes """
-        for access_time in access_times:
-            print(access_time)
-        print()
-    
     def is_observation_feasible(self, 
                                 state : SimulationAgentState,
                                 t_img : float, 

@@ -3,6 +3,27 @@ from typing import Dict, Union
 import uuid
 import numpy as np
 
+def monitoring(observation: dict, unobserved_reward_rate : float = 1, latest_observation : dict = None, **kwargs) -> float:
+    """
+    ### Monitoring Utility Function
+
+    This function calculates the utility of a monitoring observation based on the time since the last observation.
+    The utility is calculated as the time since the last observation divided by the total time available for monitoring.
+
+    - :`observation`: The current observation.
+    - :`unobserved_reward_rate`: The rate at which the reward decreases for unobserved events.    - :`latest_observation`: The latest observation.
+    - :`kwargs`: Additional keyword arguments (not used in this function).
+    
+    """
+    t_img = observation['t_start']
+    t_prev = latest_observation['t_start'] if latest_observation else 0.0
+        
+    # assert (t - t_init) >= 0.0 # TODO fix acbba triggering this
+
+    # calculate reward
+    reward = (t_img - t_prev) * unobserved_reward_rate / 3600 
+    reward = min(reward, 1.0) * int((t_img - t_prev) >= 0.0)
+
 RO = {
     # Reobservation Strategies
     "linear_increase" : lambda n_obs : n_obs,
@@ -11,6 +32,7 @@ RO = {
     "decaying_decrease" : lambda n_obs : np.exp(1 - n_obs),
     "immediate_decrease" : lambda n_obs : 0.0 if n_obs > 0 else 1.0,
     "no_change" : lambda _ : 1.0,
+    "monitoring" : monitoring,
 }
 
 class GeophysicalEvent:
@@ -313,6 +335,10 @@ class Mission:
     def __str__(self):
         """String representation of the mission."""
         return f"Mission: {self.name}, Objectives: {self.objectives}"
+    
+    def __iter__(self):
+        """Iterate over the objectives."""
+        return iter(self.objectives)
     
     def copy(self) -> 'Mission':
         """Create a copy of the mission."""
