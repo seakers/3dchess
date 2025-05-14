@@ -293,11 +293,15 @@ class MissionObjective:
                     # calculate measurement performance score
                     scores.append(req.calc_preference_value(measurement[attribute]))
             
-            reobs_val = RO[self.reobservation_strategy](measurement)
-            return np.prod(scores) * reobs_val
+            # reobs_val = RO[self.reobservation_strategy](measurement)
+            return np.prod(scores) 
         
         except Exception as e:
             raise(e)
+        
+    def calc_reward(self, measurement: dict) -> float:
+        """Calculate the reward for the objective based on the measurement."""
+        return RO[self.reobservation_strategy](measurement)
     
     def __repr__(self):
         """String representation of the objective."""
@@ -330,9 +334,6 @@ class MissionObjective:
 
     def can_perform(self, instrument: str) -> bool:
         """Check if the objective can be performed by the given instrument."""
-        return any([(instrument.lower() in valid_instrument or valid_instrument in instrument.lower())
-                    for valid_instrument in self.valid_instruments 
-                    ])
         return instrument.lower() in self.valid_instruments
 
 class EventDrivenObjective(MissionObjective):

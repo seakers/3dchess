@@ -7,7 +7,7 @@ from dmas.clocks import *
 from tqdm import tqdm
 
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import ObservationHistory, SchedulableObservationTask
+from chess3d.agents.planning.tasks import EventObservationTask, ObservationHistory, SchedulableObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -210,14 +210,19 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                 else:
                     measurement['spectral_resolution'] = "None"
 
+            # calculate total task reward          
+            task_reward = 0
             for parent_task in task.parent_tasks:
-                performance = parent_task.objective.eval_performance(measurement)
-                x = 1
+                task_priority = parent_task.objective.priority
+                task_performance = parent_task.objective.eval_performance(measurement)
+                task_score = parent_task.objective.calc_reward(measurement)
+                task_severity = parent_task.event.severity if isinstance(parent_task, EventObservationTask) else 1.0
+                
+                u_ijk = task_priority * task_performance * task_score * task_severity
+                task_reward += u_ijk
 
-            # calculate total task reward
-            
-
-            return -0.0, -priority, -duration, t_start
+            # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
+            return -task_reward, -priority, -duration, t_start
 
         # TEMP SOLUTION schedule based on largest duration and earliest start time
         return sorted(tasks, key=reward_heuristic)
