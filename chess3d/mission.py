@@ -3,7 +3,7 @@ from typing import Dict, Union
 import uuid
 import numpy as np
 
-def monitoring(observation: dict, unobserved_reward_rate : float = 1, latest_observation : dict = None, **kwargs) -> float:
+def monitoring(kwargs) -> float:
     """
     ### Monitoring Utility Function
 
@@ -15,22 +15,26 @@ def monitoring(observation: dict, unobserved_reward_rate : float = 1, latest_obs
     - :`kwargs`: Additional keyword arguments (not used in this function).
     
     """
-    t_img = observation['t_start']
-    t_prev = latest_observation['t_start'] if latest_observation else 0.0
+    t_img = kwargs['t_start']
+    t_prev = kwargs.get('t_prev',-1)
+    t_prev = t_prev if t_prev > 0 else 0.0
+    unobserved_reward_rate = kwargs.get('unobserved_reward_rate', 1.0)
         
     # assert (t - t_init) >= 0.0 # TODO fix acbba triggering this
 
     # calculate reward
     reward = (t_img - t_prev) * unobserved_reward_rate / 3600 
-    reward = min(reward, 1.0) * int((t_img - t_prev) >= 0.0)
+    reward = min(max(reward, 0.0), 1.0 )
+
+    return reward
 
 RO = {
     # Reobservation Strategies
-    "linear_increase" : lambda n_obs : n_obs,
-    "linear_decrease" : lambda n_obs : max((4 - n_obs)/4, 0),
-    "decaying_increase" : lambda n_obs : np.log(n_obs) + 1,
-    "decaying_decrease" : lambda n_obs : np.exp(1 - n_obs),
-    "immediate_decrease" : lambda n_obs : 0.0 if n_obs > 0 else 1.0,
+    "linear_increase" : lambda kwargs : kwargs['n_obs'],
+    "linear_decrease" : lambda kwargs : max((4 - kwargs['n_obs'])/4, 0),
+    "decaying_increase" : lambda kwargs : np.log(kwargs['n_obs']) + 1,
+    "decaying_decrease" : lambda kwargs : np.exp(1 - kwargs['n_obs']),
+    "immediate_decrease" : lambda kwargs : 0.0 if kwargs['n_obs'] > 0 else 1.0,
     "no_change" : lambda _ : 1.0,
     "monitoring" : monitoring,
 }
@@ -229,7 +233,13 @@ class MeasurementRequirement:
         return f"MeasurementRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
 class MissionObjective:
-    def __init__(self, parameter: str, priority: float, requirements: list, valid_instruments : list, id : str = None):
+    def __init__(self, 
+                 parameter: str, 
+                 priority: float, 
+                 requirements: list, 
+                 valid_instruments : list, 
+                 reobservation_strategy : str = "monitoring", 
+                 id : str = None):
         """ 
         ### Objective
          
@@ -238,6 +248,14 @@ class MissionObjective:
         - :`priority`: The priority of the objective.
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
         - :`valid_instruments`: A list of valid instruments that can be used to measure the parameter.
+        - :`reobservation_strategy`: The strategy for reobserving the event. Can be one of the following:
+            - "linar_increase"
+            - "linar_decrease"
+            - "decaying_increase"
+            - "decaying_decrease"
+            - "immediate_decrease"
+            - "no_change"
+            - "monitoring"
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
         if all([isinstance(req, dict) for req in requirements]):
@@ -248,6 +266,7 @@ class MissionObjective:
         assert isinstance(parameter, str), "Parameter must be a string"
         assert len(requirements) > 0, "At least one requirement is needed"
         assert all(isinstance(req, MeasurementRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
+        assert reobservation_strategy in RO, f"Invalid reobservation strategy: {reobservation_strategy}. Available strategies: {list(RO.keys())}"
         assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
 
         # Set attributes
@@ -255,24 +274,30 @@ class MissionObjective:
         self.parameter : str = parameter
         self.requirements : Dict[str, MeasurementRequirement] = {requirement.attribute : requirement for requirement in requirements}
         self.valid_instruments = [instrument.lower() for instrument in valid_instruments]
+        self.reobservation_strategy = reobservation_strategy
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def eval_performance(self, measurement: dict) -> float:
         """Evaluate the product of satisfaction scores given a measurement dict {attr: value}"""
-        scores = []
-        if measurement['instrument'].lower() not in self.valid_instruments:
-            # measurement does not meet requirement
-            return 0.0
-
-        for attribute,req in self.requirements.items():
-            if attribute not in measurement:
+        try:
+            scores = []
+            if measurement['instrument'].lower() not in self.valid_instruments:
                 # measurement does not meet requirement
-                scores.append(0)
-            else:
-                # calculate measurement performance score
-                scores.append(req.calc_preference_value(measurement[attribute]))
+                return 0.0
+
+            for attribute,req in self.requirements.items():
+                if attribute not in measurement:
+                    # measurement does not meet requirement
+                    scores.append(0)
+                else:
+                    # calculate measurement performance score
+                    scores.append(req.calc_preference_value(measurement[attribute]))
+            
+            reobs_val = RO[self.reobservation_strategy](measurement)
+            return np.prod(scores) * reobs_val
         
-        return np.prod(scores)
+        except Exception as e:
+            raise(e)
     
     def __repr__(self):
         """String representation of the objective."""
@@ -284,7 +309,7 @@ class MissionObjective:
 
     def copy(self) -> 'MissionObjective':
         """Create a copy of the objective."""
-        return MissionObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.valid_instruments, self.id)
+        return MissionObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.valid_instruments, self.reobservation_strategy, self.id)
 
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the objective to a dictionary."""
@@ -301,10 +326,13 @@ class MissionObjective:
             return EventDrivenObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['event_type'], obj_dict['valid_instruments'], obj_dict['reobservation_strategy'], obj_dict['id'])
         else:
             requirements = [MeasurementRequirement(**req) for _,req in obj_dict['requirements'].items()]
-            return MissionObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['valid_instruments'], obj_dict['id'])
+            return MissionObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['valid_instruments'], obj_dict['reobservation_strategy'], obj_dict['id'])
 
     def can_perform(self, instrument: str) -> bool:
         """Check if the objective can be performed by the given instrument."""
+        return any([(instrument.lower() in valid_instrument or valid_instrument in instrument.lower())
+                    for valid_instrument in self.valid_instruments 
+                    ])
         return instrument.lower() in self.valid_instruments
 
 class EventDrivenObjective(MissionObjective):
@@ -333,19 +361,15 @@ class EventDrivenObjective(MissionObjective):
             - "decaying_decrease"
             - "immediate_decrease"
             - "no_change"
+        - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
-        super().__init__(parameter, priority, requirements, valid_instruments, id)
+        super().__init__(parameter, priority, requirements, valid_instruments, reobservation_strategy, id)
         
         # Validate inputs
         assert isinstance(event_type, str), "Event type must be a string"
-        assert reobservation_strategy in RO, f"Invalid reobservation strategy: {reobservation_strategy}. Available strategies: {list(RO.keys())}"
-
+        
         # Set attributes
         self.event_type = event_type.lower() 
-        self.reobservation_strategy = reobservation_strategy
-
-    def eval_performance(self, measurement):
-        return super().eval_performance(measurement) * RO[self.reobservation_strategy](measurement["n_obs"])
 
     def __repr__(self):
         """String representation of the objective."""

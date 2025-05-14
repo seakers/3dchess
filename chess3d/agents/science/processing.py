@@ -27,9 +27,6 @@ class DataProcessor(ABC):
         
         # update list of known requests
         incoming_reqs : list[TaskRequest]
-        if incoming_reqs:
-            x =1
-
         incoming_event_requesters = {req.event : req.requester for req in incoming_reqs
                                      if req.event is not None}
         incoming_detected_events = {req.event for req in incoming_reqs 

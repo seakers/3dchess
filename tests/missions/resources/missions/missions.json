@@ -20,6 +20,8 @@
                     ],
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "TIR",
                         "Altimeter"
                     ]
@@ -36,6 +38,8 @@
                     ],
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "TIR",
                         "Altimeter"
                     ]
@@ -57,6 +61,8 @@
                     ],
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "TIR",
                         "Altimeter"
                     ]
@@ -82,6 +88,8 @@
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "TIR",
                         "Altimeter"
                     ]
@@ -100,6 +108,8 @@
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "TIR",
                         "Altimeter"
                     ]
@@ -123,6 +133,8 @@
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "TIR",
                         "Altimeter"
                     ]
@@ -149,6 +161,8 @@
                     ],
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "Altimeter"
                     ]
                 },
@@ -169,6 +183,8 @@
                     ],
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "Altimeter"
                     ]
                 },
@@ -189,6 +205,8 @@
                     ],
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "Altimeter"
                     ]
                 }
@@ -213,6 +231,8 @@
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "Altimeter"
                     ]
                 },
@@ -235,6 +255,8 @@
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "Altimeter"
                     ]
                 },
@@ -257,6 +279,8 @@
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
                         "VNIR",
+                        "VNIR hyp",
+                        "VNIR multi",
                         "Altimeter"
                     ]
                 }

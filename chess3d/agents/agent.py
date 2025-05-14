@@ -1108,6 +1108,5 @@ class SimulatedAgent(AbstractAgent):
             # self.log(f'total: {sum(stats_df["t_total"])}', level=logging.WARNING)
             stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
 
-
         except Exception as e:
             x = 1

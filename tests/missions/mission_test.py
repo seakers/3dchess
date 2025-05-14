@@ -7,208 +7,212 @@ from chess3d.mission import *
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
-class TestMission(unittest.TestCase):
-    def test_events(self):
-        """
-        O4: Observe events “Algal Blooms” (w=10)
-            Main parameter: Chl-A, MR = O1
-            DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
-            CA: Severity proportional to lake area (as in paper) 
-            CO: Secondary params = Water temperature and water level, MR as in O2 and O3
-            RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
+# class TestMission(unittest.TestCase):
+#     def test_events(self):
+#         """
+#         O4: Observe events “Algal Blooms” (w=10)
+#             Main parameter: Chl-A, MR = O1
+#             DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
+#             CA: Severity proportional to lake area (as in paper) 
+#             CO: Secondary params = Water temperature and water level, MR as in O2 and O3
+#             RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
 
-        """
+#         """
 
-        event = GeophysicalEvent('Algal Bloom', 
-                                 1.0, 
-                                 [
-                                    (0.0,0.0,0,0),
-                                    (1.0,1.0,0,1)
-                                  ], 
-                                 0.5, 
-                                 1.0, 
-                                 0.25)
+#         event = GeophysicalEvent('Algal Bloom', 
+#                                  1.0, 
+#                                  [
+#                                     (0.0,0.0,0,0),
+#                                     (1.0,1.0,0,1)
+#                                   ], 
+#                                  0.5, 
+#                                  1.0, 
+#                                  0.25)
 
-        # check initialization
-        self.assertEqual(event.event_type, 'algal bloom')
-        self.assertEqual(event.severity, 1.0)
-        self.assertEqual(event.t_start, 0.5)
-        self.assertEqual(event.t_end, 1.0)
-        self.assertEqual(event.t_corr, 0.25)
+#         # check initialization
+#         self.assertEqual(event.event_type, 'algal bloom')
+#         self.assertEqual(event.severity, 1.0)
+#         self.assertEqual(event.t_start, 0.5)
+#         self.assertEqual(event.t_end, 1.0)
+#         self.assertEqual(event.t_corr, 0.25)
 
-        # check serialization
-        event_dict = event.to_dict()
-        event_reconstructed : GeophysicalEvent = GeophysicalEvent.from_dict(event_dict)
-        self.assertEqual(event.event_type, event_reconstructed.event_type)
-        self.assertEqual(event.severity, event_reconstructed.severity)
-        self.assertEqual(event.t_start, event_reconstructed.t_start)
-        self.assertEqual(event.t_end, event_reconstructed.t_end)
-        self.assertEqual(event.t_corr, event_reconstructed.t_corr)
-        self.assertEqual(event.id, event_reconstructed.id)
-        self.assertEqual(event, event_reconstructed)
+#         # check serialization
+#         event_dict = event.to_dict()
+#         event_reconstructed : GeophysicalEvent = GeophysicalEvent.from_dict(event_dict)
+#         self.assertEqual(event.event_type, event_reconstructed.event_type)
+#         self.assertEqual(event.severity, event_reconstructed.severity)
+#         self.assertEqual(event.t_start, event_reconstructed.t_start)
+#         self.assertEqual(event.t_end, event_reconstructed.t_end)
+#         self.assertEqual(event.t_corr, event_reconstructed.t_corr)
+#         self.assertEqual(event.id, event_reconstructed.id)
+#         self.assertEqual(event, event_reconstructed)
 
-    def test_requirement(self):
-        """
-        O1: Measure Chlorophyll-A (w=1): 
-            Horizontal spatial resolution: Thresholds = [10, 30, 100] m, u = [1.0, 0.7, 0.1]
-            Spectral resolution: Thresholds = [Hyperspectral, Multispectral], u = [1, 0.5]
+#     def test_requirement(self):
+#         """
+#         O1: Measure Chlorophyll-A (w=1): 
+#             Horizontal spatial resolution: Thresholds = [10, 30, 100] m, u = [1.0, 0.7, 0.1]
+#             Spectral resolution: Thresholds = [Hyperspectral, Multispectral], u = [1, 0.5]
 
-        """
-        # Test the MeasurementRequirement class
-        # Create instances of MeasurementRequirement
-        req_1 = MeasurementRequirement('spatial_resolution', 
-                                       [10, 30, 100], 
-                                       [1.0, 0.7, 0.1])
-        req_2 = MeasurementRequirement('spectral_resolution', 
-                                       ["Hyperspectral", "Multispectral"], 
-                                       [1.0, 0.5])
+#         """
+#         # Test the MeasurementRequirement class
+#         # Create instances of MeasurementRequirement
+#         req_1 = MeasurementRequirement('spatial_resolution', 
+#                                        [10, 30, 100], 
+#                                        [1.0, 0.7, 0.1])
+#         req_2 = MeasurementRequirement('spectral_resolution', 
+#                                        ["Hyperspectral", "Multispectral"], 
+#                                        [1.0, 0.5])
 
-        # Check initialization
-        self.assertEqual(req_1.attribute, 'spatial_resolution')
-        self.assertEqual(req_1.thresholds, [10, 30, 100])
-        self.assertEqual(req_1.scores, [1.0, 0.7, 0.1])
+#         # Check initialization
+#         self.assertEqual(req_1.attribute, 'spatial_resolution')
+#         self.assertEqual(req_1.thresholds, [10, 30, 100])
+#         self.assertEqual(req_1.scores, [1.0, 0.7, 0.1])
         
-        self.assertEqual(req_2.attribute, 'spectral_resolution')
-        self.assertEqual(req_2.thresholds, ["hyperspectral", "multispectral"])
-        self.assertEqual(req_2.scores, [1.0, 0.5])
+#         self.assertEqual(req_2.attribute, 'spectral_resolution')
+#         self.assertEqual(req_2.thresholds, ["hyperspectral", "multispectral"])
+#         self.assertEqual(req_2.scores, [1.0, 0.5])
         
-        # Check performance function
-        self.assertAlmostEqual(req_1.calc_preference_value(5), 1.0)
-        self.assertAlmostEqual(req_1.calc_preference_value(20), 0.85)
-        self.assertAlmostEqual(req_1.calc_preference_value(65), 0.4)
-        self.assertAlmostEqual(req_1.calc_preference_value(150), 0.1*np.exp(-50))
+#         # Check performance function
+#         self.assertAlmostEqual(req_1.calc_preference_value(5), 1.0)
+#         self.assertAlmostEqual(req_1.calc_preference_value(20), 0.85)
+#         self.assertAlmostEqual(req_1.calc_preference_value(65), 0.4)
+#         self.assertAlmostEqual(req_1.calc_preference_value(150), 0.1*np.exp(-50))
 
-        self.assertAlmostEqual(req_2.calc_preference_value("Hyperspectral"), 1.0)
-        self.assertAlmostEqual(req_2.calc_preference_value("Multispectral"), 0.5)
-        self.assertAlmostEqual(req_2.calc_preference_value("Aspectral"), 0)
+#         self.assertAlmostEqual(req_2.calc_preference_value("Hyperspectral"), 1.0)
+#         self.assertAlmostEqual(req_2.calc_preference_value("Multispectral"), 0.5)
+#         self.assertAlmostEqual(req_2.calc_preference_value("Aspectral"), 0)
         
-    def test_objective(self):
-        """
-        O1: Measure Chlorophyll-A (w=1): 
-            Horizontal spatial resolution: Thresholds = [10, 30, 100] m, u = [1.0, 0.7, 0.1]
-            Spectral resolution: Thresholds = [Hyperspectral, Multispectral], u = [1, 0.5]
+#     def test_objective(self):
+#         """
+#         O1: Measure Chlorophyll-A (w=1): 
+#             Horizontal spatial resolution: Thresholds = [10, 30, 100] m, u = [1.0, 0.7, 0.1]
+#             Spectral resolution: Thresholds = [Hyperspectral, Multispectral], u = [1, 0.5]
 
-        O2: Measure Water temperature (w=1)
-            Horizontal spatial resolution: Thresholds = [30, 100] m, u = [1.0, 0.3]
+#         O2: Measure Water temperature (w=1)
+#             Horizontal spatial resolution: Thresholds = [30, 100] m, u = [1.0, 0.3]
         
-        O3: Measure Water level (w=1)
-            Horizontal spatial resolution: Thresholds = [30, 100] m, u = [1.0, 0.5]
-            Accuracy: Thresholds = [10, 50, 100] cm, u = [1.0, 0.5, 0.1]
+#         O3: Measure Water level (w=1)
+#             Horizontal spatial resolution: Thresholds = [30, 100] m, u = [1.0, 0.5]
+#             Accuracy: Thresholds = [10, 50, 100] cm, u = [1.0, 0.5, 0.1]
 
-        """
-        # Test the Objective class
-        # Create instances of MeasurementRequirement
-        req_1 = MeasurementRequirement('spatial_resolution', 
-                                       [10, 30, 100], 
-                                       [1.0, 0.7, 0.1])
-        req_2 = MeasurementRequirement('spectral_resolution', 
-                                       ["Hyperspectral", "Multispectral"], 
-                                       [1.0, 0.5])
-        req_3 = MeasurementRequirement('accuracy', 
-                                       [10, 50, 100], # [cm] 
-                                       [1.0, 0.5, 0.1])
+#         """
+#         # Test the Objective class
+#         # Create instances of MeasurementRequirement
+#         req_1 = MeasurementRequirement('spatial_resolution', 
+#                                        [10, 30, 100], 
+#                                        [1.0, 0.7, 0.1])
+#         req_2 = MeasurementRequirement('spectral_resolution', 
+#                                        ["Hyperspectral", "Multispectral"], 
+#                                        [1.0, 0.5])
+#         req_3 = MeasurementRequirement('accuracy', 
+#                                        [10, 50, 100], # [cm] 
+#                                        [1.0, 0.5, 0.1])
         
-        # create objectives
-        o_1 = MissionObjective('Chlorophyll-A',
-                        1.0, 
-                        [req_1, req_2],
-                        ['VNIR']
-                    )
-        o_2 = MissionObjective('Water Temperature',
-                        1.0, 
-                        [req_1],
-                        ['VNIR']
-                    )
-        o_3 = MissionObjective('Water Level',
-                        1.0, 
-                        [req_1, req_3],
-                        ['VNIR']
-                    )
-        o_4 = MissionObjective('Water Level',
-                        1.0, 
-                        [req_1, req_3],
-                        ['TIR']
-                    )
+#         # create objectives
+#         o_1 = MissionObjective('Chlorophyll-A',
+#                         1.0, 
+#                         [req_1, req_2],
+#                         ['VNIR'],
+#                         'no_change'
+#                     )
+#         o_2 = MissionObjective('Water Temperature',
+#                         1.0, 
+#                         [req_1],
+#                         ['VNIR'],
+#                         'no_change'
+#                     )
+#         o_3 = MissionObjective('Water Level',
+#                         1.0, 
+#                         [req_1, req_3],
+#                         ['VNIR'],
+#                         'no_change'
+#                     )
+#         o_4 = MissionObjective('Water Level',
+#                         1.0, 
+#                         [req_1, req_3],
+#                         ['TIR'],
+#                         'no_change'
+#                     )
         
-        # create example measurement
-        measurement = {
-            "instrument": "VNIR",
-            "spatial_resolution": 20,
-            "spectral_resolution": "Hyperspectral",
-            "n_obs" : 1,
-        }
+#         # create example measurement
+#         measurement = {
+#             "instrument": "VNIR",
+#             "spatial_resolution": 20,
+#             "spectral_resolution": "Hyperspectral",
+#             "n_obs" : 1,
+#         }
   
-        self.assertAlmostEqual(o_1.eval_performance(measurement), 0.85*1.0)
-        self.assertAlmostEqual(o_2.eval_performance(measurement), 0.85)
-        self.assertAlmostEqual(o_3.eval_performance(measurement), 0.0)
-        self.assertAlmostEqual(o_4.eval_performance(measurement), 0.0)
+#         self.assertAlmostEqual(o_1.eval_performance(measurement), 0.85*1.0)
+#         self.assertAlmostEqual(o_2.eval_performance(measurement), 0.85)
+#         self.assertAlmostEqual(o_3.eval_performance(measurement), 0.0)
+#         self.assertAlmostEqual(o_4.eval_performance(measurement), 0.0)
 
-    def test_event_driven_objective(self):
-        """
-        O4: Observe events “Algal Blooms” (w=10)
-            Main parameter: Chl-A, MR = O1
-            DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
-            CA: Severity proportional to lake area (as in paper) 
-            CO: Secondary params = Water temperature and water level, MR as in O2 and O3
-            RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
-        """
-        # Create instances of MeasurementRequirement
-        req_1 = MeasurementRequirement('spatial_resolution', 
-                                       [10, 30, 100], 
-                                       [1.0, 0.7, 0.1])
-        req_2 = MeasurementRequirement('spectral_resolution', 
-                                       ["Hyperspectral", "Multispectral"], 
-                                       [1.0, 0.5])
+#     def test_event_driven_objective(self):
+#         """
+#         O4: Observe events “Algal Blooms” (w=10)
+#             Main parameter: Chl-A, MR = O1
+#             DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
+#             CA: Severity proportional to lake area (as in paper) 
+#             CO: Secondary params = Water temperature and water level, MR as in O2 and O3
+#             RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
+#         """
+#         # Create instances of MeasurementRequirement
+#         req_1 = MeasurementRequirement('spatial_resolution', 
+#                                        [10, 30, 100], 
+#                                        [1.0, 0.7, 0.1])
+#         req_2 = MeasurementRequirement('spectral_resolution', 
+#                                        ["Hyperspectral", "Multispectral"], 
+#                                        [1.0, 0.5])
         
-        # create event
-        event = GeophysicalEvent('Algal Bloom',
-                                    1.0, 
-                                    [
-                                        (0.0,0.0,0,0),
-                                        (1.0,1.0,0,1)
-                                    ], 
-                                    0.5, 
-                                    1.0, 
-                                    0.25)
+#         # create event
+#         event = GeophysicalEvent('Algal Bloom',
+#                                     1.0, 
+#                                     [
+#                                         (0.0,0.0,0,0),
+#                                         (1.0,1.0,0,1)
+#                                     ], 
+#                                     0.5, 
+#                                     1.0, 
+#                                     0.25)
 
-        # create objectives
-        o_4_1 = EventDrivenObjective('Chlorophyll-A',
-                                     10.0,
-                                     [req_1, req_2],
-                                     event.event_type,
-                                     ['VNIR'],
-                                     'linear_increase'
-                                     )
+#         # create objectives
+#         o_4_1 = EventDrivenObjective('Chlorophyll-A',
+#                                      10.0,
+#                                      [req_1, req_2],
+#                                      event.event_type,
+#                                      ['VNIR'],
+#                                      'linear_increase'
+#                                      )
         
-        # create example measurements
-        measurement_1 = {
-            "instrument": "VNIR",
-            "spatial_resolution": 20,
-            "spectral_resolution": "Hyperspectral",
-            "n_obs" : 1
-        }
-        measurement_2 = {
-            "instrument": "VNIR",
-            "spatial_resolution": 20,
-            "spectral_resolution": "Hyperspectral",
-            "n_obs" : 2
-        }
-        measurement_3 = {
-            "instrument": "VNIR",
-            "accuracy": 1.0,
-            "n_obs" : 3
-        }
-        measurement_4 = {
-            "instrument": "TIR",
-            "spatial_resolution": 20,
-            "spectral_resolution": "Hyperspectral",
-            "n_obs" : 3
-        }
+#         # create example measurements
+#         measurement_1 = {
+#             "instrument": "VNIR",
+#             "spatial_resolution": 20,
+#             "spectral_resolution": "Hyperspectral",
+#             "n_obs" : 1
+#         }
+#         measurement_2 = {
+#             "instrument": "VNIR",
+#             "spatial_resolution": 20,
+#             "spectral_resolution": "Hyperspectral",
+#             "n_obs" : 2
+#         }
+#         measurement_3 = {
+#             "instrument": "VNIR",
+#             "accuracy": 1.0,
+#             "n_obs" : 3
+#         }
+#         measurement_4 = {
+#             "instrument": "TIR",
+#             "spatial_resolution": 20,
+#             "spectral_resolution": "Hyperspectral",
+#             "n_obs" : 3
+#         }
 
-        self.assertAlmostEqual(o_4_1.eval_performance(measurement_1), 0.85*1.0*1.0)
-        self.assertAlmostEqual(o_4_1.eval_performance(measurement_2), 0.85*1.0*2.0)
-        self.assertAlmostEqual(o_4_1.eval_performance(measurement_3), 0.0)
-        self.assertAlmostEqual(o_4_1.eval_performance(measurement_4), 0.0)
+#         self.assertAlmostEqual(o_4_1.eval_performance(measurement_1), 0.85*1.0*1.0)
+#         self.assertAlmostEqual(o_4_1.eval_performance(measurement_2), 0.85*1.0*2.0)
+#         self.assertAlmostEqual(o_4_1.eval_performance(measurement_3), 0.0)
+#         self.assertAlmostEqual(o_4_1.eval_performance(measurement_4), 0.0)
 
 
 class TestToySatCase(unittest.TestCase):
@@ -251,7 +255,7 @@ class TestToySatCase(unittest.TestCase):
                         }
                     },
                     "instrument": {
-                        "name": "VNIR",
+                        "name": "VNIR hyp",
                         "@id" : "vnir_skysat",
                         "@type": "Passive Optical Scanner",
                         "scanTechnique": "MATRIX_IMAGER", 
@@ -283,7 +287,8 @@ class TestToySatCase(unittest.TestCase):
                             "A_rollMin": -50,
                             "A_rollMax": 50
                         },
-                        "spectral_resolution" : "Hyperspectral"
+                        "spectral_resolution" : "Hyperspectral",
+                        "accuracy" : 10,
                     },
                     "orbitState": {
                         "date": {

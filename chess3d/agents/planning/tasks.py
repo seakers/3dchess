@@ -293,16 +293,15 @@ class ObservationHistory:
             for _,row in grid.iterrows():
                 lat = row["lat [deg]"]
                 lon = row["lon [deg]"]
-                gp_index = int(row["GP index"])
                 grid_index = int(row["grid index"])
+                gp_index = int(row["GP index"])
 
                 # create a new entry for the grid point
-                if gp_index not in self.history:
-                    self.history[gp_index] = {}
+                if grid_index not in self.history:
+                    self.history[grid_index] = {}
                 # create a new entry for the grid point
-                if grid_index not in self.history[gp_index]:
-                    self.history[gp_index][grid_index] = {objective.parameter : ObservationTracker(lat, lon, grid_index, gp_index) 
-                                                          for objective in mission}
+                if gp_index not in self.history[grid_index]:
+                    self.history[grid_index][gp_index] = ObservationTracker(lat, lon, grid_index, gp_index) 
 
     def update(self, observations : list, orbitdata : OrbitData) -> None:
         """
@@ -316,10 +315,20 @@ class ObservationHistory:
                 grid_index,gp_index = self.__get_target_indeces(lat, lon, orbitdata)
 
                 # update the observation history
-                for objective in observation.objectives:
-                    tracker : ObservationTracker = self.history[gp_index][grid_index][objective.parameter]
-                    tracker.t_last = observation.t_end
-                    tracker.n_obs += 1
+                tracker : ObservationTracker = self.history[grid_index][gp_index]
+                tracker.t_last = observation.t_end
+                tracker.n_obs += 1
+                # for objective in observation.objectives:
+                #     tracker : ObservationTracker = self.history[gp_index][grid_index][objective.parameter]
+                #     tracker.t_last = observation.t_end
+                #     tracker.n_obs += 1
+
+    def get_observation_history(self, grid_index : int, gp_index : int) -> ObservationTracker:
+        if grid_index in self.history and gp_index in self.history[grid_index]:
+            return self.history[grid_index][gp_index]
+        else:
+            raise ValueError(f"Observation history for grid index {grid_index} and ground point index {gp_index} not found.")
+
 
     def __get_target_indeces(self, lat : float, lon : float, orbitdata : OrbitData) -> tuple:
         """
