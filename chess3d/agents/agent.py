@@ -14,7 +14,7 @@ from zmq import SocketType
 
 from chess3d.agents.planning.plan import Replan, Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
-from chess3d.agents.planning.tasks import GenericObservationTask
+from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
@@ -407,8 +407,6 @@ class AbstractAgent(Agent):
         manager_message = NodeDeactivatedMessage(self.get_element_name(), SimulationElementRoles.MANAGER.value)
         await self._send_manager_msg(manager_message, zmq.PUB)
 
-        x = 1
-
     async def teardown(self) -> None:
         try:
             # TODO log agent capabilities
@@ -697,6 +695,31 @@ class SimulatedAgent(AbstractAgent):
         self.orbitdata = None
         self.plan_history = []
         self.tasks : list[GenericObservationTask] = []
+        self.observation_history : ObservationHistory = None
+
+    def update_tasks(self, 
+                     incoming_reqs : list, 
+                     t : float) -> None:
+        """
+        Updates the list of tasks based on incoming requests.
+        """
+        # add tasks from incoming requests
+        event_tasks = []
+        for req in incoming_reqs:
+            req : TaskRequest
+            event = req.event
+
+            for objective in req.objectives:
+                reobservation_strategy = objective.reobservation_strategy
+                task = EventObservationTask(event, req.mission_name, objective, reobservation_strategy)
+                event_tasks.append(task)
+        
+        # add tasks to task list
+        self.tasks.extend(event_tasks)
+        self.tasks = list(set(self.tasks)) # remove duplicates
+
+        # remove expired tasks
+        self.tasks = [task for task in self.tasks if task.available(t)]
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -724,7 +747,7 @@ class SimulatedAgent(AbstractAgent):
         # process performed observations
         generated_reqs : list[TaskRequest] = self.processor.process_observations(incoming_reqs, observations) if self.processor is not None else []
         incoming_reqs.extend(generated_reqs)
-
+        
         # compile measurements performed by myself or other agents
         completed_observations = {action for action in completed_actions
                         if isinstance(action, ObservationAction)}
@@ -735,12 +758,11 @@ class SimulatedAgent(AbstractAgent):
         # TODO update mission objectives from requests
         # for objective in self.mission.objectives:
 
-        # TODO update observation history
+        # update observation history
+        self.observation_history.update(completed_observations, self.orbitdata)
 
-        # TODO update tasks from incoming requests
-
-        # remove expired tasks
-        self.tasks = [task for task in self.tasks if task.available(state.t)]
+        # update tasks from incoming requests
+        self.update_tasks(incoming_reqs, state.t)
 
         # --- Create plan ---
         if self.preplanner is not None:
@@ -767,7 +789,8 @@ class SimulatedAgent(AbstractAgent):
                                                             self._clock_config,
                                                             self.orbitdata,
                                                             self.mission,
-                                                            self.tasks
+                                                            self.tasks,
+                                                            self.observation_history
                                                             )
 
                 # save copy of plan for post-processing
@@ -775,7 +798,7 @@ class SimulatedAgent(AbstractAgent):
                 self.plan_history.append((state.t, plan_copy))
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 

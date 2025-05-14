@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
 import numpy as np
+import pandas as pd
+from chess3d.agents.actions import ObservationAction
+from chess3d.agents.orbitdata import OrbitData
 from chess3d.mission import *
 from chess3d.utils import Interval
 
@@ -56,6 +59,19 @@ class GenericObservationTask(ABC):
     def available(self, time : float) -> bool:
         """ Check if the task is available at a given time. """
         return time in self.availability    
+    
+    def to_dict(self) -> dict:
+        """ Convert the task to a dictionary. """
+        return {
+            "mission": self.mission,
+            "objective": self.objective.to_dict(),
+            "targets": [target for target in self.targets],
+            "availability": self.availability.to_dict(),
+            "reward": self.reward,
+            "reobservation_strategy": self.reobservation_strategy,
+            "id": self.id,
+            "duration_requirements": self.duration_requirements.to_dict()
+        }
         
 class MonitoringObservationTask(GenericObservationTask):
     def __init__(self,
@@ -113,14 +129,32 @@ class EventObservationTask(GenericObservationTask):
         assert isinstance(event, GeophysicalEvent), "Event must be a GeophysicalEvent."
         
         # set default values
-        targets = [target for target in event.location]
+        targets = [tuple(target for target in event.location)]
         availability = Interval(event.t_start, event.t_end)
         reward = event.severity
 
         # initialte default values
+        self.event = event
         super().__init__(mission, objective, targets, availability, reward, reobservation_strategy, id, duration_requirements)
 
-class ObservationTask:
+    def copy(self):
+        return EventObservationTask(
+            self.event,
+            self.mission,
+            self.objective,
+            self.reobservation_strategy,
+            id=self.id,
+            duration_requirements=self.duration_requirements
+        )
+    
+    def generate_id(self) -> str:
+        """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
+        return f"{self.mission}_{self.objective.parameter}_{self.targets[0][2]}_{self.targets[0][3]}_EVENT-{self.event.id.split('-')[0]}"
+    
+    def __repr__(self):
+        return f"EventObservationTask(event={self.event}, mission={self.mission}, objective={self.objective}, targets={self.targets}, availability={self.availability}, reward={self.reward}, reobservation_strategy={self.reobservation_strategy}, id={self.id})"
+
+class SchedulableObservationTask:
     def __init__(self,
                  parent_tasks : Union[GenericObservationTask, set],
                  instrument_name : str, 
@@ -151,11 +185,18 @@ class ObservationTask:
         """ Check if two tasks can be combined based on their time and slew angle. """
         
         # Check if the other task is an instance of ObservationTask
-        if not isinstance(other_task, ObservationTask):
+        if not isinstance(other_task, SchedulableObservationTask):
             raise ValueError("The other task must be an instance of Task.")
         
         # Check if the instrument names are the same
         if self.instrument_name != other_task.instrument_name:
+            return False
+        
+        # Check if the parent tasks are the same
+        parent_task_types = {type(task) for task in self.parent_tasks}
+        assert len(parent_task_types) == 1, "All parent tasks must be of the same type."
+        parent_task_type = parent_task_types.pop()
+        if any([type(task) != parent_task_type for task in other_task.parent_tasks]):
             return False
 
         # Check if the availability time intervals overlap
@@ -179,7 +220,7 @@ class ObservationTask:
 
     def merge(self, other_task : object) -> object:
         """ Merge two tasks into one. """
-        assert isinstance(other_task, ObservationTask), "The other task must be an instance of ObservationTask."
+        assert isinstance(other_task, SchedulableObservationTask), "The other task must be an instance of ObservationTask."
         assert self.can_combine(other_task), "The tasks cannot be combined."
 
         # Combine the time intervals and slew angles
@@ -192,10 +233,108 @@ class ObservationTask:
         accessibility = combined_time_interval
         slew_angles = combined_slew_angles
         
-        return ObservationTask(parent_tasks, self.instrument_name, accessibility, slew_angles)
+        return SchedulableObservationTask(parent_tasks, self.instrument_name, accessibility, slew_angles)
     
     def __repr__(self):
         return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
     
     def __str__(self):
         return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
+    
+class ObservationTracker:
+    def __init__(self, lat : float, lon : float, grid_index : int, gp_index : int, t_last : str = -1, n_obs : int = 0):
+        """ 
+        Class to track the observation tasks and their history.
+        """
+        # validate inputs
+        assert isinstance(lat, (float, int)), "Latitude must be a float or int."
+        assert isinstance(lon, (float, int)), "Longitude must be a float or int."
+        assert isinstance(grid_index, int), "Grid index must be an integer."
+        assert isinstance(gp_index, int), "Ground point index must be an integer."
+        assert isinstance(t_last, (int, float)), "Last observation time must be a float or int."
+        assert isinstance(n_obs, int), "Number of observations must be an integer."
+        assert n_obs >= 0, "Number of observations must be non-negative."
+        assert lat >= -90 and lat <= 90, "Latitude must be between -90 and 90 degrees."
+        assert lon >= -180 and lon <= 180, "Longitude must be between -180 and 180 degrees."
+        assert grid_index >= 0, "Grid index must be non-negative."
+        assert gp_index >= 0, "Ground point index must be non-negative."
+
+        # assign parameters
+        self.lat = lat
+        self.lon = lon
+        self.grid_index = grid_index
+        self.gp_index = gp_index
+        self.t_last = t_last
+        self.n_obs = n_obs
+    
+    def __repr__(self):
+        return f"ObservationTracker(grid_index={self.grid_index}, gp_index={self.gp_index}, lat={self.lat}, lon={self.lon}, t_last={self.t_last}, n_obs={self.n_obs})"
+
+class ObservationHistory:
+    def __init__(self, orbitdata : OrbitData, mission : Mission):
+        """
+        Class to track the observation history of the agent.
+        """
+        self.history = {}
+
+        for gp_index in range(len(orbitdata.grid_data)):
+            grid : pd.DataFrame = orbitdata.grid_data[gp_index]
+            
+            for _,row in grid.iterrows():
+                lat = row["lat [deg]"]
+                lon = row["lon [deg]"]
+                gp_index = int(row["GP index"])
+                grid_index = int(row["grid index"])
+
+                # create a new entry for the grid point
+                if gp_index not in self.history:
+                    self.history[gp_index] = {}
+                # create a new entry for the grid point
+                if grid_index not in self.history[gp_index]:
+                    self.history[gp_index][grid_index] = {objective.parameter : ObservationTracker(lat, lon, grid_index, gp_index) 
+                                                          for objective in mission}
+
+    def update(self, observations : list, orbitdata : OrbitData) -> None:
+        """
+        Update the observation history with the new observations.
+        """
+        for observation in observations:
+            observation : ObservationAction
+            for target in observation.targets:
+                lat = target[0]
+                lon = target[1]
+                grid_index,gp_index = self.__get_target_indeces(lat, lon, orbitdata)
+
+                # update the observation history
+                for objective in observation.objectives:
+                    tracker : ObservationTracker = self.history[gp_index][grid_index][objective.parameter]
+                    tracker.t_last = observation.t_end
+                    tracker.n_obs += 1
+
+    def __get_target_indeces(self, lat : float, lon : float, orbitdata : OrbitData) -> tuple:
+        """
+        Get the target indeces for the given latitude and longitude.
+        """
+        # validate inputs
+        assert isinstance(lat, (float, int)), "Latitude must be a float or int."
+        assert isinstance(lon, (float, int)), "Longitude must be a float or int."
+        
+        # get the grid index and ground point index
+        for grid in orbitdata.grid_data:
+            grid : pd.DataFrame 
+            
+            matching_rows = [
+                row for _, row in grid.iterrows() 
+                if abs(row["lat [deg]"] - lat) < 1e-6 
+                and abs(row["lon [deg]"] - lon) < 1e-6
+            ]
+
+            if matching_rows:
+                # get the first matching row
+                matching_row = matching_rows[0]
+                grid_index = int(matching_row["grid index"])
+                gp_index = int(matching_row["GP index"])
+                return grid_index, gp_index
+            
+        # if no matching rows are found, return None
+        return None, None

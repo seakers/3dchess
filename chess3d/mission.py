@@ -63,9 +63,9 @@ class GeophysicalEvent:
         assert isinstance(severity, (int, float)), "Severity must be a number"
         assert isinstance(location, tuple) or isinstance(location, list), "Location must be a tuple or a list"
         if isinstance(location, tuple):
-            assert len(location) == 3, "Location must be a lat-lon-alt tuple of length 3"
+            assert len(location) == 4, "Location must be a lat-lon-grid index-gp index tuple of length 4"
         elif isinstance(location, list):
-            assert all(len(loc) == 3 for loc in location), "Location must be a list of lat-lon-alt tuples of length 3"
+            assert all(len(loc) == 4 for loc in location), "Location must be a lat-lon-grid index-gp index tuple of length 4"
         assert isinstance(t_start, (int, float)), "Start time must be a number"
         assert isinstance(t_end, (int, float)), "End time must be a number"
         assert t_start < t_end, "Start time must be less than end time"
@@ -120,6 +120,17 @@ class GeophysicalEvent:
         """Hash the event for use in sets and dictionaries."""
         return hash((self.event_type, self.severity, self.t_start, self.t_end, self.t_corr, self.id))
     
+    def to_dict(self) -> Dict[str, Union[str, float]]:
+        """Convert the event to a dictionary."""
+        return {
+            "event_type": self.event_type,
+            "severity": self.severity,
+            "location": self.location,
+            "t_start": self.t_start,
+            "t_end": self.t_end,
+            "t_corr": self.t_corr,
+            "id": self.id
+        }
 
 class MeasurementRequirement:
     def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None):
@@ -205,8 +216,20 @@ class MeasurementRequirement:
         """Create a copy of the measurement requirement."""
         return MeasurementRequirement(self.attribute, self.thresholds, self.scores, self.id)
 
+    def to_dict(self) -> Dict[str, Union[str, float]]:
+        """Convert the measurement requirement to a dictionary."""
+        return {
+            "attribute": self.attribute,
+            "thresholds": self.thresholds,
+            "scores": self.scores,
+            "id": self.id
+        }
+    
+    def __repr__(self):
+        return f"MeasurementRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+
 class MissionObjective:
-    def __init__(self, parameter: str, priority: float, requirements: list, id : str = None):
+    def __init__(self, parameter: str, priority: float, requirements: list, valid_instruments : list, id : str = None):
         """ 
         ### Objective
          
@@ -214,8 +237,12 @@ class MissionObjective:
         - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
         - :`priority`: The priority of the objective.
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
+        - :`valid_instruments`: A list of valid instruments that can be used to measure the parameter.
+        - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
-        
+        if all([isinstance(req, dict) for req in requirements]):
+            requirements = [MeasurementRequirement(**req) for req in requirements]
+
         # Validate inputs
         assert isinstance(priority, (int, float)), "Priority must be a number"
         assert isinstance(parameter, str), "Parameter must be a string"
@@ -227,11 +254,16 @@ class MissionObjective:
         self.priority : float = priority
         self.parameter : str = parameter
         self.requirements : Dict[str, MeasurementRequirement] = {requirement.attribute : requirement for requirement in requirements}
+        self.valid_instruments = [instrument.lower() for instrument in valid_instruments]
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def eval_performance(self, measurement: dict) -> float:
         """Evaluate the product of satisfaction scores given a measurement dict {attr: value}"""
         scores = []
+        if measurement['instrument'].lower() not in self.valid_instruments:
+            # measurement does not meet requirement
+            return 0.0
+
         for attribute,req in self.requirements.items():
             if attribute not in measurement:
                 # measurement does not meet requirement
@@ -252,7 +284,28 @@ class MissionObjective:
 
     def copy(self) -> 'MissionObjective':
         """Create a copy of the objective."""
-        return MissionObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.id)
+        return MissionObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.valid_instruments, self.id)
+
+    def to_dict(self) -> Dict[str, Union[str, float]]:
+        """Convert the objective to a dictionary."""
+        out : dict = dict(self.__dict__)
+        out['requirements'] = {key: req.to_dict() 
+                            for key,req in self.requirements.items()}
+        return out
+    
+    def from_dict(obj_dict: Dict[str, Union[str, float]]) -> 'MissionObjective':
+        """Create an objective from a dictionary."""
+        if 'event_type' in obj_dict:
+            # EventDrivenObjective
+            requirements = [MeasurementRequirement(**req) for _,req in obj_dict['requirements'].items()]
+            return EventDrivenObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['event_type'], obj_dict['valid_instruments'], obj_dict['reobservation_strategy'], obj_dict['id'])
+        else:
+            requirements = [MeasurementRequirement(**req) for _,req in obj_dict['requirements'].items()]
+            return MissionObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['valid_instruments'], obj_dict['id'])
+
+    def can_perform(self, instrument: str) -> bool:
+        """Check if the objective can be performed by the given instrument."""
+        return instrument.lower() in self.valid_instruments
 
 class EventDrivenObjective(MissionObjective):
     def __init__(self, 
@@ -260,6 +313,7 @@ class EventDrivenObjective(MissionObjective):
                  priority: float, 
                  requirements: list, 
                  event_type: str,
+                 valid_instruments : list,
                  reobservation_strategy: str = "no_change",
                  id : str = None
                  ):
@@ -271,6 +325,7 @@ class EventDrivenObjective(MissionObjective):
         - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
         - :`event_type`: The type of geophysical event associated with the objective.
+        - :`valid_instruments`: A list of valid instruments that can be used to measure the parameter.
         - :`reobservation_strategy`: The strategy for reobserving the event. Can be one of the following:
             - "linar_increase"
             - "linar_decrease"
@@ -279,7 +334,7 @@ class EventDrivenObjective(MissionObjective):
             - "immediate_decrease"
             - "no_change"
         """
-        super().__init__(parameter, priority, requirements, id)
+        super().__init__(parameter, priority, requirements, valid_instruments, id)
         
         # Validate inputs
         assert isinstance(event_type, str), "Event type must be a string"
@@ -301,7 +356,14 @@ class EventDrivenObjective(MissionObjective):
         return f"Event-driven Objective: {self.parameter}, Priority: {self.priority}, Requirements: {self.requirements}"
 
     def copy(self):
-        return EventDrivenObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.event_type, self.reobservation_strategy, self.id)
+        return EventDrivenObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.event_type, self.valid_instruments, self.reobservation_strategy, self.id)
+
+    def to_dict(self) -> Dict[str, Union[str, float]]:
+        """Convert the objective to a dictionary."""
+        out : dict = dict(self.__dict__)
+        out['requirements'] = {key: req.to_dict() 
+                            for key,req in self.requirements.items()}
+        return out
 
 class Mission:
     def __init__(self, name : str, objectives: list):
@@ -343,3 +405,7 @@ class Mission:
     def copy(self) -> 'Mission':
         """Create a copy of the mission."""
         return Mission(self.name, [obj.copy() for obj in self.objectives])
+    
+    def to_dict(self) -> Dict[str, Union[str, float]]:
+        """Convert the mission to a dictionary."""
+        return self.__dict__

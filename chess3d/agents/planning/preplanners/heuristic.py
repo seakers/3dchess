@@ -7,7 +7,7 @@ from dmas.clocks import *
 from tqdm import tqdm
 
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import ObservationTask
+from chess3d.agents.planning.tasks import ObservationHistory, SchedulableObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -26,7 +26,8 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                                specs : object, 
                                _ : ClockConfig, 
                                orbitdata : OrbitData, 
-                               schedulable_tasks : list
+                               schedulable_tasks : list,
+                               observation_history : ObservationHistory
                                ) -> list:
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
@@ -40,7 +41,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         cross_track_fovs : dict = self.collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        schedulable_tasks : list[ObservationTask] = self.sort_tasks_by_heuristic(schedulable_tasks, orbitdata)
+        schedulable_tasks : list[SchedulableObservationTask] = self.sort_tasks_by_heuristic(schedulable_tasks, orbitdata, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -136,8 +137,10 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             if prev_action_feasible and next_action_feasible:
                 targets = [[lat,lon,0.0] for parent_task in task.parent_tasks
                                         for lat,lon,*_ in parent_task.targets]
+                objectives = [parent_task.objective for parent_task in task.parent_tasks]
                 action = ObservationAction(task.instrument_name, 
                                            targets, 
+                                           objectives,
                                            th_img, 
                                            task.accessibility.left, 
                                            task.accessibility.span())
@@ -151,11 +154,13 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         return observations_sorted
 
     # @abstractmethod
-    def sort_tasks_by_heuristic(self, tasks : list, orbitdata : OrbitData) -> list:
-        def reward_heuristic(task : ObservationTask) -> float:
+    def sort_tasks_by_heuristic(self, tasks : list, orbitdata : OrbitData, observation_history : ObservationHistory) -> list:
+        def reward_heuristic(task : SchedulableObservationTask) -> float:
             """ Heuristic function to sort tasks by their heuristic value. """
             # calculate total task reward
             reward = sum([parent_task.reward for parent_task in task.parent_tasks])
+
+            # reward = 0.0
             # calculate task priority
             priority = np.prod([parent_task.objective.priority  
                                 for parent_task in task.parent_tasks])

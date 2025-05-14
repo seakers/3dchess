@@ -22,8 +22,8 @@ class TestMission(unittest.TestCase):
         event = GeophysicalEvent('Algal Bloom', 
                                  1.0, 
                                  [
-                                    (0.0,0.0,0.0),
-                                    (1.0,1.0,0.0)
+                                    (0.0,0.0,0,0),
+                                    (1.0,1.0,0,1)
                                   ], 
                                  0.5, 
                                  1.0, 
@@ -111,19 +111,28 @@ class TestMission(unittest.TestCase):
         # create objectives
         o_1 = MissionObjective('Chlorophyll-A',
                         1.0, 
-                        [req_1, req_2]
+                        [req_1, req_2],
+                        ['VNIR']
                     )
         o_2 = MissionObjective('Water Temperature',
                         1.0, 
-                        [req_1]
+                        [req_1],
+                        ['VNIR']
                     )
         o_3 = MissionObjective('Water Level',
                         1.0, 
-                        [req_1, req_3]
+                        [req_1, req_3],
+                        ['VNIR']
+                    )
+        o_4 = MissionObjective('Water Level',
+                        1.0, 
+                        [req_1, req_3],
+                        ['TIR']
                     )
         
         # create example measurement
         measurement = {
+            "instrument": "VNIR",
             "spatial_resolution": 20,
             "spectral_resolution": "Hyperspectral",
             "n_obs" : 1,
@@ -132,6 +141,7 @@ class TestMission(unittest.TestCase):
         self.assertAlmostEqual(o_1.eval_performance(measurement), 0.85*1.0)
         self.assertAlmostEqual(o_2.eval_performance(measurement), 0.85)
         self.assertAlmostEqual(o_3.eval_performance(measurement), 0.0)
+        self.assertAlmostEqual(o_4.eval_performance(measurement), 0.0)
 
     def test_event_driven_objective(self):
         """
@@ -154,8 +164,8 @@ class TestMission(unittest.TestCase):
         event = GeophysicalEvent('Algal Bloom',
                                     1.0, 
                                     [
-                                        (0.0,0.0,0.0),
-                                        (1.0,1.0,0.0)
+                                        (0.0,0.0,0,0),
+                                        (1.0,1.0,0,1)
                                     ], 
                                     0.5, 
                                     1.0, 
@@ -166,28 +176,39 @@ class TestMission(unittest.TestCase):
                                      10.0,
                                      [req_1, req_2],
                                      event.event_type,
+                                     ['VNIR'],
                                      'linear_increase'
                                      )
         
         # create example measurements
         measurement_1 = {
+            "instrument": "VNIR",
             "spatial_resolution": 20,
             "spectral_resolution": "Hyperspectral",
             "n_obs" : 1
         }
         measurement_2 = {
+            "instrument": "VNIR",
             "spatial_resolution": 20,
             "spectral_resolution": "Hyperspectral",
             "n_obs" : 2
         }
         measurement_3 = {
+            "instrument": "VNIR",
             "accuracy": 1.0,
+            "n_obs" : 3
+        }
+        measurement_4 = {
+            "instrument": "TIR",
+            "spatial_resolution": 20,
+            "spectral_resolution": "Hyperspectral",
             "n_obs" : 3
         }
 
         self.assertAlmostEqual(o_4_1.eval_performance(measurement_1), 0.85*1.0*1.0)
         self.assertAlmostEqual(o_4_1.eval_performance(measurement_2), 0.85*1.0*2.0)
         self.assertAlmostEqual(o_4_1.eval_performance(measurement_3), 0.0)
+        self.assertAlmostEqual(o_4_1.eval_performance(measurement_4), 0.0)
 
 
 class TestToySatCase(unittest.TestCase):
@@ -206,7 +227,7 @@ class TestToySatCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 1.0 / 24.0,
+            "duration": 3.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
             },
@@ -262,6 +283,7 @@ class TestToySatCase(unittest.TestCase):
                             "A_rollMin": -50,
                             "A_rollMax": 50
                         },
+                        "spectral_resolution" : "Hyperspectral"
                     },
                     "orbitState": {
                         "date": {
@@ -294,10 +316,10 @@ class TestToySatCase(unittest.TestCase):
                         #     "period" : 400
                         # },
                     },
-                    # "science" : {
-                    #     "@type": "lookup", 
-                    #     "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
-                    # },
+                    "science" : {
+                        "@type": "lookup", 
+                        "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
+                    },
                     "mission" : "Algal blooms monitoring"
                 }
             ],

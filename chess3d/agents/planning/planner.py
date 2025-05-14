@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import GenericObservationTask, ObservationTask
+from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, SchedulableObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -586,7 +586,8 @@ class AbstractPreplanner(AbstractPlanner):
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
                         mission : Mission,
-                        tasks : list
+                        tasks : list,
+                        observation_history : ObservationHistory,
                     ) -> Plan:
         # compile instrument field of view specifications   
         cross_track_fovs : dict = self.collect_fov_specs(specs)
@@ -596,10 +597,10 @@ class AbstractPreplanner(AbstractPlanner):
         access_opportunities = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
 
         # create schedulable tasks from known tasks and future access opportunities
-        schedulable_tasks : list[ObservationTask] = self.create_tasks_from_accesses(tasks, access_opportunities, ground_points, cross_track_fovs)
+        schedulable_tasks : list[SchedulableObservationTask] = self.create_tasks_from_accesses(tasks, access_opportunities, cross_track_fovs, orbitdata)
         
         # schedule observation tasks
-        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks)
+        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, observation_history)
         assert self.is_observation_path_valid(state, specs, observations)
 
         # schedule broadcasts to be perfomed
@@ -619,7 +620,7 @@ class AbstractPreplanner(AbstractPlanner):
         return self.plan.copy()
         
     @abstractmethod
-    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list) -> list:
+    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list, observation_history : ObservationHistory) -> list:
         """ Creates a list of observation actions to be performed by the agent """    
 
     @abstractmethod
@@ -788,13 +789,13 @@ class AbstractPreplanner(AbstractPlanner):
     def create_tasks_from_accesses(self, 
                                      available_tasks : list,
                                      access_times : list, 
-                                     ground_points : dict, 
-                                     cross_track_fovs : dict
+                                     cross_track_fovs : dict,
+                                     orbitdata : OrbitData
                                      ) -> list:
         """ Creates tasks from access times. """
         
         # create one task per each access opportinity
-        schedulable_tasks : list[ObservationTask] = []
+        schedulable_tasks : list[SchedulableObservationTask] = []
         for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
             task : GenericObservationTask
 
@@ -806,19 +807,25 @@ class AbstractPreplanner(AbstractPlanner):
                 
                 # create a schedulable task for each access time
                 for access_time in matching_access_times:
+                    # unpack access time
                     instrument = access_time[2]
                     accessibility = access_time[3]
                     th = access_time[-1]
                     slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
                                            np.mean(th)+cross_track_fovs[instrument]/2)
-                    schedulable_tasks.append(ObservationTask(task, 
+
+                    # check if instrument can perform the task                    
+                    if not task.objective.can_perform(instrument): 
+                        continue # skip if not
+
+                    # create and add schedulable task to list of schedulable tasks
+                    schedulable_tasks.append(SchedulableObservationTask(task, 
                                                              instrument,
                                                              accessibility,
                                                              slew_angles))
-       
-         
+
         # check if tasks are clusterable
-        adj : Dict[ObservationTask, set[ObservationTask]] = {task : set() for task in schedulable_tasks}
+        adj : Dict[SchedulableObservationTask, set[SchedulableObservationTask]] = {task : set() for task in schedulable_tasks}
         
         for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
             for j in range(i + 1, len(schedulable_tasks)):
@@ -827,46 +834,50 @@ class AbstractPreplanner(AbstractPlanner):
                     adj[schedulable_tasks[j]].add(schedulable_tasks[i]) 
    
         # sort tasks by degree of adjacency 
-        v : list[ObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
+        v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
         
         # only keep tasks that have at least one clusterable task
         v = [task for task in v if len(adj[task]) > 0]
         # print(f'\n\n{len(v)} tasks are clusterable out of {len(tasks)} tasks.')
         
         # combine tasks into clusters
-        combined_tasks : list[ObservationTask] = []
+        combined_tasks : list[SchedulableObservationTask] = []
         while len(v) > 0:
-            p : ObservationTask = v.pop(0)
-            n_p : list[ObservationTask] = self.sort_tasks_by_degree(list(adj[p]), adj)
+            p : SchedulableObservationTask = v.pop(0)
+            n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(list(adj[p]), adj)
 
             clique : set = {p}
 
             while len(n_p) > 0:
                 # Pick a neighbor q of p, q \in n_p, such that the number of their common neighbors is maximum: If such p are not unique, pick the p with least edges being deleted
-                q : ObservationTask = n_p.pop(0)
+                q : SchedulableObservationTask = n_p.pop(0)
 
                 # Combine q and p into a new p
                 # p.combine(q)
                 clique.add(q)
 
                 # Delete edges from q and p that are not connected to their common neighbors
-                common_neighbors : set[ObservationTask] = adj[p].intersection(adj[q])
+                common_neighbors : set[SchedulableObservationTask] = adj[p].intersection(adj[q])
 
-                neighbors_to_delete_p : set[ObservationTask] = adj[p].difference(common_neighbors)
-                for neighbor in neighbors_to_delete_p: adj[p].remove(neighbor)
+                neighbors_to_delete_p : set[SchedulableObservationTask] = adj[p].difference(common_neighbors)
+                for neighbor in neighbors_to_delete_p: 
+                    adj[p].remove(neighbor)
+                    adj[neighbor].remove(p)
 
-                neighbors_to_delete_q : set[ObservationTask] = adj[q].difference(common_neighbors)
-                for neighbor in neighbors_to_delete_q: adj[q].remove(neighbor)
+                neighbors_to_delete_q : set[SchedulableObservationTask] = adj[q].difference(common_neighbors)
+                for neighbor in neighbors_to_delete_q: 
+                    adj[q].remove(neighbor)
+                    adj[neighbor].remove(q)
 
                 # Reset neighbor collection N_p for the new p;
-                n_p : list[ObservationTask] = self.sort_tasks_by_degree(n_p, adj)
+                n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(n_p, adj)
 
             for q in clique: 
                 p = p.merge(q)
                 adj.pop(q)
                 if q in v: v.remove(q)
 
-            v : list[ObservationTask] = self.sort_tasks_by_degree(v, adj)
+            v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(v, adj)
 
             # Add p to the list of combined tasks
             combined_tasks.append(p)

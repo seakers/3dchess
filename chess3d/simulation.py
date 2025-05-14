@@ -1044,23 +1044,9 @@ class SimulationElementFactory:
                     thresholds = requirement['thresholds']
                     scores = requirement['scores']
                     requirements.append(MeasurementRequirement(attribute, thresholds, scores))
-                
-                objectives.append(MissionObjective(parameter, priority, requirements))
+                valid_instruments = objective_spec['valid_instruments']
 
-            # for event_objectives_specs in mission_spec['event_objectives']:
-            #     event_type = event_objectives_specs['event_type']
-            #     parameter = event_objectives_specs['parameter']
-            #     priority = event_objectives_specs['priority']
-            #     reobservation_strategy = event_objectives_specs['reobservation_strategy']
-
-            #     requirements = []
-            #     for requirement in event_objectives_specs['requirements']:
-            #         attribute = requirement['attribute']
-            #         thresholds = requirement['thresholds']
-            #         scores = requirement['scores']
-            #         requirements.append(MeasurementRequirement(attribute, thresholds, scores))
-                
-            #     objectives.append(EventDrivenObjective(parameter, priority, requirements, event_type, reobservation_strategy))
+                objectives.append(MissionObjective(parameter, priority, requirements, valid_instruments))
 
             missions[name.lower()] = Mission(name, objectives)
         
@@ -1089,8 +1075,9 @@ class SimulationElementFactory:
                     thresholds = requirement['thresholds']
                     scores = requirement['scores']
                     requirements.append(MeasurementRequirement(attribute, thresholds, scores))
-                
-                objectives.append(EventDrivenObjective(parameter, priority, requirements, event_type, reobservation_strategy))
+                valid_instruments = event_objectives_specs['valid_instruments']
+
+                objectives.append(EventDrivenObjective(parameter, priority, requirements, event_type, valid_instruments, reobservation_strategy))
 
             missions[name.lower()] = Mission(name, objectives)
         

@@ -138,6 +138,7 @@ class TaskRequest:
     def __init__(self,
                  requester : str,
                  event : Union[GeophysicalEvent, dict],
+                 mission_name : str,
                  objectives : list,
                  t_req : Union[float, int],
                  id : str = None,
@@ -162,7 +163,7 @@ class TaskRequest:
             raise ValueError(f'`event` must be of type `GeophysicalEvent`. Is of type {type(event)}.')
         if not isinstance(objectives, list):
             raise ValueError(f'`objectives` must be of type `list`. Is of type {type(objectives)}.')
-        if any([not isinstance(objective, dict) for objective in objectives]) or any([not isinstance(objective, MissionObjective) for objective in objectives]):
+        if any([not isinstance(objective, dict) for objective in objectives]) and any([not isinstance(objective, MissionObjective) for objective in objectives]):
             raise ValueError(f'`objectives` must be a `list` of elements of type `dict` or `MissionObjective`.')
         if len(objectives) == 0:
             raise ValueError(f'`objectives` must be a non-empty `list` of elements of type `dict` or `MissionObjective`.')
@@ -174,8 +175,9 @@ class TaskRequest:
         # initialize attributes
         self.requester : str = requester
         self.event : GeophysicalEvent= event
+        self.mission_name : str = mission_name
         # convert list of dicts to list of MissionObjectives if needed 
-        if isinstance(objectives[0], dict): objectives = [EventDrivenObjective(**objective) for objective in objectives]
+        if isinstance(objectives[0], dict): objectives = [MissionObjective.from_dict(objective) for objective in objectives]
         self.objectives : list[EventDrivenObjective] = [objective for objective in objectives]
         self.t_req : float = t_req
         self.id : str = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
@@ -188,7 +190,9 @@ class TaskRequest:
         """
         Crates a dictionary containing all information contained in this measurement request object
         """
-        return dict(self.__dict__)
+        out = dict(self.__dict__)
+        out['objetives'] = [objective.to_dict() for objective in out['objetives']]
+        return out
 
     def from_dict(d : dict) -> object:
         return TaskRequest(**d)

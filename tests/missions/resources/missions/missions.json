@@ -17,6 +17,11 @@
                             "thresholds": ["Hyperspectral", "Multispectral"],
                             "scores": [1, 0.5]
                         }
+                    ],
+                    "valid_instruments" : [
+                        "VNIR",
+                        "TIR",
+                        "Altimeter"
                     ]
                 },
                 {
@@ -28,6 +33,11 @@
                             "thresholds": [30, 100],
                             "scores": [1.0, 0.3]
                         }
+                    ],
+                    "valid_instruments" : [
+                        "VNIR",
+                        "TIR",
+                        "Altimeter"
                     ]
                 },
                 {
@@ -44,6 +54,11 @@
                             "thresholds": [10, 50, 100],
                             "scores": [1.0, 0.5, 0.1]
                         }
+                    ],
+                    "valid_instruments" : [
+                        "VNIR",
+                        "TIR",
+                        "Altimeter"
                     ]
                 }
             ],
@@ -64,7 +79,12 @@
                             "scores": [1, 0.5]
                         }
                     ],
-                    "reobservation_strategy" : "linear_increase"
+                    "reobservation_strategy" : "linear_increase",
+                    "valid_instruments" : [
+                        "VNIR",
+                        "TIR",
+                        "Altimeter"
+                    ]
                 },
                 {
                     "event_type" : "Algal bloom",
@@ -77,7 +97,12 @@
                             "scores": [1.0, 0.3]
                         }
                     ],
-                    "reobservation_strategy" : "linear_increase"
+                    "reobservation_strategy" : "linear_increase",
+                    "valid_instruments" : [
+                        "VNIR",
+                        "TIR",
+                        "Altimeter"
+                    ]
                 },
                 {
                     "event_type" : "Algal bloom",
@@ -95,7 +120,12 @@
                             "scores": [1.0, 0.5, 0.1]
                         }
                     ],
-                    "reobservation_strategy" : "linear_increase"
+                    "reobservation_strategy" : "linear_increase",
+                    "valid_instruments" : [
+                        "VNIR",
+                        "TIR",
+                        "Altimeter"
+                    ]
                 }
             ]
         },
@@ -116,6 +146,10 @@
                             "thresholds": [10, 50, 100],
                             "scores": [1.0, 0.5, 0.1]
                         }
+                    ],
+                    "valid_instruments" : [
+                        "VNIR",
+                        "Altimeter"
                     ]
                 },
                 {
@@ -132,6 +166,10 @@
                             "thresholds": ["Hyperspectral", "Multispectral"],
                             "scores": [1, 0.5]
                         }
+                    ],
+                    "valid_instruments" : [
+                        "VNIR",
+                        "Altimeter"
                     ]
                 },
                 {
@@ -148,6 +186,10 @@
                             "thresholds": ["Hyperspectral", "Multispectral"],
                             "scores": [1, 0.5]
                         }
+                    ],
+                    "valid_instruments" : [
+                        "VNIR",
+                        "Altimeter"
                     ]
                 }
             ],
@@ -168,7 +210,11 @@
                             "scores": [1.0, 0.5, 0.1]
                         }
                     ],
-                    "reobservation_strategy" : "linear_increase"
+                    "reobservation_strategy" : "linear_increase",
+                    "valid_instruments" : [
+                        "VNIR",
+                        "Altimeter"
+                    ]
                 },
                 {
                     "event_type" : "High flow event",
@@ -186,7 +232,11 @@
                             "scores": [1, 0.5]
                         }
                     ],
-                    "reobservation_strategy" : "linear_increase"
+                    "reobservation_strategy" : "linear_increase",
+                    "valid_instruments" : [
+                        "VNIR",
+                        "Altimeter"
+                    ]
                 },
                 {
                     "event_type" : "High flow event",
@@ -204,7 +254,11 @@
                             "scores": [1, 0.5]
                         }
                     ],
-                    "reobservation_strategy" : "linear_increase"
+                    "reobservation_strategy" : "linear_increase",
+                    "valid_instruments" : [
+                        "VNIR",
+                        "Altimeter"
+                    ]
                 }
             ]
         }

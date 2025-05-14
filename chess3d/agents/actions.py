@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Union
 
 import numpy as np
+from chess3d.mission import MissionObjective
 from chess3d.utils import CoordinateTypes
 from dmas.agents import AgentAction
    
@@ -232,6 +233,7 @@ class ObservationAction(AgentAction):
     def __init__(   self,
                     instrument_name : str,
                     targets : list, 
+                    objectives : list,
                     look_angle : float, 
                     t_start: Union[float, int], 
                     duration: Union[float, int] = 0.0, 
@@ -260,10 +262,24 @@ class ObservationAction(AgentAction):
         if any([len(target) != 3 for target in targets]): raise ValueError(f'`target` must be a `list` of length 3 (lat, lon, alt). Is of length {len(targets)}.')
         if not isinstance(look_angle,float) and not isinstance(look_angle,int): raise ValueError(f'`look_angle` must be a numerical value of type `float`. Is of type `{type(look_angle)}`')
 
+        if all([isinstance(objective, dict) for objective in objectives]):
+            objectives = [MissionObjective.from_dict(objective) for objective in objectives]
+        
+        # get unique targets and objectives
+        objectives = list(set(objectives))
+        targets = {tuple(target) for target in targets}
+        targets = [list(target) for target in targets]
+
         # set parameters
         self.instrument_name = instrument_name
+        self.objectives : list[MissionObjective] = [objective.copy() for objective in objectives]
         self.targets = [[coordinate for coordinate in target] for target in targets]
         self.look_angle = look_angle
+
+    def to_dict(self):
+        out = super().to_dict()
+        out['objectives'] = [ojective.to_dict() for ojective in self.objectives]
+        return out
 
 class WaitForMessages(AgentAction):
     """
