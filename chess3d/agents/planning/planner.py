@@ -105,19 +105,19 @@ class AbstractPlanner(ABC):
                                                              slew_angles))
 
         # check if tasks are clusterable
-        adj : Dict[SchedulableObservationTask, set[SchedulableObservationTask]] = {task : set() for task in schedulable_tasks}
+        adj : Dict[str, set[SchedulableObservationTask]] = {task.id : set() for task in schedulable_tasks}
         
         for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
             for j in range(i + 1, len(schedulable_tasks)):
                 if schedulable_tasks[i].can_combine(schedulable_tasks[j]):
-                    adj[schedulable_tasks[i]].add(schedulable_tasks[j])
-                    adj[schedulable_tasks[j]].add(schedulable_tasks[i]) 
+                    adj[schedulable_tasks[i].id].add(schedulable_tasks[j])
+                    adj[schedulable_tasks[j].id].add(schedulable_tasks[i]) 
    
         # sort tasks by degree of adjacency 
         v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
         
         # only keep tasks that have at least one clusterable task
-        v = [task for task in v if len(adj[task]) > 0]
+        v = [task for task in v if len(adj[task.id]) > 0]
         # print(f'\n\n{len(v)} tasks are clusterable out of {len(tasks)} tasks.')
         
         # combine tasks into clusters
@@ -126,7 +126,7 @@ class AbstractPlanner(ABC):
         with tqdm(total=len(v), desc="Merging overlapping tasks", leave=False) as pbar:
             while len(v) > 0:
                 p : SchedulableObservationTask = v.pop(0)
-                n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(list(adj[p]), adj)
+                n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(list(adj[p.id]), adj)
 
                 clique : set = {p}
                 pbar.update(1)
@@ -140,24 +140,23 @@ class AbstractPlanner(ABC):
                     clique.add(q)
 
                     # Delete edges from q and p that are not connected to their common neighbors
-                    common_neighbors : set[SchedulableObservationTask] = adj[p].intersection(adj[q])
+                    common_neighbors : set[SchedulableObservationTask] = adj[p.id].intersection(adj[q.id])
 
-                    neighbors_to_delete_p : set[SchedulableObservationTask] = adj[p].difference(common_neighbors)
+                    neighbors_to_delete_p : set[SchedulableObservationTask] = adj[p.id].difference(common_neighbors)
                     for neighbor in neighbors_to_delete_p: 
-                        adj[p].remove(neighbor)
-                        adj[neighbor].remove(p)
+                        adj[p.id].remove(neighbor)
+                        adj[neighbor.id].remove(p)
 
-                    neighbors_to_delete_q : set[SchedulableObservationTask] = adj[q].difference(common_neighbors)
+                    neighbors_to_delete_q : set[SchedulableObservationTask] = adj[q.id].difference(common_neighbors)
                     for neighbor in neighbors_to_delete_q: 
-                        adj[q].remove(neighbor)
-                        adj[neighbor].remove(q)
+                        adj[q.id].remove(neighbor)
+                        adj[neighbor.id].remove(q)
 
                     # Reset neighbor collection N_p for the new p;
-                    n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(n_p, adj)
+                    n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(list(adj[p.id]), adj)
 
                 for q in clique: 
                     p = p.merge(q)
-                    adj.pop(q)
                     if q in v: 
                         v.remove(q)
                         pbar.update(1)
@@ -175,16 +174,12 @@ class AbstractPlanner(ABC):
 
         # return tasks
         return schedulable_tasks
-        
-    # def get_coordinates(self, ground_points : dict, grid_index : int, gp_index : int) -> list:
-    #     """ Returns the coordinates of the ground points. """
-    #     lat,lon = ground_points[grid_index][gp_index]
-    #     return [lat, lon, 0.0]
-    
+            
+    @runtime_tracker
     def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:
         """ Sorts tasks by degree of adjacency. """
         # calculate degree of each task
-        degrees : dict = {task : len(adjacency[task]) for task in tasks}
+        degrees : dict = {task : len(adjacency[task.id]) for task in tasks}
 
         # sort tasks by degree and return
         return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.reward for parent_task in p.parent_tasks]), p.accessibility), reverse=True)
@@ -197,50 +192,70 @@ class AbstractPlanner(ABC):
                          orbitdata : OrbitData,
                          observation_history : ObservationHistory
                          ) -> float:
+        dt = []
+        t_0 = time.perf_counter()
+
         # estimate observation look angle
         th_img = np.average((task.slew_angles.left, task.slew_angles.right))
         
         t_l = task.accessibility.left / orbitdata.time_step - 0.5
         t_u = task.accessibility.right / orbitdata.time_step + 0.5
 
+        dt.append(time.perf_counter() - t_0)
+        t_0 = time.perf_counter()
+
         # calculate task performance
-        observation_performances = [row 
-                                    for _,row in orbitdata.gp_access_data.iterrows()
-                                    if row['instrument'] == task.instrument_name
-                                    and any([(row['GP index'] == gp_index and row['grid index'] == grid_index)
-                                                for parent_task in task.parent_tasks
-                                                for *_,grid_index,gp_index in parent_task.targets])
-                                    and t_l <= row['time index'] <= t_u
-                                    and abs(row['look angle [deg]'] - th_img) <= cross_track_fovs[task.instrument_name] / 2
-                                    ]
-        if not observation_performances: return 0.0
+        task_targets = {(int(grid_index), int(gp_index))
+                        for parent_task in task.parent_tasks
+                        for *_,grid_index,gp_index in parent_task.targets}
         
-        instrument_specs = [instr for instr in specs.instrument
-                            if instr.name == task.instrument_name][0].mode[0]
+        columns = [column for column in orbitdata.gp_access_data.columns.values]
+        observation_performances = [(t_index, gp_index, pnt_opt, lat, lon, range, look_angle, *_, grid_index, instrument, agent_name)
+                                    for t_index, gp_index, pnt_opt, lat, lon, range, look_angle, *_, grid_index, instrument, agent_name in orbitdata.gp_access_data.values
+                                    if instrument == task.instrument_name
+                                    and t_l <= t_index <= t_u
+                                    and abs(look_angle - th_img) <= cross_track_fovs[task.instrument_name] / 2
+                                    and (int(grid_index), int(gp_index)) in task_targets
+                                    ]
+        
+        dt.append(time.perf_counter() - t_0)
+        t_0 = time.perf_counter()
+
+        if not observation_performances: 
+            return 0.0
+        
+        instrument_spec : BasicSensorModel = next(instr for instr in specs.instrument).mode[0]
         observation_performance = observation_performances[0]
-        grid_index = int(observation_performance['grid index'])
-        gp_index = int(observation_performance['GP index'])
+        grid_index = observation_performance[len(observation_performance)-3]
+        gp_index = observation_performance[1]
 
         prev_obs = observation_history.get_observation_history(grid_index, gp_index)
 
-        measurement = {
-            "instrument" : task.instrument_name,    
-            "t_start" : task.accessibility.left,
-            "t_end" : task.accessibility.right,
-            "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
-            "accuracy" : instrument_specs.accuracy,
-            "n_obs" : prev_obs.n_obs,
-            "t_prev" : prev_obs.t_last,
-            'spectral_resolution' : instrument_specs.spectral_resolution
-        }
+        dt.append(time.perf_counter() - t_0)
+        t_0 = time.perf_counter()
 
-        # if 'vnir' in task.instrument_name.lower():
-        #     if 'hyp' in task.instrument_name.lower():
-        #         measurement['spectral_resolution'] = "Hyperspectral"
-        #     elif 'multi' in task.instrument_name.lower():
-        #         measurement['spectral_resolution'] = "Multispectral"
-        #     else:
-        #         measurement['spectral_resolution'] = "None"
+        if task.instrument_name.lower() in ['vnir', 'tir']:
+            measurement = {
+                "instrument" : task.instrument_name,    
+                "t_start" : task.accessibility.left,
+                "t_end" : task.accessibility.right,
+                "n_obs" : prev_obs.n_obs,
+                "t_prev" : prev_obs.t_last,
+                "horizontal_spatial_resolution" : observation_performance[columns.index('ground pixel cross-track resolution [m]')],
+                'spectral_resolution' : instrument_spec.spectral_resolution
+            }
+        elif task.instrument_name.lower() == 'altimeter':
+            measurement = {
+                "instrument" : task.instrument_name,    
+                "t_start" : task.accessibility.left,
+                "t_end" : task.accessibility.right,
+                "n_obs" : prev_obs.n_obs,
+                "t_prev" : prev_obs.t_last,
+                "horizontal_spatial_resolution" : observation_performance[columns.index('ground pixel cross-track resolution [m]')],
+                "accuracy" : observation_performance[columns.index('accuracy [m]')],
+            }
+        else:
+            raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
 
         # calculate total task reward          
         task_reward = 0
@@ -252,6 +267,9 @@ class AbstractPlanner(ABC):
             
             u_ijk = task_priority * task_performance * task_score * task_severity
             task_reward += u_ijk
+
+        dt.append(time.perf_counter() - t_0)
+        t_0 = time.perf_counter()
 
         # return total task reward
         return task_reward
@@ -833,7 +851,7 @@ class AbstractPreplanner(AbstractPlanner):
         access_opportunities = {}
         
         for data in tqdm(raw_coverage_data, 
-                         desc='PREPLANNER: Compiling access opportunities', 
+                         desc=f'{state.agent_name}-PREPLANNER: Compiling access opportunities', 
                          leave=False):
             t_img = data[orbitdata_columns.index('time index')]
             grid_index = data[orbitdata_columns.index('grid index')]
@@ -1009,18 +1027,21 @@ class AbstractReplanner(AbstractPlanner):
                         current_plan : Plan,
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
+                        mission : Mission,
+                        tasks : list,
+                        observation_history : ObservationHistory,
                     ) -> Plan:
         pass
 
     def get_broadcast_contents(self,
                                broadcast_action : FutureBroadcastMessageAction,
                                state : SimulationAgentState,
-                               reward_grid ,
+                               observation_history : ObservationHistory,
                                **kwargs
                                ) -> BroadcastMessageAction:
         """  Generates a broadcast message to be sent to other agents """
         if broadcast_action.broadcast_type == FutureBroadcastTypes.REWARD:
-            raise NotImplementedError('Reward broadcast not yet implemented.')
+            # raise NotImplementedError('Reward broadcast not yet implemented.')
 
             latest_observations : list[ObservationAction] = []
             for grid in reward_grid.rewards:

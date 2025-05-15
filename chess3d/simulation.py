@@ -47,14 +47,19 @@ class Simulation:
     def __init__(self,
                  results_path : str,
                  orbitdata_dir : str,
+                 nominal_missions : dict,
+                 event_missions : dict,
                  manager : SimulationManager,
                  environment : SimulationEnvironment,
                  agents : list,
                  monitor : ResultsMonitor,
                  level : int
             ) -> None:
+        
         self.results_path : str = results_path
         self.orbitdata_dir : str = orbitdata_dir
+        self.nominal_missions : Dict[str, Mission] = nominal_missions
+        self.event_missions : Dict[str, Mission] = event_missions
         self.manager : SimulationManager = manager
         self.environment : SimulationEnvironment = environment
         self.agents : list[SimulatedAgent] = agents
@@ -223,7 +228,7 @@ class Simulation:
                                             logger)
         
         # return initialized mission
-        return Simulation(results_path, orbitdata_dir, manager, environment, agents, monitor, level)
+        return Simulation(results_path, orbitdata_dir,nominal_missions, event_missions, manager, environment, agents, monitor, level)
     
     def execute(self, plot_results : bool = False, save_plot : bool = False) -> None:
         """ executes the simulation """
@@ -249,11 +254,16 @@ class Simulation:
         orbitdata : dict = OrbitData.from_directory(self.orbitdata_dir) if self.orbitdata_dir is not None else None
 
         print('Collecting observations performed data...')
+        # observations_performed_path = os.path.join(self.environment.results_path, 'measurements.csv')
+        # observations_performed = pd.read_csv(observations_performed_path)
         try:
-            observations_performed = pd.read_csv((os.path.join(self.environment.results_path, 'measurements.csv')))
+            observations_performed_path = os.path.join(self.environment.results_path, 'measurements.csv')
+            observations_performed = pd.read_csv(observations_performed_path)
+            print('SUCCESS!')
         except pd.errors.EmptyDataError:
             columns = ['observer','t_img','lat','lon','range','look','incidence','zenith','instrument_name']
             observations_performed = pd.DataFrame(data=[],columns=columns)
+            print('OOPS!')
 
         # load all senario events
         print('Loading event data...')
@@ -370,7 +380,7 @@ class Simulation:
         t_event_reobservation = self.calc_event_coverage_metrics(events_observed)
 
         # count number of GPs observed
-        gps_observed : set = {(lat,lon) for _,_,lat,lon,*_ in observations_performed.values}
+        gps_observed : set = {(grid_index,gp_index) for _,_,_,gp_index,*_,grid_index,_,_ in observations_performed.values}
         n_gps_observed = len(gps_observed)
 
         # Generate summary
@@ -476,11 +486,11 @@ class Simulation:
         # classify observations per GP
         observations_per_gp = {group : [(observer,t_img,lat_img,lon_img,__,instrument) 
                                         for (observer,t_img,lat_img,lon_img,*__,instrument) in data.values]
-                                 for group,data in observations_performed.groupby(['lat', 'lon'])}
+                                 for group,data in observations_performed.groupby(['lat [deg]', 'lon [deg]'])}
 
         # classify events per ground point
-        events_per_gp = {group : [[t_start,duration,severity,observations_req]
-                                  for *_,t_start,duration,severity,observations_req in data.values]
+        events_per_gp = {group : [[t_start,duration,severity,event_type,t_corr]
+                                  for *_,t_start,duration,severity,event_type,t_corr in data.values]
                         for group,data in events.groupby(['lat [deg]', 'lon [deg]'])}
 
         # count event presense, detections, and observations
@@ -517,18 +527,34 @@ class Simulation:
         events_co_observable_partially : Dict[tuple, list] = {}
 
         for event, access_intervals in tqdm(events_observable.items(), desc='Compiling possible co-observations', leave=False):
-            # get required measurements for a given event
-            observations_req = set(str_to_list(event[-1]))
-
+            # get event characteristics
+            event_type : str = event[6]
+            
             # get types of observations that can be performed for this event
-            instruments = {instrument for *_, instrument in access_intervals if instrument in observations_req}
+            co_observation_params = set()
+            observations_required = dict()
+            valid_instruments = set()
+
+            for mission_name,mission in self.event_missions.items():
+                if event_type in mission_name.lower():
+                    for objective in mission:
+                        co_observation_params.add(objective.parameter)
+                        valid_instruments.update(set(objective.valid_instruments))
+                        observations_required[objective.parameter] = set(objective.valid_instruments)
 
             # check if there are observations that satisfy the requirements of the request
-            if len(instruments) > 1:
+            if len(observations_required) > 1:
                 # check if valid co-observations match this event
-                co_observation_opportunities = {(*_, instrument) for *_, instrument in access_intervals if instrument in observations_req}
+                co_observation_opportunities = {(*_, instrument) 
+                                                for param in observations_required
+                                                for *_, instrument in access_intervals 
+                                                if instrument.lower() in observations_required[param]}
+                co_observable_parameters = {param 
+                                            for param in observations_required
+                                            for *_, instrument in access_intervals 
+                                            if instrument.lower() in observations_required[param]}
 
-                if observations_req.issubset(instruments):
+                if co_observation_params.issubset(co_observable_parameters):
                     # all required observation types were performed; event was fully co-observed
                     events_co_observable_fully[event] = co_observation_opportunities
                 else:
@@ -544,27 +570,51 @@ class Simulation:
         events_co_obs_partially : Dict[tuple, list] = {}
 
         for event, observations in tqdm(events_observed.items(), desc='Compiling co-observations', leave=False):
+            # get event characteristics
+            event_type : str = event[6]
+            
+            # get types of observations that can be performed for this event
+            co_observation_params = set()
+            observations_required = dict()
+            valid_instruments = set()
+
+            for mission_name,mission in self.event_missions.items():
+                if event_type in mission_name.lower():
+                    for objective in mission:
+                        co_observation_params.add(objective.parameter)
+                        valid_instruments.update(set(objective.valid_instruments))
+                        observations_required[objective.parameter] = set(objective.valid_instruments)
+            
             # get required measurements for a given event
-            observations_req = set(str_to_list(event[-1]))
-            instruments = {instrument for *_, instrument in observations if instrument in observations_req}
+            # observations_req = set(str_to_list(event[-1]))
+            # instruments = {instrument for *_, instrument in observations if instrument in observations_req}
 
             # check if there are observations that satisfy the requirements of the request
-            if len(instruments) > 1:
+            if len(observations_required) > 1:
                 # check if valid co-observations match this even
-                co_observations = {(*_, instrument) for *_, instrument in observations if instrument in observations_req}
+                co_observations = {(*_, instrument) 
+                                   for *_, instrument in observations 
+                                   if any([instrument.lower() in observations_required[param]
+                                           for param in observations_required])
+                                   }
 
-                # find which observations may have triggered co-observations
-                if event in events_requested:
-                    requesting_observations = {
-                        (lat, lon, t_start, duration, severity, observer, t_img, instrument)
-                        for lat, lon, t_start, duration, severity, observer, t_img, instrument in co_observations
-                        for _, requester, _, _, _, t_start_req, *_ in events_requested[event]
-                        if abs(t_start_req - t_img) <= 1e-3 and requester == observer
-                    }
-                    # remove requesting observations from co-observations (if any)
-                    co_observations.difference_update(requesting_observations)
+                # TODO find which observations may have triggered co-observations
+                # if event in events_requested:
+                #     requesting_observations = {
+                #         (lat, lon, t_start, duration, severity, observer, t_img, instrument)
+                #         for lat, lon, t_start, duration, severity, observer, t_img, instrument in co_observations
+                #         for _, requester, _, _, _, t_start_req, *_ in events_requested[event]
+                #         if abs(t_start_req - t_img) <= 1e-3 and requester == observer
+                #     }
+                #     # remove requesting observations from co-observations (if any)
+                #     co_observations.difference_update(requesting_observations)
 
-                if observations_req.issubset(instruments):
+                co_observed_parameters = {param 
+                                            for param in observations_required
+                                            for *_, instrument in access_intervals 
+                                            if instrument.lower() in observations_required[param]}
+
+                if co_observation_params.issubset(co_observed_parameters):
                     # all required observation types were performed; event was fully co-observed
                     events_co_obs_fully[event] = co_observations
                 else:
@@ -593,7 +643,14 @@ class Simulation:
                              observations_performed : pd.DataFrame) -> tuple:
         # unpackage event
         event = tuple(event)
-        *_,lat,lon,t_start,duration,severity,observations_req = event
+        *_,lat,lon,t_start,duration,severity,event_type,t_corr,id = event
+
+        # get matching objectives
+        observations_reqs = set()
+        for mission_name,mission in self.event_missions.items():
+            if event_type in mission_name.lower():
+                for objective in mission:
+                    observations_reqs.update(set(objective.valid_instruments))
 
         # find accesses that overlook a given event's location
         matching_accesses = [
@@ -603,7 +660,7 @@ class Simulation:
                                 if t_start <= t_index*agent_orbit_data.time_step <= t_start+duration
                                 and abs(lat - gp_lat) < 1e-3 
                                 and abs(lon - gp_lon) < 1e-3
-                                and instrument in observations_req
+                                and instrument.lower() in observations_reqs
                             ]
 
         # initialize map of compiled access intervals
@@ -635,36 +692,46 @@ class Simulation:
                                     for access_interval in access_intervals[(agent_name,instrument)] ])
 
         # find measurement detections that match this event
-        matching_detections = [ (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
-                                for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in event_detections.values
+        matching_detections = [ (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, detected_event_type)
+                                for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, detected_event_type in event_detections.values
                                 if t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
                                 and abs(lat - lat_req) < 1e-3 
                                 and abs(lon - lon_req) < 1e-3
-                                and all([instrument in observations_req for instrument in str_to_list(observation_types)])
+                                and event_type == detected_event_type
                             ]       
         matching_detections.sort(key= lambda a : a[5])
 
-        # find measurement requests that match this event
-        matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
-                                for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
-                                if  t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
-                                and abs(lat - lat_req) < 1e-3 
-                                and abs(lon - lon_req) < 1e-3
-                                and all([instrument in observations_req for instrument in str_to_list(observation_types)])
-                            ]       
-        matching_requests.sort(key= lambda a : a[5])
+        # TODO find measurement requests that match this event
+        matching_requests = []
+        # matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
+        #                         for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
+        #                         if  t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
+        #                         and abs(lat - lat_req) < 1e-3 
+        #                         and abs(lon - lon_req) < 1e-3
+        #                         and all([instrument in observations_req for instrument in str_to_list(observation_types)])
+        #                     ]       
+        # matching_requests.sort(key= lambda a : a[5])
 
         # find observations that overlooked a given event's location
         matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)
-                                    for observer,t_img,lat_img,lon_img,*_,instrument in observations_performed.values
-                                    if t_start <= t_img <= t_start+duration
+                                    for observer,__,t_img,gp_index,pnt_opt,lat_img,lon_img,*_,instrument,agent_name in observations_performed.values
+                                    
+                                    if self.str2interval(t_img).overlaps(Interval(t_start, t_start+duration))
                                     and abs(lat - lat_img) < 1e-3 
                                     and abs(lon - lon_img) < 1e-3
-                                    and instrument in observations_req  #TODO include better reasoning!
+                                    and instrument.lower() in observations_reqs
                                 ]
         matching_observations.sort(key= lambda a : a[6])
 
         return event, access_intervals, matching_detections, matching_requests, matching_observations
+
+    def str2interval(self, s : str) -> Interval:
+        s = s.replace(']','')
+        s = s.replace('[','')
+        s = s.split(',')
+
+        vals = [float(val) for val in s]
+        return Interval(vals[0],vals[1])
 
     def count_observations(self, 
                            orbitdata : dict, 
@@ -964,11 +1031,13 @@ class Simulation:
                     continue
 
                 # get observation times
-                _,t,*_ = observation
-                _,t_prev,*_ = prev_observation
+                _,_,t,*_ = observation
+                _,_,t_prev,*_ = prev_observation
 
                 # calculate revisit
-                t_reobservation = t-t_prev
+                t : Interval = self.str2interval(t)
+                t_prev : Interval = self.str2interval(t_prev)
+                t_reobservation = t.left-t_prev.right
 
                 # add to list
                 t_reobservations.append(t_reobservation)
@@ -1000,7 +1069,9 @@ class Simulation:
                 *_,t,_ = observation
 
                 # calculate revisit
-                t_reobservation = t-t_prev
+                t : Interval = self.str2interval(t)
+                t_prev : Interval = self.str2interval(t_prev)
+                t_reobservation = t.left-t_prev.right
 
                 # add to list
                 t_reobservations.append(t_reobservation)

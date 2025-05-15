@@ -11,8 +11,10 @@ from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.plan import *
 from chess3d.agents.planning.planner import AbstractReplanner
 # from chess3d.agents.planning.rewards import  RewardGrid
+from chess3d.agents.planning.tasks import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import BusMessage
+from chess3d.mission import Mission
 from chess3d.utils import Interval
 
 
@@ -65,13 +67,15 @@ class BroadcasterReplanner(AbstractReplanner):
         # check if the broadcast time has been reached 
         return state.t >= self.t_next
 
-    def generate_plan(self, 
-                      state : SimulationAgentState,
-                      specs : object,
-                      reward_grid ,
-                      current_plan : Plan,
-                      clock_config : ClockConfig,
-                      orbitdata : OrbitData,
+    def generate_plan(  self, 
+                        state : SimulationAgentState,
+                        specs : object,
+                        current_plan : Plan,
+                        clock_config : ClockConfig,
+                        orbitdata : OrbitData,
+                        mission : Mission,
+                        tasks : list,
+                        observation_history : ObservationHistory,
                     ) -> Plan:
         
         if self.mode == 'periodic':

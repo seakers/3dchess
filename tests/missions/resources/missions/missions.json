@@ -20,10 +20,7 @@
                     ],
                     "valid_instruments" : [
                         "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "TIR",
-                        "Altimeter"
+                        "TIR"
                     ]
                 },
                 {
@@ -37,11 +34,7 @@
                         }
                     ],
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "TIR",
-                        "Altimeter"
+                        "TIR"
                     ]
                 },
                 {
@@ -55,15 +48,11 @@
                         },
                         {
                             "attribute": "accuracy",
-                            "thresholds": [10, 50, 100],
+                            "thresholds": [1, 5, 10],
                             "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "TIR",
                         "Altimeter"
                     ]
                 }
@@ -88,10 +77,7 @@
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
                         "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "TIR",
-                        "Altimeter"
+                        "TIR"
                     ]
                 },
                 {
@@ -107,11 +93,7 @@
                     ],
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "TIR",
-                        "Altimeter"
+                        "TIR"
                     ]
                 },
                 {
@@ -126,16 +108,12 @@
                         },
                         {
                             "attribute": "accuracy",
-                            "thresholds": [10, 50, 100],
+                            "thresholds": [1, 5, 10],
                             "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "TIR",
                         "Altimeter"
                     ]
                 }
@@ -155,14 +133,11 @@
                         },
                         {
                             "attribute": "accuracy",
-                            "thresholds": [10, 50, 100],
+                            "thresholds": [1, 5, 10],
                             "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
                         "Altimeter"
                     ]
                 },
@@ -182,10 +157,7 @@
                         }
                     ],
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "Altimeter"
+                        "VNIR"
                     ]
                 },
                 {
@@ -204,10 +176,7 @@
                         }
                     ],
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "Altimeter"
+                        "VNIR"
                     ]
                 }
             ],
@@ -224,15 +193,12 @@
                         },
                         {
                             "attribute": "accuracy",
-                            "thresholds": [10, 50, 100],
+                            "thresholds": [1, 5, 10],
                             "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
                         "Altimeter"
                     ]
                 },
@@ -254,10 +220,7 @@
                     ],
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "Altimeter"
+                        "VNIR"
                     ]
                 },
                 {
@@ -278,10 +241,7 @@
                     ],
                     "reobservation_strategy" : "linear_increase",
                     "valid_instruments" : [
-                        "VNIR",
-                        "VNIR hyp",
-                        "VNIR multi",
-                        "Altimeter"
+                        "VNIR"
                     ]
                 }
             ]

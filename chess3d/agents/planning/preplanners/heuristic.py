@@ -41,7 +41,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         cross_track_fovs : dict = self.collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        schedulable_tasks : list[SchedulableObservationTask] = self.sort_tasks_by_heuristic(schedulable_tasks, specs, cross_track_fovs, orbitdata, observation_history)
+        schedulable_tasks : list[SchedulableObservationTask] = self.sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -66,19 +66,20 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             
             # calculate task observation angle
             th_img = np.average((task.slew_angles.left, task.slew_angles.right))
+
+            # task_times = [Interval(obs.t_start) for obs in observations]
             
             # check if there is overlap with previous scheduled observation
             potential_overlap = [Interval(observation.t_start,  observation.t_end) 
                                  for observation in observations
                                  if observation.t_start in task.accessibility 
                                   or observation.t_end in task.accessibility]
-            if any([overlap.overlaps(task.accessibility)
-                    for overlap in potential_overlap]):
+            if any([overlap.overlaps(task.accessibility) for overlap in potential_overlap]):
                 continue
 
             # compare with previous scheduled observation
             actions_prev = [observation for observation in observations
-                            if observation.t_end <= task.accessibility.left]
+                            if observation.t_start - 1e-6 <= task.accessibility.left]
             
             if actions_prev:
                 # sort by end time 
@@ -94,9 +95,8 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                 th_prev = state.attitude[0]
 
             # check if there is a potential previous observation conflict
-            t_img = task.accessibility.left
             prev_action_feasible = self.is_observation_feasible(state,
-                                                                t_img,
+                                                                task.accessibility.left,
                                                                 th_img,
                                                                 t_prev,
                                                                 th_prev,
@@ -107,7 +107,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
 
             # compare with future scheduled observation
             actions_next = [observation for observation in observations
-                            if observation.t_start >= task.accessibility.right]
+                            if task.accessibility.right - 1e-6 <= observation.t_end]
             if actions_next:
                 # sort by start times
                 actions_next.sort(key=lambda a : a.t_start)
@@ -122,11 +122,10 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                 th_next = np.average((task.slew_angles.left, task.slew_angles.right))
 
             # check if there is a potential future observation conflict
-            t_img = task.accessibility.right
             next_action_feasible = self.is_observation_feasible(state,
                                                                 t_next,
                                                                 th_next,
-                                                                t_img,
+                                                                task.accessibility.right,
                                                                 th_img,
                                                                 max_slew_rate,
                                                                 max_torque,
@@ -149,30 +148,55 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         # sort by start time
         observations_sorted = sorted(observations, key=lambda a : a.t_start)
 
-        assert self.no_redundant_observations(state, observations_sorted, orbitdata)
+        # assert self.no_redundant_observations(state, observations_sorted, orbitdata)
+        assert self.is_observation_path_valid(state, specs, observations_sorted)
 
         return observations_sorted
     
-    def sort_tasks_by_heuristic(self, tasks : list, specs : Spacecraft, cross_track_fovs : dict, orbitdata : OrbitData, observation_history : ObservationHistory) -> list:
-        def reward_heuristic(task : SchedulableObservationTask) -> float:
-            """ Heuristic function to sort tasks by their heuristic value. """
-            # calculate task priority
-            priority = np.prod([parent_task.objective.priority  
-                                for parent_task in task.parent_tasks])
-            # calculate task duration
-            duration = task.accessibility.span()
+    def sort_tasks_by_heuristic(self, state : SimulationAgentState, tasks : list, specs : Spacecraft, cross_track_fovs : dict, orbitdata : OrbitData, observation_history : ObservationHistory) -> list:
+        """ Sorts tasks by heuristic value """
+        if tasks:
+            # estimate maximum number of tasks in the planning horizon
+            min_task_duration = min([task.accessibility.span() for task in tasks])
+            max_number_tasks = int(self.horizon / min_task_duration) if min_task_duration > 0 else -1
             
-            # calculate task start time
-            t_start = task.accessibility.left
-            
-            # calculate task reward
-            task_reward = self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
+            # reduce number of tasks to be scheduled by using estimated max number of tasks 
+            tasks.sort(key=lambda x: x.accessibility.span(),reverse=True)
+            tasks = tasks[:max_number_tasks]
 
-            # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
-            return -task_reward, -priority, -duration, t_start
+        # calculate heuristic value for each task
+        values = [[self.calc_heuristic(task, specs, cross_track_fovs, orbitdata, observation_history)] 
+                  for task in tqdm(tasks, desc=f"{state.agent_name}-PREPLANNER: Calculating heuristic values", leave=False)]
+        for i in range(len(values)): values[i].insert(0,tasks[i])
+        
+        # sort tasks by heuristic value
+        sorted_data = sorted(values, key=lambda x: x[1:])
+        
+        # return sorted tasks
+        return [task for task, *_ in sorted_data]
+    
+    def calc_heuristic(self,
+                        task : SchedulableObservationTask, 
+                        specs : Spacecraft, 
+                        cross_track_fovs : dict, 
+                        orbitdata : OrbitData, 
+                        observation_history : ObservationHistory
+                        ) -> float:
+        """ Heuristic function to sort tasks by their heuristic value. """
+        # calculate task priority
+        priority = np.prod([parent_task.objective.priority  
+                            for parent_task in task.parent_tasks])
+        # calculate task duration
+        duration = task.accessibility.span()
+        
+        # calculate task start time
+        t_start = task.accessibility.left
+        
+        # calculate task reward
+        task_reward = self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
 
-        # TEMP SOLUTION schedule based on largest duration and earliest start time
-        return sorted(tasks, key=reward_heuristic)
+        # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
+        return -task_reward, -priority, -duration, t_start
 
     def is_observation_feasible(self, 
                                 state : SimulationAgentState,
@@ -196,7 +220,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         dt_maneuver = dth_img / max_slew_rate
 
         # check slew constraint
-        return dt_maneuver <= dt_obs or abs(dt_maneuver - dt_obs) <= 1e-6
+        return dt_obs >= 0 and (dt_maneuver <= dt_obs or abs(dt_maneuver - dt_obs) <= 1e-6)
     
         #TODO check torque constraint
     
@@ -218,8 +242,8 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                 for target_prev in observation_prev.targets:
                     for target_curr in observation_curr.targets:
                         if (
-                            abs(target_prev[0] - target_prev[0]) <= 1e-3
-                            and abs(target_prev[1] - target_prev[1]) <= 1e-3
+                            abs(target_curr[0] - target_prev[0]) <= 1e-3
+                            and abs(target_curr[1] - target_prev[1]) <= 1e-3
                             and (observation_curr.t_start - observation_prev.t_end) <= orbitdata.time_step):
                             return False
             

@@ -160,6 +160,7 @@ class SchedulableObservationTask:
                  instrument_name : str, 
                  accessibility : Interval,
                  slew_angles : Interval,
+                 id : str = None,
                  ):
         """ Represents an observation task to be scheduled by a particular agent """
 
@@ -180,6 +181,7 @@ class SchedulableObservationTask:
         self.instrument_name : str = instrument_name
         self.accessibility : Interval = accessibility
         self.slew_angles : Interval = slew_angles
+        self.id : str = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
     
     def can_combine(self, other_task : object) -> bool:
         """ Check if two tasks can be combined based on their time and slew angle. """
@@ -229,21 +231,26 @@ class SchedulableObservationTask:
         return not (accessibility_overlap.is_empty() or slew_angle_overlap.is_empty())
 
     def merge(self, other_task : object) -> object:
-        """ Merge two tasks into one. """
-        assert isinstance(other_task, SchedulableObservationTask), "The other task must be an instance of ObservationTask."
-        assert self.can_combine(other_task), "The tasks cannot be combined."
+        try:
+            """ Merge two tasks into one. """
+            assert isinstance(other_task, SchedulableObservationTask), "The other task must be an instance of ObservationTask."
+            assert self.can_combine(other_task), "The tasks cannot be combined."
 
-        # Combine the time intervals and slew angles
-        combined_time_interval : Interval = self.accessibility.union(other_task.accessibility)
-        combined_slew_angles : Interval  = self.slew_angles.intersection(other_task.slew_angles)
-                
-        # Update the task attributes
-        parent_tasks = {task for task in self.parent_tasks}
-        parent_tasks.update({task for task in other_task.parent_tasks})
-        accessibility = combined_time_interval
-        slew_angles = combined_slew_angles
-        
-        return SchedulableObservationTask(parent_tasks, self.instrument_name, accessibility, slew_angles)
+            # Combine the time intervals and slew angles
+            combined_time_interval : Interval = self.accessibility.union(other_task.accessibility)
+            combined_slew_angles : Interval  = self.slew_angles.intersection(other_task.slew_angles)
+                    
+            # Update the task attributes
+            parent_tasks = {task for task in self.parent_tasks}
+            parent_tasks.update({task for task in other_task.parent_tasks})
+            accessibility = combined_time_interval
+            slew_angles = combined_slew_angles
+            
+            return SchedulableObservationTask(parent_tasks, self.instrument_name, accessibility, slew_angles, self.id)
+        except AssertionError as e:
+            x = 1
+            self.can_combine(other_task)
+            raise e
     
     def __repr__(self):
         return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
@@ -252,7 +259,7 @@ class SchedulableObservationTask:
         return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
     
 class ObservationTracker:
-    def __init__(self, lat : float, lon : float, grid_index : int, gp_index : int, t_last : str = -1, n_obs : int = 0):
+    def __init__(self, lat : float, lon : float, grid_index : int, gp_index : int, t_last : str = -1, n_obs : int = 0, latest_observation : dict = None):
         """ 
         Class to track the observation tasks and their history.
         """
@@ -276,6 +283,7 @@ class ObservationTracker:
         self.gp_index = gp_index
         self.t_last = t_last
         self.n_obs = n_obs
+        self.latest_observation = None
     
     def __repr__(self):
         return f"ObservationTracker(grid_index={self.grid_index}, gp_index={self.gp_index}, lat={self.lat}, lon={self.lon}, t_last={self.t_last}, n_obs={self.n_obs})"
@@ -318,10 +326,7 @@ class ObservationHistory:
                 tracker : ObservationTracker = self.history[grid_index][gp_index]
                 tracker.t_last = observation.t_end
                 tracker.n_obs += 1
-                # for objective in observation.objectives:
-                #     tracker : ObservationTracker = self.history[gp_index][grid_index][objective.parameter]
-                #     tracker.t_last = observation.t_end
-                #     tracker.n_obs += 1
+                tracker.latest_observation = observation.to_dict()
 
     def get_observation_history(self, grid_index : int, gp_index : int) -> ObservationTracker:
         if grid_index in self.history and gp_index in self.history[grid_index]:

@@ -1,5 +1,6 @@
 from itertools import repeat
 from logging import Logger
+import math
 import os
 from typing import Dict
 from orbitpy.util import Spacecraft
@@ -12,6 +13,7 @@ from dmas.clocks import *
 
 from chess3d.agents.planning.plan import Plan, Preplan
 # from chess3d.agents.planning.rewards import RewardGrid
+from chess3d.agents.planning.tasks import ObservationHistory, SchedulableObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -19,6 +21,7 @@ from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.messages import *
+from chess3d.utils import EmptyInterval, Interval
 
 class DynamicProgrammingPlanner(AbstractPreplanner):
     def __init__(self, 
@@ -37,86 +40,137 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         
     @runtime_tracker
     def _schedule_observations(self, 
-                               state: SimulationAgentState, 
-                               specs: object, 
-                               reward_grid,
-                               _: ClockConfig, 
-                               orbitdata: OrbitData = None
+                               state : SimulationAgentState, 
+                               specs : object, 
+                               _ : ClockConfig, 
+                               orbitdata : OrbitData, 
+                               schedulable_tasks : list,
+                               observation_history : ObservationHistory
                                ) -> list:
         
         if not isinstance(state, SatelliteAgentState):
-            raise NotImplementedError(f'Dynamic Programming planner not yet implemented for agents of type `{type(state)}.`')
+            raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
         elif not isinstance(specs, Spacecraft):
             raise ValueError(f'`specs` needs to be of type `{Spacecraft}` for agents with states of type `{SatelliteAgentState}`')
+        
+        # compile list of instruments available in payload
+        payload : dict = {instrument.name: instrument for instrument in specs.instrument}
+        
+        # compile instrument field of view specifications   
+        cross_track_fovs : dict = self.collect_fov_specs(specs)
+        
+        # get pointing agility specifications
+        adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
+        assert adcs_specs, 'ADCS component specifications missing from agent specs object.'
 
-        t_0 = time.perf_counter()
-        t_prev = t_0
+        max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
+        assert max_slew_rate, 'ADCS `maxRate` specification missing from agent specs object.'
 
-        # compile access times for this planning horizon
-        ground_points : dict = self.get_ground_points(orbitdata)
-        access_opportunities : list  = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
+        max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
+        assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
-        # sort by observation time
-        access_opportunities.sort(key=lambda a: a[3])
+        # sort tasks by start time
+        schedulable_tasks : list[SchedulableObservationTask] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -len(t.parent_tasks)))
 
         # initiate results arrays
-        t_imgs = [np.NAN for _ in access_opportunities]
-        th_imgs = [np.NAN for _ in access_opportunities]
-        rewards = [0.0 for _ in access_opportunities]
-        cumulative_rewards = [0.0 for _ in access_opportunities]
-        preceeding_observations = [np.NAN for _ in access_opportunities]
-        # adjacency = [[False for _ in access_opportunities] for _ in access_opportunities]
+        t_imgs : list[Interval]             = [task.accessibility for task in schedulable_tasks]
+        th_imgs : list[float]               = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in schedulable_tasks]
+        rewards : list[float]               = [self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
+                                                for task in tqdm(schedulable_tasks,leave=False,desc='SATELLITE: Calculating task rewards')]
+        cumulative_rewards : list[float]    = [0.0 for _ in schedulable_tasks]
+        preceeding_observations : list[int] = [np.NAN for _ in schedulable_tasks]
+        observation_actions : list[ObservationAction] = [None for _ in schedulable_tasks]
 
-        t_1 = time.perf_counter() - t_prev
-        t_prev = time.perf_counter()
+        # add dummy values 
+        instrument_names = list(payload.keys())
+        dummy_task = SchedulableObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), Interval(state.attitude[0],state.attitude[0]))
+        schedulable_tasks.insert(0,dummy_task)
+        t_imgs.insert(0,dummy_task.accessibility)
+        th_imgs.insert(0,dummy_task.slew_angles.left)
+        rewards.insert(0,0.0)
+        cumulative_rewards.insert(0,0.0)
+        preceeding_observations.insert(0,np.NAN)
+        observation_actions.insert(0,None)
 
-        # create adjancency matrix      
-        adjacency = [ [access_opportunities.index(prev_opportunity) < access_opportunities.index(curr_opportunity) 
-                            and self.is_observation_path_valid(state, specs, 
-                                                                [ObservationAction( prev_opportunity[2], 
-                                                                                    [*ground_points[prev_opportunity[0]][prev_opportunity[1]],0.0], 
-                                                                                    prev_opportunity[5][0], 
-                                                                                    prev_opportunity[4][0]),
-                                                                ObservationAction( curr_opportunity[2], 
-                                                                                    [*ground_points[curr_opportunity[0]][curr_opportunity[1]],0.0], 
-                                                                                    curr_opportunity[5][-1], 
-                                                                                    curr_opportunity[4][-1])]
-                                                                ) 
-                        
-                        for curr_opportunity in access_opportunities]
-                    for prev_opportunity in tqdm(access_opportunities, 
-                                                desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix', 
-                                                leave=False)]
-               
-        t_2 = time.perf_counter() - t_prev
-        t_prev = time.perf_counter()
+        # create adjancency matrix     
+        adjacency = [ [False for _ in schedulable_tasks] for _ in schedulable_tasks]
+
+        for i in tqdm(range(len(schedulable_tasks)), 
+                        desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix',
+                        leave=False):
+            # get task i
+            task_i : SchedulableObservationTask = schedulable_tasks[i]
+            
+            # collect all targets and objectives
+            targets_i = [[target[0], target[1], 0.0] 
+                         for parent_task in task_i.parent_tasks
+                         for target in parent_task.targets]
+            objectives = [parent_task.objective for parent_task in task_i.parent_tasks]
+            th_i = th_imgs[i]
+
+            # estimate observation action for task i
+            observation_i = ObservationAction(task_i.instrument_name,
+                                              targets_i,
+                                              objectives,
+                                              th_i,
+                                              task_i.accessibility.left,
+                                              task_i.accessibility.right,
+                                              )
+
+            for j in range(i + 1, len(schedulable_tasks)):
+                # get task j
+                task_j : SchedulableObservationTask = schedulable_tasks[j]
+
+                # collect all targets and objectives
+                targets_j = [[target[0], target[1], 0.0] 
+                            for parent_task in task_j.parent_tasks
+                            for target in parent_task.targets]
+                objectives = [parent_task.objective for parent_task in task_j.parent_tasks]
+                th_j = th_imgs[j]
+
+                # estimate observation action for task j
+                observation_j = ObservationAction(task_j.instrument_name,
+                                                targets_j,
+                                                objectives,
+                                                th_j,
+                                                task_j.accessibility.left,
+                                                task_j.accessibility.right,
+                                                )
+
+                # update observation actions list
+                observation_actions[i] = observation_i
+                observation_actions[j] = observation_j
+
+                # update adjacency matrix
+                adjacency[i][j] = self.is_observation_path_valid(state, specs, [observation_i, observation_j])
+                adjacency[j][i] = self.is_observation_path_valid(state, specs, [observation_j, observation_i])
 
         # calculate optimal path and update results
-        for j in tqdm(range(len(access_opportunities)), 
+        for j in tqdm(range(len(schedulable_tasks)), 
                       desc=f'{state.agent_name}-PLANNER: Calculating Optimal Path',
                       leave=False):
             self.find_optimal_path(state, 
                                    specs, 
-                                   reward_grid, 
-                                   access_opportunities, 
-                                   ground_points, 
+                                   schedulable_tasks, 
                                    adjacency, 
                                    t_imgs, 
                                    th_imgs, 
                                    rewards, 
-                                   cumulative_rewards, preceeding_observations, j)
-            
-        t_3 = time.perf_counter() - t_prev
-        t_prev = time.perf_counter()
+                                   cumulative_rewards, 
+                                   preceeding_observations, 
+                                   observation_actions,
+                                   j
+                                )
+
+        # get task with highest cummulative reward
+        best_task_index = self.argmax(cumulative_rewards)
 
         # extract sequence of observations from results
         visited_observation_opportunities = set()
+        observation_sequence = [best_task_index] if preceeding_observations else []
 
-        while preceeding_observations and np.isnan(preceeding_observations[-1]):
-            preceeding_observations.pop()
-        observation_sequence = [len(preceeding_observations)-1] if preceeding_observations else []
-        
-        while preceeding_observations and not np.isnan(preceeding_observations[observation_sequence[-1]]):
+        while (preceeding_observations 
+               and not np.isnan(preceeding_observations[observation_sequence[-1]])):
             prev_observation_index = preceeding_observations[observation_sequence[-1]]
             
             if prev_observation_index in visited_observation_opportunities:
@@ -125,102 +179,56 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             visited_observation_opportunities.add(prev_observation_index)
             observation_sequence.append(prev_observation_index)
 
-        observation_sequence.sort()
-
-        t_4 = time.perf_counter() - t_prev
-        t_prev = time.perf_counter()
+        assert 0 in observation_sequence, 'invalid sequence of observations generated by DP. No starting point found.'
+        observation_sequence.reverse()
 
         # create observation actions
-        observations : list[ObservationAction] = []
-        for j in observation_sequence:
-            grid_index, gp_indx, instrument_name, *_ = access_opportunities[j]
-            lat,lon = ground_points[grid_index][gp_indx]
-            target = [lat,lon,0.0]
-            observation = ObservationAction(instrument_name, target, th_imgs[j], t_imgs[j])
-            observations.append(observation)
-                
-        t_5 = time.perf_counter() - t_prev
-        t_f = time.perf_counter() - t_0
+        # scheduled_tasks : list[SchedulableObservationTask] = [schedulable_tasks[j] for j in observation_sequence]
+        # scheduled_tasks.sort(key=lambda o: o.accessibility)      
+        # scheduled_tasks.pop(0) # remove dummy task
+
+        observations : list[ObservationAction] = [observation_actions[j] for j in observation_sequence]
+
+        observations.sort(key=lambda o: o.t_start)      
+        observations.pop(0) # remove dummy observation  
 
         # return observations
-        return observations    
+        return observations  
+
+    def argmax(self, values, rel_tol=1e-9, abs_tol=0.0):
+        max_val = max(values)
+        for i, val in enumerate(values):
+            if math.isclose(val, max_val, rel_tol=rel_tol, abs_tol=abs_tol):
+                return i
 
     @runtime_tracker
     def find_optimal_path(self, 
                           state : SimulationAgentState, 
-                          specs : dict, 
-                          reward_grid ,
-                          access_opportunities : list, 
-                          ground_points : list, 
+                          specs : dict,
+                          schedulable_tasks : list, 
                           adjancency : list, 
                           t_imgs : list, 
                           th_imgs : list,
                           rewards : list,
                           cumulative_rewards : list,
                           preceeding_observations : list,
+                          observation_actions : list,
                           j : int
                           ) -> tuple:
                    
-        # get current observation opportunity
-        curr_opportunity : tuple = access_opportunities[j]
-        lat,lon = ground_points[curr_opportunity[0]][curr_opportunity[1]]
-        curr_target = [lat,lon,0.0]
-
         # get any possibly prior observation            
-        prev_opportunities : list[tuple] = [(i,access_opportunities[i]) for i in range(0,j)
-                                            if adjancency[i][j] and not np.isnan(th_imgs[i]) ]
+        prev_opportunities : list[tuple] = [i
+                                            for i in range(0,j)
+                                            if adjancency[i][j]]
+        # there are no previous possible observations; skip
+        if not prev_opportunities: return
 
-        # calculate all possible observation actions for this observation opportunity
-        possible_observations = [ObservationAction( curr_opportunity[2], 
-                                                    curr_target, 
-                                                    curr_opportunity[5][k], 
-                                                    curr_opportunity[4][k])
-                                        for k in range(len(curr_opportunity[4]))]
-
-        # update observation time and look angle
-        if not prev_opportunities: # there are no previous possible observations
-            # get possible observation action from the current observation opportunity
-            feasible_observation = next((possible_observation for possible_observation in possible_observations
-                                            if self.is_observation_path_valid(state, specs, [possible_observation])),
-                                        None)
-            
-            # check if an observation is possible
-            if feasible_observation is not None:
-                # update imaging time, look angle, and reward
-                t_imgs[j] = feasible_observation.t_start
-                th_imgs[j] = feasible_observation.look_angle
-                rewards[j] = reward_grid.estimate_reward(feasible_observation)
-
-            return
-
-        prev_observations : Dict[int, ObservationAction] = {i : ObservationAction(prev_opportunity[2], 
-                                                                                    [*ground_points[prev_opportunity[0]][prev_opportunity[1]],0.0], 
-                                                                                    th_imgs[i], 
-                                                                                    t_imgs[i])
-                                                            for i,prev_opportunity in prev_opportunities}
-
-        for i,_ in prev_opportunities: # there are previous possible observations
-            # get previous observation
-            prev_observation : ObservationAction = prev_observations[i]
-                            
-            # check if an observation is possible
-            feasible_observation = next((possible_observation for possible_observation in possible_observations
-                                        if self.is_observation_path_valid(state, specs, [prev_observation, possible_observation])),
-                                        None)
-            
-            # update imaging time, look angle, and reward
-            if feasible_observation is not None:
-                # estimate reward for observation
-                reward = reward_grid.estimate_reward(feasible_observation)
-
-                # update results only if cumulative reward is increased
-                if cumulative_rewards[i] + reward > cumulative_rewards[j] and not np.isnan(t_imgs[i]):
-                    t_imgs[j] = feasible_observation.t_start
-                    th_imgs[j] = feasible_observation.look_angle
-                    rewards[j] = reward
-
-                    cumulative_rewards[j] += cumulative_rewards[i] + rewards[j]
-                    preceeding_observations[j] = i
+        # update cummulative reward
+        for i in prev_opportunities:
+            # update cumulative reward
+            if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j]:
+                cumulative_rewards[j] = cumulative_rewards[i] + rewards[j]
+                preceeding_observations[j] = i
 
     @runtime_tracker
     def populate_adjacency_matrix(self, 

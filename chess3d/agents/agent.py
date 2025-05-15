@@ -697,6 +697,7 @@ class SimulatedAgent(AbstractAgent):
         self.tasks : list[GenericObservationTask] = []
         self.observation_history : ObservationHistory = None
 
+    @runtime_tracker
     def update_tasks(self, 
                      incoming_reqs : list, 
                      t : float) -> None:
@@ -831,10 +832,13 @@ class SimulatedAgent(AbstractAgent):
 
                 # Modify current Plan      
                 self.plan : Plan = self.replanner.generate_plan(state, 
-                                                                self.specs,    
+                                                                self.specs,
                                                                 self.plan,
                                                                 self._clock_config,
-                                                                self.orbitdata
+                                                                self.orbitdata,
+                                                                self.mission,
+                                                                self.tasks,
+                                                                self.observation_history
                                                                 )
 
                 # update last time plan was updated
@@ -848,7 +852,7 @@ class SimulatedAgent(AbstractAgent):
                 pending_actions = []
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                self.__log_plan(self.plan, "REPLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 

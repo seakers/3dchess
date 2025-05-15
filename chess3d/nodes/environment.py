@@ -311,10 +311,11 @@ class SimulationEnvironment(EnvironmentNode):
 
     @runtime_tracker
     def update_databases(self, t : float) -> None:
-        # update orbitdata
+        # TODO fix update orbitdata to consider two time steps ago
         for _,agent_orbitdata in self.orbitdata.items(): 
             agent_orbitdata : OrbitData
-            agent_orbitdata.update_databases(t)
+            t_update = self.t_update if self.t_update is not None else 0.0
+            agent_orbitdata.update_databases(t_update)
 
         # update events
         self.events = [event for event in self.events if event.is_active(t) or event.is_future(t)]
@@ -530,8 +531,8 @@ class SimulationEnvironment(EnvironmentNode):
             agent_orbitdata : OrbitData = self.orbitdata[agent_state.agent_name]
 
             # get time indexes and bounds
-            t_u = agent_state.t/agent_orbitdata.time_step + 0.5
-            t_l = t_start/agent_orbitdata.time_step - 0.5
+            t_u = t_end
+            t_l = t_start
             
             # get names of the columns of the available coverage data
             orbitdata_columns : list = list(agent_orbitdata.gp_access_data.columns.values)
@@ -556,27 +557,44 @@ class SimulationEnvironment(EnvironmentNode):
                     raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
 
                 # query coverage data of everything that is within the field of view of the agent
-                matching_data = [ row
-                                  for _,row in agent_orbitdata.gp_access_data.iterrows()
-                                  if t_l < row['time index'] <= t_u                             # is being observed at this given time
-                                  and row['instrument'] == instrument.name                      # is being observed by the correct instrument
-                                  and abs(satellite_off_axis_angle \
-                                          - row['look angle [deg]']) <= instrument_off_axis_fov # agent is pointing at the ground point
+                matching_data = [ (time_index,gp_index,pnt_opt,lat,lon,obs_range,look_angle,*_,instrument_name,agent_name)
+                                  for time_index,gp_index,pnt_opt,lat,lon,obs_range,look_angle,*_,instrument_name,agent_name in agent_orbitdata.gp_access_data.values
+                                  if t_l < time_index*agent_orbitdata.time_step <= t_u                            # is being observed at this given time
+                                  and instrument_name == instrument.name                # is being observed by the correct instrument
+                                  and abs(satellite_off_axis_angle - look_angle) <= instrument_off_axis_fov + 1e-6      # agent is pointing at the ground point
                                 ]
                 
+                if not matching_data:
+                    desired_accesses = [ (time_index,gp_index,*_,instrument_name,agent_name)
+                                  for time_index,gp_index,*_,instrument_name,agent_name in agent_orbitdata.gp_access_data.values
+                                  if t_l < time_index*agent_orbitdata.time_step <= t_u  # is being observed at this given time
+                                  and instrument_name == instrument.name                # is being observed by the correct instrument
+                    ]
+                    x = 1
+                    for time_index,gp_index,pnt_opt,lat,lon,obs_range,look_angle,*_,instrument_name,agent_name in desired_accesses:
+                        off_axis_angle = abs(satellite_off_axis_angle - look_angle)
+                        if off_axis_angle <= instrument_off_axis_fov + 1e-6:
+                            x =1
+                        else:
+                            x = 1
+
+
                 # compile data
-                unique_targets = {(row['lat [deg]'], row['lon [deg]']) for row in matching_data}
+                unique_targets = {(lat,lon) 
+                                  for time_index,gp_index,pnt_opt,lat,lon,*_ in matching_data}
                 for lat,lon in unique_targets:
-                    matching_observations = [row for row in matching_data
-                                             if abs(row['lat [deg]'] - lat ) < 1e-3
-                                             and abs(row['lon [deg]'] - lon) < 1e-3]
+                    matching_observations = [(time_index,gp_index,pnt_opt,lat,lon,*_) 
+                                             for time_index,gp_index,pnt_opt,lat_obs,lon_obs,*_ in matching_data
+                                             if abs(lat_obs - lat ) < 1e-3
+                                             and abs(lon_obs - lon) < 1e-3]
                     merged_observation = { column : [] for column in orbitdata_columns }
                     merged_observation['t_start'] = np.Inf
                     merged_observation['t_end'] = np.NINF
                     for matching_observation in matching_observations:
-                        datum = { column : matching_observation[column] for column in orbitdata_columns }
-                        datum['t_start'] = matching_observation['time index'] * agent_orbitdata.time_step
-                        datum['t_end'] = matching_observation['time index'] * agent_orbitdata.time_step
+                        datum = { column : matching_observation[orbitdata_columns.index(column)] for column in orbitdata_columns }
+                        
+                        datum['t_start'] = matching_observation[0] * agent_orbitdata.time_step
+                        datum['t_end'] = matching_observation[0] * agent_orbitdata.time_step
                         
                         for column in orbitdata_columns:
                             if (column in ['instrument', 'agent name', 'grid index', 'GP index', 'lat [deg]', 'lon [deg]', 'pnt-opt index']
