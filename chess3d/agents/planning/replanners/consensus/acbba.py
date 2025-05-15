@@ -10,14 +10,14 @@ from chess3d.agents.actions import ObservationAction
 from chess3d.agents.orbitdata import OrbitData
 from chess3d.agents.planning.replanners.consensus.bids import Bid
 from chess3d.agents.planning.replanners.consensus.consensus import AbstractConsensusReplanner
-from chess3d.agents.science.requests import TaskRequest
+from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 
 
 class ACBBAPlanner(AbstractConsensusReplanner):
     @runtime_tracker    
     def _generate_bids_from_request(self, 
-                                    req: TaskRequest, 
+                                    req: MeasurementRequest, 
                                     state: SimulationAgentState
                                     ) -> set:
         return [Bid(req.id, observation_type, state.agent_name) 
@@ -92,7 +92,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                 state : SimulationAgentState, 
                 specs : object,
                 results : dict,
-                req : TaskRequest, 
+                req : MeasurementRequest, 
                 main_measurement : str
                 ) -> bool:
         """ Checks if an agent has the ability to bid on a measurement task """
@@ -120,7 +120,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
                           state : SimulationAgentState, 
                           specs : object, 
                           path : list, 
-                          req : TaskRequest, 
+                          req : MeasurementRequest, 
                           main_measurement : str, 
                           orbitdata : OrbitData) -> tuple:
         """
@@ -175,7 +175,7 @@ class ACBBAPlanner(AbstractConsensusReplanner):
             # gather list of observation actions
             observations = [ObservationAction(main_measurement, req.target, th_img, t_img)
                             for req, main_measurement, t_img, th_img, _ in path
-                            if isinstance(req,TaskRequest)]
+                            if isinstance(req,MeasurementRequest)]
 
             return self.is_observation_path_valid(state, specs, observations)
         

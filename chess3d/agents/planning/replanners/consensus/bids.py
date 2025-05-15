@@ -5,7 +5,7 @@ from typing import Any, Union
 
 import numpy as np
 
-from chess3d.agents.science.requests import TaskRequest
+from chess3d.agents.science.requests import MeasurementRequest
 
 class BidComparisonResults(Enum):
     UPDATE_TIME = 'update_time'
@@ -491,7 +491,7 @@ class Bid(ABC):
         Returns a string representation of this task bid in the following format:
         - `task_id`, `main_measurement`, `target`, `bidder`, `bid`, `winner`, `t_img`, `t_update`
         """
-        req : TaskRequest = TaskRequest.from_dict(self.req)
+        req : MeasurementRequest = MeasurementRequest.from_dict(self.req)
         split_id = req.id.split('-')
         line_data = [   split_id[0], 
                         self.main_measurement, 
@@ -599,7 +599,7 @@ class BidBuffer(object):
         await self.bid_access_lock.acquire()
 
         if new_bid.req_id not in self.bid_buffer:
-            req : TaskRequest = TaskRequest.from_dict(new_bid.req)
+            req : MeasurementRequest = MeasurementRequest.from_dict(new_bid.req)
             self.bid_buffer[new_bid.req_id] = [None for _ in req.dependency_matrix]
 
         current_bid : Bid = self.bid_buffer[new_bid.req_id][new_bid.subtask_index]
@@ -628,7 +628,7 @@ class BidBuffer(object):
             new_bid : Bid
 
             if new_bid.req_id not in self.bid_buffer:
-                req : TaskRequest = TaskRequest.from_dict(new_bid.req)
+                req : MeasurementRequest = MeasurementRequest.from_dict(new_bid.req)
                 self.bid_buffer[new_bid.req_id] = [None for _ in req.dependency_matrix]
 
             current_bid : Bid = self.bid_buffer[new_bid.req_id][new_bid.subtask_index]

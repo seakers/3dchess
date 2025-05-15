@@ -17,7 +17,6 @@ class ScienceModule(InternalModule):
                     parent_name : str,
                     parent_network_config: NetworkConfig, 
                     data_processor : DataProcessor,
-                    event_mission : Mission,
                     logger: logging.Logger = None
                 ) -> None:
 
@@ -46,13 +45,12 @@ class ScienceModule(InternalModule):
                             logger)
         
         # initialize
-        self.known_reqs : set[TaskRequest] = set()
+        self.known_reqs : set[MeasurementRequest] = set()
 
         # assign parameters
         self.results_path = results_path
         self.parent_name = parent_name
         self.data_processor = data_processor
-        self.event_mission = event_mission
     
     async def sim_wait(self, _: float) -> None:
         # is event-driven; no need to support timed delays
@@ -144,7 +142,7 @@ class ScienceModule(InternalModule):
                             self.log(f"received measurement request message!")
 
                             # unapack measurement request
-                            req : TaskRequest = TaskRequest.from_dict(msg.req)
+                            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
                             
                             # update list of known measurement requests
                             if req.severity > 0.0: self.known_reqs.add(req)
@@ -178,8 +176,6 @@ class ScienceModule(InternalModule):
                 # wait for next observation to be performed by parent agent
                 msg : ObservationResultsMessage = await self.onboard_processing_inbox.get()
 
-                raise NotImplementedError("No case has been implemented for event detected in onboard processing in real-time processor")   
-
                 # unpack information from observation message
                 observation_data = msg.observation_data
                 instrument = Instrument.from_dict(msg.instrument)
@@ -188,50 +184,41 @@ class ScienceModule(InternalModule):
                 reqs_from_observations : list[MeasurementRequestMessage] = []
                 for obs in observation_data:
                     # process observation
-                    event : GeophysicalEvent = self.data_processor.process_observation(instrument, **obs)
+                    lat_event,lon_event,t_start,t_end,t_corr,severity,observations_required \
+                        = self.data_processor.process_observation(instrument, **obs)
 
-                    # no event in observation; skip
-                    if event is None: 
-                        raise NotImplementedError("No case has been implemented for no event detected in onboard processing")   
-
-                    # get event objetives from mission
-                    objectives = [objective for objective in self.event_mission.objectives
-                                if objective.event_type == event.event_type]
-
-                    # generate task request 
-                    # measurement_req = MeasurementRequest(self.parent_name,
-                    #                                     [lat_event,lon_event,0.0],
-                    #                                     severity,
-                    #                                     observations_required,
-                    #                                     t_start, t_end, t_corr)
-                    task_request = TaskRequest(self.parent_name,
-                                            event,
-                                            objectives,
-                                            obs['t_img'])
-                                        
+                    # generate measurement request 
+                    measurement_req = MeasurementRequest(self.get_parent_name(),
+                                                         [lat_event,lon_event,0.0],
+                                                         severity,
+                                                         observations_required,
+                                                         t_start,
+                                                         t_end,
+                                                         t_corr)
+                    
                     # check if another request has already been made for this event
-                    if any([task_request.same_event(req) for req in self.known_reqs]):
+                    if any([measurement_req.same_event(req) for req in self.known_reqs]):
                         # another request has been made for this same event; ignore
-                        task_request.severity = 0.0
-                    elif event.severity > 0:
-                        self.known_reqs.add(task_request)
+                        measurement_req.severity = 0.0
+                    elif severity > 0:
+                        self.known_reqs.add(measurement_req)
                     
                     # send request to all internal agent modules
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 
                                                         self.get_parent_name(), 
-                                                        task_request.to_dict())
+                                                        measurement_req.to_dict())
                     reqs_from_observations.append(req_msg)
                 
                 # create blank request if no requests were discovered in this observation
                 if not reqs_from_observations:
-                    task_request = TaskRequest(self.get_parent_name(),
+                    measurement_req = MeasurementRequest(self.get_parent_name(),
                                                          [-1,-1,0.0],
                                                          0.0,
                                                          [],
                                                          -1)
                     req_msg = MeasurementRequestMessage(self.get_module_name(), 
                                                         self.get_parent_name(), 
-                                                        task_request.to_dict())
+                                                        measurement_req.to_dict())
                     reqs_from_observations.append(req_msg)
 
                 # package into bus    

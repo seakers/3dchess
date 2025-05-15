@@ -3,7 +3,7 @@ import unittest
 
 import pandas as pd
 
-from chess3d.simulation import Simulation
+from chess3d.mission import Mission
 from chess3d.utils import print_welcome
 
 class TestNaivePlanner(unittest.TestCase):
@@ -60,7 +60,7 @@ class TestNaivePlanner(unittest.TestCase):
         }
 
         # initialize mission
-        self.mission : Simulation = Simulation.from_dict(self.scenario_specs)
+        self.mission : Mission = Mission.from_dict(self.scenario_specs)
 
     def test_events(self) -> None:
         # load events parameters

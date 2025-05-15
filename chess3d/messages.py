@@ -127,8 +127,6 @@ class ObservationResultsMessage(SimulationMessage):
                  agent_state : dict, 
                  observation_action : dict, 
                  instrument : dict,
-                 t_start : float,
-                 t_end : float,
                  observation_data : list = [],
                  id: str = None, 
                  path : list = [], **_):
@@ -142,8 +140,6 @@ class ObservationResultsMessage(SimulationMessage):
         self.agent_state = agent_state
         self.observation_action = observation_action
         self.instrument = instrument
-        self.t_start = t_start
-        self.t_end = t_end
         self.observation_data = observation_data
 
 class ObservationPerformedMessage(SimulationMessage):

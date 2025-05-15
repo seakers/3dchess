@@ -10,7 +10,81 @@ import numpy as np
 from datetime import timedelta
 from orbitpy.mission import Mission
 
-from chess3d.utils import Interval
+class TimeInterval:
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+        if self.end < self.start:
+            raise Exception('The end of time interval must be later than beginning of the interval.')
+
+    def is_after(self, t):
+        return t < self.start
+
+    def is_before(self, t):
+        return self.end < t
+
+    def is_during(self, t):
+        return self.start <= t <= self.end
+    
+    def has_overlap(self, __other : object) -> bool:
+        """ checks if a this time interval has an overlap with another """
+        return (    __other.start <= self.start <= __other.end
+                or  __other.start <= self.end <= __other.end 
+                or  (self.start <= __other.start and __other.end <= self.end)) 
+
+    def merge(self, __other : object) -> object:
+        """ merges two time intervals and returns their intersect """
+
+        __other : TimeInterval
+        if not self.has_overlap(__other):
+            raise ValueError("cannot merge two time intervals with no overlap")
+
+        self.start = max(self.start, __other.start)
+        self.end = min(self.end, __other.end)
+
+    def extend(self, t: float) -> None:
+        """ extends time interval """
+
+        if t < self.start:
+            self.start = t
+        elif t > self.end:
+            self.end = t
+
+    def duration(self) -> int:
+        return self.end - self.start
+
+    def __eq__(self, __value: object) -> bool:
+        return abs(self.start - __value.start) < 1e-6 and abs(self.end - __value.end) < 1e-6
+
+    def __gt__(self, __value: object) -> bool:
+        if abs(self.start - __value.start) < 1e-6:
+            return self.duration() > __value.duration()
+        
+        return self.start > __value.start
+
+    def __ge__(self, __value: object) -> bool:
+        if abs(self.start - __value.start) < 1e-6:
+            return self.duration() >= __value.duration()
+        
+        return self.start >= __value.start
+    
+    def __lt__(self, __value: object) -> bool:
+        if abs(self.start - __value.start) < 1e-6:
+            return self.duration() < __value.duration()
+        
+        return self.start < __value.start
+
+    def __le__(self, __value: object) -> bool:
+        if abs(self.start - __value.start) < 1e-6:
+            return self.duration() <= __value.duration()
+        
+        return self.start <= __value.start
+    
+    def __repr__(self) -> str:
+        return f'TimeInterval({self.start},{self.end})'
+    
+    def __hash__(self) -> int:
+        return hash(str(self))
 
 class OrbitData:
     """
@@ -87,7 +161,7 @@ class OrbitData:
         else:
             raise ValueError(f'{src} cannot access {target}.')
 
-    def get_next_isl_access_interval(self, target : str, t : float) -> Interval:
+    def get_next_isl_access_interval(self, target : str, t : float) -> TimeInterval:
         t = t/self.time_step
         isl_data : pd.DataFrame = self.isl_data[target]
         isl_access : pd.DataFrame = isl_data.query('@t <= `end index`').sort_values('start index')
@@ -96,9 +170,9 @@ class OrbitData:
             t_start = max(t, row['start index']) * self.time_step
             t_end = row['end index'] * self.time_step
 
-            return Interval(t_start, t_end)
+            return TimeInterval(t_start, t_end)
 
-        return Interval(np.Inf, np.Inf)
+        return TimeInterval(np.Inf, np.Inf)
 
     def get_next_gs_access(self, t):
         t = t/self.time_step
@@ -111,14 +185,14 @@ class OrbitData:
         """
         Returns the next access to a ground point
         """
-        # # find closest gridpoint 
-        # grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
+        # find closest gridpoint 
+        grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
 
         # find next access
         # TODO
         raise NotImplementedError('TODO: need to implement.')
 
-        interval = Interval(-np.Inf, np.Inf)
+        interval = TimeInterval(-np.Inf, np.Inf)
         instruments = []
         modes = dict()
         return interval, instruments, modes
@@ -171,7 +245,6 @@ class OrbitData:
     def get_orbit_state(self, t: float):
         is_eclipse = self.is_eclipse(t)
 
-        t_original = t
         t = t / self.time_step
         t_u = t + 0.5
         t_l = t - 0.5
@@ -181,10 +254,6 @@ class OrbitData:
                 if t_l < t_i <= t_u]
         
         if not data:
-            if t_u > self.position_data['time index'].max():
-                data = [(self.position_data.values[-1])]
-                x = 1
-        if len(data) > 1:
             x = 1
 
         _,x,y,z,vx,vy,vz = data[0]

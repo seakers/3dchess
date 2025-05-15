@@ -4,7 +4,6 @@ import queue
 import random
 
 from instrupy.base import BasicSensorModel
-from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
 from instrupy.util import ViewGeometry, SphericalGeometry
 from orbitpy.util import Spacecraft
 
@@ -13,13 +12,11 @@ from dmas.utils import runtime_tracker
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.orbitdata import OrbitData, TimeInterval
 from chess3d.agents.planning.rewards import GridPoint, RewardGrid
-from chess3d.agents.planning.tasks import ObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
-from chess3d.utils import Interval
 
 class AbstractPlanner(ABC):
     """ 
@@ -36,7 +33,7 @@ class AbstractPlanner(ABC):
             raise ValueError(f'`logger` must be of type `Logger`. Is of type `{type(logger)}`.')
 
         # initialize attributes
-        self.known_reqs : set[TaskRequest] = set()                   # set of known measurement requests
+        self.known_reqs : set[MeasurementRequest] = set()                   # set of known measurement requests
         self.stats : dict = dict()                                          # collector for runtime performance statistics
         
         # set attribute parameters
@@ -54,7 +51,7 @@ class AbstractPlanner(ABC):
         """ Updates internal knowledge based on incoming percepts """
         
         # check parameters
-        assert all([isinstance(req, TaskRequest) for req in incoming_reqs])
+        assert all([isinstance(req, MeasurementRequest) for req in incoming_reqs])
 
         # update list of known requests
         self.known_reqs.update(incoming_reqs)
@@ -111,12 +108,12 @@ class AbstractPlanner(ABC):
         earliest_accesses = [   orbitdata.get_next_agent_access(target_agent, t_init) 
                                 for target_agent in target_agents]           
         
-        same_access_start = [   abs(access.left - earliest_accesses[0].left) < 1e-3
+        same_access_start = [   abs(access.start - earliest_accesses[0].start) < 1e-3
                                 for access in earliest_accesses 
-                                if isinstance(access, Interval)]
-        same_access_end = [     abs(access.right - earliest_accesses[0].right) < 1e-3
+                                if isinstance(access, TimeInterval)]
+        same_access_end = [     abs(access.end - earliest_accesses[0].end) < 1e-3
                                 for access in earliest_accesses 
-                                if isinstance(access, Interval)]
+                                if isinstance(access, TimeInterval)]
 
         if all(same_access_start) and all(same_access_end):
             # all agents are accessing eachother at the same time; no need for mesasge relays
@@ -155,13 +152,13 @@ class AbstractPlanner(ABC):
                 # query next access interval to children nodes
                 t_access : float = state.t + path_cost
 
-                access_interval : Interval = orbitdata.get_next_agent_access(receiver_agent, t_access)
+                access_interval : TimeInterval = orbitdata.get_next_agent_access(receiver_agent, t_access)
                 
-                if access_interval.left < np.Inf:
+                if access_interval.start < np.Inf:
                     new_path = [path_element for path_element in current_path]
                     new_path.append(receiver_agent)
 
-                    new_cost = access_interval.left - state.t
+                    new_cost = access_interval.start - state.t
 
                     new_times = [path_time for path_time in current_times]
                     new_times.append(new_cost + state.t)
@@ -186,7 +183,7 @@ class AbstractPlanner(ABC):
         
         # query next access interval to children nodes
         sender_orbitdata : OrbitData = orbitdata[state.agent_name]
-        access_interval : Interval = sender_orbitdata.get_next_agent_access(next_dst, state.t)
+        access_interval : TimeInterval = sender_orbitdata.get_next_agent_access(next_dst, state.t)
         t_start : float = access_interval.start
 
         if t_start < np.Inf:
@@ -351,13 +348,6 @@ class AbstractPlanner(ABC):
             cross_track_fov = []
             for instrument_model in instrument.mode:
                 if isinstance(instrument_model, BasicSensorModel):
-                    instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
-                    instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
-                    if instrument_fov_geometry.shape == 'RECTANGULAR':
-                        cross_track_fov.append(instrument_fov_geometry.angle_width)
-                    else:
-                        raise NotImplementedError(f'Extraction of FOV for instruments with view geometry of shape `{instrument_fov_geometry.shape}` not yet implemented.')
-                elif isinstance(instrument_model, PassiveOpticalScannerModel):
                     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
                     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
                     if instrument_fov_geometry.shape == 'RECTANGULAR':
@@ -547,7 +537,7 @@ class AbstractPreplanner(AbstractPlanner):
         self.plan = Preplan(t=-1,horizon=horizon,t_next=0.0)                        # initialized empty plan
                 
         # initialize attributes
-        self.pending_reqs_to_broadcast : set[TaskRequest] = set()            # set of observation requests that have not been broadcasted
+        self.pending_reqs_to_broadcast : set[MeasurementRequest] = set()            # set of observation requests that have not been broadcasted
 
     @runtime_tracker
     def update_percepts(self, 
@@ -562,6 +552,33 @@ class AbstractPreplanner(AbstractPlanner):
                         ) -> None:
         # update percepts
         super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
+
+        # update completion of current plan
+        # self.plan.update_action_completion(completed_actions, aborted_actions, pending_actions, state.t)
+
+        # # update list of pending observation requests to broadcasts
+        # if self.sharing:
+        #     # collect list of measurement requests newly generated by the parent agent
+        #     my_reqs = {req 
+        #                 for req in incoming_reqs
+        #                 if isinstance(req, MeasurementRequest)
+        #                 and req.requester == state.agent_name}
+
+        #     # update list of pending requests to broadcast
+        #     self.pending_reqs_to_broadcast.update(my_reqs)
+
+        #     # collect list of completed broadcasts
+        #     completed_broadcasts = {message_from_dict(**action.msg) 
+        #                         for action in completed_actions
+        #                         if isinstance(action, BroadcastMessageAction)}
+            
+        #     # collect list of completed request broadcasts
+        #     broadcasted_reqs = {MeasurementRequest.from_dict(msg.req) 
+        #                         for msg in completed_broadcasts
+        #                         if isinstance(msg, MeasurementRequestMessage)}
+            
+        #     # remove from list of pending requests to breadcasts if they've been broadcasted already
+        #     self.pending_reqs_to_broadcast.difference_update(broadcasted_reqs)
     
     @runtime_tracker
     def needs_planning( self, 
@@ -587,11 +604,10 @@ class AbstractPreplanner(AbstractPlanner):
                         reward_grid : RewardGrid,
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
-                        mission : Mission
                     ) -> Plan:
         
         # schedule observations
-        observations : list = self._schedule_observations(state, specs, reward_grid, clock_config, orbitdata, mission)
+        observations : list = self._schedule_observations(state, specs, reward_grid, clock_config, orbitdata)
         assert self.is_observation_path_valid(state, specs, observations)
 
         # schedule broadcasts to be perfomed
@@ -752,12 +768,12 @@ class AbstractPreplanner(AbstractPlanner):
             # compile time interval information 
             found = False
             for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
-                interval : Interval
+                interval : TimeInterval
                 t : list
                 th : list
 
-                if (   (t_img - orbitdata.time_step) in interval 
-                    or (t_img + orbitdata.time_step) in interval):
+                if (   interval.is_during(t_img - orbitdata.time_step) 
+                    or interval.is_during(t_img + orbitdata.time_step)):
                     interval.extend(t_img)
                     t.append(t_img)
                     th.append(look_angle)
@@ -765,7 +781,7 @@ class AbstractPreplanner(AbstractPlanner):
                     break                        
 
             if not found:
-                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
+                access_opportunities[grid_index][gp_index][instrument].append([TimeInterval(t_img, t_img), [t_img], [look_angle]])
 
         # convert to `list`
         access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)
@@ -777,100 +793,6 @@ class AbstractPreplanner(AbstractPlanner):
                 
         # return access times and grid information
         return access_opportunities
-    
-    @runtime_tracker
-    def create_tasks_from_accesses(self, 
-                                     access_times : list, 
-                                     ground_points : dict, 
-                                     cross_track_fovs : dict
-                                     ) -> list:
-        """ Creates tasks from access times. """
-        
-        # create one task per each access opportinity
-        tasks : list[ObservationTask] = [ObservationTask(instrument, 
-                                        Interval(min(t), max(t)), 
-                                        Interval(np.mean(th)-cross_track_fovs[instrument]/2, np.mean(th)+cross_track_fovs[instrument]/2), 
-                                        [self.get_coordinates(ground_points, grid_index, gp_index)]                                        
-                                        )
-                        for grid_index, gp_index, instrument, _, t, th in tqdm(access_times, desc="Creating tasks from access times", leave=False)
-                        ]       
-        
-        # check if tasks are clusterable
-        adj : Dict[ObservationTask, set[ObservationTask]] = {task : set() for task in tasks}
-        
-        for i in tqdm(range(len(tasks)), leave=False, desc="Checking task clusterability"):
-            for j in range(i + 1, len(tasks)):
-                if tasks[i].can_combine(tasks[j]):
-                    adj[tasks[i]].add(tasks[j])
-                    adj[tasks[j]].add(tasks[i]) 
-   
-        # sort tasks by degree of adjacency 
-        v : list[ObservationTask] = self.sort_tasks_by_degree(tasks, adj)
-        
-        # only keep tasks that have at least one clusterable task
-        v = [task for task in v if len(adj[task]) > 0]
-        # print(f'\n\n{len(v)} tasks are clusterable out of {len(tasks)} tasks.')
-        
-        # combine tasks into clusters
-        combined_tasks : list[ObservationTask] = []
-        while len(v) > 0:
-            p : ObservationTask = v.pop(0)
-            n_p : list[ObservationTask] = self.sort_tasks_by_degree(list(adj[p]), adj)
-
-            clique : set = {p}
-
-            while len(n_p) > 0:
-                # Pick a neighbor q of p, q \in n_p, such that the number of their common neighbors is maximum: If such p are not unique, pick the p with least edges being deleted
-                q : ObservationTask = n_p.pop(0)
-
-                # Combine q and p into a new p
-                # p.combine(q)
-                clique.add(q)
-
-                # Delete edges from q and p that are not connected to their common neighbors
-                common_neighbors : set[ObservationTask] = adj[p].intersection(adj[q])
-
-                neighbors_to_delete_p : set[ObservationTask] = adj[p].difference(common_neighbors)
-                for neighbor in neighbors_to_delete_p: adj[p].remove(neighbor)
-
-                neighbors_to_delete_q : set[ObservationTask] = adj[q].difference(common_neighbors)
-                for neighbor in neighbors_to_delete_q: adj[q].remove(neighbor)
-
-                # Reset neighbor collection N_p for the new p;
-                n_p : list[ObservationTask] = self.sort_tasks_by_degree(n_p, adj)
-
-            for q in clique: 
-                p.combine(q)
-                adj.pop(q)
-                if q in v: v.remove(q)
-
-            v : list[ObservationTask] = self.sort_tasks_by_degree(v, adj)
-
-            # Add p to the list of combined tasks
-            combined_tasks.append(p)
-
-        # add clustered tasks to the final list of tasks available for scheduling
-        tasks.extend(combined_tasks)
-
-        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] for task in tasks]), \
-            f"Tasks have slew angles larger than the maximum allowed field of view."
-
-        # return tasks
-        return tasks
-    
-    def get_coordinates(self, ground_points : dict, grid_index : int, gp_index : int) -> list:
-        """ Returns the coordinates of the ground points. """
-        lat,lon = ground_points[grid_index][gp_index]
-        return [lat, lon, 0.0]
-    
-    def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:
-        """ Sorts tasks by degree of adjacency. """
-        # calculate degree of each task
-        degrees : dict = {task : len(adjacency[task]) for task in tasks}
-
-        # sort tasks by degree and return
-        return sorted(tasks, key=lambda p: (degrees[p], p.reward, p.availability), reverse=True)
-
 
 class AbstractReplanner(AbstractPlanner):
     """ Repairs plans previously constructed by another planner """
@@ -945,7 +867,7 @@ class AbstractReplanner(AbstractPlanner):
         elif broadcast_action.broadcast_type == FutureBroadcastTypes.REQUESTS:
             msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
                     for req in self.known_reqs
-                    if isinstance(req, TaskRequest)
+                    if isinstance(req, MeasurementRequest)
                     and req.t_start <= state.t <= req.t_end]
         else:
             raise ValueError(f'`{broadcast_action.broadcast_type}` broadcast type not supported.')

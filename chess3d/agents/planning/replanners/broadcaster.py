@@ -7,13 +7,13 @@ from dmas.modules import ClockConfig
 from dmas.messages import SimulationMessage
 import pandas as pd
 
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.agents.orbitdata import OrbitData, TimeInterval
 from chess3d.agents.planning.plan import *
 from chess3d.agents.planning.planner import AbstractReplanner
-from chess3d.agents.planning.rewards import  RewardGrid
+from chess3d.agents.planning.rewards import GridPoint, RewardGrid
+from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SimulationAgentState
-from chess3d.messages import BusMessage
-from chess3d.utils import Interval
+from chess3d.messages import BusMessage, MeasurementRequestMessage, ObservationPerformedMessage, ObservationResultsMessage, message_from_dict
 
 
 class BroadcasterReplanner(AbstractReplanner):
@@ -124,20 +124,20 @@ class BroadcasterReplanner(AbstractReplanner):
     def __calculate_broadcast_opportunities(self, orbitdata: OrbitData) -> list:
         """ calculates broadcast times that overlap with """
         # compile all inter-agent access opportunities
-        intervals : list[Interval] = [Interval(t_start,t_end)
+        intervals : list[TimeInterval] = [TimeInterval(t_start,t_end)
                                           for _,data in orbitdata.isl_data.items()
                                           for t_start,t_end in data.values]
         # TODO include ground station support
 
         # collect unique start times of every access opportunity
-        interval_starts = list({interval.left for interval in intervals})
+        interval_starts = list({interval.start for interval in intervals})
         interval_starts.sort(reverse=True)
 
         return interval_starts
         
         # IDEA only broadcast during overlaps? 
         # merge access intervals
-        merged_intervals : list[Interval] = []
+        merged_intervals : list[TimeInterval] = []
         for interval in intervals:
             overlaps = [merged_interval for merged_interval in merged_intervals
                         if interval.has_overlap(merged_interval)]

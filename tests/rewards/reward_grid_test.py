@@ -8,7 +8,7 @@ from orbitpy.util import Spacecraft
 
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.planning.rewards import RewardGrid, GridPoint
-from chess3d.agents.science.requests import TaskRequest
+from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.science.utility import event_driven
 
 class RewardGridTester(unittest.TestCase):
@@ -280,7 +280,7 @@ class RewardGridTester(unittest.TestCase):
         time_step = 1.0
 
         # create events
-        events = [TaskRequest('ADMIN', [0.0,0.0,0.0], 1.0, ['thermal'], 4.0, 13.0)]
+        events = [MeasurementRequest('ADMIN', [0.0,0.0,0.0], 1.0, ['thermal'], 4.0, 13.0)]
 
         # load reward grid
         reward_grid = RewardGrid(event_driven, self.agent_specs, self.grid_data, **self.grid_params)

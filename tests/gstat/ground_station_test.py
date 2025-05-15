@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from chess3d.simulation import Simulation
+from chess3d.mission import Mission
 from chess3d.utils import print_welcome
 
 class TestGroundStationAgent(unittest.TestCase):
@@ -141,7 +141,7 @@ class TestGroundStationAgent(unittest.TestCase):
         }
 
         # initialize mission
-        self.mission : Simulation = Simulation.from_dict(mission_specs)
+        self.mission : Mission = Mission.from_dict(mission_specs)
 
     def test_mission(self) -> None:
         # execute mission

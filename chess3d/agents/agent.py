@@ -15,14 +15,13 @@ from zmq import SocketType
 from chess3d.agents.planning.plan import Replan, Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
 from chess3d.agents.planning.rewards import RewardGrid
-from chess3d.agents.science.requests import TaskRequest
+from chess3d.agents.science.requests import MeasurementRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
 from chess3d.messages import *
 from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
-from chess3d.mission import Mission
 
 class AbstractAgent(Agent):
     """
@@ -35,14 +34,11 @@ class AbstractAgent(Agent):
                  manager_network_config, 
                  initial_state, 
                  specs : object,
-                 modules : list, 
-                 mission : Mission,
+                 modules, 
                  level = logging.INFO, 
                  logger = None):
-        # initialize agent class
         super().__init__(agent_name, agent_network_config, manager_network_config, initial_state, modules, level, logger)
         
-        # set parameters
         self.specs = specs
         if isinstance(self.specs, Spacecraft):
             self.payload = {instrument.name: instrument for instrument in self.specs.instrument}
@@ -50,7 +46,7 @@ class AbstractAgent(Agent):
             self.payload = {instrument['name']: instrument for instrument in self.specs['instrument']} if 'instrument' in self.specs else dict()
         else:
             raise ValueError(f'`specs` must be of type `Spacecraft` or `dict`. Is of type `{type(specs)}`.')
-        self.mission = mission
+
         self.state_history : list = []
         
         # setup results folder:
@@ -337,8 +333,6 @@ class AbstractAgent(Agent):
                     
     @runtime_tracker
     async def perform_observation(self, action : ObservationAction) -> str:
-        """ Performs a measurement or observation of a given target """
-        
         # update agent state and state history
         self.state : SimulationAgentState
         self.state.update_state(self.get_current_time(), 
@@ -346,18 +340,6 @@ class AbstractAgent(Agent):
         self.state_history.append(self.state.to_dict())
         
         try:
-            t = self.get_current_time()
-            dt = action.t_end - action.t_start
-
-            if dt > 0:
-                # perfrom time wait if needed
-                await self.perform_wait_for_messages(WaitForMessages(t, t+dt), False)
-
-                # update the agent's state
-                self.state.update_state(self.get_current_time(), 
-                                        status=SimulationAgentState.MEASURING)      
-                self.state_history.append(self.state.to_dict())
-            
             # find relevant instrument information 
             instrument : Instrument = self.payload[action.instrument_name]
 
@@ -367,9 +349,7 @@ class AbstractAgent(Agent):
                                                     SimulationElementRoles.ENVIRONMENT.value,
                                                     self.state.to_dict(),
                                                     action.to_dict(),
-                                                    instrument.to_dict(),
-                                                    t,
-                                                    self.get_current_time()
+                                                    instrument.to_dict()
                                                     )
 
             # request measurement data from the environment
@@ -602,12 +582,10 @@ class RealtimeAgent(AbstractAgent):
                  manager_network_config, 
                  initial_state, 
                  specs, 
-                 mission : Mission,
                  planning_module : InternalModule = None,
                  science_module : InternalModule = None,
                  level=logging.INFO, 
                  logger=None):
-        
         # load agent modules
         modules = []
         if planning_module is not None:
@@ -619,7 +597,7 @@ class RealtimeAgent(AbstractAgent):
                 raise AttributeError(f'`science_module` must be of type `ScienceModule`; is of type {type(science_module)}')
             modules.append(science_module)
 
-        super().__init__(agent_name, results_path, agent_network_config, manager_network_config, initial_state, specs, modules, mission, level, logger)
+        super().__init__(agent_name, results_path, agent_network_config, manager_network_config, initial_state, specs, modules, level, logger)
 
     @runtime_tracker
     async def think(self, senses: list) -> list:
@@ -669,7 +647,6 @@ class SimulatedAgent(AbstractAgent):
                  manager_network_config, 
                  initial_state, 
                  specs, 
-                 mission : Mission,
                  processor : DataProcessor = None, 
                  preplanner : AbstractPreplanner = None,
                  replanner : AbstractReplanner = None,
@@ -683,8 +660,7 @@ class SimulatedAgent(AbstractAgent):
                          manager_network_config, 
                          initial_state, 
                          specs, 
-                         [],
-                         mission, 
+                         [], 
                          level, 
                          logger)
         
@@ -705,7 +681,7 @@ class SimulatedAgent(AbstractAgent):
         # unpack and sort senses
         relay_messages, incoming_reqs, observations, \
             states, action_statuses, misc_messages = self._read_incoming_messages(senses)
-        incoming_reqs : list[TaskRequest]
+        incoming_reqs : list[MeasurementRequest]
         states : list[SimulationAgentState]
 
         # check action completion
@@ -723,7 +699,7 @@ class SimulatedAgent(AbstractAgent):
                                            )    
 
         # process performed observations
-        generated_reqs : list[TaskRequest] = self.processor.process_observations(incoming_reqs, observations) if self.processor is not None else []
+        generated_reqs : list[MeasurementRequest] = self.processor.process(incoming_reqs, observations)
         incoming_reqs.extend(generated_reqs)
 
         # compile measurements performed by myself or other agents
@@ -733,9 +709,6 @@ class SimulatedAgent(AbstractAgent):
                             for msg in misc_messages
                             if isinstance(msg, ObservationPerformedMessage)})
                 
-        # TODO update mission objectives
-        # for objective in self.mission.objectives:
-
         # update reward grid
         if self.reward_grid: self.reward_grid.update(self.get_current_time(), observations, incoming_reqs)
 
@@ -763,8 +736,7 @@ class SimulatedAgent(AbstractAgent):
                                                             self.specs,
                                                             self.reward_grid,
                                                             self._clock_config,
-                                                            self.orbitdata,
-                                                            self.mission
+                                                            self.orbitdata
                                                             )
 
                 # save copy of plan for post-processing
@@ -873,7 +845,7 @@ class SimulatedAgent(AbstractAgent):
             senses.remove(bus_msg)
 
         ## classify senses
-        incoming_reqs : list[TaskRequest] = [TaskRequest.from_dict(msg.req) 
+        incoming_reqs : list[MeasurementRequest] = [MeasurementRequest.from_dict(msg.req) 
                                                     for msg in senses 
                                                     if isinstance(msg, MeasurementRequestMessage)
                                                     and msg.req['severity'] > 0.0]

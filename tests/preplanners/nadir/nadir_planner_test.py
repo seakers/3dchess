@@ -1,6 +1,6 @@
 import unittest
 
-from chess3d.simulation import Simulation
+from chess3d.mission import Mission
 from chess3d.utils import print_welcome
 
 class TestNaivePlanner(unittest.TestCase):
@@ -127,10 +127,10 @@ class TestNaivePlanner(unittest.TestCase):
         }
 
         # initialize mission
-        self.mission : Simulation = Simulation.from_dict(scenario_specs)
+        self.mission : Mission = Mission.from_dict(scenario_specs)
 
         # check type of mission object
-        self.assertTrue(isinstance(self.mission, Simulation))
+        self.assertTrue(isinstance(self.mission, Mission))
 
     def test_planner(self) -> None:
         # execute mission

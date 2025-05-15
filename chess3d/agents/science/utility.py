@@ -2,7 +2,7 @@ import random
 from typing import Callable
 import numpy as np
 from chess3d.agents.actions import ObservationAction
-from chess3d.agents.science.requests import TaskRequest
+from chess3d.agents.science.requests import MeasurementRequest
 
 """
 List of utility functions used to evalute the value of observations
@@ -25,13 +25,13 @@ def no_utility(**_) -> float:
 
 def fixed_utility(req : dict, t_img : float, **_) -> float:
     # unpack request
-    req : TaskRequest = TaskRequest.from_dict(req)
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
     return req.severity if req.t_start <= t_img <= req.t_end else 0.0
 
 def random_utility(req : dict, **_) -> float:    
     # unpack request
-    req : TaskRequest = TaskRequest.from_dict(req)
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
     return req.severity * random.random()
 
@@ -54,7 +54,7 @@ def linear_utility(
         - utility (`float`): estimated normalized utility 
     """
     # unpack request
-    req : TaskRequest = TaskRequest.from_dict(req)
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
     
     # calculate urgency factor from task
     utility = req.severity * (t_img - req.t_end) / (req.t_start - req.t_end)
@@ -80,7 +80,7 @@ def exp_utility(
         - utility (`float`): estimated normalized utility 
     """
     # unpack request
-    req : TaskRequest = TaskRequest.from_dict(req)
+    req : MeasurementRequest = MeasurementRequest.from_dict(req)
 
     # check time constraints
     if t_img < req.t_start or req.t_end < t_img:
@@ -112,15 +112,15 @@ def event_driven(
         return reward
 
     # find latest event
-    latest_events : list[TaskRequest] = [event 
+    latest_events : list[MeasurementRequest] = [event 
                                                 for event in events 
                                                 if event.t_start <= t]
     latest_events.sort(key=lambda a : a.t_end)
-    latest_event : TaskRequest = latest_events.pop() if latest_events else None
+    latest_event : MeasurementRequest = latest_events.pop() if latest_events else None
 
     # find latest observations
     observations : list[dict] = list(observations)
-    observations.sort(key= lambda a : a['t'])
+    observations.sort(key= lambda a : a['t_img'])
     
     # calculate utility
     if latest_event:
@@ -130,7 +130,7 @@ def event_driven(
         if t <= latest_event.t_end: # event is current
             # count previous observations
             latest_observations = [observation for observation in observations
-                                   if latest_event.t_start <= observation['t'] <= latest_event.t_end]
+                                   if latest_event.t_start <= observation['t_img'] <= latest_event.t_end]
             
             # calculate reward
             if instrument in latest_event.observation_types:
@@ -143,18 +143,18 @@ def event_driven(
         else: # event has already passed
             # check if an observation has occurred since then
             latest_observations = [observation for observation in observations
-                                   if latest_event.t_end <= observation['t'] <= t]
+                                   if latest_event.t_end <= observation['t_img'] <= t]
             latest_observation = latest_observations.pop() if latest_observations else None
 
             # calculate reward
-            t_init = max(latest_event.t_end, latest_observation['t']) if latest_observation else latest_event.t_end
+            t_init = max(latest_event.t_end, latest_observation['t_img']) if latest_observation else latest_event.t_end
             reward = (t - t_init) * unobserved_reward_rate / 3600  + min_reward
             reward = min(reward, max_unobserved_reward)
 
     else: # no events have been detected for this ground point
         # get latest observation if it exists
         latest_observation = observations.pop() if observations else None
-        t_init = latest_observation['t'] if latest_observation else 0.0
+        t_init = latest_observation['t_img'] if latest_observation else 0.0
         
         # assert (t - t_init) >= 0.0 # TODO fix acbba triggering this
 

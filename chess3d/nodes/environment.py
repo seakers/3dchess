@@ -11,7 +11,6 @@ import concurrent.futures
 
 from instrupy.base import Instrument
 from instrupy.base import BasicSensorModel
-from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
 from instrupy.util import SphericalGeometry, ViewGeometry
 
 from chess3d.agents.science.requests import *
@@ -107,7 +106,7 @@ class SimulationEnvironment(EnvironmentNode):
                 self.agent_connectivity[src][target] = -1
         self.agent_state_update_times = {}
 
-        self.measurement_reqs : set[TaskRequest] = set()
+        self.measurement_reqs : set[MeasurementRequest] = set()
         self.stats = {}
         self.t_0 = None
         self.t_f = None
@@ -130,28 +129,18 @@ class SimulationEnvironment(EnvironmentNode):
         else:
             sim_duration = np.Inf
 
-        if not os.path.isfile(events_path):
-            raise ValueError('`events_path` must point to an existing file.')
-        
-        events_df : pd.DataFrame = pd.read_csv(events_path)
-
-        events = []
-        for _,row in events_df.iterrows():
-            # convert event to GeophysicalEvent
-            if row['start time [s]'] > sim_duration:
-                # event is not in the simulation time frame
-                continue
-
-            event = GeophysicalEvent(
-                row['event type'],
-                row['severity'],
-                (row['lat [deg]'], row['lon [deg]'], 0.0),
-                row['start time [s]'],
-                (row['start time [s]'] + row['duration [s]']),
-                row['decorrelation time [s]'],
-                row['id']
-            )
-            events.append(event)
+        # load events 
+        events : pd.DataFrame = pd.read_csv(events_path)
+        columns = events.columns
+        if len(columns) == 6:
+            data = [(lat,lon,t_start,duration,severity,measurements)
+                    for lat,lon,t_start,duration,severity,measurements in events.values
+                    if t_start <= sim_duration]
+        else:
+            data = [(gp_idx,lat,lon,t_start,duration,severity,measurements)
+                    for gp_idx,lat,lon,t_start,duration,severity,measurements in events.values
+                    if t_start <= sim_duration]
+        events = pd.DataFrame(data=data,columns=columns)
 
         return events
 
@@ -242,7 +231,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
             # some agent broadcasted a measurement request
-            measurement_req : TaskRequest = TaskRequest.from_dict(content['req'])
+            measurement_req : MeasurementRequest = MeasurementRequest.from_dict(content['req'])
 
             # add to list of received measurement requests 
             self.measurement_reqs.add(measurement_req)
@@ -252,8 +241,8 @@ class SimulationEnvironment(EnvironmentNode):
             bus_msg : BusMessage = message_from_dict(**content)
             
             # filter out measurement request messages
-            measurement_reqs : list[TaskRequest] \
-                = [ TaskRequest.from_dict(msg['req'])
+            measurement_reqs : list[MeasurementRequest] \
+                = [ MeasurementRequest.from_dict(msg['req'])
                     for msg in bus_msg.msgs
                     if msg['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value]
             
@@ -317,7 +306,7 @@ class SimulationEnvironment(EnvironmentNode):
             agent_orbitdata.update_databases(t)
 
         # update events
-        self.events = [event for event in self.events if event.is_active(t) or event.is_future(t)]
+        self.events = self.events[self.events['start time [s]'] + self.events['duration [s]'] >= t]
         
         # update time tracker
         self.t_update = t
@@ -331,7 +320,7 @@ class SimulationEnvironment(EnvironmentNode):
         instrument = Instrument.from_dict(msg.instrument) if isinstance(msg.instrument, dict) else msg.instrument
 
         # find/generate measurement results
-        observation_data = self.query_measurement_data(agent_state, instrument, msg.t_start, msg.t_end)
+        observation_data = self.query_measurement_data(agent_state, instrument)
 
         # repsond to request
         self.log(f'measurement results obtained! responding to request')
@@ -518,9 +507,7 @@ class SimulationEnvironment(EnvironmentNode):
     @runtime_tracker
     def query_measurement_data( self,
                                 agent_state : SimulationAgentState, 
-                                instrument : Instrument,
-                                t_start : float,
-                                t_end : float
+                                instrument : Instrument
                                 ) -> dict:
         """
         Queries internal models or data and returns observation information being sensed by the agent
@@ -530,8 +517,9 @@ class SimulationEnvironment(EnvironmentNode):
             agent_orbitdata : OrbitData = self.orbitdata[agent_state.agent_name]
 
             # get time indexes and bounds
-            t_u = agent_state.t/agent_orbitdata.time_step + 0.5
-            t_l = t_start/agent_orbitdata.time_step - 0.5
+            t = agent_state.t/agent_orbitdata.time_step
+            t_u = t + 1
+            t_l = t - 1
             
             # get names of the columns of the available coverage data
             orbitdata_columns : list = list(agent_orbitdata.gp_access_data.columns.values)
@@ -547,51 +535,29 @@ class SimulationEnvironment(EnvironmentNode):
                     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
                     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
                     instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
-                elif isinstance(instrument_model, PassiveOpticalScannerModel):
-                    instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
-                    instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
-                    instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
-
                 else:
                     raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
 
                 # query coverage data of everything that is within the field of view of the agent
-                matching_data = [ row
-                                  for _,row in agent_orbitdata.gp_access_data.iterrows()
-                                  if t_l < row['time index'] <= t_u                             # is being observed at this given time
-                                  and row['instrument'] == instrument.name                      # is being observed by the correct instrument
-                                  and abs(satellite_off_axis_angle \
-                                          - row['look angle [deg]']) <= instrument_off_axis_fov # agent is pointing at the ground point
-                                ]
+                raw_coverage_data = [list(data)
+                                    for data in agent_orbitdata.gp_access_data.values
+                                    if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
+                                    and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
+                                    and abs(satellite_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
+                                    ]
                 
                 # compile data
-                unique_targets = {(row['lat [deg]'], row['lon [deg]']) for row in matching_data}
-                for lat,lon in unique_targets:
-                    matching_observations = [row for row in matching_data
-                                             if abs(row['lat [deg]'] - lat ) < 1e-3
-                                             and abs(row['lon [deg]'] - lon) < 1e-3]
-                    merged_observation = { column : [] for column in orbitdata_columns }
-                    merged_observation['t_start'] = np.Inf
-                    merged_observation['t_end'] = np.NINF
-                    for matching_observation in matching_observations:
-                        datum = { column : matching_observation[column] for column in orbitdata_columns }
-                        datum['t_start'] = matching_observation['time index'] * agent_orbitdata.time_step
-                        datum['t_end'] = matching_observation['time index'] * agent_orbitdata.time_step
-                        
-                        for column in orbitdata_columns:
-                            if (column in ['instrument', 'agent name', 'grid index', 'GP index', 'lat [deg]', 'lon [deg]', 'pnt-opt index']
-                                and len(merged_observation[column]) > 0): 
-                                continue
-                            merged_observation[column].append(datum[column])
-
-                        merged_observation['t_start'] = min(datum['t_start'], merged_observation['t_start'])
-                        merged_observation['t_end'] = max(datum['t_end'], merged_observation['t_end'])
-
-                    for key in merged_observation:
-                        if isinstance(merged_observation[key], list) and len(merged_observation[key]) == 1:
-                            merged_observation[key] = merged_observation[key][0]
-
-                    obs_data.append(merged_observation)
+                for data in raw_coverage_data:                    
+                    obs_data.append({
+                        "t_img"     : data[orbitdata_columns.index('time index')]*agent_orbitdata.time_step,
+                        "lat"       : data[orbitdata_columns.index('lat [deg]')],
+                        "lon"       : data[orbitdata_columns.index('lon [deg]')],
+                        "range"     : data[orbitdata_columns.index('observation range [km]')],
+                        "look"      : data[orbitdata_columns.index('look angle [deg]')],
+                        "incidence" : data[orbitdata_columns.index('incidence angle [deg]')],
+                        "zenith"         : data[orbitdata_columns.index('solar zenith [deg]')],
+                        "instrument_name": data[orbitdata_columns.index('instrument')]
+                    })
 
             # return processed observation data
             return obs_data
