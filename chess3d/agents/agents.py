@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from chess3d.agents.agent import RealtimeAgent, SimulatedAgent
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.orbitdata import OrbitData
 from chess3d.agents.planning.tasks import MonitoringObservationTask, ObservationHistory, SchedulableObservationTask
 
 

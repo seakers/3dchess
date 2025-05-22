@@ -6,11 +6,11 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 from chess3d.agents.actions import ObservationAction
-from chess3d.agents.orbitdata import OrbitData 
+from chess3d.orbitdata import OrbitData 
 from chess3d.agents.planning.plan import Plan, Replan
 from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.planning.replanners.consensus.bids import Bid
-from chess3d.agents.planning.rewards import RewardGrid
+# from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.utils import Interval
@@ -24,7 +24,7 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         specs : object,
-                        reward_grid : RewardGrid,
+                        reward_grid ,
                         current_plan : Plan,
                         clock_config : ClockConfig,
                         orbitdata : dict = None
@@ -82,7 +82,7 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
     def _schedule_observations(self, 
                                state: SimulationAgentState, 
                                specs: object, 
-                               reward_grid: RewardGrid,
+                               reward_grid,
                                results : dict,
                                orbitdata: OrbitData = None
                                ) -> list:

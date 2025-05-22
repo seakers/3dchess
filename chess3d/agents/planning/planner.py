@@ -13,7 +13,7 @@ from dmas.utils import runtime_tracker
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.orbitdata import OrbitData
 from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, SchedulableObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
@@ -841,11 +841,12 @@ class AbstractPreplanner(AbstractPlanner):
         t_index_end = t_end / orbitdata.time_step
 
         # compile coverage data
-        orbitdata_columns : list = list(orbitdata.gp_access_data.columns.values)
-        raw_coverage_data = [(t_index*orbitdata.time_step, *_)
-                             for t_index, *_ in orbitdata.gp_access_data.values
-                             if t_index_start <= t_index <= t_index_end]
-        raw_coverage_data.sort(key=lambda a : a[0])
+        # orbitdata_columns : list = list(orbitdata.gp_access_data.columns.values)
+        # raw_coverage_data = [(t_index*orbitdata.time_step, *_)
+        #                      for t_index, *_ in orbitdata.gp_access_data.values
+        #                      if t_index_start <= t_index <= t_index_end]
+        # raw_coverage_data.sort(key=lambda a : a[0])
+        raw_coverage_data = orbitdata.gp_access_data.lookup_interval(t_start, t_end)
 
         # initiate accestimes 
         access_opportunities = {}

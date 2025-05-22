@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 from chess3d.agents.actions import ObservationAction
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.orbitdata import OrbitData
 from chess3d.mission import *
 from chess3d.utils import Interval
 

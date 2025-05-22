@@ -7,7 +7,7 @@ from dmas.modules import ClockConfig
 from dmas.messages import SimulationMessage
 import pandas as pd
 
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.orbitdata import OrbitData
 from chess3d.agents.planning.plan import *
 from chess3d.agents.planning.planner import AbstractReplanner
 # from chess3d.agents.planning.rewards import  RewardGrid

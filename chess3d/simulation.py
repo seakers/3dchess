@@ -29,7 +29,7 @@ from chess3d.mission import *
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule

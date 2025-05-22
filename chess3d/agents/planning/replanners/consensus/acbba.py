@@ -7,7 +7,7 @@ from orbitpy.util import Spacecraft
 from dmas.utils import runtime_tracker
 
 from chess3d.agents.actions import ObservationAction
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.orbitdata import OrbitData
 from chess3d.agents.planning.replanners.consensus.bids import Bid
 from chess3d.agents.planning.replanners.consensus.consensus import AbstractConsensusReplanner
 from chess3d.agents.science.requests import TaskRequest

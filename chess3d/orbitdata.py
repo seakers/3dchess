@@ -4,6 +4,7 @@ import os
 import random
 import re
 import time
+from typing import Dict
 import pandas as pd
 import numpy as np
 
@@ -11,6 +12,204 @@ from datetime import timedelta
 from orbitpy.mission import Mission
 
 from chess3d.utils import Interval
+
+INTERPOLATION_IGNORED_COLUMNS = [
+    'GP index',
+    'grid index',
+    'agent name',
+    'pnt-opt index',
+    'instrument'
+    'lat [deg]',
+    'lon [deg]', 
+    ]
+
+class TimeIndexedData:
+    def __init__(self, 
+                 name : str,
+                 columns : list,
+                 t : list,
+                 data : dict):
+        assert len(columns) == len(data), 'number of columns and data do not match'
+        assert all([len(data[col]) == len(t) for col in columns]), 'number of time steps and data do not match'
+        
+        self.name = name
+        self.columns = columns
+        self.t = t
+        self.data = data
+
+    def from_dataframe(df : pd.DataFrame, time_step : float, name : str = 'param') -> 'TimeIndexedData':
+        # validate inputs
+        assert 'time index' in df.columns or 'time [s]' in df.columns, 'time column not found in dataframe'
+        assert time_step > 0.0, 'time step must be greater than 0.0'
+
+        # get data columns 
+        columns = list(df.columns.values)
+        
+        # get appropriate time data
+        if 'time index' in columns:
+            # sort dataframe by time index
+            df = df.sort_values(by=['time index'])
+
+            # get time column index
+            time_column_index = columns.index('time index')
+
+            # remove time column from columns list
+            columns.remove('time index')
+
+            # get time data in seconds
+            t = [val*time_step for val in np.array(df.iloc[:, time_column_index].to_numpy())]
+
+        elif 'time [s]' in columns:
+            # sort dataframe by time index
+            df = df.sort_values(by=['time [s]'])
+
+            # get time column index
+            time_column_index = columns.index('time [s]')
+            
+            # remove time column from columns list
+            columns.remove('time [s]')
+
+            # get time data in seconds
+            t = [val for val in np.array(df.iloc[:, time_column_index].to_numpy())]
+        else:
+            raise ValueError('time column not found in dataframe')
+
+        # get data from dataframe and ignore time column
+        data = {col : np.array([row[columns.index(col)] 
+                                for row in df.values]) 
+                for col in columns}
+                
+        # return TimeIndexedData object
+        return TimeIndexedData(name, columns, np.array(t), data)
+
+    def lookup_value(self, t : float, columns : list = None) -> dict:
+        """
+        Returns the value of data at time `t` in seconds
+        """
+        # get desired columns
+        columns = columns if columns is not None else self.columns
+        
+        # interpolate the data to find the value at time `t` and return the data at the specified columns
+        out = {col : np.interp(t, self.t, self.data[col]) 
+                for col in columns}
+        out['time [s]'] = t
+        return out
+    
+    def lookup_interval(self, t_start : float, t_end : float, columns : list = None) -> list:
+        """
+        Returns the value of data between the start and end times in seconds
+        """
+        # validata imputs
+        assert t_start < t_end, 'start time must be less than end time'
+        assert t_start >= 0.0, 'start time must be greater than 0.0'
+        t_end = t_end if t_end < self.t[-1] else self.t[-1]
+
+        # get desired columns
+        columns = columns if columns is not None else self.columns
+
+        # find the indices of the start and end times
+        i_start = np.searchsorted(self.t, t_start, side='left')
+        i_end = np.searchsorted(self.t, t_end, side='right')
+
+        # get the data between the start and end times
+        out : dict[np.array] = {col : self.data[col][i_start:i_end]
+                            for col in columns}
+        out['time [s]'] = [t for t in self.t[i_start:i_end]]
+        
+        if any(len(out[col]) == 0 for col in columns):
+            # TODO what happens when no data is found?
+            raise NotImplementedError('TODO: what happens when no data is found within the interval?')
+
+        if abs(out['time [s]'][0] - t_start) > 1e-6:
+            # interval start time is not in the data
+
+            # check if it is before or after the first data point
+            if out['time [s]'][0] < t_start:
+                # pop fist element of every column
+                if all(len(out[col]) == 1 for col in columns):
+                    out = {col : [] for col in columns}
+                elif any(len(out[col]) > 1 for col in columns):
+                    out = {col : out[col][1:] for col in columns}
+            
+            # insert interpolated start time to the data
+            for col in columns:
+                if 'time' in col: continue
+                out[col] = np.insert(out[col], 0, np.interp(t_end, self.t, self.data[col]))
+            
+            out['time [s]'] = np.insert(out['time [s]'], 0, t_start)
+            x = 1
+
+        if abs(out['time [s]'][-1] - t_end) > 1e-6:
+            # interval end time is not in the data
+
+            # check if it is before or after the final data point
+            if t_end < out['time [s]'][-1]:
+                # pop last element
+                if all(len(out[col]) == 1 for col in columns):
+                    out = {col : [] for col in columns}
+                elif any(len(out[col]) > 0 for col in columns):
+                    out = {col : out[col][:(len(out[col])-2)] for col in columns}
+
+            # append interpolated end time to the data
+            for col in columns:
+                if 'time' in col: continue
+                out[col] = np.append(out[col], np.interp(t_end, self.t, self.data[col]))
+            
+            out['time [s]'] = np.append(out['time [s]'], t_end)
+            x = 1
+            
+        # return the data between the start and end times
+        return out
+
+class IntervalData:
+    def __init__(self, 
+                 name : str,
+                 columns : list,
+                 data : list):
+        self.name = name
+        self.columns = columns
+        self.data = data
+
+    def from_dataframe(df : pd.DataFrame, time_step : float, name : str = 'param') -> 'IntervalData':
+        assert time_step > 0.0, 'time step must be greater than 0.0'
+        assert 'start index' in df.columns, 'start index column not found in dataframe'
+        assert 'end index' in df.columns, 'end index column not found in dataframe'
+        
+        # sort dataframe by time index
+        df.sort_values(by=['start index'])
+
+        # get time column index
+        if any(['index' in col for col in df.columns.values]):
+            # replace time index with time in seconds
+            columns = [col.replace('index', 'time [s]') for col in df.columns.values]
+            
+            # get time data in Inteval format
+            data = [(t_start * time_step, t_end * time_step, row) for t_start,t_end,*row in df.values]
+        else:
+            # get time column index
+            columns = [col for col in df.columns.values]
+            
+            # get time data in Inteval format
+            data = [(t_start, t_end, row) for t_start,t_end,*row in df.values]
+
+        # return IntervalData object
+        return IntervalData(name, columns, data)
+    
+    def lookup(self, t : float) -> list:
+        """
+        Returns interval that contains time `t`. Returns None if no interval contains time `t`
+        """
+        intervals = [(t_start,t_end,row) for t_start,t_end,*row in self.data
+                     if t_start-1e-6 <= t <= t_end+1e-6]
+        intervals.sort()
+
+        return intervals[0] if intervals else None
+    
+    def is_active(self, t : float) -> bool:
+        """
+        Returns True if time `t` is in any of the intervals
+        """
+        return any([t_start-1e-6 <= t <= t_end+1e-6 for t_start,t_end,*_ in self.data])
 
 class OrbitData:
     """
@@ -37,18 +236,18 @@ class OrbitData:
         self.duration = time_data['duration']
 
         # agent position and eclipse information
-        self.eclipse_data = eclipse_data.sort_values(by=['start index'])
-        self.position_data = position_data.sort_values(by=['time index'])
+        self.eclipse_data : IntervalData = IntervalData.from_dataframe(eclipse_data, self.time_step, 'eclipse')
+        self.position_data : TimeIndexedData = TimeIndexedData.from_dataframe(position_data, self.time_step, 'position')   
 
         # inter-satellite communication access times
-        self.isl_data = { satellite_name : isl_data[satellite_name].sort_values(by=['start index']) 
-                         for satellite_name in isl_data }
+        self.isl_data : Dict[str, IntervalData] = {satellite_name : IntervalData.from_dataframe(isl_data[satellite_name], self.time_step, f"{satellite_name.lower()}-isl")
+                                                   for satellite_name in isl_data.keys()}
         
-        # ground station access times
-        self.gs_access_data = gs_access_data.sort_values(by=['start index'])
+        # TODO ground station access times
+        self.gs_access_data : IntervalData = IntervalData.from_dataframe(gs_access_data, self.time_step, 'gs-access')
         
         # ground point access times
-        self.gp_access_data = gp_access_data.sort_values(by=['time index'])
+        self.gp_access_data : TimeIndexedData = TimeIndexedData.from_dataframe(gp_access_data, self.time_step, 'gp-access')
 
         # grid information
         self.grid_data = grid_data
@@ -156,9 +355,7 @@ class OrbitData:
 
     def is_eclipse(self, t: float):
         """ checks if a satellite is currently in eclise at time `t`. """
-        t_e = t / self.time_step
-
-        return any([t_start <= t_e <= t_end for t_start,t_end in self.eclipse_data.values])
+        return self.eclipse_data.is_active(t)
 
     def get_position(self, t: float):
         pos, _, _ = self.get_orbit_state(t)
@@ -169,27 +366,18 @@ class OrbitData:
         return vel
         
     def get_orbit_state(self, t: float):
+        # get eclipse data
         is_eclipse = self.is_eclipse(t)
 
-        t_original = t
-        t = t / self.time_step
-        t_u = t + 0.5
-        t_l = t - 0.5
-
-        data = [(t_i,x,y,z,vx,vy,vz) 
-                for t_i,x,y,z,vx,vy,vz in self.position_data.values
-                if t_l < t_i <= t_u]
+        # get position data
+        position_data = self.position_data.lookup_value(t)
         
-        if not data:
-            if t_u > self.position_data['time index'].max():
-                data = [(self.position_data.values[-1])]
-                x = 1
-        if len(data) > 1:
-            x = 1
+        if not position_data:
+            raise ValueError(f'No position data found for time {t} [s].')
 
-        _,x,y,z,vx,vy,vz = data[0]
-        pos = [x, y, z]
-        vel = [vx, vy, vz]
+        # unpack position and velocity data
+        pos = [position_data['x [km]'], position_data['y [km]'], position_data['z [km]']]
+        vel = [position_data['vx [km/s]'], position_data['vy [km/s]'], position_data['vz [km/s]']]
         
         return (pos, vel, is_eclipse)
 
