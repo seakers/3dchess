@@ -13,7 +13,7 @@ from dmas.utils import runtime_tracker
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.orbitdata import OrbitData
+from chess3d.orbitdata import OrbitData, TimeIndexedData
 from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, SchedulableObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
@@ -209,19 +209,27 @@ class AbstractPlanner(ABC):
                         for parent_task in task.parent_tasks
                         for *_,grid_index,gp_index in parent_task.targets}
         
-        columns = [column for column in orbitdata.gp_access_data.columns.values]
-        observation_performances = [(t_index, gp_index, pnt_opt, lat, lon, range, look_angle, *_, grid_index, instrument, agent_name)
-                                    for t_index, gp_index, pnt_opt, lat, lon, range, look_angle, *_, grid_index, instrument, agent_name in orbitdata.gp_access_data.values
-                                    if instrument == task.instrument_name
-                                    and t_l <= t_index <= t_u
-                                    and abs(look_angle - th_img) <= cross_track_fovs[task.instrument_name] / 2
-                                    and (int(grid_index), int(gp_index)) in task_targets
-                                    ]
+        # get access times for this task
+        raw_access_data = orbitdata.gp_access_data.lookup_interval(task.accessibility.left, task.accessibility.right)
+        valid_access_data_indeces = [i for i in range(len(raw_access_data))
+                                     if abs(raw_access_data['look angle [deg]'][i] - th_img) <= cross_track_fovs[task.instrument_name] / 2
+                                     and (int(raw_access_data['grid index'][i]), int(raw_access_data['GP index'][i])) in task_targets]
+        observation_performances = {col : [raw_access_data[col][i] for i in valid_access_data_indeces]
+                                    for col in raw_access_data}
+
+        # columns = [column for column in orbitdata.gp_access_data.columns.values]
+        # observation_performances = [(t_index, gp_index, pnt_opt, lat, lon, range, look_angle, *_, grid_index, instrument, agent_name)
+        #                             for t_index, gp_index, pnt_opt, lat, lon, range, look_angle, *_, grid_index, instrument, agent_name in orbitdata.gp_access_data.values
+        #                             if instrument == task.instrument_name
+        #                             and t_l <= t_index <= t_u
+        #                             and abs(look_angle - th_img) <= cross_track_fovs[task.instrument_name] / 2
+        #                             and (int(grid_index), int(gp_index)) in task_targets
+        #                             ]
         
         dt.append(time.perf_counter() - t_0)
         t_0 = time.perf_counter()
 
-        if not observation_performances: 
+        if not any([len(observation_performances[col]) == 0 for col in observation_performances]): 
             return 0.0
         
         instrument_spec : BasicSensorModel = next(instr for instr in specs.instrument).mode[0]
@@ -837,8 +845,6 @@ class AbstractPreplanner(AbstractPlanner):
         # define planning horizon
         t_start = state.t
         t_end = self.plan.t_next+self.horizon
-        t_index_start = t_start / orbitdata.time_step
-        t_index_end = t_end / orbitdata.time_step
 
         # compile coverage data
         # orbitdata_columns : list = list(orbitdata.gp_access_data.columns.values)
@@ -846,23 +852,19 @@ class AbstractPreplanner(AbstractPlanner):
         #                      for t_index, *_ in orbitdata.gp_access_data.values
         #                      if t_index_start <= t_index <= t_index_end]
         # raw_coverage_data.sort(key=lambda a : a[0])
-        raw_coverage_data = orbitdata.gp_access_data.lookup_interval(t_start, t_end)
+        raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(t_start, t_end)
 
         # initiate accestimes 
         access_opportunities = {}
         
-        for data in tqdm(raw_coverage_data, 
-                         desc=f'{state.agent_name}-PREPLANNER: Compiling access opportunities', 
-                         leave=False):
-            t_img = data[orbitdata_columns.index('time index')]
-            grid_index = data[orbitdata_columns.index('grid index')]
-            gp_index = data[orbitdata_columns.index('GP index')]
-            instrument = data[orbitdata_columns.index('instrument')]
-            look_angle = data[orbitdata_columns.index('look angle [deg]')]
-
-            # only consider ground points from the pedefined list of important groundopints
-            if grid_index not in ground_points or gp_index not in ground_points[grid_index]:
-                continue
+        for i in tqdm(range(len(raw_coverage_data)), 
+                        desc=f'{state.agent_name}-PREPLANNER: Compiling access opportunities', 
+                        leave=False):
+            t_img = raw_coverage_data['time [s]'][i]
+            grid_index = raw_coverage_data['grid index'][i]
+            gp_index = raw_coverage_data['GP index'][i]
+            instrument = raw_coverage_data['instrument'][i]
+            look_angle = raw_coverage_data['look angle [deg]'][i]
             
             # initialize dictionaries if needed
             if grid_index not in access_opportunities:
@@ -891,6 +893,8 @@ class AbstractPreplanner(AbstractPlanner):
 
             if not found:
                 access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
+
+            x = 1
 
         # convert to `list`
         access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)

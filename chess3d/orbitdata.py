@@ -75,9 +75,11 @@ class TimeIndexedData:
             raise ValueError('time column not found in dataframe')
 
         # get data from dataframe and ignore time column
-        data = {col : np.array([row[columns.index(col)] 
-                                for row in df.values]) 
-                for col in columns}
+        data = {col : np.array(df[col]) for col in df.columns.values}
+        if 'time index' in data:
+            data.pop('time index')
+        elif 'time [s]' in data:
+            data.pop('time [s]')
                 
         # return TimeIndexedData object
         return TimeIndexedData(name, columns, np.array(t), data)
@@ -115,51 +117,63 @@ class TimeIndexedData:
         out : dict[np.array] = {col : self.data[col][i_start:i_end]
                             for col in columns}
         out['time [s]'] = [t for t in self.t[i_start:i_end]]
+
+        assert all(len(out[col]) == len(out['time [s]']) for col in columns), 'number of time steps and data do not match'
         
-        if any(len(out[col]) == 0 for col in columns):
-            # TODO what happens when no data is found?
-            raise NotImplementedError('TODO: what happens when no data is found within the interval?')
+        # if any(len(out[col]) == 0 for col in columns):
+        #     # TODO what happens when no data is found?
+        #     raise NotImplementedError('TODO: what happens when no data is found within the interval?')
 
-        if abs(out['time [s]'][0] - t_start) > 1e-6:
-            # interval start time is not in the data
+        # if abs(out['time [s]'][0] - t_start) > 1e-6:
+        #     # interval start time is not in the data
 
-            # check if it is before or after the first data point
-            if out['time [s]'][0] < t_start:
-                # pop fist element of every column
-                if all(len(out[col]) == 1 for col in columns):
-                    out = {col : [] for col in columns}
-                elif any(len(out[col]) > 1 for col in columns):
-                    out = {col : out[col][1:] for col in columns}
+        #     # check if it is before or after the first data point
+        #     if out['time [s]'][0] < t_start:
+        #         # pop fist element of every column
+        #         if all(len(out[col]) == 1 for col in columns):
+        #             out = {col : [] for col in columns}
+        #         elif any(len(out[col]) > 1 for col in columns):
+        #             out = {col : out[col][1:] for col in columns}
             
-            # insert interpolated start time to the data
-            for col in columns:
-                if 'time' in col: continue
-                out[col] = np.insert(out[col], 0, np.interp(t_end, self.t, self.data[col]))
+        #     # insert interpolated start time to the data
+        #     for col in columns:
+        #         if 'time' in col: continue
+        #         out[col] = np.insert(out[col], 0, np.interp(t_end, self.t, self.data[col]))
             
-            out['time [s]'] = np.insert(out['time [s]'], 0, t_start)
-            x = 1
+        #     out['time [s]'] = np.insert(out['time [s]'], 0, t_start)
+        #     x = 1
 
-        if abs(out['time [s]'][-1] - t_end) > 1e-6:
-            # interval end time is not in the data
+        # if abs(out['time [s]'][-1] - t_end) > 1e-6:
+        #     # interval end time is not in the data
 
-            # check if it is before or after the final data point
-            if t_end < out['time [s]'][-1]:
-                # pop last element
-                if all(len(out[col]) == 1 for col in columns):
-                    out = {col : [] for col in columns}
-                elif any(len(out[col]) > 0 for col in columns):
-                    out = {col : out[col][:(len(out[col])-2)] for col in columns}
+        #     # check if it is before or after the final data point
+        #     if t_end < out['time [s]'][-1]:
+        #         # pop last element
+        #         if all(len(out[col]) == 1 for col in columns):
+        #             out = {col : [] for col in columns}
+        #         elif any(len(out[col]) > 0 for col in columns):
+        #             out = {col : out[col][:(len(out[col])-2)] for col in columns}
 
-            # append interpolated end time to the data
-            for col in columns:
-                if 'time' in col: continue
-                out[col] = np.append(out[col], np.interp(t_end, self.t, self.data[col]))
+        #     # append interpolated end time to the data
+        #     for col in columns:
+        #         if 'time' in col: continue
+        #         out[col] = np.append(out[col], np.interp(t_end, self.t, self.data[col]))
             
-            out['time [s]'] = np.append(out['time [s]'], t_end)
-            x = 1
+        #     out['time [s]'] = np.append(out['time [s]'], t_end)
+        #     x = 1
             
         # return the data between the start and end times
         return out
+    
+    def __iter__(self):
+        """
+        Returns an iterator over the data
+        """
+        for i in range(len(self.t)):
+            row = {col : self.data[col][i] for col in self.columns}
+            t = self.t[i]
+            yield (t,row)
+
 
 class IntervalData:
     def __init__(self, 
