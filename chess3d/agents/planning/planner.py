@@ -197,9 +197,6 @@ class AbstractPlanner(ABC):
 
         # estimate observation look angle
         th_img = np.average((task.slew_angles.left, task.slew_angles.right))
-        
-        t_l = task.accessibility.left / orbitdata.time_step - 0.5
-        t_u = task.accessibility.right / orbitdata.time_step + 0.5
 
         dt.append(time.perf_counter() - t_0)
         t_0 = time.perf_counter()
@@ -211,9 +208,11 @@ class AbstractPlanner(ABC):
         
         # get access times for this task
         raw_access_data = orbitdata.gp_access_data.lookup_interval(task.accessibility.left, task.accessibility.right)
-        valid_access_data_indeces = [i for i in range(len(raw_access_data))
+        
+        valid_access_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
                                      if abs(raw_access_data['look angle [deg]'][i] - th_img) <= cross_track_fovs[task.instrument_name] / 2
                                      and (int(raw_access_data['grid index'][i]), int(raw_access_data['GP index'][i])) in task_targets]
+        
         observation_performances = {col : [raw_access_data[col][i] for i in valid_access_data_indeces]
                                     for col in raw_access_data}
 
@@ -229,38 +228,44 @@ class AbstractPlanner(ABC):
         dt.append(time.perf_counter() - t_0)
         t_0 = time.perf_counter()
 
-        if not any([len(observation_performances[col]) == 0 for col in observation_performances]): 
+        if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
             return 0.0
         
+        # get target information
         instrument_spec : BasicSensorModel = next(instr for instr in specs.instrument).mode[0]
-        observation_performance = observation_performances[0]
-        grid_index = observation_performance[len(observation_performance)-3]
-        gp_index = observation_performance[1]
+        grid_index = observation_performances['grid index'][0] if 'grid index' in observation_performances else None
+        gp_index = observation_performances['GP index'][0] if 'GP index' in observation_performances else None
 
+        # get previous observation information
         prev_obs = observation_history.get_observation_history(grid_index, gp_index)
+
+        # get current observation information 
+        # TODO : add support for multiple targets within the observation
+        observation_performance = {col : observation_performances[col][0] for col in observation_performances}
 
         dt.append(time.perf_counter() - t_0)
         t_0 = time.perf_counter()
 
+        # package observation performance information
         if task.instrument_name.lower() in ['vnir', 'tir']:
-            measurement = {
+            observation_performance = {
                 "instrument" : task.instrument_name,    
                 "t_start" : task.accessibility.left,
                 "t_end" : task.accessibility.right,
                 "n_obs" : prev_obs.n_obs,
                 "t_prev" : prev_obs.t_last,
-                "horizontal_spatial_resolution" : observation_performance[columns.index('ground pixel cross-track resolution [m]')],
+                "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
                 'spectral_resolution' : instrument_spec.spectral_resolution
             }
         elif task.instrument_name.lower() == 'altimeter':
-            measurement = {
+            observation_performance = {
                 "instrument" : task.instrument_name,    
                 "t_start" : task.accessibility.left,
                 "t_end" : task.accessibility.right,
                 "n_obs" : prev_obs.n_obs,
                 "t_prev" : prev_obs.t_last,
-                "horizontal_spatial_resolution" : observation_performance[columns.index('ground pixel cross-track resolution [m]')],
-                "accuracy" : observation_performance[columns.index('accuracy [m]')],
+                "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
+                "accuracy" : observation_performance['accuracy [m]'],
             }
         else:
             raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
@@ -269,8 +274,8 @@ class AbstractPlanner(ABC):
         task_reward = 0
         for parent_task in task.parent_tasks:
             task_priority = parent_task.objective.priority
-            task_performance = parent_task.objective.eval_performance(measurement)
-            task_score = parent_task.objective.calc_reward(measurement)
+            task_performance = parent_task.objective.eval_performance(observation_performance)
+            task_score = parent_task.objective.calc_reward(observation_performance)
             task_severity = parent_task.event.severity if isinstance(parent_task, EventObservationTask) else 1.0
             
             u_ijk = task_priority * task_performance * task_score * task_severity
@@ -857,7 +862,7 @@ class AbstractPreplanner(AbstractPlanner):
         # initiate accestimes 
         access_opportunities = {}
         
-        for i in tqdm(range(len(raw_coverage_data)), 
+        for i in tqdm(range(len(raw_coverage_data['time [s]'])), 
                         desc=f'{state.agent_name}-PREPLANNER: Compiling access opportunities', 
                         leave=False):
             t_img = raw_coverage_data['time [s]'][i]

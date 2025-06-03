@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import copy
 import json
 import os
@@ -23,7 +24,27 @@ INTERPOLATION_IGNORED_COLUMNS = [
     'lon [deg]', 
     ]
 
-class TimeIndexedData:
+class AbstractData(ABC):
+    """
+    Base class for all database types.
+    """
+    def __init__(self, name : str, columns : list, data : list):
+        self.name = name
+        self.columns = columns
+        self.data = data
+
+    @abstractmethod
+    def from_dataframe(df : pd.DataFrame, time_step : float, name : str = 'param') -> 'AbstractData':
+        """ Creates an instance of the class from a pandas DataFrame. """
+        ...
+    
+    @abstractmethod
+    def update_expired_values(self, t :float) -> None:
+        """ Updates the data by removing all values that are older than time `t`. """
+        ...
+    
+
+class TimeIndexedData(AbstractData):
     def __init__(self, 
                  name : str,
                  columns : list,
@@ -118,7 +139,7 @@ class TimeIndexedData:
                             for col in columns}
         out['time [s]'] = [t for t in self.t[i_start:i_end]]
 
-        assert all(len(out[col]) == len(out['time [s]']) for col in columns), 'number of time steps and data do not match'
+        assert all([len(out[col]) == len(out['time [s]']) for col in columns]), 'number of time steps and data do not match'
         
         # if any(len(out[col]) == 0 for col in columns):
         #     # TODO what happens when no data is found?
@@ -164,7 +185,7 @@ class TimeIndexedData:
             
         # return the data between the start and end times
         return out
-    
+        
     def __iter__(self):
         """
         Returns an iterator over the data
@@ -174,8 +195,19 @@ class TimeIndexedData:
             t = self.t[i]
             yield (t,row)
 
+    def update_expired_values(self, t : float):
+        # only keep values that are still active or that haven't expired yet
+        unexpired_indeces = [(i,t_i) for i, t_i in enumerate(self.t) 
+                             if t_i >= t or abs(t_i - t) <= 1e-6]
+        
+        # update internal data
+        self.t = np.array([t_i for _, t_i in unexpired_indeces])
+        self.data = {col : np.array([self.data[col][i] for i, _ in unexpired_indeces]) 
+                     for col in self.columns}
 
-class IntervalData:
+        return 
+
+class IntervalData(AbstractData):
     def __init__(self, 
                  name : str,
                  columns : list,
@@ -224,6 +256,13 @@ class IntervalData:
         Returns True if time `t` is in any of the intervals
         """
         return any([t_start-1e-6 <= t <= t_end+1e-6 for t_start,t_end,*_ in self.data])
+    
+    def update_expired_values(self, t : float):
+        # only keep intervals that are still active or that haven't ended yet
+        self.data = [(t_start,t_end,row) for t_start,t_end,row in self.data
+                     if t <= t_end or abs(t - t_end) <= 1e-6]
+        
+        return
 
 class OrbitData:
     """
@@ -278,16 +317,23 @@ class OrbitData:
                          )
     
     def update_databases(self, t : float) -> None:
-        # calculate time-step
-        t_index = t / self.time_step 
-
+        
         # exclude outdated data
-        self.eclipse_data = self.eclipse_data[self.eclipse_data['end index'] >= t_index - 1]
-        self.position_data = self.position_data[self.position_data['time index'] >= t_index - 1]
-        self.isl_data = {   satellite_name : self.isl_data[satellite_name][self.isl_data[satellite_name]['end index'] >= t_index - 1]
-                            for satellite_name in self.isl_data}
-        self.gs_access_data = self.gs_access_data[self.gs_access_data['end index'] >= t_index - 1]
-        self.gp_access_data = self.gp_access_data[self.gp_access_data['time index'] >= t_index - 1]
+        self.eclipse_data.update_expired_values(t)
+        self.position_data.update_expired_values(t)
+        self.isl_data = {satellite_name : isl_data.update_expired_values(t) 
+                         for satellite_name, isl_data in self.isl_data.items()}
+        self.gs_access_data.update_expired_values(t)
+        self.gp_access_data.update_expired_values(t)
+
+        return
+
+        # self.eclipse_data = self.eclipse_data[self.eclipse_data['end index'] >= t_index - 1]
+        # self.position_data = self.position_data[self.position_data['time index'] >= t_index - 1]
+        # self.isl_data = {   satellite_name : self.isl_data[satellite_name][self.isl_data[satellite_name]['end index'] >= t_index - 1]
+        #                     for satellite_name in self.isl_data}
+        # self.gs_access_data = self.gs_access_data[self.gs_access_data['end index'] >= t_index - 1]
+        # self.gp_access_data = self.gp_access_data[self.gp_access_data['time index'] >= t_index - 1]
 
     """
     GET NEXT methods

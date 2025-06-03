@@ -642,8 +642,11 @@ class Simulation:
                              measurement_reqs : pd.DataFrame, 
                              observations_performed : pd.DataFrame) -> tuple:
         # unpackage event
-        event = tuple(event)
-        *_,lat,lon,t_start,duration,severity,event_type,t_corr,id = event
+        event = tuple(event) 
+
+        # event format:
+        # gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
+        gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,id = event
 
         # get matching objectives
         observations_reqs = set()
@@ -654,13 +657,13 @@ class Simulation:
 
         # find accesses that overlook a given event's location
         matching_accesses = [
-                                (t_index*agent_orbit_data.time_step, agent_name, instrument)
+                                (t, row['agent name'], row['instrument'])
                                 for _, agent_orbit_data in orbitdata.items()
-                                for t_index,__,___,gp_lat,gp_lon,*____,instrument,agent_name in agent_orbit_data.gp_access_data.values
-                                if t_start <= t_index*agent_orbit_data.time_step <= t_start+duration
-                                and abs(lat - gp_lat) < 1e-3 
-                                and abs(lon - gp_lon) < 1e-3
-                                and instrument.lower() in observations_reqs
+                                for t,row in agent_orbit_data.gp_access_data
+                                if t_start <= t <= t_start+duration
+                                and abs(lat - row['lat [deg]']) < 1e-3 
+                                and abs(lon - row['lon [deg]']) < 1e-3
+                                and row['instrument'].lower() in observations_reqs
                             ]
 
         # initialize map of compiled access intervals
@@ -714,7 +717,11 @@ class Simulation:
 
         # find observations that overlooked a given event's location
         matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)
-                                    for observer,__,t_img,gp_index,pnt_opt,lat_img,lon_img,*_,instrument,agent_name in observations_performed.values
+                                 
+                                    # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],observation range [km],
+                                    # look angle [deg],incidence angle [deg],ground pixel along-track resolution [m],
+                                    # ground pixel cross-track resolution [m],grid index,instrument,agent name,time [s]  
+                                    for observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*_,instrument,agent_name,_ in observations_performed.values
                                     
                                     if self.str2interval(t_img).overlaps(Interval(t_start, t_start+duration))
                                     and abs(lat - lat_img) < 1e-3 
@@ -763,7 +770,7 @@ class Simulation:
             n_gps = sum([len(gps.values) for gps in agent_orbitdata.grid_data]) if n_gps is None else n_gps
 
             # get set of accessible ground points
-            gps_accessible : set = {gp_index for _,gp_index,*__ in agent_orbitdata.gp_access_data.values}
+            gps_accessible : set = {(row['grid index'], row['GP index']) for _,row in agent_orbitdata.gp_access_data}
 
             # update set of accessible ground points
             gps_accessible_compiled.update(gps_accessible)

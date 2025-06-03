@@ -39,11 +39,11 @@ class Interval:
 
     def is_after(self, x : float) -> bool:
         """ checks if the interval starts after the value `x` """
-        return x < self.left
+        return (self.left < x or abs(self.left - x) < 1e-6) if self.left_open else x < self.left
 
     def is_before(self, x : float) -> bool:
         """ checks if the time ends before the value `x` """
-        return self.right < x
+        return (self.right < x or abs(self.right - x) < 1e-6) if self.right_open else self.right < x
     
     def is_empty(self) -> bool:
         """ checks if the interval is empty """
@@ -54,12 +54,6 @@ class Interval:
         
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot check overlap with object of type `{type(__other)}`.')
-
-        if not ( self.left in __other
-                or self.right in __other
-                or __other.left in self
-                or __other.right in self):
-            x =1
 
         return ( self.left in __other
                 or self.right in __other
