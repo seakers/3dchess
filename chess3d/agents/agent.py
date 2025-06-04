@@ -750,8 +750,7 @@ class SimulatedAgent(AbstractAgent):
         self.plan.update_action_completion(completed_actions, 
                                            aborted_actions, 
                                            pending_actions, 
-                                           state.t
-                                           )    
+                                           state.t)    
 
         # process performed observations
         generated_reqs : list[TaskRequest] = self.processor.process_observations(incoming_reqs, observations) if self.processor is not None else []
@@ -864,7 +863,7 @@ class SimulatedAgent(AbstractAgent):
                 x = 1 # breakpoint
                 # -------------------------------------
 
-        plan_out = self.get_next_action(state)
+        plan_out = self.get_next_actions(state)
 
         # --- FOR DEBUGGING PURPOSES ONLY: ---
         # plan_out_dict = [action.to_dict() for action in plan_out]
@@ -875,7 +874,7 @@ class SimulatedAgent(AbstractAgent):
         return plan_out
     
     @runtime_tracker
-    def get_next_action(self, state) -> list:
+    def get_next_actions(self, state) -> list:
         plan_out : list[AgentAction] = self.plan.get_next_actions(state.t)
 
         future_broadcasts = [action for action in plan_out
@@ -904,6 +903,7 @@ class SimulatedAgent(AbstractAgent):
 
         return plan_out
 
+    @runtime_tracker
     def _read_incoming_messages(self, senses : list) -> tuple:
         ## extract relay messages
         relay_messages = [msg for msg in senses if msg.path]
@@ -948,6 +948,7 @@ class SimulatedAgent(AbstractAgent):
 
         return relay_messages, incoming_reqs, observations, states, action_statuses, misc_messages
 
+    @runtime_tracker
     def _check_action_completion(self, action_statuses : list) -> tuple:
         
         # collect all action statuses from messages
