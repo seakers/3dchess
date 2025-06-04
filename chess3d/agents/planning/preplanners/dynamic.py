@@ -188,8 +188,8 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # reverse the sequence to start from the first observation
         observation_sequence.reverse()
 
-        # remove dummy observation if included
-        if 0 in observation_sequence: observation_sequence.remove(0)
+        # remove dummy observation from sequence
+        observation_sequence.remove(0)
 
         # get matching observation actions
         observations : list[ObservationAction] = [observation_actions[j] for j in observation_sequence]
