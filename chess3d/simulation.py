@@ -379,10 +379,6 @@ class Simulation:
         t_gp_reobservation = self.calc_groundpoint_coverage_metrics(observations_per_gp)
         t_event_reobservation = self.calc_event_coverage_metrics(events_observed)
 
-        # count number of GPs observed
-        gps_observed : set = {(grid_index,gp_index) for _,_,_,gp_index,*_,grid_index,_,_ in observations_performed.values}
-        n_gps_observed = len(gps_observed)
-
         # Generate summary
         summary_headers = ['stat_name', 'val']
         summary_data = [
@@ -484,13 +480,17 @@ class Simulation:
                               ) -> tuple:
                
         # classify observations per GP
-        observations_per_gp = {group : [(observer,t_img,lat_img,lon_img,__,instrument) 
-                                        for (observer,t_img,lat_img,lon_img,*__,instrument) in data.values]
+        observations_per_gp = {group : [(observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*__,instrument,agent_name,t) 
+                                        # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],observation range [km],
+                                        # look angle [deg],incidence angle [deg],ground pixel along-track resolution [m],
+                                        # ground pixel cross-track resolution [m],grid index,instrument,agent name,time [s]
+                                        for (observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*__,instrument,agent_name,t) in data.values]
                                  for group,data in observations_performed.groupby(['lat [deg]', 'lon [deg]'])}
 
         # classify events per ground point
         events_per_gp = {group : [[t_start,duration,severity,event_type,t_corr]
-                                  for *_,t_start,duration,severity,event_type,t_corr in data.values]
+                                  # gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
+                                  for *_,t_start,duration,severity,event_type,t_corr,_ in data.values]
                         for group,data in events.groupby(['lat [deg]', 'lon [deg]'])}
 
         # count event presense, detections, and observations

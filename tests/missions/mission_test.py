@@ -317,7 +317,7 @@ class TestToySatCase(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "heuristic",
+                            "@type" : "dp",
                             "period": 1000,
                             # "horizon": 500,
                         },
