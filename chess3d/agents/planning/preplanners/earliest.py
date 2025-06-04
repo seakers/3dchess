@@ -18,5 +18,5 @@ from chess3d.messages import *
 class EarliestAccessPlanner(HeuristicInsertionPlanner):
     """ Schedules observations based on the earliest feasible access point """
     @runtime_tracker
-    def sort_tasks_by_heuristic(self, tasks, *_):
+    def sort_tasks_by_heuristic(self, _, tasks, *__):
         return sorted(tasks, key=lambda task: task.accessibility.left)

@@ -317,7 +317,7 @@ class TestToySatCase(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "dp",
+                            "@type" : "nadir",
                             "period": 1000,
                             # "horizon": 500,
                         },
@@ -371,14 +371,14 @@ class TestToySatCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.simulation.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.simulation.execute()
 
-        # print results
-        self.simulation.print_results()
+    #     # print results
+    #     self.simulation.print_results()
 
-        print('DONE')
+    #     print('DONE')
 
 class TestSingleSatCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -464,7 +464,7 @@ class TestSingleSatCase(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "heuristic",
-                            "period": 7000,
+                            "period": 1000,
                             # "horizon": 500,
                         },
                         # "replanner" : {
@@ -518,14 +518,14 @@ class TestSingleSatCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.simulation.execute()
+    def test_planner(self) -> None:
+        # execute mission
+        self.simulation.execute()
 
-    #     # print results
-    #     self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
 if __name__ == '__main__':
     # terminal welcome message

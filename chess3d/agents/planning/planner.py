@@ -1,4 +1,5 @@
 
+from collections import defaultdict
 from logging import Logger
 import queue
 import random
@@ -73,17 +74,46 @@ class AbstractPlanner(ABC):
                                      cross_track_fovs : dict
                                      ) -> list:
         """ Creates tasks from access times. """
+
+        # generate schedulable tasks from access times
+        schedulable_tasks : list[SchedulableObservationTask] \
+            = self.single_tasks_from_accesses(available_tasks, access_times, cross_track_fovs)
         
-        # create one task per each access opportinity
+        # check if tasks are clusterable
+        adj : Dict[str, set[SchedulableObservationTask]] = self.check_task_clusterability(schedulable_tasks)
+   
+        # cluster tasks based on adjacency
+        combined_tasks : list[SchedulableObservationTask] = self.cluster_tasks(schedulable_tasks, adj)
+
+        # add clustered tasks to the final list of tasks available for scheduling
+        schedulable_tasks.extend(combined_tasks)
+
+        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] for task in schedulable_tasks]), \
+            f"Tasks have slew angles larger than the maximum allowed field of view."
+
+        # return tasks
+        return schedulable_tasks
+    
+    @runtime_tracker
+    def single_tasks_from_accesses(self,
+                                     available_tasks : list,
+                                     access_times : list, 
+                                     cross_track_fovs : dict) -> list:
+        # index access times by ground point and grid index
+        access_index = defaultdict(list)
+        for access_time in access_times:
+            grid_index, gp_index = access_time[0], access_time[1]
+            access_index[(grid_index, gp_index)].append(access_time)
+
+        # create one task per each access opportunity
         schedulable_tasks : list[SchedulableObservationTask] = []
         for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
             task : GenericObservationTask
 
             # find access time for this task
             for *__,gp_index,grid_index in task.targets:
-                matching_access_times = [(access_grid_index,access_gp_index,*_) 
-                                         for access_grid_index,access_gp_index,*_ in access_times
-                                         if access_grid_index == int(gp_index) and access_gp_index == int(grid_index)]
+                # get access times for this ground point and grid index
+                matching_access_times = access_index.get((int(gp_index), int(grid_index)), [])
                 
                 # create a schedulable task for each access time
                 for access_time in matching_access_times:
@@ -103,8 +133,13 @@ class AbstractPlanner(ABC):
                                                              instrument,
                                                              accessibility,
                                                              slew_angles))
-
-        # check if tasks are clusterable
+        
+        # return list of schedulable tasks
+        return schedulable_tasks
+            
+    @runtime_tracker
+    def check_task_clusterability(self, schedulable_tasks : list) -> dict:
+        schedulable_tasks : list[SchedulableObservationTask]
         adj : Dict[str, set[SchedulableObservationTask]] = {task.id : set() for task in schedulable_tasks}
         
         for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
@@ -112,7 +147,16 @@ class AbstractPlanner(ABC):
                 if schedulable_tasks[i].can_combine(schedulable_tasks[j]):
                     adj[schedulable_tasks[i].id].add(schedulable_tasks[j])
                     adj[schedulable_tasks[j].id].add(schedulable_tasks[i]) 
-   
+
+        return adj
+
+    @runtime_tracker
+    def cluster_tasks(self, schedulable_tasks : list, adj : dict) -> list:
+        """ Clusters tasks based on adjacency. """ 
+
+        schedulable_tasks : list[SchedulableObservationTask]
+        adj : Dict[str, set[SchedulableObservationTask]]
+
         # sort tasks by degree of adjacency 
         v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
         
@@ -166,15 +210,8 @@ class AbstractPlanner(ABC):
                 # Add p to the list of combined tasks
                 combined_tasks.append(p)
 
-        # add clustered tasks to the final list of tasks available for scheduling
-        schedulable_tasks.extend(combined_tasks)
+        return combined_tasks
 
-        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] for task in schedulable_tasks]), \
-            f"Tasks have slew angles larger than the maximum allowed field of view."
-
-        # return tasks
-        return schedulable_tasks
-            
     @runtime_tracker
     def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:
         """ Sorts tasks by degree of adjacency. """
@@ -192,97 +229,86 @@ class AbstractPlanner(ABC):
                          orbitdata : OrbitData,
                          observation_history : ObservationHistory
                          ) -> float:
-        dt = []
-        t_0 = time.perf_counter()
-
         # estimate observation look angle
         th_img = np.average((task.slew_angles.left, task.slew_angles.right))
 
-        dt.append(time.perf_counter() - t_0)
-        t_0 = time.perf_counter()
-
-        # calculate task performance
-        task_targets = {(int(grid_index), int(gp_index))
-                        for parent_task in task.parent_tasks
-                        for *_,grid_index,gp_index in parent_task.targets}
-        
-        # get access times for this task
+        # get ground points accessesible during the availability of the task
         raw_access_data = orbitdata.gp_access_data.lookup_interval(task.accessibility.left, task.accessibility.right)
-        
-        valid_access_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
-                                     if abs(raw_access_data['look angle [deg]'][i] - th_img) <= cross_track_fovs[task.instrument_name] / 2
-                                     and (int(raw_access_data['grid index'][i]), int(raw_access_data['GP index'][i])) in task_targets]
-        
-        observation_performances = {col : [raw_access_data[col][i] for i in valid_access_data_indeces]
+
+        # get ground points that are within the agent's field of view
+        accessible_gps_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
+                                        if abs(raw_access_data['look angle [deg]'][i] - th_img) \
+                                            <= cross_track_fovs[task.instrument_name] / 2]
+        accessible_gps_performances = {col : [raw_access_data[col][i] for i in accessible_gps_data_indeces]
                                     for col in raw_access_data}
-
-        # columns = [column for column in orbitdata.gp_access_data.columns.values]
-        # observation_performances = [(t_index, gp_index, pnt_opt, lat, lon, range, look_angle, *_, grid_index, instrument, agent_name)
-        #                             for t_index, gp_index, pnt_opt, lat, lon, range, look_angle, *_, grid_index, instrument, agent_name in orbitdata.gp_access_data.values
-        #                             if instrument == task.instrument_name
-        #                             and t_l <= t_index <= t_u
-        #                             and abs(look_angle - th_img) <= cross_track_fovs[task.instrument_name] / 2
-        #                             and (int(grid_index), int(gp_index)) in task_targets
-        #                             ]
-        
-        dt.append(time.perf_counter() - t_0)
-        t_0 = time.perf_counter()
-
-        if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
-            return 0.0
-        
-        # get target information
-        instrument_spec : BasicSensorModel = next(instr for instr in specs.instrument).mode[0]
-        grid_index = observation_performances['grid index'][0] if 'grid index' in observation_performances else None
-        gp_index = observation_performances['GP index'][0] if 'GP index' in observation_performances else None
-
-        # get previous observation information
-        prev_obs = observation_history.get_observation_history(grid_index, gp_index)
-
-        # get current observation information 
-        # TODO : add support for multiple targets within the observation
-        observation_performance = {col : observation_performances[col][0] for col in observation_performances}
-
-        dt.append(time.perf_counter() - t_0)
-        t_0 = time.perf_counter()
-
-        # package observation performance information
-        if task.instrument_name.lower() in ['vnir', 'tir']:
-            observation_performance = {
-                "instrument" : task.instrument_name,    
-                "t_start" : task.accessibility.left,
-                "t_end" : task.accessibility.right,
-                "n_obs" : prev_obs.n_obs,
-                "t_prev" : prev_obs.t_last,
-                "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
-                'spectral_resolution' : instrument_spec.spectral_resolution
-            }
-        elif task.instrument_name.lower() == 'altimeter':
-            observation_performance = {
-                "instrument" : task.instrument_name,    
-                "t_start" : task.accessibility.left,
-                "t_end" : task.accessibility.right,
-                "n_obs" : prev_obs.n_obs,
-                "t_prev" : prev_obs.t_last,
-                "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
-                "accuracy" : observation_performance['accuracy [m]'],
-            }
-        else:
-            raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
 
         # calculate total task reward          
         task_reward = 0
         for parent_task in task.parent_tasks:
+
+            # get task targets
+            task_targets = {(int(grid_index), int(gp_index))
+                            for *_,grid_index,gp_index in parent_task.targets}
+            
+            # get accesses of desired targets within the task's accessibility and agent's field of view
+            valid_access_data_indeces = [i for i in range(len(accessible_gps_performances['time [s]']))
+                                        if (int(accessible_gps_performances['grid index'][i]), \
+                                            int(accessible_gps_performances['GP index'][i])) in task_targets]
+            observation_performances = {col : [accessible_gps_performances[col][i] for i in valid_access_data_indeces]
+                                        for col in accessible_gps_performances}
+            
+            # check if there are no valid observations for this task
+            if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
+                # no accesses; no reward added
+                continue
+            
+            # get target information
+            instrument_spec : BasicSensorModel = next(instr for instr in specs.instrument).mode[0]
+            grid_index = observation_performances['grid index'][0] if 'grid index' in observation_performances else None
+            gp_index = observation_performances['GP index'][0] if 'GP index' in observation_performances else None
+
+            # get previous observation information
+            prev_obs = observation_history.get_observation_history(grid_index, gp_index)
+
+            # get current observation information 
+            # TODO : add support for multiple targets within the observation
+            observation_performance = {col : observation_performances[col][0] for col in observation_performances}
+
+            # package observation performance information
+            if task.instrument_name.lower() in ['vnir', 'tir']:
+                observation_performance = {
+                    "instrument" : task.instrument_name,    
+                    "t_start" : task.accessibility.left,
+                    "t_end" : task.accessibility.right,
+                    "n_obs" : prev_obs.n_obs,
+                    "t_prev" : prev_obs.t_last,
+                    "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
+                    'spectral_resolution' : instrument_spec.spectral_resolution
+                }
+            elif task.instrument_name.lower() == 'altimeter':
+                observation_performance = {
+                    "instrument" : task.instrument_name,    
+                    "t_start" : task.accessibility.left,
+                    "t_end" : task.accessibility.right,
+                    "n_obs" : prev_obs.n_obs,
+                    "t_prev" : prev_obs.t_last,
+                    "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
+                    "accuracy" : observation_performance['accuracy [m]'],
+                }
+            else:
+                raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
+            
+            # calculate task priority, performance, score and severity
             task_priority = parent_task.objective.priority
             task_performance = parent_task.objective.eval_performance(observation_performance)
             task_score = parent_task.objective.calc_reward(observation_performance)
             task_severity = parent_task.event.severity if isinstance(parent_task, EventObservationTask) else 1.0
             
+            # calculate utility of the task
             u_ijk = task_priority * task_performance * task_score * task_severity
+            
+            # update task reward
             task_reward += u_ijk
-
-        dt.append(time.perf_counter() - t_0)
-        t_0 = time.perf_counter()
 
         # return total task reward
         return task_reward

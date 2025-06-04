@@ -153,6 +153,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
 
         return observations_sorted
     
+    @runtime_tracker
     def sort_tasks_by_heuristic(self, state : SimulationAgentState, tasks : list, specs : Spacecraft, cross_track_fovs : dict, orbitdata : OrbitData, observation_history : ObservationHistory) -> list:
         """ Sorts tasks by heuristic value """
         if tasks:
@@ -175,6 +176,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         # return sorted tasks
         return [task for task, *_ in sorted_data]
     
+    @runtime_tracker
     def calc_heuristic(self,
                         task : SchedulableObservationTask, 
                         specs : Spacecraft, 

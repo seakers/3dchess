@@ -710,17 +710,25 @@ class SimulatedAgent(AbstractAgent):
             req : TaskRequest
             event = req.event
 
+            # create task for each objective
             for objective in req.objectives:
+                # initialize task
                 reobservation_strategy = objective.reobservation_strategy
                 task = EventObservationTask(event, req.mission_name, objective, reobservation_strategy)
-                event_tasks.append(task)
+                
+                # only add to known tasks if task is not already in the list
+                if event_tasks not in self.tasks:
+                    event_tasks.append(task)
         
         # add tasks to task list
         self.tasks.extend(event_tasks)
-        self.tasks = list(set(self.tasks)) # remove duplicates
 
         # remove expired tasks
-        self.tasks = [task for task in self.tasks if task.available(t)]
+        expired_tasks = [task for task in self.tasks if not task.available(t)]
+
+        if expired_tasks:
+            self.log(f'removing {len(expired_tasks)} expired tasks from task list', level=logging.DEBUG)
+            for task in expired_tasks: self.tasks.remove(task)
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -856,6 +864,18 @@ class SimulatedAgent(AbstractAgent):
                 x = 1 # breakpoint
                 # -------------------------------------
 
+        plan_out = self.get_next_action(state)
+
+        # --- FOR DEBUGGING PURPOSES ONLY: ---
+        # plan_out_dict = [action.to_dict() for action in plan_out]
+        # self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
+        # x = 1 # breakpoint
+        # -------------------------------------
+        
+        return plan_out
+    
+    @runtime_tracker
+    def get_next_action(self, state) -> list:
         plan_out : list[AgentAction] = self.plan.get_next_actions(state.t)
 
         future_broadcasts = [action for action in plan_out
@@ -882,12 +902,6 @@ class SimulatedAgent(AbstractAgent):
                 # ignore unknown plan types
                 for action in future_broadcasts: plan_out.remove(action)
 
-        # --- FOR DEBUGGING PURPOSES ONLY: ---
-        # plan_out_dict = [action.to_dict() for action in plan_out]
-        # self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
-        # x = 1 # breakpoint
-        # -------------------------------------
-        
         return plan_out
 
     def _read_incoming_messages(self, senses : list) -> tuple:
