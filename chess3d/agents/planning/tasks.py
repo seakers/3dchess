@@ -320,7 +320,7 @@ class ObservationHistory:
                 )
         
 
-    def update(self, observations : list, orbitdata : OrbitData) -> None:
+    def update(self, observations : list) -> None:
         """
         Update the observation history with the new observations.
         """
@@ -329,7 +329,7 @@ class ObservationHistory:
             for target in observation.targets:
                 lat = target[0]
                 lon = target[1]
-                grid_index,gp_index = self.__get_target_indeces(lat, lon, orbitdata)
+                grid_index,gp_index = self.__get_target_indeces(lat, lon)
 
                 assert grid_index is not None, f"Grid index not found for target {target}."
                 assert gp_index is not None, f"Ground point index not found for target {target}."
@@ -347,7 +347,7 @@ class ObservationHistory:
             raise ValueError(f"Observation history for grid index {grid_index} and ground point index {gp_index} not found.")
 
 
-    def __get_target_indeces(self, lat : float, lon : float, orbitdata : OrbitData) -> tuple:
+    def __get_target_indeces(self, lat : float, lon : float) -> tuple:
         """
         Get the target indeces for the given latitude and longitude.
         """
@@ -359,22 +359,3 @@ class ObservationHistory:
         lon_key = round(lon, 6)
         return self.grid_lookup.get((lat_key, lon_key), (None, None))
         
-        # # get the grid index and ground point index
-        # for grid in orbitdata.grid_data:
-        #     grid : pd.DataFrame 
-            
-        #     matching_rows = [
-        #         row for _, row in grid.iterrows() 
-        #         if abs(row["lat [deg]"] - lat) < 1e-6 
-        #         and abs(row["lon [deg]"] - lon) < 1e-6
-        #     ]
-
-        #     if matching_rows:
-        #         # get the first matching row
-        #         matching_row = matching_rows[0]
-        #         grid_index = int(matching_row["grid index"])
-        #         gp_index = int(matching_row["GP index"])
-        #         return grid_index, gp_index
-            
-        # # if no matching rows are found, return None
-        # return None, None

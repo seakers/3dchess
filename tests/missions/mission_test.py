@@ -371,14 +371,14 @@ class TestToySatCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.simulation.execute()
+    def test_planner(self) -> None:
+        # execute mission
+        self.simulation.execute()
 
-    #     # print results
-    #     self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
 class TestSingleSatCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -472,10 +472,10 @@ class TestSingleSatCase(unittest.TestCase):
                         #     "period" : 400
                         # },
                     },
-                    # "science" : {
-                    #     "@type": "lookup", 
-                    #     "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
-                    # },
+                    "science" : {
+                        "@type": "lookup", 
+                        "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
+                    },
                     "mission" : "Algal blooms monitoring"
                 }
             ],
@@ -518,14 +518,14 @@ class TestSingleSatCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.simulation.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.simulation.execute()
 
-        # print results
-        self.simulation.print_results()
+    #     # print results
+    #     self.simulation.print_results()
 
-        print('DONE')
+    #     print('DONE')
 
 if __name__ == '__main__':
     # terminal welcome message

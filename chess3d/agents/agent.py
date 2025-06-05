@@ -732,14 +732,6 @@ class SimulatedAgent(AbstractAgent):
         #     for i in reversed(expired_indices): del self.tasks[i]
 
     @runtime_tracker
-    def update_observation_history(self, completed_observations : list) -> None:
-        """
-        Updates the observation history with the completed observations.
-        """        
-        # update observation history
-        self.observation_history.update(completed_observations, self.orbitdata)
-
-    @runtime_tracker
     async def think(self, senses : list):
 
         # unpack and sort senses
@@ -770,7 +762,7 @@ class SimulatedAgent(AbstractAgent):
         completed_observations = self.compile_completed_observations(completed_actions, misc_messages)
                 
         # TODO update mission objectives from requests
-        # for objective in self.mission.objectives:
+            # for objective in self.mission.objectives:
 
         # update observation history
         self.update_observation_history(completed_observations)
@@ -983,6 +975,14 @@ class SimulatedAgent(AbstractAgent):
                             if isinstance(msg, ObservationPerformedMessage)})
         
         return completed_observations
+
+    @runtime_tracker
+    def update_observation_history(self, completed_observations : list) -> None:
+        """
+        Updates the observation history with the completed observations.
+        """        
+        # update observation history
+        self.observation_history.update(completed_observations)
 
     @runtime_tracker
     def get_next_actions(self, state) -> list:
