@@ -115,7 +115,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                                               objectives,
                                               th_i,
                                               task_i.accessibility.left,
-                                              task_i.accessibility.right,
+                                              task_i.accessibility.span(),
                                               )
 
             # update observation action list
@@ -138,7 +138,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                                                 objectives,
                                                 th_j,
                                                 task_j.accessibility.left,
-                                                task_j.accessibility.right,
+                                                task_i.accessibility.span(),
                                                 )
 
                 # update observation actions list
@@ -147,25 +147,26 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                 # update adjacency matrix
                 adjacency[i][j] = self.is_observation_path_valid(state, specs, [observation_i, observation_j])
                 adjacency[j][i] = self.is_observation_path_valid(state, specs, [observation_j, observation_i])
-                x =1
+
 
         # calculate optimal path and update results
         for j in tqdm(range(len(schedulable_tasks)), 
                       desc=f'{state.agent_name}-PLANNER: Calculating Optimal Path',
                       leave=False):
-            self.find_optimal_path(state, 
-                                   specs, 
-                                   schedulable_tasks, 
-                                   adjacency, 
-                                   t_imgs, 
-                                   th_imgs, 
-                                   rewards, 
-                                   cumulative_rewards, 
-                                   preceeding_observations, 
-                                   observation_actions,
-                                   j
-                                )
+            # get any possibly prior observation            
+            prev_opportunities : list[tuple] = [i
+                                                for i in range(0,j)
+                                                if adjacency[i][j]]
+            # there are no previous possible observations; skip
+            if not prev_opportunities: return
 
+            # update cummulative reward
+            for i in prev_opportunities:
+                # update cumulative reward
+                if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j]:
+                    cumulative_rewards[j] = cumulative_rewards[i] + rewards[j]
+                    preceeding_observations[j] = i
+            
         # get task with highest cummulative reward
         best_task_index = self.argmax(cumulative_rewards)
 
@@ -207,36 +208,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         max_val = max(values)
         for i, val in enumerate(values):
             if math.isclose(val, max_val, rel_tol=rel_tol, abs_tol=abs_tol):
-                return i
-
-    @runtime_tracker
-    def find_optimal_path(self, 
-                          state : SimulationAgentState, 
-                          specs : dict,
-                          schedulable_tasks : list, 
-                          adjancency : list, 
-                          t_imgs : list, 
-                          th_imgs : list,
-                          rewards : list,
-                          cumulative_rewards : list,
-                          preceeding_observations : list,
-                          observation_actions : list,
-                          j : int
-                          ) -> tuple:
-                   
-        # get any possibly prior observation            
-        prev_opportunities : list[tuple] = [i
-                                            for i in range(0,j)
-                                            if adjancency[i][j]]
-        # there are no previous possible observations; skip
-        if not prev_opportunities: return
-
-        # update cummulative reward
-        for i in prev_opportunities:
-            # update cumulative reward
-            if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j]:
-                cumulative_rewards[j] = cumulative_rewards[i] + rewards[j]
-                preceeding_observations[j] = i
+                return i        
 
     @runtime_tracker
     def populate_adjacency_matrix(self, 

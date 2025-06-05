@@ -698,9 +698,7 @@ class SimulatedAgent(AbstractAgent):
         self.observation_history : ObservationHistory = None
 
     @runtime_tracker
-    def update_tasks(self, 
-                     incoming_reqs : list, 
-                     t : float) -> None:
+    def update_tasks(self, incoming_reqs : list) -> None:
         """
         Updates the list of tasks based on incoming requests.
         """
@@ -722,14 +720,6 @@ class SimulatedAgent(AbstractAgent):
         
         # add tasks to task list
         self.tasks.extend(event_tasks)
-
-        # remove expired tasks
-        # self.tasks = [task for task in self.tasks if task.available(t)]
-        # expired_indices = [i for i, task in enumerate(self.tasks) if not task.available(t)]
-
-        # if expired_indices:
-        #     self.log(f"Removing {len(expired_indices)} expired tasks", level=logging.DEBUG)
-        #     for i in reversed(expired_indices): del self.tasks[i]
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -768,7 +758,7 @@ class SimulatedAgent(AbstractAgent):
         self.update_observation_history(completed_observations)
 
         # update tasks from incoming requests
-        self.update_tasks(incoming_reqs, state.t)
+        self.update_tasks(incoming_reqs)
 
         # --- Create plan ---
         if self.preplanner is not None:

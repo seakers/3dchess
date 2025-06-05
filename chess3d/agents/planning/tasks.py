@@ -174,7 +174,7 @@ class SchedulableObservationTask:
 
         assert isinstance(accessibility, Interval), "Accessibility must be an Interval."
         assert isinstance(slew_angles, Interval), "Slew angles must be an Interval."
-        assert all([not accessibility.intersection(parent_task.availability).is_empty() for parent_task in parent_tasks]), "Accesibility interval must be within the parent tasks' availability interval."
+        assert all([accessibility.overlaps(parent_task.availability) for parent_task in parent_tasks]), "Accesibility interval must be within the parent tasks' availability interval."
 
         # set parameters
         self.parent_tasks : set[GenericObservationTask] = parent_tasks

@@ -155,29 +155,26 @@ class TaskRequest:
             - id (`str`) : identifying number for this task in uuid format
         
         """
-        if not isinstance(requester, str):
-            raise ValueError(f'`requester` must be of type `str`. Is of type {type(requester)}.')
-        if isinstance(event, dict):
-            event = GeophysicalEvent.from_dict(event)
-        if not isinstance(event, GeophysicalEvent):
-            raise ValueError(f'`event` must be of type `GeophysicalEvent`. Is of type {type(event)}.')
-        if not isinstance(objectives, list):
-            raise ValueError(f'`objectives` must be of type `list`. Is of type {type(objectives)}.')
-        if any([not isinstance(objective, dict) for objective in objectives]) and any([not isinstance(objective, MissionObjective) for objective in objectives]):
-            raise ValueError(f'`objectives` must be a `list` of elements of type `dict` or `MissionObjective`.')
-        if len(objectives) == 0:
-            raise ValueError(f'`objectives` must be a non-empty `list` of elements of type `dict` or `MissionObjective`.')
+        # convert arguments if needed
+        if isinstance(event, dict): event = GeophysicalEvent.from_dict(event)
+        if isinstance(objectives[0], dict): objectives = [MissionObjective.from_dict(objective) for objective in objectives]
         if isinstance(t_req, str) and t_req.lower() == "inf": t_req = np.Inf
-        if not isinstance(t_req, float) and not isinstance(t_req, int):
-            raise ValueError(f'`t_req` must be of type `float` or `int`. Is of type {type(t_req)}.')
-        if t_req < 0: raise ValueError(f"`t_req` must have a non-negative value.")
 
+        # check argument types
+        assert isinstance(requester, str), f'`requester` must be of type `str`. Is of type {type(requester)}.'
+        assert isinstance(event, (GeophysicalEvent, dict)), f'`event` must be of type `GeophysicalEvent` or `dict`. Is of type {type(event)}.'
+        assert isinstance(mission_name, str), f'`mission_name` must be of type `str`. Is of type {type(mission_name)}.'
+        assert isinstance(objectives, list), f'`objectives` must be of type `list`. Is of type {type(objectives)}.'
+        assert all([isinstance(objective, (dict, MissionObjective)) for objective in objectives]), \
+               f'`objectives` must be a `list` of elements of type `dict` or `MissionObjective`.'
+        assert len(objectives) > 0, f'`objectives` must be a non-empty `list` of elements of type `dict` or `MissionObjective`.'
+        assert isinstance(t_req, (float, int)), f'`t_req` must be of type `float` or `int`. Is of type {type(t_req)}.'
+        assert t_req >= 0, f"`t_req` must have a non-negative value."
+        
         # initialize attributes
         self.requester : str = requester
         self.event : GeophysicalEvent= event
         self.mission_name : str = mission_name
-        # convert list of dicts to list of MissionObjectives if needed 
-        if isinstance(objectives[0], dict): objectives = [MissionObjective.from_dict(objective) for objective in objectives]
         self.objectives : list[EventDrivenObjective] = [objective for objective in objectives]
         self.t_req : float = t_req
         self.id : str = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())

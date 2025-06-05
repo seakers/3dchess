@@ -123,7 +123,7 @@ class TimeIndexedData(AbstractData):
         Returns the value of data between the start and end times in seconds
         """
         # validata imputs
-        assert t_start < t_end, 'start time must be less than end time'
+        assert t_start <= t_end, 'start time must be less than end time'
         assert t_start >= 0.0, 'start time must be greater than 0.0'
         t_end = t_end if t_end < self.t[-1] else self.t[-1]
 

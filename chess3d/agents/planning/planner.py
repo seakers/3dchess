@@ -69,10 +69,10 @@ class AbstractPlanner(ABC):
 
     @runtime_tracker
     def create_tasks_from_accesses(self, 
-                                     available_tasks : list,
-                                     access_times : list, 
-                                     cross_track_fovs : dict
-                                     ) -> list:
+                                    available_tasks : list,
+                                    access_times : list, 
+                                    cross_track_fovs : dict
+                                    ) -> list:
         """ Creates tasks from access times. """
 
         # generate schedulable tasks from access times
@@ -99,11 +99,12 @@ class AbstractPlanner(ABC):
                                      available_tasks : list,
                                      access_times : list, 
                                      cross_track_fovs : dict) -> list:
+        
         # index access times by ground point and grid index
-        access_index = defaultdict(list)
+        indexed_access_times = defaultdict(list)
         for access_time in access_times:
             grid_index, gp_index = access_time[0], access_time[1]
-            access_index[(grid_index, gp_index)].append(access_time)
+            indexed_access_times[(int(grid_index), int(gp_index))].append(access_time)
 
         # create one task per each access opportunity
         schedulable_tasks : list[SchedulableObservationTask] = []
@@ -111,9 +112,9 @@ class AbstractPlanner(ABC):
             task : GenericObservationTask
 
             # find access time for this task
-            for *__,gp_index,grid_index in task.targets:
+            for *__,grid_index,gp_index in task.targets:
                 # get access times for this ground point and grid index
-                matching_access_times = access_index.get((int(gp_index), int(grid_index)), [])
+                matching_access_times = indexed_access_times.get((int(grid_index), int(gp_index)), [])
                 
                 # create a schedulable task for each access time
                 for access_time in matching_access_times:
@@ -122,17 +123,21 @@ class AbstractPlanner(ABC):
                     accessibility = access_time[3]
                     th = access_time[-1]
                     slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
-                                           np.mean(th)+cross_track_fovs[instrument]/2)
+                                        np.mean(th)+cross_track_fovs[instrument]/2)
 
                     # check if instrument can perform the task                    
                     if not task.objective.can_perform(instrument): 
                         continue # skip if not
 
+                    # check if access time matches task availability
+                    if not task.availability.overlaps(accessibility):
+                        continue # skip if not
+
                     # create and add schedulable task to list of schedulable tasks
                     schedulable_tasks.append(SchedulableObservationTask(task, 
-                                                             instrument,
-                                                             accessibility,
-                                                             slew_angles))
+                                                            instrument,
+                                                            accessibility,
+                                                            slew_angles))
         
         # return list of schedulable tasks
         return schedulable_tasks
@@ -840,8 +845,7 @@ class AbstractPreplanner(AbstractPlanner):
         cross_track_fovs : dict = self.collect_fov_specs(specs)
 
         # calculate coverage opportunities for tasks
-        ground_points : dict = self.get_ground_points(orbitdata)
-        access_opportunities = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
+        access_opportunities = self.calculate_access_opportunities(state, specs, orbitdata)
 
         # get only available tasks
         available_tasks : list[GenericObservationTask] = self.get_available_tasks(tasks, state.t)
@@ -873,19 +877,13 @@ class AbstractPreplanner(AbstractPlanner):
     def calculate_access_opportunities(self, 
                                        state : SimulationAgentState, 
                                        specs : Spacecraft,
-                                       ground_points : dict,
                                        orbitdata : OrbitData
                                     ) -> dict:
         # define planning horizon
         t_start = state.t
-        t_end = self.plan.t_next+self.horizon
+        t_end = t_start+self.horizon
 
         # compile coverage data
-        # orbitdata_columns : list = list(orbitdata.gp_access_data.columns.values)
-        # raw_coverage_data = [(t_index*orbitdata.time_step, *_)
-        #                      for t_index, *_ in orbitdata.gp_access_data.values
-        #                      if t_index_start <= t_index <= t_index_end]
-        # raw_coverage_data.sort(key=lambda a : a[0])
         raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(t_start, t_end)
 
         # initiate accestimes 
