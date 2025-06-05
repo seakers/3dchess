@@ -23,7 +23,7 @@ class DataProcessor(ABC):
         self.known_events : set[GeophysicalEvent] = set()         # events detected by me or others
         self.detected_events : set[GeophysicalEvent] = set()      # events detected by me only
 
-    @runtime_tracker
+    # @runtime_tracker
     def process_observations(self, incoming_reqs : list, observations : list) -> list:
         
         # update list of known requests

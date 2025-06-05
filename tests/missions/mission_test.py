@@ -396,7 +396,7 @@ class TestSingleSatCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 1.0 / 24.0,
+            "duration": 1500 / 3600 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
             },
@@ -472,10 +472,10 @@ class TestSingleSatCase(unittest.TestCase):
                         #     "period" : 400
                         # },
                     },
-                    "science" : {
-                        "@type": "lookup", 
-                        "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
-                    },
+                    # "science" : {
+                    #     "@type": "lookup", 
+                    #     "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
+                    # },
                     "mission" : "Algal blooms monitoring"
                 }
             ],

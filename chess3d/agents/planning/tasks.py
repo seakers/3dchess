@@ -294,6 +294,7 @@ class ObservationHistory:
         Class to track the observation history of the agent.
         """
         self.history = {}
+        self.grid_lookup = {}
 
         for gp_index in range(len(orbitdata.grid_data)):
             grid : pd.DataFrame = orbitdata.grid_data[gp_index]
@@ -310,6 +311,14 @@ class ObservationHistory:
                 # create a new entry for the grid point
                 if gp_index not in self.history[grid_index]:
                     self.history[grid_index][gp_index] = ObservationTracker(lat, lon, grid_index, gp_index) 
+                # create a lookup table for the grid points
+                lat_key = round(row["lat [deg]"], 6)
+                lon_key = round(row["lon [deg]"], 6)
+                self.grid_lookup[(lat_key, lon_key)] = (
+                    int(row["grid index"]),
+                    int(row["GP index"])
+                )
+        
 
     def update(self, observations : list, orbitdata : OrbitData) -> None:
         """
@@ -321,6 +330,9 @@ class ObservationHistory:
                 lat = target[0]
                 lon = target[1]
                 grid_index,gp_index = self.__get_target_indeces(lat, lon, orbitdata)
+
+                assert grid_index is not None, f"Grid index not found for target {target}."
+                assert gp_index is not None, f"Ground point index not found for target {target}."
 
                 # update the observation history
                 tracker : ObservationTracker = self.history[grid_index][gp_index]
@@ -342,23 +354,27 @@ class ObservationHistory:
         # validate inputs
         assert isinstance(lat, (float, int)), "Latitude must be a float or int."
         assert isinstance(lon, (float, int)), "Longitude must be a float or int."
-        
-        # get the grid index and ground point index
-        for grid in orbitdata.grid_data:
-            grid : pd.DataFrame 
-            
-            matching_rows = [
-                row for _, row in grid.iterrows() 
-                if abs(row["lat [deg]"] - lat) < 1e-6 
-                and abs(row["lon [deg]"] - lon) < 1e-6
-            ]
 
-            if matching_rows:
-                # get the first matching row
-                matching_row = matching_rows[0]
-                grid_index = int(matching_row["grid index"])
-                gp_index = int(matching_row["GP index"])
-                return grid_index, gp_index
+        lat_key = round(lat, 6)
+        lon_key = round(lon, 6)
+        return self.grid_lookup.get((lat_key, lon_key), (None, None))
+        
+        # # get the grid index and ground point index
+        # for grid in orbitdata.grid_data:
+        #     grid : pd.DataFrame 
             
-        # if no matching rows are found, return None
-        return None, None
+        #     matching_rows = [
+        #         row for _, row in grid.iterrows() 
+        #         if abs(row["lat [deg]"] - lat) < 1e-6 
+        #         and abs(row["lon [deg]"] - lon) < 1e-6
+        #     ]
+
+        #     if matching_rows:
+        #         # get the first matching row
+        #         matching_row = matching_rows[0]
+        #         grid_index = int(matching_row["grid index"])
+        #         gp_index = int(matching_row["GP index"])
+        #         return grid_index, gp_index
+            
+        # # if no matching rows are found, return None
+        # return None, None

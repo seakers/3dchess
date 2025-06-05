@@ -843,8 +843,11 @@ class AbstractPreplanner(AbstractPlanner):
         ground_points : dict = self.get_ground_points(orbitdata)
         access_opportunities = self.calculate_access_opportunities(state, specs, ground_points, orbitdata)
 
+        # get only available tasks
+        available_tasks : list[GenericObservationTask] = self.get_available_tasks(tasks, state.t)
+
         # create schedulable tasks from known tasks and future access opportunities
-        schedulable_tasks : list[SchedulableObservationTask] = self.create_tasks_from_accesses(tasks, access_opportunities, cross_track_fovs)
+        schedulable_tasks : list[SchedulableObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs)
         
         # schedule observation tasks
         observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, observation_history)
@@ -925,8 +928,6 @@ class AbstractPreplanner(AbstractPlanner):
             if not found:
                 access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
 
-            x = 1
-
         # convert to `list`
         access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)
                                     for grid_index in access_opportunities
@@ -938,6 +939,14 @@ class AbstractPreplanner(AbstractPlanner):
         # return access times and grid information
         return access_opportunities
         
+    @runtime_tracker
+    def get_available_tasks(self, tasks : list, t : float) -> list:
+        """ Returns a list of tasks that are available at the given time """
+        if not isinstance(tasks, list):
+            raise ValueError(f'`tasks` needs to be of type `list`. Is of type `{type(tasks)}`.')
+        
+        return [task for task in tasks if task.available(t)]
+
     @abstractmethod
     def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list, observation_history : ObservationHistory) -> list:
         """ Creates a list of observation actions to be performed by the agent """    

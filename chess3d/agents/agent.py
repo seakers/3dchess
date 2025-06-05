@@ -724,11 +724,20 @@ class SimulatedAgent(AbstractAgent):
         self.tasks.extend(event_tasks)
 
         # remove expired tasks
-        expired_tasks = [task for task in self.tasks if not task.available(t)]
+        # self.tasks = [task for task in self.tasks if task.available(t)]
+        # expired_indices = [i for i, task in enumerate(self.tasks) if not task.available(t)]
 
-        if expired_tasks:
-            self.log(f'removing {len(expired_tasks)} expired tasks from task list', level=logging.DEBUG)
-            for task in expired_tasks: self.tasks.remove(task)
+        # if expired_indices:
+        #     self.log(f"Removing {len(expired_indices)} expired tasks", level=logging.DEBUG)
+        #     for i in reversed(expired_indices): del self.tasks[i]
+
+    @runtime_tracker
+    def update_observation_history(self, completed_observations : list) -> None:
+        """
+        Updates the observation history with the completed observations.
+        """        
+        # update observation history
+        self.observation_history.update(completed_observations, self.orbitdata)
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -740,34 +749,31 @@ class SimulatedAgent(AbstractAgent):
         states : list[SimulationAgentState]
 
         # check action completion
-        completed_actions, aborted_actions, pending_actions = self._check_action_completion(action_statuses)
+        completed_actions, aborted_actions, pending_actions \
+            = self._check_action_completion(action_statuses)
 
         # extract latest state from senses
         states.sort(key = lambda a : a.state['t'])
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
         # update plan completion
-        self.plan.update_action_completion(completed_actions, 
-                                           aborted_actions, 
-                                           pending_actions, 
-                                           state.t)    
+        self.update_plan_completion(completed_actions, 
+                                    aborted_actions, 
+                                    pending_actions, 
+                                    state.t)
 
         # process performed observations
-        generated_reqs : list[TaskRequest] = self.processor.process_observations(incoming_reqs, observations) if self.processor is not None else []
+        generated_reqs : list[TaskRequest] = self.process_observations(incoming_reqs, observations)
         incoming_reqs.extend(generated_reqs)
         
         # compile measurements performed by myself or other agents
-        completed_observations = {action for action in completed_actions
-                        if isinstance(action, ObservationAction)}
-        completed_observations.update({action_from_dict(**msg.observation_action) 
-                            for msg in misc_messages
-                            if isinstance(msg, ObservationPerformedMessage)})
+        completed_observations = self.compile_completed_observations(completed_actions, misc_messages)
                 
         # TODO update mission objectives from requests
         # for objective in self.mission.objectives:
 
         # update observation history
-        self.observation_history.update(completed_observations, self.orbitdata)
+        self.update_observation_history(completed_observations)
 
         # update tasks from incoming requests
         self.update_tasks(incoming_reqs, state.t)
@@ -809,8 +815,6 @@ class SimulatedAgent(AbstractAgent):
                 self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
-
-        t_3 = time.perf_counter()
 
         # --- Modify plan ---
         # Check if reeplanning is needed
@@ -873,36 +877,6 @@ class SimulatedAgent(AbstractAgent):
         
         return plan_out
     
-    @runtime_tracker
-    def get_next_actions(self, state) -> list:
-        plan_out : list[AgentAction] = self.plan.get_next_actions(state.t)
-
-        future_broadcasts = [action for action in plan_out
-                             if isinstance(action, FutureBroadcastMessageAction)]
-        if future_broadcasts:
-            if self.replanner is not None:
-                for action in future_broadcasts:
-                    # get index of current future broadcast message action in output plan
-                    i_action = plan_out.index(action)
-                    # get contents of future broadcast message action
-                    broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.reward_grid)
-                    # replace future message action with broadcast action
-                    plan_out[i_action] = broadcast
-                    # remove future message action from current plan
-                    self.plan.remove(action, state.t)
-                    # add broadcast message action from current plan
-                    self.plan.add(broadcast, state.t)
-                
-                # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
-                x = 1 # breakpoint
-                # -------------------------------------
-            else:
-                # ignore unknown plan types
-                for action in future_broadcasts: plan_out.remove(action)
-
-        return plan_out
-
     @runtime_tracker
     def _read_incoming_messages(self, senses : list) -> tuple:
         ## extract relay messages
@@ -969,6 +943,76 @@ class SimulatedAgent(AbstractAgent):
 
         # return classified lists
         return completed_actions, aborted_actions, pending_actions
+
+    @runtime_tracker
+    def update_plan_completion(self, 
+                                completed_actions : list, 
+                                aborted_actions : list, 
+                                pending_actions : list, 
+                                t : float) -> None:
+        """
+        Updates the plan completion based on the actions performed.
+        """
+        # update plan completion
+        self.plan.update_action_completion(completed_actions, 
+                                           aborted_actions, 
+                                           pending_actions, 
+                                           t)    
+
+    @runtime_tracker
+    def process_observations(self, incoming_reqs, observations) -> list:
+        """
+        Processes observations and generates new requests based on the observations.
+        """
+        if self.processor is not None:
+            # process observations
+            return self.processor.process_observations(incoming_reqs, observations)
+        else:
+            # no processor assigned; return empty list
+            return []
+        
+    @runtime_tracker
+    def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
+        """
+        Compiles completed observations from the plan.
+        """
+        completed_observations = {action for action in completed_actions
+                        if isinstance(action, ObservationAction)}
+        completed_observations.update({action_from_dict(**msg.observation_action) 
+                            for msg in misc_messages
+                            if isinstance(msg, ObservationPerformedMessage)})
+        
+        return completed_observations
+
+    @runtime_tracker
+    def get_next_actions(self, state) -> list:
+        plan_out : list[AgentAction] = self.plan.get_next_actions(state.t)
+
+        future_broadcasts = [action for action in plan_out
+                             if isinstance(action, FutureBroadcastMessageAction)]
+        if future_broadcasts:
+            if self.replanner is not None:
+                for action in future_broadcasts:
+                    # get index of current future broadcast message action in output plan
+                    i_action = plan_out.index(action)
+                    # get contents of future broadcast message action
+                    broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.reward_grid)
+                    # replace future message action with broadcast action
+                    plan_out[i_action] = broadcast
+                    # remove future message action from current plan
+                    self.plan.remove(action, state.t)
+                    # add broadcast message action from current plan
+                    self.plan.add(broadcast, state.t)
+                
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
+                x = 1 # breakpoint
+                # -------------------------------------
+            else:
+                # ignore unknown plan types
+                for action in future_broadcasts: plan_out.remove(action)
+
+        return plan_out
 
     def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
         try:
@@ -1129,3 +1173,4 @@ class SimulatedAgent(AbstractAgent):
 
         except Exception as e:
             x = 1
+            
