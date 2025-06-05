@@ -167,10 +167,8 @@ class Plan(ABC):
 
             if interrupted_actions:
                 earliest_interrupted_action : AgentAction = interrupted_actions.pop(0)
-                if (    isinstance(earliest_interrupted_action, ObservationAction) 
-                    or  isinstance(earliest_interrupted_action, BroadcastMessageAction)
-                    ):
-                    # interrupted action has no duration, schedule broadcast for right after
+                if abs(earliest_interrupted_action.t_end - earliest_interrupted_action.t_start) < 1e-6:
+                    # interrupted action has no duration, schedule task for right after
                     self.actions.insert(self.actions.index(earliest_interrupted_action) + 1, action)
                     
                 else:
@@ -179,6 +177,7 @@ class Plan(ABC):
 
                     # create duplciate of interrupted action with a new ID
                     continued_action : AgentAction = action_from_dict(**earliest_interrupted_action.to_dict())
+                    continued_action.t_end = earliest_interrupted_action.t_end
                     continued_action.id = str(uuid.uuid1())
 
                     # modify interrupted action

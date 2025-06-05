@@ -64,10 +64,8 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             if task.instrument_name not in payload:
                 continue
             
-            # calculate task observation angle
+            # set task observation angle
             th_img = np.average((task.slew_angles.left, task.slew_angles.right))
-
-            # task_times = [Interval(obs.t_start) for obs in observations]
             
             # check if there is overlap with previous scheduled observation
             potential_overlap = [Interval(observation.t_start,  observation.t_end) 
@@ -77,7 +75,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             if any([overlap.overlaps(task.accessibility) for overlap in potential_overlap]):
                 continue
 
-            # compare with previous scheduled observation
+            # find any previous scheduled observation
             actions_prev = [observation for observation in observations
                             if observation.t_start - 1e-6 <= task.accessibility.left]
             
@@ -105,7 +103,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                                                                 cross_track_fovs[task.instrument_name]
                                                                 )
 
-            # compare with future scheduled observation
+            # find any future scheduled observation
             actions_next = [observation for observation in observations
                             if task.accessibility.right - 1e-6 <= observation.t_end]
             if actions_next:
@@ -136,7 +134,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             if prev_action_feasible and next_action_feasible:
                 targets = [[lat,lon,0.0] for parent_task in task.parent_tasks
                                         for lat,lon,*_ in parent_task.targets]
-                objectives = [parent_task.objective for parent_task in task.parent_tasks]
+                objectives = list({parent_task.objective for parent_task in task.parent_tasks})
                 action = ObservationAction(task.instrument_name, 
                                            targets, 
                                            objectives,

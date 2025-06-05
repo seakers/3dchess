@@ -1087,7 +1087,7 @@ class AbstractReplanner(AbstractPlanner):
             # raise NotImplementedError('Reward broadcast not yet implemented.')
 
             latest_observations : list[ObservationAction] = []
-            for grid in reward_grid.rewards:
+            for grid_index,grid in observation_history.history.items():
                 for target in grid:
                     for instrument,grid_point in target.items():
                         grid_point : GridPoint

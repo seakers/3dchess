@@ -463,19 +463,19 @@ class TestSingleSatCase(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "dp",
+                            "@type" : "heuristic",
                             "period": 1000,
                             # "horizon": 500,
                         },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster",
-                        #     "period" : 400
-                        # },
+                        "replanner" : {
+                            "@type" : "broadcaster",
+                            "period" : 400
+                        },
                     },
-                    # "science" : {
-                    #     "@type": "lookup", 
-                    #     "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
-                    # },
+                    "science" : {
+                        "@type": "lookup", 
+                        "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
+                    },
                     "mission" : "Algal blooms monitoring"
                 }
             ],

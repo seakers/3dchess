@@ -308,9 +308,11 @@ class ObservationHistory:
                 # create a new entry for the grid point
                 if grid_index not in self.history:
                     self.history[grid_index] = {}
+                
                 # create a new entry for the grid point
                 if gp_index not in self.history[grid_index]:
                     self.history[grid_index][gp_index] = ObservationTracker(lat, lon, grid_index, gp_index) 
+                
                 # create a lookup table for the grid points
                 lat_key = round(row["lat [deg]"], 6)
                 lon_key = round(row["lon [deg]"], 6)

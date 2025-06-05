@@ -986,7 +986,7 @@ class SimulatedAgent(AbstractAgent):
                     # get index of current future broadcast message action in output plan
                     i_action = plan_out.index(action)
                     # get contents of future broadcast message action
-                    broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.reward_grid)
+                    broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.observation_history)
                     # replace future message action with broadcast action
                     plan_out[i_action] = broadcast
                     # remove future message action from current plan
