@@ -69,7 +69,12 @@ class GeophysicalEvent:
         if isinstance(location, tuple):
             assert len(location) == 4, "Location must be a lat-lon-grid index-gp index tuple of length 4"
         elif isinstance(location, list):
-            assert all(len(loc) == 4 for loc in location), "Location must be a lat-lon-grid index-gp index tuple of length 4"
+            if len(location) == 4:
+                # Check if all elements are numbers
+                assert all(isinstance(loc, (int, float)) for loc in location), "All elements of location must be numbers"
+            else:
+                
+                assert all(len(loc) == 4 for loc in location), "Location must be a lat-lon-grid index-gp index tuple of length 4"
         assert isinstance(t_start, (int, float)), "Start time must be a number"
         assert isinstance(t_end, (int, float)), "End time must be a number"
         assert t_start < t_end, "Start time must be less than end time"

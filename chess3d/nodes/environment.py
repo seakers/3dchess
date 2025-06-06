@@ -257,6 +257,9 @@ class SimulationEnvironment(EnvironmentNode):
                     for msg in bus_msg.msgs
                     if msg['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value]
             
+            if measurement_reqs:
+                x =1 
+
             # add to list of received measurement requests 
             self.measurement_reqs.update(measurement_reqs)
 
@@ -750,16 +753,12 @@ class SimulationEnvironment(EnvironmentNode):
         return pd.DataFrame(data=data, columns=columns)
     
     def compile_requests(self) -> pd.DataFrame:
-        columns = ['ID', 'Requester', 'lat [deg]', 'lon [deg]', 'Severity', 't start', 't end', 't corr', 'Measurment Types']
+        columns = ['request ID', 'Requester', 'event ID', 'mission name', 't_req']
         data = [[req.id,
                  req.requester,
-                 req.target[0],
-                 req.target[1],
-                 req.severity,
-                 req.t_start,
-                 req.t_end,
-                 req.t_corr,
-                 req.observation_types] 
+                 req.event.id,
+                 req.mission_name,
+                 req.t_req] 
                  for req in self.measurement_reqs]
 
         return pd.DataFrame(data=data, columns=columns)

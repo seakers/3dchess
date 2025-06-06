@@ -188,7 +188,8 @@ class TaskRequest:
         Crates a dictionary containing all information contained in this measurement request object
         """
         out = dict(self.__dict__)
-        out['objetives'] = [objective.to_dict() for objective in out['objetives']]
+        out['event'] = out['event'].to_dict() if isinstance(out['event'], GeophysicalEvent) else out['event']
+        out['objectives'] = [objective.to_dict() for objective in out['objectives']]
         return out
 
     def from_dict(d : dict) -> object:

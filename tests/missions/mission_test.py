@@ -231,7 +231,7 @@ class TestToySatCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 3.0 / 24.0,
+            "duration": 1.0 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
             },
@@ -317,14 +317,14 @@ class TestToySatCase(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "dp",
+                            "@type" : "heuristic",
                             "period": 1000,
                             # "horizon": 500,
                         },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster",
-                        #     "period" : 400
-                        # },
+                        "replanner" : {
+                            "@type" : "broadcaster",
+                            "period" : 400
+                        },
                     },
                     "science" : {
                         "@type": "lookup", 
@@ -371,14 +371,14 @@ class TestToySatCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.simulation.execute()
+    def test_planner(self) -> None:
+        # execute mission
+        self.simulation.execute()
 
-    #     # print results
-    #     self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
 class TestSingleSatCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -518,14 +518,14 @@ class TestSingleSatCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.simulation.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.simulation.execute()
 
-        # print results
-        self.simulation.print_results()
+    #     # print results
+    #     self.simulation.print_results()
 
-        print('DONE')
+    #     print('DONE')
 
 if __name__ == '__main__':
     # terminal welcome message

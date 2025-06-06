@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.orbitdata import OrbitData, TimeIndexedData
-from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, SchedulableObservationTask
+from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, ObservationTracker, SchedulableObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -1086,36 +1086,42 @@ class AbstractReplanner(AbstractPlanner):
         if broadcast_action.broadcast_type == FutureBroadcastTypes.REWARD:
             # raise NotImplementedError('Reward broadcast not yet implemented.')
 
-            latest_observations : list[ObservationAction] = []
-            for grid_index,grid in observation_history.history.items():
-                for target in grid:
-                    for instrument,grid_point in target.items():
-                        grid_point : GridPoint
-                        
-                        # collect latest known observation for each ground point
-                        if grid_point.observations:
-                            observations : list[dict] = list(grid_point.observations)
-                            observations.sort(key= lambda a: a['t_img'])
-                            latest_observations.append((instrument, observations[-1]))
+            # compile latest observations from the observation history
+            latest_observations : list[ObservationAction] = [observation_tracker.latest_observation
+                                                             for grid_index,grid in observation_history.history.items()
+                                                             for gp_index, observation_tracker in grid.items()
+                                                             if observation_tracker.latest_observation is not None
+                                                             # TODO ONLY include observations that are within the period of the broadcast
+                                                             # and state.t - self.period <= observation_tracker.latest_observation.t_start
+                                                             ]
+            
+            # index by instrument name
+            instruments_used : set = {latest_observation['instrument_name'] 
+                                      for latest_observation in latest_observations}
+            indexed_observations = {instrument_used: [latest_observation for latest_observation in latest_observations
+                                                      if latest_observation['instrument_name'] == instrument_used]
+                                    for instrument_used in instruments_used}
 
-            instruments_used : set = {instrument for instrument,_ in latest_observations}
-
+            # create ObservationResultsMessage for each instrument
             msgs = [ObservationResultsMessage(state.agent_name, 
                                               state.agent_name, 
                                               state.to_dict(), 
                                               {}, 
-                                              instrument_used,
-                                              [observation_data
-                                                for instrument, observation_data in latest_observations
-                                                if instrument == instrument_used]
+                                              instrument,
+                                              state.t,
+                                              state.t,
+                                              observations
                                               )
-                    for instrument_used in instruments_used]
+                    for instrument, observations in indexed_observations.items()]
             
         elif broadcast_action.broadcast_type == FutureBroadcastTypes.REQUESTS:
+            if self.known_reqs:
+                x =1
+            
             msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
                     for req in self.known_reqs
                     if isinstance(req, TaskRequest)
-                    and req.t_start <= state.t <= req.t_end]
+                    and req.event.t_start <= state.t <= req.event.t_end]
         else:
             raise ValueError(f'`{broadcast_action.broadcast_type}` broadcast type not supported.')
 
