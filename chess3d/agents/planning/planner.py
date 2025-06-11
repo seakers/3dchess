@@ -710,19 +710,15 @@ class AbstractPlanner(ABC):
                 observation_j : ObservationAction = observations[j]
                 th_j = observation_j.look_angle
                 t_j = observation_j.t_start
-                # fov = cross_track_fovs[observation_j.instrument_name]
 
                 # compare to prior measurements
-                
                 if j > 0: # there was a prior observation performed
-
                     # estimate the state of the agent at the prior mesurement
                     observation_i : ObservationAction = observations[j-1]
                     th_i = observation_i.look_angle
                     t_i = observation_i.t_end
 
-                else: # there was prior measurement
-
+                else: # there was no prior measurement
                     # use agent's current state as previous state
                     th_i = state.attitude[0]
                     t_i = state.t                
@@ -733,15 +729,15 @@ class AbstractPlanner(ABC):
                 
                 assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
 
+                # estimate maneuver time betweem states
+                dt_maneuver = abs(th_j - th_i) / max_slew_rate
+
                 # calculate time between measuremnets
                 dt_measurements = t_j - t_i
 
                 # check if observation sequence is correct 
                 if dt_measurements < 0.0:
                     return False
-
-                # estimate maneuver time betweem states
-                dt_maneuver = abs(dt_measurements) / max_slew_rate
 
                 # Slewing constraint: check if there's enough time to maneuver from one observation to another
                 if dt_maneuver > dt_measurements and abs(dt_maneuver - dt_measurements) > 1e-6:
