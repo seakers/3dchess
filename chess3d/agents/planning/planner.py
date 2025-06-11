@@ -733,15 +733,15 @@ class AbstractPlanner(ABC):
                 
                 assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
 
-                # estimate maneuver time betweem states
-                dt_maneuver = abs(th_j - th_i) / max_slew_rate
-
                 # calculate time between measuremnets
                 dt_measurements = t_j - t_i
 
                 # check if observation sequence is correct 
                 if dt_measurements < 0.0:
                     return False
+
+                # estimate maneuver time betweem states
+                dt_maneuver = abs(dt_measurements) / max_slew_rate
 
                 # Slewing constraint: check if there's enough time to maneuver from one observation to another
                 if dt_maneuver > dt_measurements and abs(dt_maneuver - dt_measurements) > 1e-6:
