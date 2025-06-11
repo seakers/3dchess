@@ -855,6 +855,8 @@ class AbstractPreplanner(AbstractPlanner):
         
         # schedule observation tasks
         observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, observation_history)
+        assert isinstance(observations, list) and all([isinstance(obs, ObservationAction) for obs in observations]), \
+            f'Observation actions not generated correctly. Is of type `{type(observations)}` with elements of type `{type(observations[0])}`.'
         assert self.is_observation_path_valid(state, specs, observations)
 
         # schedule broadcasts to be perfomed
@@ -943,6 +945,8 @@ class AbstractPreplanner(AbstractPlanner):
         if not isinstance(tasks, list):
             raise ValueError(f'`tasks` needs to be of type `list`. Is of type `{type(tasks)}`.')
         
+        # TODO add check for capability of the agent to perform the task
+
         return [task for task in tasks if task.available(t)]
 
     @abstractmethod
@@ -1083,6 +1087,8 @@ class AbstractReplanner(AbstractPlanner):
                                **kwargs
                                ) -> BroadcastMessageAction:
         """  Generates a broadcast message to be sent to other agents """
+        raise NotImplementedError('Broadcast contents generation not yet implemented for this planner.')
+
         if broadcast_action.broadcast_type == FutureBroadcastTypes.REWARD:
             # raise NotImplementedError('Reward broadcast not yet implemented.')
 

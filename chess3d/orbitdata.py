@@ -303,7 +303,7 @@ class OrbitData:
         self.gp_access_data : TimeIndexedData = TimeIndexedData.from_dataframe(gp_access_data, self.time_step, 'gp-access')
 
         # grid information
-        self.grid_data = grid_data
+        self.grid_data : list[pd.DataFrame] = grid_data
     
     def copy(self) -> object:
         return OrbitData(self.agent_name, 

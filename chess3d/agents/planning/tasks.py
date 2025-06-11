@@ -234,6 +234,10 @@ class SchedulableObservationTask:
         try:
             """ Merge two tasks into one. """
             assert isinstance(other_task, SchedulableObservationTask), "The other task must be an instance of ObservationTask."
+            
+            if not self.can_combine(other_task):
+                self.can_combine(other_task)
+                x = 1
             assert self.can_combine(other_task), "The tasks cannot be combined."
 
             # Combine the time intervals and slew angles

@@ -63,7 +63,6 @@ class DataProcessor(ABC):
                 objectives = [objective for objective in self.event_mission.objectives
                               if objective.event_type == event.event_type]
                 objectives : list[EventDrivenObjective] 
-                for objective in objectives: objective.t_end = event.t_end
 
                 # generate task request 
                 task_request = TaskRequest(self.parent_name,
@@ -109,8 +108,10 @@ class LookupProcessor(DataProcessor):
         self.events_lookup : list[GeophysicalEvent] = self.load_events(events_path)
 
         # extract detectable event types from mission objectives
-        self.detectable_event_types = {objective.event_type 
+        self.detectable_event_types = {objective.event_type : set()
                                        for objective in self.event_mission.objectives}
+        for objective in self.event_mission.objectives:
+            self.detectable_event_types[objective.event_type].update(objective.valid_instruments)
 
         # initialize update timer
         self.t_update = None
@@ -131,7 +132,7 @@ class LookupProcessor(DataProcessor):
                 (row['lat [deg]'], row['lon [deg]'], row.get('grid index', 0), row['gp_index']),
                 row['start time [s]'],
                 (row['start time [s]'] + row['duration [s]']),
-                row['decorrelation time [s]'],
+                # row['decorrelation time [s]'],
                 row['id']
             )
             events.append(event)
@@ -161,12 +162,11 @@ class LookupProcessor(DataProcessor):
                             # availability during the time of observation
                             and (event.t_start <= t_img_start <= event.t_end
                                  or event.t_start <= t_img_end <= event.t_end)
-                            # event requires observations of the same type as the one performed
-                            # and instrument in event.event_type
                             # event has not been detected before
                             and (event.location[0],event.location[1],event.t_start,event.t_end-event.t_start,event.severity,event.event_type) not in self.detected_events 
-                            # and event type is detectable by mission
+                            # event type is detectable by mission
                             and event.event_type in self.detectable_event_types
+                            and instrument.lower() in self.detectable_event_types[event.event_type]
                             ]
 
         

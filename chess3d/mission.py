@@ -16,16 +16,18 @@ def monitoring(kwargs) -> float:
     
     """
     t_img = kwargs['t_start']
-    t_prev = kwargs.get('t_prev',-1)
-    t_prev = t_prev if t_prev > 0 else 0.0
+    t_prev = kwargs.get('t_prev',0.0)
     unobserved_reward_rate = kwargs.get('unobserved_reward_rate', 1.0)
         
-    # assert (t - t_init) >= 0.0 # TODO fix acbba triggering this
+    assert (t_img - t_prev) >= 0.0 # TODO fix acbba triggering this
 
     # calculate reward
     reward = (t_img - t_prev) * unobserved_reward_rate / 3600 
-    reward = min(max(reward, 0.0), 1.0 )
+    
+    # clip reward to [0, 1]
+    reward = np.clip(reward, 0.0, 1.0)
 
+    # return reward
     return reward
 
 RO = {
@@ -39,6 +41,11 @@ RO = {
     "monitoring" : monitoring,
 }
 
+CO = {
+    # Coobservation Strategies
+    "no_change" : lambda _ : 1.0
+}
+
 class GeophysicalEvent:
     def __init__(self,
                  event_type : str,
@@ -46,11 +53,11 @@ class GeophysicalEvent:
                  location : list,
                  t_start : float,
                  t_end : float,
-                 t_corr : float = None,
+                #  t_corr : float = None,
                  id : str = None
                  ):
         """ 
-        Geophysical Event
+        ### Geophysical Event
 
         Initialize a geophysical event with a type, severity, start time, end time, and correlation time.
         - :`event_type`: The type of event (e.g., "algal bloom", "flood").
@@ -78,9 +85,9 @@ class GeophysicalEvent:
         assert isinstance(t_start, (int, float)), "Start time must be a number"
         assert isinstance(t_end, (int, float)), "End time must be a number"
         assert t_start < t_end, "Start time must be less than end time"
-        assert t_corr is None or isinstance(t_corr, (int, float)), "Correlation time must be a number or None"
-        assert t_corr is None or t_corr >= 0, "Correlation time must be greater than 0 or None"
-        assert t_corr is None or t_corr <= (t_end - t_start), "Correlation time must be less than or equal to (t_end - t_start) or None"
+        # assert t_corr is None or isinstance(t_corr, (int, float)), "Correlation time must be a number or None"
+        # assert t_corr is None or t_corr >= 0, "Correlation time must be greater than 0 or None"
+        # assert t_corr is None or t_corr <= (t_end - t_start), "Correlation time must be less than or equal to (t_end - t_start) or None"
 
         # Set attributes
         self.event_type : str = event_type.lower()
@@ -88,7 +95,7 @@ class GeophysicalEvent:
         self.location : list = location
         self.t_start : float = t_start
         self.t_end : float = t_end
-        self.t_corr : float = t_corr if t_corr is not None else (t_end - t_start)
+        # self.t_corr : float = t_corr if t_corr is not None else (t_end - t_start)
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def is_active(self, t: float) -> bool:
@@ -127,7 +134,7 @@ class GeophysicalEvent:
     
     def __hash__(self) -> int:
         """Hash the event for use in sets and dictionaries."""
-        return hash((self.event_type, self.severity, self.t_start, self.t_end, self.t_corr, self.id))
+        return hash((self.event_type, self.severity, self.t_start, self.t_end, self.id))
     
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the event to a dictionary."""
@@ -137,19 +144,19 @@ class GeophysicalEvent:
             "location": self.location,
             "t_start": self.t_start,
             "t_end": self.t_end,
-            "t_corr": self.t_corr,
+            # "t_corr": self.t_corr,
             "id": self.id
         }
 
-class MeasurementRequirement:
+class MissionRequirement:
     def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None):
         """
-        ### Measurement Requirement 
+        ### Mission Requirement 
         
-        Initialize a measurement requirement with an attribute, thresholds, and scores.
+        Initialize a mission requirement with an attribute, thresholds, and scores.
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
-        - :`thresholds`: A list of threshold values that define the performance levels.
-        - :`scores`: A list of scores corresponding to the thresholds, indicating performance.
+        - :`thresholds`: A list of threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10,30,100] m.
+        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1,0.7,0.2]
                 
         """
         # Validate inputs
@@ -221,9 +228,9 @@ class MeasurementRequirement:
     def calc_preference_value(self, value: float) -> float:
         return self.preference_function(value)
     
-    def copy(self) -> 'MeasurementRequirement':
+    def copy(self) -> 'MissionRequirement':
         """Create a copy of the measurement requirement."""
-        return MeasurementRequirement(self.attribute, self.thresholds, self.scores, self.id)
+        return MissionRequirement(self.attribute, self.thresholds, self.scores, self.id)
 
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the measurement requirement to a dictionary."""
@@ -264,22 +271,22 @@ class MissionObjective:
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
         if all([isinstance(req, dict) for req in requirements]):
-            requirements = [MeasurementRequirement(**req) for req in requirements]
+            requirements = [MissionRequirement(**req) for req in requirements]
 
         # Validate inputs
         assert isinstance(priority, (int, float)), "Priority must be a number"
         assert isinstance(parameter, str), "Parameter must be a string"
         assert len(requirements) > 0, "At least one requirement is needed"
-        assert all(isinstance(req, MeasurementRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
+        assert all(isinstance(req, MissionRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
         assert reobservation_strategy in RO, f"Invalid reobservation strategy: {reobservation_strategy}. Available strategies: {list(RO.keys())}"
         assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
 
         # Set attributes
         self.priority : float = priority
         self.parameter : str = parameter
-        self.requirements : Dict[str, MeasurementRequirement] = {requirement.attribute : requirement for requirement in requirements}
+        self.requirements : Dict[str, MissionRequirement] = {requirement.attribute : requirement for requirement in requirements}
         self.valid_instruments = [instrument.lower() for instrument in valid_instruments]
-        self.reobservation_strategy = reobservation_strategy
+        self.reobservation_strategy = reobservation_strategy.lower()
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def eval_performance(self, measurement: dict) -> float:
@@ -298,7 +305,7 @@ class MissionObjective:
                     # calculate measurement performance score
                     scores.append(req.calc_preference_value(measurement[attribute]))
             
-            # reobs_val = RO[self.reobservation_strategy](measurement)
+            # return the product of all scores
             return np.prod(scores) 
         
         except Exception as e:
@@ -331,10 +338,10 @@ class MissionObjective:
         """Create an objective from a dictionary."""
         if 'event_type' in obj_dict:
             # EventDrivenObjective
-            requirements = [MeasurementRequirement(**req) for _,req in obj_dict['requirements'].items()]
+            requirements = [MissionRequirement(**req) for _,req in obj_dict['requirements'].items()]
             return EventDrivenObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['event_type'], obj_dict['valid_instruments'], obj_dict['reobservation_strategy'], obj_dict['id'])
         else:
-            requirements = [MeasurementRequirement(**req) for _,req in obj_dict['requirements'].items()]
+            requirements = [MissionRequirement(**req) for _,req in obj_dict['requirements'].items()]
             return MissionObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['valid_instruments'], obj_dict['reobservation_strategy'], obj_dict['id'])
 
     def can_perform(self, instrument: str) -> bool:
@@ -348,7 +355,10 @@ class EventDrivenObjective(MissionObjective):
                  requirements: list, 
                  event_type: str,
                  valid_instruments : list,
-                 reobservation_strategy: str = "no_change",
+                 reobservation_strategy: str,
+                 synergistic_parameters: list,
+                 coobservation_strategy: str,
+                 t_corr : float = None,
                  id : str = None
                  ):
         """ 
@@ -367,15 +377,24 @@ class EventDrivenObjective(MissionObjective):
             - "decaying_decrease"
             - "immediate_decrease"
             - "no_change"
+            - "monitoring"
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
         super().__init__(parameter, priority, requirements, valid_instruments, reobservation_strategy, id)
         
         # Validate inputs
         assert isinstance(event_type, str), "Event type must be a string"
+        assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
+        assert all(isinstance(param, str) for param in synergistic_parameters), "Synergistic parameters must be strings"
+        assert parameter not in synergistic_parameters, "Main parameter cannot be in list of synergistic parameters."
+        assert isinstance(coobservation_strategy, str), "Coobservation strategy must be a string"
+        assert coobservation_strategy in CO, f"Invalid coobservation strategy: {coobservation_strategy}. Available strategies: {list(CO.keys())}"
         
         # Set attributes
         self.event_type = event_type.lower() 
+        self.synergistic_parameters = [param.lower() for param in synergistic_parameters]
+        self.coobservation_strategy = coobservation_strategy.lower()
+        self.t_corr = t_corr if t_corr is not None else np.Inf
 
     def __repr__(self):
         """String representation of the objective."""
@@ -386,7 +405,16 @@ class EventDrivenObjective(MissionObjective):
         return f"Event-driven Objective: {self.parameter}, Priority: {self.priority}, Requirements: {self.requirements}"
 
     def copy(self):
-        return EventDrivenObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.event_type, self.valid_instruments, self.reobservation_strategy, self.id)
+        return EventDrivenObjective(self.parameter, 
+                                    self.priority, 
+                                    [req.copy() for req in self.requirements.values()], 
+                                    self.event_type, 
+                                    self.valid_instruments, 
+                                    self.reobservation_strategy, 
+                                    self.synergistic_parameters,
+                                    self.coobservation_strategy,
+                                    self.t_corr,
+                                    self.id)
 
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the objective to a dictionary."""

@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from chess3d.agents.agent import RealtimeAgent, SimulatedAgent
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import MonitoringObservationTask, ObservationHistory, SchedulableObservationTask
+from chess3d.agents.planning.tasks import MonitoringObservationTask, ObservationHistory, GenericObservationTask
 
 
 class RealtimeGroundStationAgent(RealtimeAgent):
@@ -95,7 +95,7 @@ class SatelliteAgent(SimulatedAgent):
         
         self.orbitdata : OrbitData = orbitdata
 
-        self.tasks : list[SchedulableObservationTask]= [
+        self.tasks : list[GenericObservationTask]= [
             MonitoringObservationTask(
                                         self.mission.name,
                                         objective,

@@ -164,12 +164,14 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             tasks = tasks[:max_number_tasks]
 
         # calculate heuristic value for each task
-        values = [[self.calc_heuristic(task, specs, cross_track_fovs, orbitdata, observation_history)] 
-                  for task in tqdm(tasks, desc=f"{state.agent_name}-PREPLANNER: Calculating heuristic values", leave=False)]
-        for i in range(len(values)): values[i].insert(0,tasks[i])
+        heuristic_vals = [[self.calc_heuristic(task, specs, cross_track_fovs, orbitdata, observation_history)] 
+                          for task in tqdm(tasks, desc=f"{state.agent_name}-PREPLANNER: Calculating heuristic values", leave=False)]
+        
+        # insert task into heuristic values list for sorting
+        for i in range(len(heuristic_vals)): heuristic_vals[i].insert(0,tasks[i])
         
         # sort tasks by heuristic value
-        sorted_data = sorted(values, key=lambda x: x[1:])
+        sorted_data = sorted(heuristic_vals, key=lambda x: x[1:])
         
         # return sorted tasks
         return [task for task, *_ in sorted_data]

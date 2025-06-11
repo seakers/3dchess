@@ -1,3 +1,4 @@
+from itertools import chain
 import logging
 import os
 from dmas.messages import SimulationMessage
@@ -697,29 +698,34 @@ class SimulatedAgent(AbstractAgent):
         self.tasks : list[GenericObservationTask] = []
         self.observation_history : ObservationHistory = None
 
-    @runtime_tracker
-    def update_tasks(self, incoming_reqs : list) -> None:
+    def update_tasks(self, incoming_reqs : list = [], available_only : bool = False) -> None:
         """
-        Updates the list of tasks based on incoming requests.
+        Updates the list of tasks based on incoming requests and task availability.
         """
-        # add tasks from incoming requests
-        event_tasks = []
-        for req in incoming_reqs:
-            req : TaskRequest
-            event = req.event
-
-            # create task for each objective
-            for objective in req.objectives:
-                # initialize task
-                reobservation_strategy = objective.reobservation_strategy
-                task = EventObservationTask(event, req.mission_name, objective, reobservation_strategy)
-                
-                # only add to known tasks if task is not already in the list
-                if event_tasks not in self.tasks:
-                    event_tasks.append(task)
+        # get tasks from incoming requests
+        event_tasks = [req.to_tasks()
+                       for req in incoming_reqs
+                       if isinstance(req, TaskRequest)]
         
+        # flatten list of tasks
+        event_tasks_flat = list(chain.from_iterable(event_tasks))
+
+        # # filter tasks that can be performed by agent
+        # valid_event_tasks = []
+        # payload_instrument_names = {instrument_name.lower() for instrument_name in self.payload.keys()}
+        # for event_task in event_tasks_flat:
+        #     if any([instrument in event_task.objective.valid_instruments 
+        #             for instrument in payload_instrument_names]):
+        #         valid_event_tasks.append(event_task)
+
         # add tasks to task list
-        self.tasks.extend(event_tasks)
+        self.tasks.extend(event_tasks_flat)
+        
+        # filter tasks to only include active tasks
+        if available_only: 
+            self.tasks = [task for task in self.tasks 
+                          if task.available(self.get_current_time())]
+
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -758,7 +764,7 @@ class SimulatedAgent(AbstractAgent):
         self.update_observation_history(completed_observations)
 
         # update tasks from incoming requests
-        self.update_tasks(incoming_reqs)
+        self.update_tasks(incoming_reqs=incoming_reqs)
 
         # --- Create plan ---
         if self.preplanner is not None:
@@ -779,6 +785,10 @@ class SimulatedAgent(AbstractAgent):
             if self.preplanner.needs_planning(state, 
                                               self.specs, 
                                               self.plan):  
+                
+                # update tasks for only tasks that are available
+                self.update_tasks(available_only=True)
+                
                 # initialize plan      
                 self.plan : Plan = self.preplanner.generate_plan(state, 
                                                             self.specs,
@@ -1039,9 +1049,12 @@ class SimulatedAgent(AbstractAgent):
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
                 data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, event.t_corr, event.event_type)
                         for event in self.processor.detected_events]
-                
-                df = pd.DataFrame(data=data, columns=columns)        
-                df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
+            else:
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+                data = []
+
+            df = pd.DataFrame(data=data, columns=columns)        
+            df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
         
             # log plan history
             headers = ['plan_index', 't_plan', 'desc', 't_start', 't_end']

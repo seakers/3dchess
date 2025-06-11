@@ -47,7 +47,7 @@ class Interval:
     
     def is_empty(self) -> bool:
         """ checks if the interval is empty """
-        return self.left == self.right
+        return self.left == self.right and (self.left_open or self.right_open)
         
     def overlaps(self, __other : object) -> bool:
         """ checks if this interval has an overlap with another """
@@ -77,6 +77,13 @@ class Interval:
         # check if the left and right bounds are open
         left_open = self.left_open if left == self.left else __other.left_open
         right_open = __other.right_open if right == __other.right else self.right_open
+
+        # compensate for rounding errors 
+        if left > right and abs(left - right) <= 1e-6:
+            l = min(left, right)
+            r = max(left, right)
+            left = l
+            right = r
 
         # create a new interval object
         return Interval(left, right, left_open, right_open)

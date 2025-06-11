@@ -158,7 +158,8 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                                                 for i in range(0,j)
                                                 if adjacency[i][j]]
             # there are no previous possible observations; skip
-            if not prev_opportunities: return
+            if not prev_opportunities: 
+                continue
 
             # update cummulative reward
             for i in prev_opportunities:
@@ -204,7 +205,9 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # return observations
         return observations  
 
+
     def argmax(self, values, rel_tol=1e-9, abs_tol=0.0):
+        """ returns the index of the highest value in a list of values """
         max_val = max(values)
         for i, val in enumerate(values):
             if math.isclose(val, max_val, rel_tol=rel_tol, abs_tol=abs_tol):

@@ -504,7 +504,12 @@ class Simulation:
                           leave=True):
 
             event_tuple, access_intervals, matching_detections, matching_requests, matching_observations \
-                = self.classify_observation(event, orbitdata, event_detections, measurement_reqs, observations_performed)
+                = self.classify_observation(event, 
+                                            orbitdata, 
+                                            event_detections, 
+                                            measurement_reqs, 
+                                            observations_performed,
+                                            observations_per_gp)
 
             if access_intervals: events_observable[event_tuple] = access_intervals
             if matching_detections: events_detected[event_tuple] = matching_detections
@@ -640,7 +645,8 @@ class Simulation:
                              orbitdata : Dict[str, OrbitData],
                              event_detections : pd.DataFrame, 
                              measurement_reqs : pd.DataFrame, 
-                             observations_performed : pd.DataFrame) -> tuple:
+                             observations_performed : pd.DataFrame,
+                             observations_per_gp : dict) -> tuple:
         # unpackage event
         event = tuple(event) 
 
@@ -800,7 +806,7 @@ class Simulation:
         n_events_observed = len(events_observed)
         n_total_event_obs = sum([len(observations) for _,observations in events_observed.items()])
 
-        assert n_events_detected <= n_events_observed
+        assert n_events_detected <= n_events_observed, f"Detected events ({n_events_detected}) should be a subset of observed events ({n_events_observed})."
         assert n_total_event_obs <= n_observations
 
         # count events reobservable
@@ -1121,7 +1127,7 @@ class SimulationElementFactory:
                     attribute = requirement['attribute']
                     thresholds = requirement['thresholds']
                     scores = requirement['scores']
-                    requirements.append(MeasurementRequirement(attribute, thresholds, scores))
+                    requirements.append(MissionRequirement(attribute, thresholds, scores))
                 valid_instruments = objective_spec['valid_instruments']
 
                 objectives.append(MissionObjective(parameter, priority, requirements, valid_instruments))
@@ -1146,16 +1152,18 @@ class SimulationElementFactory:
                 parameter = event_objectives_specs['parameter']
                 priority = event_objectives_specs['priority']
                 reobservation_strategy = event_objectives_specs['reobservation_strategy']
+                coobservation_strategy = event_objectives_specs['coobservation_strategy']
+                synergistic_parameters = event_objectives_specs['synergistic_parameters']
 
                 requirements = []
                 for requirement in event_objectives_specs['requirements']:
                     attribute = requirement['attribute']
                     thresholds = requirement['thresholds']
                     scores = requirement['scores']
-                    requirements.append(MeasurementRequirement(attribute, thresholds, scores))
+                    requirements.append(MissionRequirement(attribute, thresholds, scores))
                 valid_instruments = event_objectives_specs['valid_instruments']
 
-                objectives.append(EventDrivenObjective(parameter, priority, requirements, event_type, valid_instruments, reobservation_strategy))
+                objectives.append(EventDrivenObjective(parameter, priority, requirements, event_type, valid_instruments, reobservation_strategy, synergistic_parameters, coobservation_strategy))
 
             missions[name.lower()] = Mission(name, objectives)
         
