@@ -145,13 +145,63 @@ class AbstractPlanner(ABC):
     @runtime_tracker
     def check_task_clusterability(self, schedulable_tasks : list) -> dict:
         schedulable_tasks : list[SchedulableObservationTask]
+
+        # create adjacency list for tasks
         adj : Dict[str, set[SchedulableObservationTask]] = {task.id : set() for task in schedulable_tasks}
-        
-        for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
-            for j in range(i + 1, len(schedulable_tasks)):
-                if schedulable_tasks[i].can_combine(schedulable_tasks[j]):
-                    adj[schedulable_tasks[i].id].add(schedulable_tasks[j])
-                    adj[schedulable_tasks[j].id].add(schedulable_tasks[i]) 
+                
+        if schedulable_tasks:
+            # sort tasks by accessibility
+            schedulable_tasks.sort(key=lambda a : a.accessibility) 
+            
+            # get min and max accessibility times
+            t_min = schedulable_tasks[0].accessibility.left
+
+            # define bins
+            bin_size = 60  # clustering time threshold [s]
+
+            # initialize bins
+            bins = defaultdict(list)
+            
+            # group task in bins by accessibility
+            for task in tqdm(schedulable_tasks, leave=False, desc="Grouping tasks into bins"):
+                task : SchedulableObservationTask
+                center_time = (task.accessibility.left + task.accessibility.right) / 2 - t_min
+                bin_key = int(center_time // bin_size)
+                bins[bin_key].append(task)
+
+            # populate adjacency list
+            with tqdm(total=len(schedulable_tasks), desc="Checking task clusterability", leave=False) as pbar:
+                for b in bins:
+                    candidates = bins[b] + bins.get(b + 1, [])  # optionally add b-1 for symmetry
+                    for i in range(len(candidates)):
+                        for j in range(i + 1, len(candidates)):
+                            t1, t2 = candidates[i], candidates[j]
+                            if t1.can_combine(t2):
+                                adj[t1.id].add(t2)
+                                adj[t2.id].add(t1)
+                        pbar.update(1)
+
+        # # create adjacency list for tasks
+        # adj_comparison : Dict[str, set[SchedulableObservationTask]] = {task.id : set() for task in schedulable_tasks}
+
+        # # populate adjacency list
+        # for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
+        #     for j in range(i + 1, len(schedulable_tasks)):
+        #         if schedulable_tasks[i].can_combine(schedulable_tasks[j]):
+        #             adj_comparison[schedulable_tasks[i].id].add(schedulable_tasks[j])
+        #             adj_comparison[schedulable_tasks[j].id].add(schedulable_tasks[i]) 
+
+
+        # # DEGUG check if result is the same 
+        # assert len(adj_bins) == len(adj_comparison), f"Adjacency lists have different lengths: {len(adj_bins)} vs {len(adj_comparison)}"
+        # assert all([task_id in adj_comparison for task_id in adj_bins]), \
+        #     f"Adjacency list missing tasks: {[task_id for task_id in adj_bins if task_id not in adj_comparison]}"
+        # assert all([len(adj_bins[task_id]) == len(adj_comparison[task_id]) for task_id in adj_bins]), \
+        #     f"Adjacency lists have different lengths for some tasks: {[(task_id, len(adj_bins[task_id]), len(adj_comparison[task_id])) for task_id in adj_bins if len(adj_bins[task_id]) != len(adj_comparison[task_id])]}"
+        # for task_id in adj_bins:
+        #     for neighbor in adj_bins[task_id]:
+        #         assert neighbor in adj_comparison[task_id], \
+        #             f"Adjacency list for task {task_id} is missing neighbor {neighbor.id}."
 
         return adj
 

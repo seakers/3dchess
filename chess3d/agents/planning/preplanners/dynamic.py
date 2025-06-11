@@ -93,15 +93,13 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         preceeding_observations.insert(0,np.NAN)
         observation_actions.insert(0,None)
 
-        # create adjancency matrix     
-        adjacency = [ [False for _ in schedulable_tasks] for _ in schedulable_tasks]
-
+        # populate observation action list 
         for i in tqdm(range(len(schedulable_tasks)), 
-                        desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix',
+                        desc=f'{state.agent_name}-PLANNER: Generating Observation Actions from Tasks',
                         leave=False):
             # get task i
             task_i : SchedulableObservationTask = schedulable_tasks[i]
-            
+
             # collect all targets and objectives
             targets_i = [[target[0], target[1], 0.0] 
                          for parent_task in task_i.parent_tasks
@@ -121,33 +119,24 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             # update observation action list
             observation_actions[i] = observation_i if observation_actions[i] is None else observation_actions[i]
 
+        # initialize adjancency matrix     
+        adjacency = [ [False for _ in schedulable_tasks] for _ in schedulable_tasks]
+
+        # populate adjacency matrix 
+        for i in tqdm(range(len(schedulable_tasks)), 
+                        desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix',
+                        leave=False):
             for j in range(i + 1, len(schedulable_tasks)):
-                # get task j
-                task_j : SchedulableObservationTask = schedulable_tasks[j]
+                # update adjacency matrix for sequence i->j
+                adjacency[i][j] = self.is_observation_path_valid(state, specs, [observation_actions[i], observation_actions[j]])
 
-                # collect all targets and objectives
-                targets_j = [[target[0], target[1], 0.0] 
-                            for parent_task in task_j.parent_tasks
-                            for target in parent_task.targets]
-                objectives = [parent_task.objective for parent_task in task_j.parent_tasks]
-                th_j = th_imgs[j]
+                # check if observation j starts after observation i ends
+                if observation_actions[i].t_end < observation_actions[j].t_start:
+                    # observation sequence j->i cannot be performed; skip
+                    continue
 
-                # estimate observation action for task j
-                observation_j = ObservationAction(task_j.instrument_name,
-                                                targets_j,
-                                                objectives,
-                                                th_j,
-                                                task_j.accessibility.left,
-                                                task_i.accessibility.span(),
-                                                )
-
-                # update observation actions list
-                observation_actions[j] = observation_j if observation_actions[j] is None else observation_actions[j]
-
-                # update adjacency matrix
-                adjacency[i][j] = self.is_observation_path_valid(state, specs, [observation_i, observation_j])
-                adjacency[j][i] = self.is_observation_path_valid(state, specs, [observation_j, observation_i])
-
+                # update adjacency matrix for sequence j->i
+                adjacency[j][i] = self.is_observation_path_valid(state, specs, [observation_actions[j], observation_actions[i]])
 
         # calculate optimal path and update results
         for j in tqdm(range(len(schedulable_tasks)), 

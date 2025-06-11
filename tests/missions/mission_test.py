@@ -432,7 +432,7 @@ class TestSingleSatCase(unittest.TestCase):
                         "fieldOfViewGeometry": { 
                             "shape": "RECTANGULAR", 
                             "angleHeight": 2.5, 
-                            "angleWidth": 45.0
+                            "angleWidth": 5.0
                         },
                         "maneuver" : {
                             "maneuverType":"SINGLE_ROLL_ONLY",
@@ -579,7 +579,7 @@ class TestSingleSatCaseComp(unittest.TestCase):
                         "fieldOfViewGeometry": { 
                             "shape": "RECTANGULAR", 
                             "angleHeight": 2.5, 
-                            "angleWidth": 45.0
+                            "angleWidth": 5.0
                         },
                         "maneuver" : {
                             "maneuverType":"SINGLE_ROLL_ONLY",
@@ -665,14 +665,14 @@ class TestSingleSatCaseComp(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.simulation.execute()
+    def test_planner(self) -> None:
+        # execute mission
+        self.simulation.execute()
 
-    #     # print results
-    #     self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
 if __name__ == '__main__':
     # terminal welcome message
