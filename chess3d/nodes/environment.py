@@ -623,7 +623,7 @@ class SimulationEnvironment(EnvironmentNode):
                 if lat==lat_img 
                 and lon==lon_img
                 and t_start<= t_img <=t_start+duration
-                and instrument_name in measurements  #TODO include better reasoning]
+                and instrument_name in measurements  #TODO include better reasoning
                 ]
     
     async def teardown(self) -> None:

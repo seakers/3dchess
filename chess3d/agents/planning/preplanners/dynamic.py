@@ -72,27 +72,22 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # sort tasks by start time
         schedulable_tasks : list[SchedulableObservationTask] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -len(t.parent_tasks)))
 
+        # add dummy task to represent initial state
+        instrument_names = list(payload.keys())
+        dummy_task = SchedulableObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), Interval(state.attitude[0],state.attitude[0]))
+        schedulable_tasks.insert(0,dummy_task)
+
         # initiate results arrays
-        t_imgs : list[Interval]             = [task.accessibility for task in schedulable_tasks]
+        # t_imgs : list[Interval]             = [task.accessibility for task in schedulable_tasks]
         th_imgs : list[float]               = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in schedulable_tasks]
         rewards : list[float]               = [self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
                                                 for task in tqdm(schedulable_tasks,leave=False,desc='SATELLITE: Calculating task rewards')]
         cumulative_rewards : list[float]    = [0.0 for _ in schedulable_tasks]
         preceeding_observations : list[int] = [np.NAN for _ in schedulable_tasks]
+
+        # initialize observation actions list
         observation_actions : list[ObservationAction] = [None for _ in schedulable_tasks]
-
-        # add dummy values 
-        instrument_names = list(payload.keys())
-        dummy_task = SchedulableObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), Interval(state.attitude[0],state.attitude[0]))
-        schedulable_tasks.insert(0,dummy_task)
-
-        t_imgs.insert(0,dummy_task.accessibility)
-        th_imgs.insert(0,dummy_task.slew_angles.left)
-        rewards.insert(0,0.0)
-        cumulative_rewards.insert(0,0.0)
-        preceeding_observations.insert(0,np.NAN)
-        observation_actions.insert(0,None)
-
+        
         # populate observation action list 
         for i in tqdm(range(len(schedulable_tasks)), 
                         desc=f'{state.agent_name}-PLANNER: Generating Observation Actions from Tasks',

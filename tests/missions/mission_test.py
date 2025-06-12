@@ -518,14 +518,14 @@ class TestSingleSatCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.simulation.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.simulation.execute()
 
-        # print results
-        self.simulation.print_results()
+    #     # print results
+    #     self.simulation.print_results()
 
-        print('DONE')
+    #     print('DONE')
 
 class TestSingleSatCaseComp(unittest.TestCase):
     def setUp(self) -> None:

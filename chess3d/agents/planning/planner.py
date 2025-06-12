@@ -2,7 +2,7 @@
 from collections import defaultdict
 from logging import Logger
 import queue
-import random
+from numba import njit
 
 from instrupy.base import BasicSensorModel
 from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
@@ -687,7 +687,8 @@ class AbstractPlanner(ABC):
     def is_observation_path_valid(self, 
                                   state : SimulationAgentState, 
                                   specs : object,
-                                  observations : list
+                                  observations : list,
+                                  **kwargs
                                   ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
 
@@ -702,10 +703,11 @@ class AbstractPlanner(ABC):
 
             max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
             if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
-            
-            # check if every observation can be reached from the prior measurement
-            for j in range(len(observations)):
+            # max_slew_rat = kwargs['max_slew_rate']
 
+            # construct observation sequence parameter list
+            observation_parameters = []
+            for j in range(len(observations)):
                 # estimate the state of the agent at the given measurement
                 observation_j : ObservationAction = observations[j]
                 th_j = observation_j.look_angle
@@ -721,37 +723,76 @@ class AbstractPlanner(ABC):
                 else: # there was no prior measurement
                     # use agent's current state as previous state
                     th_i = state.attitude[0]
-                    t_i = state.t                
+                    t_i = state.t   
 
-                # check if desired instrument is contained within the satellite's specifications
-                if observation_j.instrument_name not in [instrument.name for instrument in specs.instrument]:
-                    return False 
+                observation_parameters.append((th_i, t_i, th_j, t_j, max_slew_rate))
+            
+            # check if all observations are valid
+            return all([self.is_observation_pair_valid(*params) for params in observation_parameters])
+
+            # check if every observation can be reached from the prior measurement
+            # for j in range(len(observations)):
+
+                # # estimate the state of the agent at the given measurement
+                # observation_j : ObservationAction = observations[j]
+                # th_j = observation_j.look_angle
+                # t_j = observation_j.t_start
+
+                # # compare to prior measurements
+                # if j > 0: # there was a prior observation performed
+                #     # estimate the state of the agent at the prior mesurement
+                #     observation_i : ObservationAction = observations[j-1]
+                #     th_i = observation_i.look_angle
+                #     t_i = observation_i.t_end
+
+                # else: # there was no prior measurement
+                #     # use agent's current state as previous state
+                #     th_i = state.attitude[0]
+                #     t_i = state.t                
+
+            #     # check if desired instrument is contained within the satellite's specifications
+            #     if observation_j.instrument_name not in [instrument.name for instrument in specs.instrument]:
+            #         return False 
                 
-                assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
+            #     assert not np.isnan(th_j) and not np.isnan(th_i) # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
 
-                # estimate maneuver time betweem states
-                dt_maneuver = abs(th_j - th_i) / max_slew_rate
+            #     # estimate maneuver time betweem states
+            #     dt_maneuver = abs(th_j - th_i) / max_slew_rate
 
-                # calculate time between measuremnets
-                dt_measurements = t_j - t_i
+            #     # calculate time between measuremnets
+            #     dt_measurements = t_j - t_i
 
-                # check if observation sequence is correct 
-                if dt_measurements < 0.0:
-                    return False
+            #     # check if observation sequence is correct 
+            #     if dt_measurements < 0.0:
+            #         return False
 
-                # Slewing constraint: check if there's enough time to maneuver from one observation to another
-                if dt_maneuver > dt_measurements and abs(dt_maneuver - dt_measurements) > 1e-6:
-                    # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
-                    return False              
+            #     # Slewing constraint: check if there's enough time to maneuver from one observation to another
+            #     if dt_maneuver > dt_measurements and abs(dt_maneuver - dt_measurements) > 1e-6:
+            #         # there is not enough time to maneuver; flag current observation plan as unfeasible for rescheduling
+            #         return False              
                 
-                # Torque constraint:
-                # TODO check if the agent has enough torque in its reaction wheels to perform the maneuver
+            #     # Torque constraint:
+            #     # TODO check if the agent has enough torque in its reaction wheels to perform the maneuver
                             
-            # if all measurements passed the check; observation path is valid
-            return True
+            # # if all measurements passed the check; observation path is valid
+            # return True
         else:
             raise NotImplementedError(f'Observation path validity check for agents with state type {type(state)} not yet implemented.')
         
+    def is_observation_pair_valid(self, th_i, t_i, th_j, t_j, max_slew_rate):
+        # check inputs
+        assert not np.isnan(th_j) and not np.isnan(th_i) # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
+
+        # calculate maneuver time betweem states
+        dt_maneuver = abs(th_j - th_i) / max_slew_rate
+        
+        # calculate time between measuremnets
+        dt_measurements = t_j - t_i
+
+        return ((dt_measurements > dt_maneuver 
+                or abs(dt_measurements - dt_maneuver) < 1e-6)   # there is enough time to maneuver
+                and dt_measurements >= 0.0)                     # measurement time is after the previous measurement
+                 
     # def _print_observation_sequence(self, 
     #                                 state : SatelliteAgentState, 
     #                                 path : list, 
