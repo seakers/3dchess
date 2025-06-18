@@ -15,7 +15,7 @@ from zmq import SocketType
 
 from chess3d.agents.planning.plan import Replan, Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
-from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory
+from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
@@ -376,6 +376,9 @@ class AbstractAgent(Agent):
             # request measurement data from the environment
             dst,src,observation_results = await self.send_peer_message(observation_req)
             msg_sci = ObservationResultsMessage(**observation_results)
+
+            if any([data['GP index'] in [2641, 3752, 4946] for data in msg_sci.observation_data]):
+                x=1
             
             # send measurement data to results logger
             # await self._send_manager_msg(msg_sci, zmq.PUB)
@@ -761,7 +764,7 @@ class SimulatedAgent(AbstractAgent):
             # for objective in self.mission.objectives:
 
         # update observation history
-        self.update_observation_history(completed_observations)
+        self.update_observation_history(observations)
 
         # update tasks from incoming requests
         self.update_tasks(incoming_reqs=incoming_reqs)
@@ -897,7 +900,10 @@ class SimulatedAgent(AbstractAgent):
                                           for msg in senses 
                                           if isinstance(msg, ObservationResultsMessage)
                                           and isinstance(msg.instrument, dict)]
-        observations = []; observations.extend(external_observations); observations.extend(own_observations)
+        
+        observations = []
+        observations.extend(external_observations)
+        observations.extend(own_observations)
 
         states : list[AgentStateMessage] = [sense for sense in senses 
                                             if isinstance(sense, AgentStateMessage)
@@ -977,12 +983,12 @@ class SimulatedAgent(AbstractAgent):
         return completed_observations
 
     @runtime_tracker
-    def update_observation_history(self, completed_observations : list) -> None:
+    def update_observation_history(self, observations : list) -> None:
         """
         Updates the observation history with the completed observations.
         """        
         # update observation history
-        self.observation_history.update(completed_observations)
+        self.observation_history.update(observations)
 
     @runtime_tracker
     def get_next_actions(self, state) -> list:
@@ -1040,14 +1046,14 @@ class SimulatedAgent(AbstractAgent):
             # log known and generated requests
             if self.processor is not None:
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
-                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, event.t_corr, event.event_type)
+                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, np.Inf, event.event_type)
                         for event in self.processor.known_events]
                 
                 df = pd.DataFrame(data=data, columns=columns)        
                 df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
 
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
-                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, event.t_corr, event.event_type)
+                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, np.Inf, event.event_type)
                         for event in self.processor.detected_events]
             else:
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
@@ -1081,6 +1087,32 @@ class SimulatedAgent(AbstractAgent):
             # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
             df.to_csv(f"{self.results_path}/planner_history.csv", index=False)
             
+            # log observation history
+            headers = ['grid_index','gp_index', 'lat [deg]', 'lon [deg]', 'n_obs', 't_last', 'latest_observation']
+            data = []
+            for grid_index, grid in self.observation_history.history.items():
+                grid : dict[int, ObservationTracker]
+                for gp_index, observation_tracker in grid.items():
+                    observation_tracker : ObservationTracker
+                    if observation_tracker.n_obs == 0:
+                        # no observations for this grid point
+                        continue
+
+                    # log observation tracker
+                    line_data = [   grid_index,
+                                    gp_index,
+                                    np.round(observation_tracker.lat,3),
+                                    np.round(observation_tracker.lon,3),
+                                    observation_tracker.n_obs,
+                                    np.round(observation_tracker.t_last,3),
+                                    observation_tracker.latest_observation
+                                ]
+                    data.append(line_data)
+            x = 1
+            df = pd.DataFrame(data, columns=headers)
+            # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+            df.to_csv(f"{self.results_path}/observation_history.csv", index=False)
+
             # log performance stats
             n_decimals = 5
             headers = ['routine','t_avg','t_std','t_med', 't_max', 't_min', 'n', 't_total']
@@ -1175,5 +1207,6 @@ class SimulatedAgent(AbstractAgent):
             stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
 
         except Exception as e:
+            raise e
             x = 1
             

@@ -311,7 +311,7 @@ class Simulation:
                           n_decimals : int = 5) -> pd.DataFrame:
         
         # classify observations
-        observations_per_gp, events_per_gp, \
+        observations_per_gp, events_per_gp, gps_accessible, \
             events_observable, events_observed, events_detected, events_requested, \
                 events_re_observable, events_re_obs, \
                     events_co_observable, events_co_obs, \
@@ -325,7 +325,7 @@ class Simulation:
 
         # count observations performed
         # n_events, n_unique_event_obs, n_total_event_obs,
-        n_observations, n_gps, n_gps_accessible, n_gps_observed, n_gps_with_events, \
+        n_observations, n_gps, n_gps_accessible, n_gps_reobserved, n_gps_observed, n_gps_with_events, \
             n_events, n_events_observable, n_events_detected, n_events_requested, n_events_observed, n_total_event_obs, \
                 n_events_reobservable, n_events_reobserved, n_total_event_re_obs, \
                     n_events_co_observable, n_events_co_obs, n_total_event_co_obs, \
@@ -350,7 +350,7 @@ class Simulation:
                                                             events_co_obs_partially)
         
         # count probabilities of observations performed
-        p_gp_accessible, p_gp_observed, p_event_at_gp, p_event_detected, \
+        p_gp_accessible, p_gp_observed, p_gp_observed_if_accessible, p_event_at_gp, p_event_detected, \
             p_event_obs_if_obs, p_event_re_obs_if_obs, p_event_co_obs_if_obs, p_event_co_obs_fully_if_obs, p_event_co_obs_partially_if_obs, \
                 p_event_observable, p_event_observed, p_event_observed_if_observable, p_event_observed_if_detected, p_event_observed_if_observable_and_detected, \
                     p_event_re_observable, p_event_re_obs, p_event_re_obs_if_re_observable, p_event_re_obs_if_detected, p_event_re_obs_if_reobservable_and_detected, \
@@ -358,6 +358,7 @@ class Simulation:
                             p_event_co_observable_fully, p_event_co_obs_fully, p_event_co_obs_fully_if_co_observable_fully, p_event_co_obs_fully_if_detected, p_event_co_obs_fully_if_co_observable_fully_and_detected, \
                                 p_event_co_observable_partial, p_event_co_obs_partial, p_event_co_obs_partial_if_co_observable_partially, p_event_co_obs_partial_if_detected, p_event_co_obs_partial_if_co_observable_partially_and_detected \
                                     = self.calc_event_probabilities(orbitdata, 
+                                                                    gps_accessible,
                                                                     observations_performed, 
                                                                     observations_per_gp,
                                                                     events, 
@@ -390,6 +391,7 @@ class Simulation:
                     ['Ground Points', n_gps],
                     ['Ground Points Accessible', n_gps_accessible],
                     ['Ground Points Observed', n_gps_observed],
+                    ['Ground Points Reobserved', n_gps_reobserved],
                     ['Ground Point Observations', n_observations],
                     ['Ground Points with Events', n_gps_with_events],
 
@@ -423,6 +425,7 @@ class Simulation:
                     # Ground-Point Coverage Probabilities
                     ['P(Ground Point Accessible)', np.round(p_gp_accessible,n_decimals)],
                     ['P(Ground Point Observed)', np.round(p_gp_observed,n_decimals)],
+                    ['P(Ground Point Observed | Ground Point Accessible)', np.round(p_gp_observed_if_accessible,n_decimals)],
                     ['P(Event at a GP)', np.round(p_event_at_gp,n_decimals)],
 
                     # Event Observation Probabilities
@@ -479,6 +482,17 @@ class Simulation:
                               measurement_reqs : pd.DataFrame
                               ) -> tuple:
                
+        # classify groundpoints by their accessibility
+        gps_accessible = set()
+        for _,agent_orbitdata in tqdm(orbitdata.items(), desc='Counting total and accessible ground points', leave=False):
+            agent_orbitdata : OrbitData
+
+            # get set of accessible ground points
+            gps_accessible_temp : set = {(row['grid index'], row['GP index']) for _,row in agent_orbitdata.gp_access_data}
+
+            # update set of accessible ground points
+            gps_accessible.update(gps_accessible_temp)
+
         # classify observations per GP
         observations_per_gp = {group : [(observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*__,instrument,agent_name,t) 
                                         # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],observation range [km],
@@ -633,7 +647,7 @@ class Simulation:
         assert all([event in events_co_observable and event in events_co_observable_fully for event in events_co_obs_fully])
         assert all([event in events_co_observable for event in events_co_obs_partially])
 
-        return observations_per_gp, events_per_gp, \
+        return observations_per_gp, events_per_gp, gps_accessible, \
                 events_observable, events_observed, events_detected, events_requested, \
                     events_re_observable, events_re_obs, \
                         events_co_observable, events_co_obs, \
@@ -783,6 +797,10 @@ class Simulation:
 
         n_gps_accessible = len(gps_accessible_compiled)
         n_gps_observed = len(observations_per_gp)
+
+        # count number of groun point reobservations
+        n_gps_reobserved = len([gp for gp,observations in observations_per_gp.items() 
+                                if len(observations) > 1])
         
         # count number of observations performed
         n_observations = len(observations_performed)
@@ -848,7 +866,7 @@ class Simulation:
 
 
         # return values
-        return n_observations, n_gps, n_gps_accessible, n_gps_observed, n_gps_with_events, \
+        return n_observations, n_gps, n_gps_accessible, n_gps_reobserved, n_gps_observed, n_gps_with_events, \
                 n_events, n_events_observable, n_events_detected, n_events_requested, n_events_observed, n_total_event_obs, \
                     n_events_reobservable, n_events_reobserved, n_total_event_re_obs, \
                         n_events_co_observable, n_events_co_obs, n_total_event_co_obs, \
@@ -857,6 +875,7 @@ class Simulation:
 
     def calc_event_probabilities(self,
                                  orbitdata : dict, 
+                                 gps_accessible : dict,
                                  observations_performed : pd.DataFrame, 
                                  observations_per_gp : dict,
                                  events : pd.DataFrame,
@@ -876,7 +895,7 @@ class Simulation:
                                 ) -> tuple:
     
         # count observations by type
-        n_observations, n_gps, n_gps_accessible, n_gps_observed, n_gps_with_events, \
+        n_observations, n_gps, n_gps_accessible, n_gps_reobserved, n_gps_observed, n_gps_with_events, \
             n_events, n_events_observable, n_events_detected, n_events_requested, n_events_observed, n_total_event_obs, \
                 n_events_reobservable, n_events_reobserved, n_total_event_re_obs, \
                     n_events_co_observable, n_events_co_obs, n_total_event_co_obs, \
@@ -900,6 +919,10 @@ class Simulation:
                                                             events_co_observable_partially,
                                                             events_co_obs_partially)
                     
+        # count number of ground points accessible and observed 
+        n_gps_observed_and_accessible = len(observations_per_gp)
+        n_gps = n_gps if n_gps is not None else 0
+
         # count number of obseved and detected events
         n_events_observed_and_observable = len([event for event in events_observed
                                                 if event in events_observable])
@@ -971,6 +994,8 @@ class Simulation:
         p_event_co_obs_partial = n_events_partially_co_obs / n_events if n_events > 0 else np.NAN    
 
         # calculate joint probabilities
+        p_gp_observed_and_accessible = p_gp_observed
+
         p_event_observed_and_observable = n_events_observed_and_observable / n_events if n_events > 0 else np.NAN
         p_event_observed_and_detected = n_events_observed_and_detected / n_events if n_events > 0 else np.NAN
         p_event_observed_and_observable_and_detected = n_events_observed_and_observable_and_detected / n_events if n_events > 0 else np.NAN
@@ -997,6 +1022,8 @@ class Simulation:
         p_event_partially_co_observable_and_detected = n_events_partially_co_observable_and_detected / n_events if n_events > 0 else np.NAN
 
         # calculate conditional probabilities
+        p_gp_observed_if_accessible = p_gp_observed_and_accessible / p_gp_accessible if p_gp_accessible > 0.0 else np.NAN
+
         p_event_obs_if_obs = n_total_event_obs / n_observations if n_observations > 0 else np.NAN
         p_event_re_obs_if_obs = n_total_event_re_obs / n_observations if n_observations > 0 else np.NAN
         p_event_co_obs_if_obs = n_total_event_co_obs / n_observations if n_observations > 0 else np.NAN
@@ -1023,7 +1050,7 @@ class Simulation:
         p_event_co_obs_partial_if_detected = p_event_co_obs_partial_and_detected / p_event_detected if p_event_detected > 0.0 else np.NAN
         p_event_co_obs_partial_if_co_observable_partially_and_detected = p_event_partially_co_obs_and_partially_co_observable_and_detected / p_event_partially_co_observable_and_detected if p_event_partially_co_observable_and_detected > 0 else np.NAN
 
-        return p_gp_accessible, p_gp_observed, p_event_at_gp, p_event_detected, \
+        return p_gp_accessible, p_gp_observed, p_gp_observed_if_accessible, p_event_at_gp, p_event_detected, \
                 p_event_obs_if_obs, p_event_re_obs_if_obs, p_event_co_obs_if_obs, p_event_co_obs_fully_if_obs, p_event_co_obs_partially_if_obs, \
                     p_event_observable, p_event_observed, p_event_observed_if_observable, p_event_observed_if_detected, p_event_observed_if_observable_and_detected, \
                         p_event_re_observable, p_event_re_obs, p_event_re_obs_if_re_observable, p_event_re_obs_if_detected, p_event_re_obs_if_reobservable_and_detected, \

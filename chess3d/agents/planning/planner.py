@@ -80,10 +80,14 @@ class AbstractPlanner(ABC):
             = self.single_tasks_from_accesses(available_tasks, access_times, cross_track_fovs)
         
         # check if tasks are clusterable
-        adj : Dict[str, set[SchedulableObservationTask]] = self.check_task_clusterability(schedulable_tasks)
+        task_adjacency : Dict[str, set[SchedulableObservationTask]] \
+            = self.check_task_clusterability(schedulable_tasks)
    
         # cluster tasks based on adjacency
-        combined_tasks : list[SchedulableObservationTask] = self.cluster_tasks(schedulable_tasks, adj)
+        combined_tasks : list[SchedulableObservationTask] = self.cluster_tasks(schedulable_tasks, task_adjacency)
+
+        if any([len(task.parent_tasks) >= 12 for task in combined_tasks]):
+            x = 1
 
         # add clustered tasks to the final list of tasks available for scheduling
         schedulable_tasks.extend(combined_tasks)
@@ -123,7 +127,7 @@ class AbstractPlanner(ABC):
                     accessibility = access_time[3]
                     th = access_time[-1]
                     slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
-                                        np.mean(th)+cross_track_fovs[instrument]/2)
+                                           np.mean(th)+cross_track_fovs[instrument]/2)
 
                     # check if instrument can perform the task                    
                     if not task.objective.can_perform(instrument): 
@@ -144,7 +148,7 @@ class AbstractPlanner(ABC):
             
     @runtime_tracker
     def check_task_clusterability(self, schedulable_tasks : list) -> dict:
-        schedulable_tasks : list[SchedulableObservationTask]
+        schedulable_tasks : list[SchedulableObservationTask] = schedulable_tasks
 
         # create adjacency list for tasks
         adj : Dict[str, set[SchedulableObservationTask]] = {task.id : set() for task in schedulable_tasks}
@@ -172,7 +176,8 @@ class AbstractPlanner(ABC):
             # populate adjacency list
             with tqdm(total=len(schedulable_tasks), desc="Checking task clusterability", leave=False) as pbar:
                 for b in bins:
-                    candidates = bins[b] + bins.get(b + 1, [])  # optionally add b-1 for symmetry
+                    candidates : list[SchedulableObservationTask]\
+                          = bins[b] + bins.get(b + 1, [])  # optionally add b-1 for symmetry
                     for i in range(len(candidates)):
                         for j in range(i + 1, len(candidates)):
                             t1, t2 = candidates[i], candidates[j]
@@ -181,27 +186,11 @@ class AbstractPlanner(ABC):
                                 adj[t2.id].add(t1)
                         pbar.update(1)
 
-        # # create adjacency list for tasks
-        # adj_comparison : Dict[str, set[SchedulableObservationTask]] = {task.id : set() for task in schedulable_tasks}
-
-        # # populate adjacency list
-        # for i in tqdm(range(len(schedulable_tasks)), leave=False, desc="Checking task clusterability"):
-        #     for j in range(i + 1, len(schedulable_tasks)):
-        #         if schedulable_tasks[i].can_combine(schedulable_tasks[j]):
-        #             adj_comparison[schedulable_tasks[i].id].add(schedulable_tasks[j])
-        #             adj_comparison[schedulable_tasks[j].id].add(schedulable_tasks[i]) 
-
-
-        # # DEGUG check if result is the same 
-        # assert len(adj_bins) == len(adj_comparison), f"Adjacency lists have different lengths: {len(adj_bins)} vs {len(adj_comparison)}"
-        # assert all([task_id in adj_comparison for task_id in adj_bins]), \
-        #     f"Adjacency list missing tasks: {[task_id for task_id in adj_bins if task_id not in adj_comparison]}"
-        # assert all([len(adj_bins[task_id]) == len(adj_comparison[task_id]) for task_id in adj_bins]), \
-        #     f"Adjacency lists have different lengths for some tasks: {[(task_id, len(adj_bins[task_id]), len(adj_comparison[task_id])) for task_id in adj_bins if len(adj_bins[task_id]) != len(adj_comparison[task_id])]}"
-        # for task_id in adj_bins:
-        #     for neighbor in adj_bins[task_id]:
-        #         assert neighbor in adj_comparison[task_id], \
-        #             f"Adjacency list for task {task_id} is missing neighbor {neighbor.id}."
+        # check if adjacency list is symmetric
+        for p in schedulable_tasks:
+            assert p not in adj[p.id], f'Task {p.id} is in its own adjacency list.'
+            for q in adj[p.id]:
+                assert p in adj[q.id], f'Task {p.id} is in the adjacency list of task {q.id} but not vice versa.'
 
         return adj
 
@@ -209,61 +198,94 @@ class AbstractPlanner(ABC):
     def cluster_tasks(self, schedulable_tasks : list, adj : dict) -> list:
         """ Clusters tasks based on adjacency. """ 
 
-        schedulable_tasks : list[SchedulableObservationTask]
-        adj : Dict[str, set[SchedulableObservationTask]]
+        debug_interval = Interval(74.52, 89.20)  # debug interval for testing purposes
 
+        schedulable_tasks : list[SchedulableObservationTask]
+        adj : Dict[str, set[SchedulableObservationTask]] = adj
+
+        x = max([len(neighbors) for neighbors in adj.values()]) if adj else 0 #debug purposes
+
+        # only keep tasks that have at least one clusterable task
+        v = [task for task in schedulable_tasks if len(adj[task.id]) > 0]
+        
         # sort tasks by degree of adjacency 
         v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
-        
-        # only keep tasks that have at least one clusterable task
-        v = [task for task in v if len(adj[task.id]) > 0]
-        # print(f'\n\n{len(v)} tasks are clusterable out of {len(tasks)} tasks.')
         
         # combine tasks into clusters
         combined_tasks : list[SchedulableObservationTask] = []
 
         with tqdm(total=len(v), desc="Merging overlapping tasks", leave=False) as pbar:
             while len(v) > 0:
-                p : SchedulableObservationTask = v.pop(0)
-                n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(list(adj[p.id]), adj)
+                # pop first task from the list of tasks to be scheduled
+                p : SchedulableObservationTask = v.pop()
 
-                clique : set = {p}
+                n_p_init : list[SchedulableObservationTask] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)
+                possible_coalition : set[SchedulableObservationTask] = adj[p.id].intersection(adj[p.id])
+                possible_coalition.add(p)
+
+                for neighbor in n_p_init:
+                    neighbor_coalition = adj[neighbor.id].intersection(adj[neighbor.id])
+                    neighbor_coalition.add(neighbor)
+                    
+                    possible_coalition.intersection_update(neighbor_coalition)
+
+                #     possible_coalition.intersection_update(neighbor_coalition)
+
+                # get list of neighbors of p sorted by number of common neighbors
+                n_p : list[SchedulableObservationTask] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)
+
+                # initialize clique with p
+                clique = set()
+
+                # update progress bar
                 pbar.update(1)
 
+                # while there are neighbors of p
                 while len(n_p) > 0:
-                    # Pick a neighbor q of p, q \in n_p, such that the number of their common neighbors is maximum: If such p are not unique, pick the p with least edges being deleted
-                    q : SchedulableObservationTask = n_p.pop(0)
+                    # pop first neighbor q from the list of neighbors
+                    q : SchedulableObservationTask = n_p.pop()
 
-                    # Combine q and p into a new p
-                    # p.combine(q)
+                    # Combine q and p into a new p                 
                     clique.add(q)
 
-                    # Delete edges from q and p that are not connected to their common neighbors
+                    # find common neighbors of p and q
                     common_neighbors : set[SchedulableObservationTask] = adj[p.id].intersection(adj[q.id])
+                   
+                    # remove edges to p and q that do not include common neighbors
+                    for neighbor in adj[p.id].difference(common_neighbors): adj[neighbor.id].discard(p)
+                    for neighbor in adj[q.id]: adj[neighbor.id].discard(q)              
+                    
+                    # update edges of p and q to only include common neighbors
+                    adj[p.id].intersection_update(common_neighbors)
+                    
+                    # remove q from the adjacency list
+                    adj.pop(q.id)
 
-                    neighbors_to_delete_p : set[SchedulableObservationTask] = adj[p.id].difference(common_neighbors)
-                    for neighbor in neighbors_to_delete_p: 
-                        adj[p.id].remove(neighbor)
-                        adj[neighbor.id].remove(p)
-
-                    neighbors_to_delete_q : set[SchedulableObservationTask] = adj[q.id].difference(common_neighbors)
-                    for neighbor in neighbors_to_delete_q: 
-                        adj[q.id].remove(neighbor)
-                        adj[neighbor.id].remove(q)
+                    # remove q from the list of tasks to be scheduled
+                    v.remove(q)
 
                     # Reset neighbor collection N_p for the new p;
-                    n_p : list[SchedulableObservationTask] = self.sort_tasks_by_degree(list(adj[p.id]), adj)
+                    n_p : list[SchedulableObservationTask] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)               
 
                 for q in clique: 
+                    # merge all tasks in the clique into a single task p
                     p = p.merge(q)
-                    if q in v: 
-                        v.remove(q)
-                        pbar.update(1)
 
+                    # update progress bar
+                    pbar.update(1)
+
+                # add merged task to the list of combined tasks
+                combined_tasks.append(p)
+
+                if p.accessibility.overlaps(debug_interval) and len(p.parent_tasks) == 4:
+                    # debug interval; print debug information
+                    x = 1
+
+                # sort remaining schedulable tasks by degree of adjacency 
                 v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(v, adj)
 
-                # Add p to the list of combined tasks
-                combined_tasks.append(p)
+        t = [len(task.parent_tasks) for task in combined_tasks]
+        y = max(t) if combined_tasks else 0
 
         return combined_tasks
 
@@ -274,7 +296,23 @@ class AbstractPlanner(ABC):
         degrees : dict = {task : len(adjacency[task.id]) for task in tasks}
 
         # sort tasks by degree and return
-        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.reward for parent_task in p.parent_tasks]), p.accessibility), reverse=True)
+        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.reward for parent_task in p.parent_tasks]), -p.accessibility.left))
+
+    def sort_tasks_by_common_neighbors(self, p : SchedulableObservationTask, tasks : list, adjacency : dict) -> list:
+        tasks : list[SchedulableObservationTask] = tasks
+        adjacency : Dict[str, set[SchedulableObservationTask]] = adjacency
+
+        common_neighbors : dict = {q : adjacency[p.id].intersection(adjacency[q.id]) 
+                                   for q in tasks}
+        neighbors_to_delete : dict = {q : adjacency[p.id].difference(adjacency[q.id])
+                                      for q in tasks}
+
+        return sorted(tasks, 
+                      key=lambda p: (len(common_neighbors[p]), 
+                                     -len(neighbors_to_delete[p]),
+                                     sum([parent_task.reward for parent_task in p.parent_tasks]), 
+                                     -p.accessibility.left))
+        
 
     @runtime_tracker
     def calc_task_reward(self, 

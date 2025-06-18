@@ -330,21 +330,40 @@ class ObservationHistory:
         """
         Update the observation history with the new observations.
         """
-        for observation in observations:
-            observation : ObservationAction
-            for target in observation.targets:
-                lat = target[0]
-                lon = target[1]
-                grid_index,gp_index = self.__get_target_indeces(lat, lon)
-
-                assert grid_index is not None, f"Grid index not found for target {target}."
-                assert gp_index is not None, f"Ground point index not found for target {target}."
-
-                # update the observation history
+        for instrument,observations_data in observations:
+            for observation in observations_data:
+                grid_index = observation['grid index']
+                gp_index = observation['GP index']
+                t_end = observation['t_end']
+                
                 tracker : ObservationTracker = self.history[grid_index][gp_index]
-                tracker.t_last = observation.t_end
+
+                if tracker.n_obs > 0:
+                    x = 1
+
+                tracker.t_last = t_end
                 tracker.n_obs += 1
-                tracker.latest_observation = observation.to_dict()
+                tracker.latest_observation = observation
+
+        # for observation in observations:
+        #     observation : ObservationAction
+        #     for target in observation.targets:
+        #         lat = target[0]
+        #         lon = target[1]
+        #         grid_index,gp_index = self.__get_target_indeces(lat, lon)
+
+        #         assert grid_index is not None, f"Grid index not found for target {target}."
+        #         assert gp_index is not None, f"Ground point index not found for target {target}."
+
+        #         # update the observation history
+                # tracker : ObservationTracker = self.history[grid_index][gp_index]
+
+                # if tracker.n_obs > 0 or gp_index in [2641, 3752, 4946]:
+                #     x = 1
+
+                # tracker.t_last = observation.t_end
+                # tracker.n_obs += 1
+                # tracker.latest_observation = observation.to_dict()
 
     def get_observation_history(self, grid_index : int, gp_index : int) -> ObservationTracker:
         if grid_index in self.history and gp_index in self.history[grid_index]:

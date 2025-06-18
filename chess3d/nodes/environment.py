@@ -337,6 +337,15 @@ class SimulationEnvironment(EnvironmentNode):
         # find/generate measurement results
         observation_data = self.query_measurement_data(agent_state, instrument, msg.t_start, msg.t_end)
 
+        # DEBUG 
+        targets_requested : set = {(np.round(lat,3),np.round(lon,3)) for lat,lon,_ in msg.observation_action['targets']}
+        targets_observed : set = {(obs['lat [deg]'], obs['lon [deg]']) for obs in observation_data}
+        additional_targets = targets_observed.difference(targets_requested)
+        # if len(targets_requested) > len(targets_observed):
+        #     print(f'\nWARNING: number of targets requested ({len(targets_requested)}) is larger than observed ({len(targets_observed)}).')
+        # elif additional_targets:
+        #     print(f'\nWARNING: number of targets observed ({len(targets_observed)}) does not match requested targets ({len(msg.observation_action["targets"])}).')
+
         # repsond to request
         self.log(f'measurement results obtained! responding to request')
         resp : ObservationResultsMessage = copy.deepcopy(msg)

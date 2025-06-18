@@ -18,6 +18,9 @@ def monitoring(kwargs) -> float:
     t_img = kwargs['t_start']
     t_prev = kwargs.get('t_prev',0.0)
     unobserved_reward_rate = kwargs.get('unobserved_reward_rate', 1.0)
+    n_obs = kwargs.get('n_obs', 0)
+    if n_obs > 0:
+        x = 1
         
     assert (t_img - t_prev) >= 0.0 # TODO fix acbba triggering this
 
