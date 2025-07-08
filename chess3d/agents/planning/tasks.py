@@ -262,6 +262,9 @@ class SchedulableObservationTask:
     def __str__(self):
         return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
     
+    def __hash__(self):
+        return hash(self.id)
+
 class ObservationTracker:
     def __init__(self, lat : float, lon : float, grid_index : int, gp_index : int, t_last : str = -1, n_obs : int = 0, latest_observation : dict = None):
         """ 
@@ -324,7 +327,6 @@ class ObservationHistory:
                     int(row["grid index"]),
                     int(row["GP index"])
                 )
-        
 
     def update(self, observations : list) -> None:
         """

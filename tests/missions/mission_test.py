@@ -527,7 +527,7 @@ class TestSingleSatCase(unittest.TestCase):
 
     #     print('DONE')
 
-class TestSingleSatCaseComp(unittest.TestCase):
+class TestSingleSatNoEventsCase(unittest.TestCase):
     def setUp(self) -> None:
         # terminal welcome message
         print_welcome('Simulation Loading Test')
@@ -611,7 +611,7 @@ class TestSingleSatCaseComp(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "heuristic",
-                            "period": 1000,
+                            "period": 80,
                             # "horizon": 500,
                         },
                         # "replanner" : {
@@ -619,10 +619,10 @@ class TestSingleSatCaseComp(unittest.TestCase):
                         #     "period" : 400
                         # },
                     },
-                    # "science" : {
-                    #     "@type": "lookup", 
-                    #     "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
-                    # },
+                    "science" : {
+                        "@type": "lookup", 
+                        "eventsPath" : "./tests/missions/resources/events/no_events.csv"
+                    },
                     "mission" : "Algal blooms monitoring"
                 }
             ],
@@ -636,24 +636,24 @@ class TestSingleSatCaseComp(unittest.TestCase):
                 "connectivity" : "FULL", 
                 "events" : {
                     "@type": "PREDEF", 
-                    "eventsPath" : "./tests/missions/resources/events/lake_events_seed-1000.csv"
+                    "eventsPath" : "./tests/missions/resources/events/no_events.csv"
                 },
                 "clock" : {
                     "@type" : "EVENT"
                 },
                 "scenarioPath" : "./tests/missions/",
-                "name" : "single_sat_case_comp",
+                "name" : "single_sat_no_events_case",
                 "missionsPath" : "./tests/missions/resources/missions/missions.json"
             },
             "settings": {
                 "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/missions/orbit_data/single_sat_case_comp",
+                "outDir" : "./tests/missions/orbit_data/single_sat_no_events_case",
             }
         }
 
         # set outdir
         orbitdata_dir = os.path.join('./tests/missions', 'orbit_data')
-        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'single_sat_case_comp')
+        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'single_sat_no_events_case')
         scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
         if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
         if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)

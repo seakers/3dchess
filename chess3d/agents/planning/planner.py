@@ -1,5 +1,6 @@
 
 from collections import defaultdict
+from functools import reduce
 from logging import Logger
 import queue
 from numba import njit
@@ -86,9 +87,6 @@ class AbstractPlanner(ABC):
         # cluster tasks based on adjacency
         combined_tasks : list[SchedulableObservationTask] = self.cluster_tasks(schedulable_tasks, task_adjacency)
 
-        if any([len(task.parent_tasks) >= 12 for task in combined_tasks]):
-            x = 1
-
         # add clustered tasks to the final list of tasks available for scheduling
         schedulable_tasks.extend(combined_tasks)
 
@@ -126,9 +124,20 @@ class AbstractPlanner(ABC):
                     instrument = access_time[2]
                     accessibility = access_time[3]
                     th = access_time[-1]
-                    slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
-                                           np.mean(th)+cross_track_fovs[instrument]/2)
+                    
+                    if max(th) - min(th) > cross_track_fovs[instrument]:
+                        # not all of the accessibility is observable with a single pass
+                        continue
+                        # raise NotImplementedError('No support for tasks that require multiple passes yet.')
+                    else:
+                        off_axis_angles = [Interval(off_axis_angle - cross_track_fovs[instrument]/2,
+                                                    off_axis_angle + cross_track_fovs[instrument]/2)
+                                                    for off_axis_angle in th]
+                        slew_angles = reduce(lambda a, b: a.intersection(b), off_axis_angles)
 
+                    # slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
+                    #                        np.mean(th)+cross_track_fovs[instrument]/2)
+                    
                     # check if instrument can perform the task                    
                     if not task.objective.can_perform(instrument): 
                         continue # skip if not
@@ -196,14 +205,49 @@ class AbstractPlanner(ABC):
 
     @runtime_tracker
     def cluster_tasks(self, schedulable_tasks : list, adj : dict) -> list:
-        """ Clusters tasks based on adjacency. """ 
+        """ 
+        Clusters tasks based on adjacency. 
+        
+        ```
+        while V!=Ø do
+            Pick a vertex p with largest degree from V. 
+                If such p are not unique, pick the p with highest priority.
+            
+            while N(p)=Ø do
+                Pick a neighbor q of p, q ∈ N(p), such that the number of their common neighbors is maximum. 
+                    If such p are not unique, pick the p with least edges being deleted.
+                    Again, if such p are still not unique, pick the p with highest priority.
+                Combine q and p into a new p
+                Delete edges from q and p that are not connected to their common neighbors
+                Reset neighbor collection N(p) for the new p
+            end while
+            
+            Output the cluster-task denoted by p
+            Delete p from V
+        end while
+        ```
+        
+        """ 
 
-        debug_interval = Interval(74.52, 89.20)  # debug interval for testing purposes
+        # DEBUG --------
+        # schedulable_tasks = schedulable_tasks[:8]
+        # adj = dict()
+        # adj = {
+        #     schedulable_tasks[0].id : {schedulable_tasks[1],schedulable_tasks[2]},
+        #     schedulable_tasks[1].id : {schedulable_tasks[0],schedulable_tasks[3],schedulable_tasks[5],schedulable_tasks[7]},
+        #     schedulable_tasks[2].id : {schedulable_tasks[0],schedulable_tasks[3],schedulable_tasks[4]},
+        #     schedulable_tasks[3].id : {schedulable_tasks[1],schedulable_tasks[2],schedulable_tasks[5],schedulable_tasks[6],schedulable_tasks[7]},
+        #     schedulable_tasks[4].id : {schedulable_tasks[2],schedulable_tasks[6]},
+        #     schedulable_tasks[5].id : {schedulable_tasks[1],schedulable_tasks[3],schedulable_tasks[7]},
+        #     schedulable_tasks[6].id : {schedulable_tasks[3],schedulable_tasks[4],schedulable_tasks[7]},
+        #     schedulable_tasks[7].id : {schedulable_tasks[1],schedulable_tasks[3],schedulable_tasks[5],schedulable_tasks[6]}
+        # }
+        # cliques = []
+        # -------------
 
+        
         schedulable_tasks : list[SchedulableObservationTask]
         adj : Dict[str, set[SchedulableObservationTask]] = adj
-
-        x = max([len(neighbors) for neighbors in adj.values()]) if adj else 0 #debug purposes
 
         # only keep tasks that have at least one clusterable task
         v = [task for task in schedulable_tasks if len(adj[task.id]) > 0]
@@ -218,18 +262,6 @@ class AbstractPlanner(ABC):
             while len(v) > 0:
                 # pop first task from the list of tasks to be scheduled
                 p : SchedulableObservationTask = v.pop()
-
-                n_p_init : list[SchedulableObservationTask] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)
-                possible_coalition : set[SchedulableObservationTask] = adj[p.id].intersection(adj[p.id])
-                possible_coalition.add(p)
-
-                for neighbor in n_p_init:
-                    neighbor_coalition = adj[neighbor.id].intersection(adj[neighbor.id])
-                    neighbor_coalition.add(neighbor)
-                    
-                    possible_coalition.intersection_update(neighbor_coalition)
-
-                #     possible_coalition.intersection_update(neighbor_coalition)
 
                 # get list of neighbors of p sorted by number of common neighbors
                 n_p : list[SchedulableObservationTask] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)
@@ -274,19 +306,18 @@ class AbstractPlanner(ABC):
                     # update progress bar
                     pbar.update(1)
 
+                # DEBUGGING--------- 
+                # clique.add(p)
+                # cliques.append(sorted([schedulable_tasks.index(t)+1 for t in clique]))
+                # ------------------
+
                 # add merged task to the list of combined tasks
                 combined_tasks.append(p)
-
-                if p.accessibility.overlaps(debug_interval) and len(p.parent_tasks) == 4:
-                    # debug interval; print debug information
-                    x = 1
 
                 # sort remaining schedulable tasks by degree of adjacency 
                 v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(v, adj)
 
-        t = [len(task.parent_tasks) for task in combined_tasks]
-        y = max(t) if combined_tasks else 0
-
+        
         return combined_tasks
 
     @runtime_tracker
@@ -298,16 +329,24 @@ class AbstractPlanner(ABC):
         # sort tasks by degree and return
         return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.reward for parent_task in p.parent_tasks]), -p.accessibility.left))
 
-    def sort_tasks_by_common_neighbors(self, p : SchedulableObservationTask, tasks : list, adjacency : dict) -> list:
-        tasks : list[SchedulableObservationTask] = tasks
+    def sort_tasks_by_common_neighbors(self, p : SchedulableObservationTask, n_p : list, adjacency : dict) -> list:
+        n_p : list[SchedulableObservationTask] = n_p
         adjacency : Dict[str, set[SchedulableObservationTask]] = adjacency
 
         common_neighbors : dict = {q : adjacency[p.id].intersection(adjacency[q.id]) 
-                                   for q in tasks}
+                                   for q in n_p}
         neighbors_to_delete : dict = {q : adjacency[p.id].difference(adjacency[q.id])
-                                      for q in tasks}
+                                      for q in n_p}
 
-        return sorted(tasks, 
+        # DEBUGGING 
+        # vals = [(len(common_neighbors[p]), 
+        #          -len(neighbors_to_delete[p]),
+        #          sum([parent_task.reward for parent_task in p.parent_tasks]), 
+        #          -p.accessibility.left)
+        #          for p in n_p]
+        # vals.sort()
+
+        return sorted(n_p, 
                       key=lambda p: (len(common_neighbors[p]), 
                                      -len(neighbors_to_delete[p]),
                                      sum([parent_task.reward for parent_task in p.parent_tasks]), 

@@ -94,7 +94,18 @@ class SatelliteAgent(SimulatedAgent):
                          logger)
         
         self.orbitdata : OrbitData = orbitdata
+        self.observation_history = ObservationHistory(orbitdata, mission)
+    
+    async def setup(self) -> None:
+        # get initial set of tasks from groud targets
 
+        ## compile task information from ground targets
+        monitoring_task_info = [ (objective, grid_index, gp_index, lat, lon)
+                                for objective in self.mission
+                                for grid in self.orbitdata.grid_data
+                                for lat,lon,grid_index,gp_index in grid.values]
+
+        ## generate tasks from ground targets
         self.tasks : list[GenericObservationTask]= [
             MonitoringObservationTask(
                                         self.mission.name,
@@ -103,16 +114,11 @@ class SatelliteAgent(SimulatedAgent):
                                         1.0,
                                         self.orbitdata.duration * 24 * 3600
                                     )
-            for grid in tqdm(self.orbitdata.grid_data,
-                         desc="SATELLITE: Generating monitoring tasks from ground targets",
-                         leave=False)
-            for lat,lon,grid_index,gp_index in grid.values
-            for objective in self.mission
+            for objective,grid_index,gp_index,lat,lon in tqdm(monitoring_task_info,
+                                                              desc="SATELLITE: Generating monitoring tasks from targets and mission objectives", 
+                                                              unit="task",
+                                                              leave=False)
         ]
 
-        self.observation_history = ObservationHistory(orbitdata, mission)
-    
-    async def setup(self) -> None:
-        # get initial set of tasks from groud targets
         return
     

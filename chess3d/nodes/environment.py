@@ -341,10 +341,10 @@ class SimulationEnvironment(EnvironmentNode):
         targets_requested : set = {(np.round(lat,3),np.round(lon,3)) for lat,lon,_ in msg.observation_action['targets']}
         targets_observed : set = {(obs['lat [deg]'], obs['lon [deg]']) for obs in observation_data}
         additional_targets = targets_observed.difference(targets_requested)
-        # if len(targets_requested) > len(targets_observed):
-        #     print(f'\nWARNING: number of targets requested ({len(targets_requested)}) is larger than observed ({len(targets_observed)}).')
-        # elif additional_targets:
-        #     print(f'\nWARNING: number of targets observed ({len(targets_observed)}) does not match requested targets ({len(msg.observation_action["targets"])}).')
+        if len(targets_requested) > len(targets_observed):
+            print(f'\nWARNING: number of targets requested ({len(targets_requested)}) is larger than observed ({len(targets_observed)}) at T={np.round(self.get_current_time(),3)} [s].')
+        elif additional_targets:
+            print(f'\nWARNING: number of targets observed ({len(targets_observed)}) does not match requested targets ({len(msg.observation_action["targets"])}) at T={np.round(self.get_current_time(),3)} [s].')
 
         # repsond to request
         self.log(f'measurement results obtained! responding to request')

@@ -7,7 +7,7 @@ from dmas.clocks import *
 from tqdm import tqdm
 
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import EventObservationTask, ObservationHistory, SchedulableObservationTask
+from chess3d.agents.planning.tasks import ObservationHistory, SchedulableObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
