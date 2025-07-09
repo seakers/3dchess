@@ -212,36 +212,30 @@ class SchedulableObservationTask:
             return False
 
         # Check if the availability time intervals overlap
-        accessibility_overlap : Interval = self.accessibility.union(other_task.accessibility)
-
-        if not accessibility_overlap.is_empty():
+        accessibility_union : Interval = self.accessibility.union(other_task.accessibility, extend=True)
+        # accessibility_union : Interval = self.accessibility.union(other_task.accessibility)
+        
+        if not accessibility_union.is_empty():
             # Check if the time intervals are within the maximum duration
             max_parent_duration_self = min([task.duration_requirements.right for task in self.parent_tasks])
             max_parent_duration_other = min([task.duration_requirements.right for task in other_task.parent_tasks])
             
-            if accessibility_overlap.span() > min(max_parent_duration_self, max_parent_duration_other):
+            if accessibility_union.span() > min(max_parent_duration_self, max_parent_duration_other):
                 return False
 
         # Check if the slew angles overlap
         slew_angle_overlap : Interval = self.slew_angles.intersection(other_task.slew_angles) 
 
-        if accessibility_overlap.is_empty() or slew_angle_overlap.is_empty():
-            return False
-
-        return not (accessibility_overlap.is_empty() or slew_angle_overlap.is_empty())
+        return not (accessibility_union.is_empty() or slew_angle_overlap.is_empty())
 
     def merge(self, other_task : object) -> object:
         try:
             """ Merge two tasks into one. """
             assert isinstance(other_task, SchedulableObservationTask), "The other task must be an instance of ObservationTask."
-            
-            if not self.can_combine(other_task):
-                self.can_combine(other_task)
-                x = 1
-            assert self.can_combine(other_task), "The tasks cannot be combined."
+            assert self.can_combine(other_task), "Tasks cannot be combined."
 
             # Combine the time intervals and slew angles
-            combined_time_interval : Interval = self.accessibility.union(other_task.accessibility)
+            combined_time_interval : Interval = self.accessibility.union(other_task.accessibility, extend=True)
             combined_slew_angles : Interval  = self.slew_angles.intersection(other_task.slew_angles)
                     
             # Update the task attributes

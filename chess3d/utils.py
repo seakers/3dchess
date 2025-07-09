@@ -47,7 +47,7 @@ class Interval:
     
     def is_empty(self) -> bool:
         """ checks if the interval is empty """
-        return self.left == self.right and (self.left_open or self.right_open)
+        return (self.left == self.right and (self.left_open or self.right_open)) or (self.left > self.right)
         
     def overlaps(self, __other : object) -> bool:
         """ checks if this interval has an overlap with another """
@@ -88,13 +88,14 @@ class Interval:
         # create a new interval object
         return Interval(left, right, left_open, right_open)
 
-    def union(self, __other : object) -> object:
+    def union(self, __other : object, extend : bool = False) -> object:
         """ merges overlapping intervals and returns their union """
 
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
 
-        if not self.overlaps(__other):
+        if not self.overlaps(__other) and not extend:
+            """ if the intervals do not overlap, return an empty interval """
             return EmptyInterval()
             # raise ValueError("cannot merge intervals with no overlap")
 

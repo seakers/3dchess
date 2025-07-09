@@ -611,7 +611,7 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                     "planner" : {
                         "preplanner" : {
                             "@type" : "heuristic",
-                            "period": 80,
+                            "period": 1000,
                             # "horizon": 500,
                         },
                         # "replanner" : {

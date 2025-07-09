@@ -135,9 +135,6 @@ class AbstractPlanner(ABC):
                                                     for off_axis_angle in th]
                         slew_angles = reduce(lambda a, b: a.intersection(b), off_axis_angles)
 
-                    # slew_angles = Interval(np.mean(th)-cross_track_fovs[instrument]/2, 
-                    #                        np.mean(th)+cross_track_fovs[instrument]/2)
-                    
                     # check if instrument can perform the task                    
                     if not task.objective.can_perform(instrument): 
                         continue # skip if not
@@ -229,7 +226,7 @@ class AbstractPlanner(ABC):
         
         """ 
 
-        # DEBUG --------
+        # DEBUG ------
         # schedulable_tasks = schedulable_tasks[:8]
         # adj = dict()
         # adj = {
@@ -316,7 +313,6 @@ class AbstractPlanner(ABC):
 
                 # sort remaining schedulable tasks by degree of adjacency 
                 v : list[SchedulableObservationTask] = self.sort_tasks_by_degree(v, adj)
-
         
         return combined_tasks
 
