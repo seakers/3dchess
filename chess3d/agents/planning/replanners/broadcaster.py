@@ -18,7 +18,7 @@ from chess3d.mission import Mission
 from chess3d.utils import Interval
 
 
-class BroadcasterReplanner(AbstractReplanner):
+class PeriodicBroadcasterReplanner(AbstractReplanner):
     def __init__(self, mode : str, period : float = np.Inf, debug = False, logger = None):
         super().__init__(debug, logger)
 

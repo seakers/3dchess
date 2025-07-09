@@ -23,7 +23,7 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
-from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
+from chess3d.agents.planning.replanners.broadcaster import PeriodicBroadcasterReplanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -1652,7 +1652,7 @@ class SimulationElementFactory:
                 mode = replanner_dict.get('mode', 'periodic').lower()
                 period = replanner_dict.get('period', 500) if mode == 'periodic' else np.Inf
 
-                replanner = BroadcasterReplanner(mode, period, debug, logger)
+                replanner = PeriodicBroadcasterReplanner(mode, period, debug, logger)
 
             elif replanner_type.lower() == 'acbba': 
                 threshold = replanner_dict.get('threshold', 1)
