@@ -284,13 +284,27 @@ class ObservationTracker:
         self.gp_index = gp_index
         self.t_last = t_last
         self.n_obs = n_obs
-        self.latest_observation = None
+        self.latest_observation = latest_observation
+        self.observations : list[dict] = []
     
+    def update(self, observation : dict) -> None:
+        """ Update the observation tracker with a new observation."""        
+        # update number of observations at this target
+        self.n_obs += 1
+
+        # update list of known observations 
+        self.observations.append(observation)
+
+        # update last observation time
+        if observation['t_end'] >= self.t_last:
+            self.t_last = observation['t_end']
+            self.latest_observation = observation
+
     def __repr__(self):
         return f"ObservationTracker(grid_index={self.grid_index}, gp_index={self.gp_index}, lat={self.lat}, lon={self.lon}, t_last={self.t_last}, n_obs={self.n_obs})"
 
 class ObservationHistory:
-    def __init__(self, orbitdata : OrbitData, mission : Mission):
+    def __init__(self, orbitdata : OrbitData):
         """
         Class to track the observation history of the agent.
         """
@@ -326,40 +340,24 @@ class ObservationHistory:
         """
         Update the observation history with the new observations.
         """
-        for instrument,observations_data in observations:
+        for _,observations_data in observations:
             for observation in observations_data:
                 grid_index = observation['grid index']
                 gp_index = observation['GP index']
-                t_end = observation['t_end']
                 
                 tracker : ObservationTracker = self.history[grid_index][gp_index]
+                tracker.update(observation)
 
-                if tracker.n_obs > 0:
-                    x = 1
-
-                tracker.t_last = t_end
-                tracker.n_obs += 1
-                tracker.latest_observation = observation
-
-        # for observation in observations:
-        #     observation : ObservationAction
-        #     for target in observation.targets:
-        #         lat = target[0]
-        #         lon = target[1]
-        #         grid_index,gp_index = self.__get_target_indeces(lat, lon)
-
-        #         assert grid_index is not None, f"Grid index not found for target {target}."
-        #         assert gp_index is not None, f"Ground point index not found for target {target}."
-
-        #         # update the observation history
+                # grid_index = observation['grid index']
+                # gp_index = observation['GP index']
+                # t_end = observation['t_end']
+                
                 # tracker : ObservationTracker = self.history[grid_index][gp_index]
 
-                # if tracker.n_obs > 0 or gp_index in [2641, 3752, 4946]:
-                #     x = 1
-
-                # tracker.t_last = observation.t_end
+                # tracker.t_last = t_end
                 # tracker.n_obs += 1
-                # tracker.latest_observation = observation.to_dict()
+                # tracker.latest_observation = observation
+
 
     def get_observation_history(self, grid_index : int, gp_index : int) -> ObservationTracker:
         if grid_index in self.history and gp_index in self.history[grid_index]:
@@ -367,16 +365,4 @@ class ObservationHistory:
         else:
             raise ValueError(f"Observation history for grid index {grid_index} and ground point index {gp_index} not found.")
 
-
-    def __get_target_indeces(self, lat : float, lon : float) -> tuple:
-        """
-        Get the target indeces for the given latitude and longitude.
-        """
-        # validate inputs
-        assert isinstance(lat, (float, int)), "Latitude must be a float or int."
-        assert isinstance(lon, (float, int)), "Longitude must be a float or int."
-
-        lat_key = round(lat, 6)
-        lon_key = round(lon, 6)
-        return self.grid_lookup.get((lat_key, lon_key), (None, None))
         

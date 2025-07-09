@@ -614,10 +614,10 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                             "period": 1000,
                             # "horizon": 500,
                         },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster",
-                        #     "period" : 400
-                        # },
+                        "replanner" : {
+                            "@type" : "broadcaster",
+                            "period" : 400
+                        },
                     },
                     "science" : {
                         "@type": "lookup", 

@@ -89,15 +89,13 @@ class Interval:
         return Interval(left, right, left_open, right_open)
 
     def union(self, __other : object, extend : bool = False) -> object:
-        """ merges overlapping intervals and returns their union """
+        """ merges intervals and returns their union """
 
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
 
-        if not self.overlaps(__other) and not extend:
-            """ if the intervals do not overlap, return an empty interval """
-            return EmptyInterval()
-            # raise ValueError("cannot merge intervals with no overlap")
+        # if the intervals do not overlap, return an empty interval
+        if not self.overlaps(__other) and not extend: return EmptyInterval()
 
         # find the left and right bounds of the union
         left = min(self.left, __other.left)
@@ -111,12 +109,15 @@ class Interval:
         return Interval(left, right, left_open, right_open)
 
     def extend(self, x: float, open:bool=False) -> None:
-        """ extends interval """
+        """ extends bounds of interval to include new value `x` """
 
         if x < self.left:
+            # extend left bound
             self.left = x
             self.left_open = open
+        
         elif x > self.right:
+            # extend right bound
             self.right = x
             self.right_open = open
 
@@ -137,7 +138,10 @@ class Interval:
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot compare with object of type `{type(__other)}`.')
 
-        return abs(self.left - __other.left) < 1e-6 and abs(self.right - __other.right) < 1e-6
+        return (abs(self.left - __other.left) < 1e-6 
+                and abs(self.right - __other.right) < 1e-6 
+                and self.left_open == __other.left_open 
+                and self.right_open == __other.right_open)
 
     def __gt__(self, __value: object) -> bool:
         if not isinstance(__value, Interval):

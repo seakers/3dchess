@@ -94,11 +94,12 @@ class SatelliteAgent(SimulatedAgent):
                          logger)
         
         self.orbitdata : OrbitData = orbitdata
-        self.observation_history = ObservationHistory(orbitdata, mission)
-    
+            
     async def setup(self) -> None:
-        # get initial set of tasks from groud targets
+        # initialize observation history
+        self.observation_history = ObservationHistory(self.orbitdata)
 
+        # get initial set of tasks from groud targets
         ## compile task information from ground targets
         monitoring_task_info = [ (objective, grid_index, gp_index, lat, lon)
                                 for objective in self.mission
