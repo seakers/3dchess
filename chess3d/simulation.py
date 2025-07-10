@@ -23,7 +23,7 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
-from chess3d.agents.planning.replanners.broadcaster import PeriodicBroadcasterReplanner
+from chess3d.agents.planning.replanners.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -1648,11 +1648,16 @@ class SimulationElementFactory:
             if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
             debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
-            if replanner_type.lower() in ['broadcaster', 'periodic broadcaster']:
+            if replanner_type.lower() == 'broadcaster':
                 mode = replanner_dict.get('mode', 'periodic').lower()
-                period = replanner_dict.get('period', 500) if mode == 'periodic' else np.Inf
 
-                replanner = PeriodicBroadcasterReplanner(mode, period, debug, logger)
+                if mode == 'opportunistic':
+                    replanner = OpportunisticBroadcasterReplanner(debug, logger)
+                elif mode == 'periodic':
+                    period = replanner_dict.get('period', np.Inf)
+                    replanner = PeriodicBroadcasterReplanner(period, debug, logger)
+                else:
+                    raise ValueError(f'`mode` of type `{mode}` not supported for broadcaster replanner.')
 
             elif replanner_type.lower() == 'acbba': 
                 threshold = replanner_dict.get('threshold', 1)

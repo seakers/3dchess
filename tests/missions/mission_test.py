@@ -616,9 +616,88 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                         },
                         "replanner" : {
                             "@type" : "broadcaster",
+                            # "mode" : "opportunistic",
                             "period" : 400
                         },
                     },
+                    "science" : {
+                        "@type": "lookup", 
+                        "eventsPath" : "./tests/missions/resources/events/no_events.csv"
+                    },
+                    "mission" : "Algal blooms monitoring"
+                },
+                {
+                    "@id": "thermal_sat_0_1",
+                    "name": "thermal_1",
+                    "spacecraftBus": {
+                        "name": "BlueCanyon",
+                        "mass": 20,
+                        "volume": 0.5,
+                        "orientation": {
+                            "referenceFrame": "NADIR_POINTING",
+                            "convention": "REF_FRAME_ALIGNED"
+                        },
+                        "components": {
+                            "adcs" : {
+                                "maxTorque" : 1000,
+                                "maxRate" : 1
+                            }
+                        }
+                    },
+                    "instrument": {
+                        "name": "TIR",
+                        "@id" : "vnir_hyp_imager",
+                        "@type" : "VNIR",
+                        "detectorWidth": 6.6e-6,
+                        "focalLength": 3.6,  
+                        "orientation": {
+                            "referenceFrame": "NADIR_POINTING",
+                            "convention": "REF_FRAME_ALIGNED"
+                        },
+                        "fieldOfViewGeometry": { 
+                            "shape": "RECTANGULAR", 
+                            "angleHeight": 2.5, 
+                            "angleWidth": 5.0
+                        },
+                        "maneuver" : {
+                            "maneuverType":"SINGLE_ROLL_ONLY",
+                            "A_rollMin": -50,
+                            "A_rollMax": 50
+                        },
+                        "spectral_resolution" : "Multispectral"
+                    },
+                    "orbitState": {
+                        "date": {
+                            "@type": "GREGORIAN_UT1",
+                            "year": 2020,
+                            "month": 1,
+                            "day": 1,
+                            "hour": 0,
+                            "minute": 0,
+                            "second": 0
+                        },
+                        "state": {
+                            "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                            "sma": 7078,
+                            "ecc": 0.01,
+                            "inc": 63.0,
+                            "raan": 0.0,
+                            "aop": 0.0,
+                            "ta": 95.0
+                        }
+                    },
+                    # "planner" : {
+                    #     "preplanner" : {
+                    #         "@type" : "heuristic",
+                    #         "period": 1000,
+                    #         # "horizon": 500,
+                    #     },
+                    #     "replanner" : {
+                    #         "@type" : "broadcaster",
+                    #         "mode" : "opportunistic",
+                    #         "period" : 400
+                    #     },
+                    # },
                     "science" : {
                         "@type": "lookup", 
                         "eventsPath" : "./tests/missions/resources/events/no_events.csv"

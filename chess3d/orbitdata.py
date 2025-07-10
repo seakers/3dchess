@@ -318,15 +318,17 @@ class OrbitData:
     
     def update_databases(self, t : float) -> None:
         
+        for satellite_name, isl_data in self.isl_data.items():
+            if isl_data is None:
+                x = 1
+
+
         # exclude outdated data
         self.eclipse_data.update_expired_values(t)
         self.position_data.update_expired_values(t)
-        self.isl_data = {satellite_name : isl_data.update_expired_values(t) 
-                         for satellite_name, isl_data in self.isl_data.items()}
+        for _, isl_data in self.isl_data.items(): isl_data.update_expired_values(t) 
         self.gs_access_data.update_expired_values(t)
         self.gp_access_data.update_expired_values(t)
-
-        return
 
         # self.eclipse_data = self.eclipse_data[self.eclipse_data['end index'] >= t_index - 1]
         # self.position_data = self.position_data[self.position_data['time index'] >= t_index - 1]

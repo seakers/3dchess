@@ -1240,6 +1240,8 @@ class AbstractReplanner(AbstractPlanner):
                     ) -> Plan:
         pass
 
+
+    @abstractmethod
     def get_broadcast_contents(self,
                                broadcast_action : FutureBroadcastMessageAction,
                                state : SimulationAgentState,
@@ -1247,51 +1249,3 @@ class AbstractReplanner(AbstractPlanner):
                                **kwargs
                                ) -> BroadcastMessageAction:
         """  Generates a broadcast message to be sent to other agents """
-        # raise NotImplementedError('Broadcast contents generation not yet implemented for this planner.')
-
-        if broadcast_action.broadcast_type == FutureBroadcastTypes.REWARD:
-            # raise NotImplementedError('Reward broadcast not yet implemented.')
-
-            # compile latest observations from the observation history
-            latest_observations : list[ObservationAction] = [observation_tracker.latest_observation
-                                                             for _,grid in observation_history.history.items()
-                                                             for _, observation_tracker in grid.items()
-                                                             if observation_tracker.latest_observation is not None
-                                                             # TODO ONLY include observations that are within the period of the broadcast
-                                                             and state.t - self.period <= observation_tracker.latest_observation['t_end']
-                                                             ]
-            
-            # index by instrument name
-            instruments_used : set = {latest_observation['instrument'].lower() 
-                                      for latest_observation in latest_observations}
-            indexed_observations = {instrument_used: [latest_observation for latest_observation in latest_observations
-                                                      if latest_observation['instrument'].lower() == instrument_used]
-                                    for instrument_used in instruments_used}
-
-            # create ObservationResultsMessage for each instrument
-            msgs = [ObservationResultsMessage(state.agent_name, 
-                                              state.agent_name, 
-                                              state.to_dict(), 
-                                              {}, 
-                                              instrument,
-                                              state.t,
-                                              state.t,
-                                              observations
-                                              )
-                    for instrument, observations in indexed_observations.items()]
-            
-        elif broadcast_action.broadcast_type == FutureBroadcastTypes.REQUESTS:
-
-            msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
-                    for req in self.known_reqs
-                    if isinstance(req, TaskRequest)
-                    and req.event.t_start <= state.t <= req.event.t_end
-                    and req.requester == state.agent_name]
-        else:
-            raise ValueError(f'`{broadcast_action.broadcast_type}` broadcast type not supported.')
-
-        # construct bus message
-        bus_msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
-
-        # return bus message broadcast (if not empty)
-        return BroadcastMessageAction(bus_msg.to_dict(), broadcast_action.t_start)
