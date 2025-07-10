@@ -440,18 +440,6 @@ class AbstractPlanner(ABC):
 
         # return total task reward
         return task_reward
-
-    @abstractmethod
-    def _schedule_broadcasts(self, 
-                             state : SimulationAgentState, 
-                             orbitdata : OrbitData,
-                             **kwargs
-                            ) -> list:
-        """ 
-        Schedules any broadcasts to be done. 
-        
-        By default it schedules any pending measurement requests or message relay messages.
-        """
     
     @runtime_tracker
     def _create_broadcast_path(self, 
@@ -1112,6 +1100,18 @@ class AbstractPreplanner(AbstractPlanner):
     @abstractmethod
     def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list, observation_history : ObservationHistory) -> list:
         """ Creates a list of observation actions to be performed by the agent """    
+
+    # @abstractmethod
+    # def _schedule_broadcasts(self, 
+    #                          state : SimulationAgentState, 
+    #                          orbitdata : OrbitData,
+    #                          **kwargs
+    #                         ) -> list:
+    #     """ 
+    #     Schedules any broadcasts to be done. 
+        
+    #     By default it schedules any pending measurement requests or message relay messages.
+    #     """
 
     @abstractmethod
     def _schedule_broadcasts(self, state: SimulationAgentState, observations : list, orbitdata: OrbitData, t : float = None) -> list:

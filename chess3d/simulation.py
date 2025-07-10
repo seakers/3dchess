@@ -1648,7 +1648,7 @@ class SimulationElementFactory:
             if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
             debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
-            if replanner_type.lower() == 'broadcaster':
+            if replanner_type.lower() in ['broadcaster', 'periodic broadcaster']:
                 mode = replanner_dict.get('mode', 'periodic').lower()
                 period = replanner_dict.get('period', 500) if mode == 'periodic' else np.Inf
 

@@ -18,6 +18,101 @@ from chess3d.mission import Mission
 from chess3d.utils import Interval
 
 
+class AccessDrivenBroadcasterReplanner(AbstractReplanner):
+    def __init__(self, debug = False, logger = None):
+        super().__init__(debug, logger)
+
+    def needs_planning(self, 
+                       state : SimulationAgentState,
+                       specs : object,
+                       current_plan : Plan,
+                       orbitdata : OrbitData
+                       ) -> bool:
+
+        # check if a new preplan was just generated
+        return isinstance(current_plan, Preplan)
+    
+    def generate_plan(  self, 
+                        state : SimulationAgentState,
+                        specs : object,
+                        current_plan : Plan,
+                        clock_config : ClockConfig,
+                        orbitdata : OrbitData,
+                        mission : Mission,
+                        tasks : list,
+                        observation_history : ObservationHistory,
+                    ) -> Plan:
+        
+        # determine the next acceptable broadcast times
+        t_start = state.t
+        t_end = current_plan.t_next if isinstance(current_plan, Preplan) else np.Inf
+
+        # gather the access opportunities per agent
+        access_opportunities : Dict[str, list] = self.__calculate_broadcast_opportunities(orbitdata, t_start, t_end)
+
+    # def _schedule_broadcasts(self, state : SimulationAgentState, reward_grid , orbitdata : OrbitData):
+    #     msgs : list[SimulationMessage] = []
+
+    #     # # prepare broadcasts latest known and active requests # <= MOVED TO ABSTRACT PREPLANNER CLASS
+    #     # req_msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+    #     #             for req in self.known_reqs
+    #     #             if isinstance(req, MeasurementRequest)
+    #     #             and req.t_start <= state.t <= req.t_end]
+    #     # msgs.extend(req_msgs)
+        
+    #     # # prepare reward grid info broadcasts
+    #     # latest_observations : list[ObservationAction] = []
+    #     # for grid in reward_grid.rewards:
+    #     #     for target in grid:
+    #     #         for _,grid_point in target.items():
+    #     #             grid_point : GridPoint
+                    
+    #     #             # collect latest known observation for each ground point
+    #     #             if grid_point.observations:
+    #     #                 observations = list(grid_point.observations)
+    #     #                 observations.sort(key= lambda a: a['t_img'])
+    #     #                 latest_observations.append(observations[-1])
+
+    #     # obs_msgs = [ObservationPerformedMessage(state.agent_name, state.agent_name, observation.to_dict())
+    #     #             for observation in latest_observations]
+    #     # msgs.extend(obs_msgs)
+
+    #     # construct bus message
+    #     bus_msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+
+    #     # return bus message broadcast (if not empty)
+    #     return [BroadcastMessageAction(bus_msg.to_dict(), state.t)] if msgs else []
+
+    def __calculate_broadcast_opportunities(self, orbitdata: OrbitData, t_start : float, t_end : float) -> dict:
+        """ calculates future broadcast times based on inter-agent access opportunities """
+
+        # compile all inter-agent access opportunities
+        intervals : list[Interval] = { agent_name : sorted([Interval(max(t_start, t_access_start),t_access_end)
+                                                    for t_access_start,t_access_end in data.values
+                                                    if t_start <= t_access_end <= t_end], key=lambda x: x.left)
+                                        for agent_name,data in orbitdata.isl_data.items()}
+        
+
+        # TODO include ground station support
+
+        # collect unique start times of every access opportunity
+        return intervals
+        
+        # IDEA only broadcast during overlaps? 
+        # merge access intervals
+        merged_intervals : list[Interval] = []
+        for interval in intervals:
+            overlaps = [merged_interval for merged_interval in merged_intervals
+                        if interval.has_overlap(merged_interval)]
+            
+            if not overlaps:
+                merged_intervals.append(interval)
+            
+            for overlap in overlaps:
+                overlap.merge(interval)
+
+        return [interval.start for interval in merged_intervals]
+
 class PeriodicBroadcasterReplanner(AbstractReplanner):
     def __init__(self, mode : str, period : float = np.Inf, debug = False, logger = None):
         super().__init__(debug, logger)
@@ -58,8 +153,6 @@ class PeriodicBroadcasterReplanner(AbstractReplanner):
                        current_plan : Plan,
                        orbitdata : OrbitData
                        ) -> bool:
-        
-        # return isinstance(current_plan, Preplan)
 
         # check if a new preplan was just generated
         if isinstance(current_plan, Preplan): return True
@@ -92,65 +185,5 @@ class PeriodicBroadcasterReplanner(AbstractReplanner):
         else:
             raise NotImplementedError(f'`{self.mode}` information broadcaster not supported.')
     
-    def _schedule_broadcasts(self, state : SimulationAgentState, reward_grid , orbitdata : OrbitData):
-        msgs : list[SimulationMessage] = []
-
-        # # prepare broadcasts latest known and active requests # <= MOVED TO ABSTRACT PREPLANNER CLASS
-        # req_msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
-        #             for req in self.known_reqs
-        #             if isinstance(req, MeasurementRequest)
-        #             and req.t_start <= state.t <= req.t_end]
-        # msgs.extend(req_msgs)
-        
-        # # prepare reward grid info broadcasts
-        # latest_observations : list[ObservationAction] = []
-        # for grid in reward_grid.rewards:
-        #     for target in grid:
-        #         for _,grid_point in target.items():
-        #             grid_point : GridPoint
-                    
-        #             # collect latest known observation for each ground point
-        #             if grid_point.observations:
-        #                 observations = list(grid_point.observations)
-        #                 observations.sort(key= lambda a: a['t_img'])
-        #                 latest_observations.append(observations[-1])
-
-        # obs_msgs = [ObservationPerformedMessage(state.agent_name, state.agent_name, observation.to_dict())
-        #             for observation in latest_observations]
-        # msgs.extend(obs_msgs)
-
-        # construct bus message
-        bus_msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
-
-        # return bus message broadcast (if not empty)
-        return [BroadcastMessageAction(bus_msg.to_dict(), state.t)] if msgs else []
-
-    def __calculate_broadcast_opportunities(self, orbitdata: OrbitData) -> list:
-        """ calculates broadcast times that overlap with """
-        # compile all inter-agent access opportunities
-        intervals : list[Interval] = [Interval(t_start,t_end)
-                                          for _,data in orbitdata.isl_data.items()
-                                          for t_start,t_end in data.values]
-        # TODO include ground station support
-
-        # collect unique start times of every access opportunity
-        interval_starts = list({interval.left for interval in intervals})
-        interval_starts.sort(reverse=True)
-
-        return interval_starts
-        
-        # IDEA only broadcast during overlaps? 
-        # merge access intervals
-        merged_intervals : list[Interval] = []
-        for interval in intervals:
-            overlaps = [merged_interval for merged_interval in merged_intervals
-                        if interval.has_overlap(merged_interval)]
-            
-            if not overlaps:
-                merged_intervals.append(interval)
-            
-            for overlap in overlaps:
-                overlap.merge(interval)
-
-        return [interval.start for interval in merged_intervals]
+    
         

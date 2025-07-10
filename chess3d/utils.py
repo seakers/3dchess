@@ -123,6 +123,22 @@ class Interval:
 
         return
     
+    def update_left(self, left: float, open: bool = False) -> None:
+        """ updates the left bound of the interval """
+        if left <= self.right:
+            self.left = left
+            self.left_open = open
+        else:
+            raise ValueError('Cannot update left bound to a value greater than the right bound.')
+        
+    def update_right(self, right: float, open: bool = False) -> None:
+        """ updates the right bound of the interval """
+        if right >= self.left:
+            self.right = right
+            self.right_open = open
+        else:
+            raise ValueError('Cannot update right bound to a value less than the left bound.')
+    
     def span(self) -> float:
         """ returns the span of the interval """       
         return self.right - self.left
