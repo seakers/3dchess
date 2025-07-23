@@ -125,8 +125,8 @@ class TestingDealer(DealerPreplanner):
         """
         Generates plans for each agent based on the provided parameters.
         """
-        # For testing purposes, just return an empty dictionary
-        return {client: [ObservationAction('test_observation',
+        # For testing purposes, just return an generic observation action for each client
+        return {client: [ObservationAction('TIR',
                                            [[0,0,0]],
                                            [],
                                            0.0,
