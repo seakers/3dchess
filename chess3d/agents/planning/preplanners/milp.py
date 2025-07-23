@@ -1,5 +1,5 @@
-from logging import Logger
 from chess3d.agents.planning.planner import *
+from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 
 
 class MILPObservationScheduler:

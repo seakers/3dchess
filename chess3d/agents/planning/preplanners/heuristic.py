@@ -6,6 +6,7 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import *
 from tqdm import tqdm
 
+from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.planning.tasks import ObservationHistory, SchedulableObservationTask
 from chess3d.agents.states import *
@@ -13,7 +14,6 @@ from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
 from chess3d.agents.states import SimulationAgentState
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.planner import AbstractPreplanner
 from chess3d.messages import *
 from chess3d.utils import Interval
 
@@ -154,6 +154,8 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
     @runtime_tracker
     def sort_tasks_by_heuristic(self, state : SimulationAgentState, tasks : list, specs : Spacecraft, cross_track_fovs : dict, orbitdata : OrbitData, observation_history : ObservationHistory) -> list:
         """ Sorts tasks by heuristic value """
+        tasks : list[SchedulableObservationTask] = tasks
+        
         if tasks:
             # estimate maximum number of tasks in the planning horizon
             min_task_duration = min([task.accessibility.span() for task in tasks])
