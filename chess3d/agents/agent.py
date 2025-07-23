@@ -14,7 +14,9 @@ from dmas.utils import runtime_tracker
 from zmq import SocketType
 
 from chess3d.agents.planning.plan import Replan, Plan, Preplan
-from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
+from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
+from chess3d.agents.planning.replanners.replanner import AbstractReplanner
 from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
@@ -997,7 +999,7 @@ class SimulatedAgent(AbstractAgent):
         future_broadcasts = [action for action in plan_out
                              if isinstance(action, FutureBroadcastMessageAction)]
         if future_broadcasts:
-            if self.replanner is not None:
+            if isinstance(self.replanner, BroadcasterReplanner):
                 for action in future_broadcasts:
                     # get index of current future broadcast message action in output plan
                     i_action = plan_out.index(action)

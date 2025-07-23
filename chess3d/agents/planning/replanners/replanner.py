@@ -1,0 +1,51 @@
+from abc import abstractmethod
+from logging import Logger
+
+from dmas.modules import ClockConfig
+
+from chess3d.agents.planning.plan import Plan, Preplan
+from chess3d.agents.planning.planner import AbstractPlanner
+from chess3d.agents.planning.tasks import ObservationHistory
+from chess3d.agents.states import SimulationAgentState
+from chess3d.mission import Mission
+from chess3d.orbitdata import OrbitData
+
+
+class AbstractReplanner(AbstractPlanner):
+    """ Repairs plans previously constructed by another planner """
+
+    def __init__(self, debug: bool = False, logger: Logger = None) -> None:
+        super().__init__(debug, logger)
+
+        self.preplan : Preplan = None
+
+    @abstractmethod
+    def update_percepts(self, 
+                        state : SimulationAgentState,
+                        current_plan : Plan,
+                        incoming_reqs: list, 
+                        relay_messages: list, 
+                        misc_messages : list,
+                        completed_actions: list,
+                        aborted_actions : list,
+                        pending_actions : list
+                        ) -> None:
+        
+        super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
+        
+        # update latest preplan
+        if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, Preplan): 
+            self.preplan : Preplan = current_plan.copy() 
+
+    @abstractmethod
+    def generate_plan(  self, 
+                        state : SimulationAgentState,
+                        specs : object,
+                        current_plan : Plan,
+                        clock_config : ClockConfig,
+                        orbitdata : OrbitData,
+                        mission : Mission,
+                        tasks : list,
+                        observation_history : ObservationHistory,
+                    ) -> Plan:
+        pass

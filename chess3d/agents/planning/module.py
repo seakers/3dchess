@@ -8,8 +8,8 @@ from dmas.modules import *
 from dmas.utils import runtime_tracker
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.planning.planner import AbstractPreplanner
-from chess3d.agents.planning.planner import AbstractReplanner
+from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.replanners.replanner import AbstractReplanner
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
