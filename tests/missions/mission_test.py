@@ -616,7 +616,7 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                         },
                         "replanner" : {
                             "@type" : "broadcaster",
-                            # "mode" : "opportunistic",
+                            "mode" : "opportunistic",
                             "period" : 400
                         },
                     },

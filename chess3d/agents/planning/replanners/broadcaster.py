@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from os import times
 from typing import Dict
 import numpy as np
 
@@ -83,111 +84,12 @@ class BroadcasterReplanner(AbstractReplanner):
         # return bus message broadcast (if not empty)
         return BroadcastMessageAction(bus_msg.to_dict(), broadcast_action.t_start)
 
-    def _calculate_broadcast_opportunities(self, orbitdata: OrbitData, t_start : float, t_end : float) -> dict:
-        """ calculates future broadcast times based on inter-agent access opportunities """
-
-        # compile all inter-agent access opportunities
-        intervals : list[Interval] = { agent_name : sorted([Interval(max(t_start, t_access_start),min(t_end, t_access_end))
-                                                    for t_access_start,t_access_end,_ in data.data
-                                                    if isinstance(data, IntervalData)
-                                                    and (t_start <= t_access_start <= t_end
-                                                         or t_start <= t_access_end <= t_end)], key=lambda x: x.left)
-                                        for agent_name,data in orbitdata.isl_data.items()}
-        
-
-        # TODO include ground station support
-
-        # collect unique start times of every access opportunity
-        return intervals
-        
-        # IDEA aim to broadcasts during intervals where more agents will listen? 
-        # merge access intervals
-        merged_intervals : list[Interval] = []
-        for interval in intervals:
-            overlaps = [merged_interval for merged_interval in merged_intervals
-                        if interval.has_overlap(merged_interval)]
-            
-            if not overlaps:
-                merged_intervals.append(interval)
-            
-            for overlap in overlaps:
-                overlap.merge(interval)
-
-        return [interval.start for interval in merged_intervals]
-
-
     @abstractmethod
     def get_latest_observations(self, 
                                     state : SimulationAgentState,
                                     observation_history : ObservationHistory
                                     ) -> list:
         """ Returns the latest observations from the observation history """
-
-class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
-    def __init__(self, debug = False, logger = None):
-        # initialize the base class
-        super().__init__(debug, logger)
-        
-        # initialize parameters
-        self.t_prev = 0         # time of last broadcast in [s]    
-
-    def needs_planning(self, 
-                       state : SimulationAgentState,
-                       specs : object,
-                       current_plan : Plan,
-                       orbitdata : OrbitData
-                       ) -> bool:
-
-        # check if a new preplan was just generated
-        return isinstance(current_plan, Preplan)
-    
-    def generate_plan(  self, 
-                        state : SimulationAgentState,
-                        specs : object,
-                        current_plan : Plan,
-                        clock_config : ClockConfig,
-                        orbitdata : OrbitData,
-                        mission : Mission,
-                        tasks : list,
-                        observation_history : ObservationHistory,
-                    ) -> Plan:
-        # update time of last broadcast
-        self.t_prev = state.t
-
-        # determine the next acceptable broadcast times
-        t_start = state.t
-        t_end = current_plan.t_next if isinstance(current_plan, Preplan) else np.Inf
-
-        # gather the access opportunities per agent
-        access_opportunities : Dict[str, list] = self._calculate_broadcast_opportunities(orbitdata, t_start, t_end)
-
-        # prepare the broadcast messages
-        broadcasts : list[FutureBroadcastMessageAction] = []
-        for _, intervals in access_opportunities.items():
-            # for each agent, prepare a broadcast message for each access opportunity
-            for interval in intervals:
-                interval : Interval
-                # create a future broadcast message for the next access opportunity
-                broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REWARD, interval.left))
-                broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REQUESTS, interval.left))
-        
-        # retrn modified plan
-        return Replan.from_preplan(current_plan, broadcasts, t=state.t)
-
-    def get_latest_observations(self, 
-                                state : SimulationAgentState,
-                                observation_history : ObservationHistory
-                                ) -> list:
-
-        return [observation_tracker.latest_observation
-                for _,grid in observation_history.history.items()
-                for _, observation_tracker in grid.items()
-                if isinstance(observation_tracker, ObservationTracker)
-                and observation_tracker.latest_observation is not None
-                and observation_tracker.latest_observation['t_end'] <= state.t
-                # ONLY include observations performed after the lastest broadcast
-                and self.t_prev <= observation_tracker.latest_observation['t_end']
-                ]
 
 class PeriodicBroadcasterReplanner(BroadcasterReplanner):
     def __init__(self, period : float = np.Inf, debug = False, logger = None):
@@ -248,3 +150,112 @@ class PeriodicBroadcasterReplanner(BroadcasterReplanner):
                 and state.t - self.period <= observation_tracker.latest_observation['t_end']
                 ]
         
+
+class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
+    def __init__(self, period: float = np.Inf, debug = False, logger = None):
+        # initialize the base class
+        super().__init__(debug, logger)
+        
+        # initialize parameters
+        self.t_prev = 0             # time of last broadcast in [s]    
+        self.period = period        # period of the opportunistic broadcasts in [s]
+
+    def needs_planning(self, 
+                       state : SimulationAgentState,
+                       specs : object,
+                       current_plan : Plan,
+                       orbitdata : OrbitData
+                       ) -> bool:
+
+        # check if a new preplan was just generated
+        return isinstance(current_plan, Preplan)
+    
+    def generate_plan(  self, 
+                        state : SimulationAgentState,
+                        specs : object,
+                        current_plan : Plan,
+                        clock_config : ClockConfig,
+                        orbitdata : OrbitData,
+                        mission : Mission,
+                        tasks : list,
+                        observation_history : ObservationHistory,
+                    ) -> Plan:
+        # update time of last broadcast
+        self.t_prev = state.t
+
+        # determine the next acceptable broadcast times
+        t_start = state.t
+        t_end = current_plan.t_next if isinstance(current_plan, Preplan) else np.Inf
+
+        # gather the access opportunities per agent
+        access_opportunities : Dict[str, list] = self._calculate_broadcast_opportunities(orbitdata, t_start, t_end)
+
+        # prepare the broadcast messages
+        broadcasts : list[FutureBroadcastMessageAction] = []
+        for _, intervals in access_opportunities.items():
+            # for each agent, prepare a broadcast message for each access opportunity
+            for interval in intervals:
+                interval : Interval
+
+                if np.isinf(self.period):
+                    # create a future broadcast message for the next access opportunity
+                    broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REWARD, interval.left))
+                    broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REQUESTS, interval.left))
+                else:
+                    # create a future broadcast message for every period within the access opportunity
+                    n_broadcasts = int(np.ceil((interval.right - interval.left) / self.period))
+                    broadcast_times = [interval.left + i * self.period for i in range(n_broadcasts)]
+                    
+                    for t in broadcast_times:
+                        broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REWARD, t))
+                        broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REQUESTS, t))
+        
+        # return modified plan
+        return Replan.from_preplan(current_plan, broadcasts, t=state.t)
+
+    def _calculate_broadcast_opportunities(self, orbitdata: OrbitData, t_start : float, t_end : float) -> dict:
+        """ calculates future broadcast times based on inter-agent access opportunities """
+
+        # compile all inter-agent access opportunities
+        intervals : list[Interval] = { agent_name : sorted([Interval(max(t_start, t_access_start),min(t_end, t_access_end))
+                                                    for t_access_start,t_access_end,_ in data.data
+                                                    if isinstance(data, IntervalData)
+                                                    and (t_start <= t_access_start <= t_end
+                                                         or t_start <= t_access_end <= t_end)], key=lambda x: x.left)
+                                        for agent_name,data in orbitdata.isl_data.items()}
+        
+
+        # TODO include ground station support
+
+        # collect unique start times of every access opportunity
+        return intervals
+        
+        # IDEA aim to broadcasts during intervals where more agents will listen? 
+        # merge access intervals
+        merged_intervals : list[Interval] = []
+        for interval in intervals:
+            overlaps = [merged_interval for merged_interval in merged_intervals
+                        if interval.has_overlap(merged_interval)]
+            
+            if not overlaps:
+                merged_intervals.append(interval)
+            
+            for overlap in overlaps:
+                overlap.merge(interval)
+
+        return [interval.start for interval in merged_intervals]
+
+    def get_latest_observations(self, 
+                                state : SimulationAgentState,
+                                observation_history : ObservationHistory
+                                ) -> list:
+
+        return [observation_tracker.latest_observation
+                for _,grid in observation_history.history.items()
+                for _, observation_tracker in grid.items()
+                if isinstance(observation_tracker, ObservationTracker)
+                and observation_tracker.latest_observation is not None
+                and observation_tracker.latest_observation['t_end'] <= state.t
+                # ONLY include observations performed after the lastest broadcast
+                and self.t_prev <= observation_tracker.latest_observation['t_end']
+                ]

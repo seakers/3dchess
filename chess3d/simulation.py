@@ -1650,11 +1650,11 @@ class SimulationElementFactory:
 
             if replanner_type.lower() == 'broadcaster':
                 mode = replanner_dict.get('mode', 'periodic').lower()
+                period = replanner_dict.get('period', np.Inf)
 
                 if mode == 'opportunistic':
-                    replanner = OpportunisticBroadcasterReplanner(debug, logger)
+                    replanner = OpportunisticBroadcasterReplanner(period, debug, logger)
                 elif mode == 'periodic':
-                    period = replanner_dict.get('period', np.Inf)
                     replanner = PeriodicBroadcasterReplanner(period, debug, logger)
                 else:
                     raise ValueError(f'`mode` of type `{mode}` not supported for broadcaster replanner.')
