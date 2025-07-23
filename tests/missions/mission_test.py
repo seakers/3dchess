@@ -543,7 +543,7 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                 "minute": 0,
                 "second": 0
             },
-            "duration": 1500 / 3600 / 24.0,
+            "duration": 70 / 60 / 24.0,
             "propagator": {
                 "@type": "J2 ANALYTICAL PROPAGATOR",
             },
@@ -605,20 +605,20 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                             "inc": 60.0,
                             "raan": 0.0,
                             "aop": 0.0,
-                            "ta": 95.0
+                            "ta": 0.0
                         }
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "heuristic",
+                            "@type" : "dealer",
                             "period": 1000,
                             # "horizon": 500,
                         },
-                        "replanner" : {
-                            "@type" : "broadcaster",
-                            "mode" : "opportunistic",
-                            "period" : 400
-                        },
+                        # "replanner" : {
+                        #     "@type" : "broadcaster",
+                        #     "mode" : "opportunistic",
+                        #     "period" : 400
+                        # },
                     },
                     "science" : {
                         "@type": "lookup", 
@@ -680,24 +680,24 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                             "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                             "sma": 7078,
                             "ecc": 0.01,
-                            "inc": 63.0,
+                            "inc": -120.0,
                             "raan": 0.0,
                             "aop": 0.0,
-                            "ta": 95.0
+                            "ta": 270.0
                         }
                     },
-                    # "planner" : {
-                    #     "preplanner" : {
-                    #         "@type" : "heuristic",
-                    #         "period": 1000,
-                    #         # "horizon": 500,
-                    #     },
-                    #     "replanner" : {
-                    #         "@type" : "broadcaster",
-                    #         "mode" : "opportunistic",
-                    #         "period" : 400
-                    #     },
-                    # },
+                    "planner" : {
+                        # "preplanner" : {
+                        #     "@type" : "heuristic",
+                        #     "period": 1000,
+                        #     # "horizon": 500,
+                        # },
+                        "replanner" : {
+                            "@type" : "worker",
+                            # "mode" : "opportunistic",
+                            # "period" : 400
+                        },
+                    },
                     "science" : {
                         "@type": "lookup", 
                         "eventsPath" : "./tests/missions/resources/events/no_events.csv"
@@ -712,7 +712,7 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                 }
             ],
             "scenario": {   
-                "connectivity" : "FULL", 
+                "connectivity" : "LOS", 
                 "events" : {
                     "@type": "PREDEF", 
                     "eventsPath" : "./tests/missions/resources/events/no_events.csv"

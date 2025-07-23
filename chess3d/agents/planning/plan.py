@@ -287,6 +287,10 @@ class Plan(ABC):
         # sort plan in order of ascending start time 
         plan_out.sort(key=lambda a: (a.t_start, a.t_end))
 
+        # if there are waits in the plan out, remove them and execute them in a future batch
+        if not all([isinstance(action, WaitForMessages) for action in plan_out]):
+            plan_out = [action for action in plan_out if not isinstance(action, WaitForMessages)]
+
         # check if actions are contained in output plan
         if plan_out:
             # there are actions in output plan; return plan
@@ -294,25 +298,7 @@ class Plan(ABC):
         else:
             # no actions in output plan; wait for future actions
             t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
-            if t > t_idle:
-                x =1
             return [WaitForMessages(t, t_idle)]
-
-        # if plan_out:
-        #     plan_out = [action.to_dict()
-        #                 for action in plan_out]
-        # else:
-        #     # idle if no more actions can be performed at this time
-        #     t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
-        #     action = WaitForMessages(t, t_idle)
-        #     plan_out.append(action.to_dict())     
-        
-        # if (len(plan_out) > 1 and 
-        #     any([action_out['t_start'] == action_out['t_end'] for action_out in plan_out])):
-        #     plan_out = [action_out for action_out in plan_out
-                    #    if action_out['t_start'] == action_out['t_end']]
-        
-        # return plan_out    
     
     def copy(self) -> object:
         """ Copy contructor. Creates a deep copy of this oject. """

@@ -406,14 +406,13 @@ class OrbitData:
         if target not in self.isl_data.keys():
             return False 
 
-        t = t/self.time_step
-
-        return any([t_start <= t <= t_end for t_start,t_end in self.isl_data[target].values])
+        return any([t_start <= t <= t_end for t_start,t_end,*_ in self.isl_data[target].data])
 
     def is_accessing_ground_station(self, target : str, t: float) -> bool:
-        t = t/self.time_step
-        nrows, _ = self.gs_access_data.query('`start index` <= @t & @t <= `end index` & `gndStn name` == @target').shape
-        return bool(nrows > 0)
+        raise NotImplementedError('TODO: implement ground station access check.')
+        # t = t/self.time_step
+        # nrows, _ = self.gs_access_data.query('`start index` <= @t & @t <= `end index` & `gndStn name` == @target').shape
+        # return bool(nrows > 0)
 
     def is_eclipse(self, t: float):
         """ checks if a satellite is currently in eclise at time `t`. """

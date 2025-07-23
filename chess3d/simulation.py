@@ -23,7 +23,9 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
+from chess3d.agents.planning.preplanners.dealer import TestingDealer
 from chess3d.agents.planning.replanners.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
+from chess3d.agents.planning.replanners.worker import WorkerReplanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -494,15 +496,21 @@ class Simulation:
             gps_accessible.update(gps_accessible_temp)
 
         # classify observations per GP
-        observations_per_gp = {group : [(observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*__,instrument,agent_name,t) 
-                                        # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],observation range [km],
-                                        # look angle [deg],incidence angle [deg],ground pixel along-track resolution [m],
-                                        # ground pixel cross-track resolution [m],grid index,instrument,agent name,time [s]
-                                        for (observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*__,instrument,agent_name,t) in data.values]
-                                 for group,data in observations_performed.groupby(['lat [deg]', 'lon [deg]'])}
+        if observations_performed.empty:
+            observations_per_gp = {}
+        else:
+            observations_per_gp = {group : [(observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*__,instrument,agent_name,t) 
+                                            # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],observation range [km],
+                                            # look angle [deg],incidence angle [deg],ground pixel along-track resolution [m],
+                                            # ground pixel cross-track resolution [m],grid index,instrument,agent name,time [s]
+                                            for (observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*__,instrument,agent_name,t) in data.values]
+                                    for group,data in observations_performed.groupby(['lat [deg]', 'lon [deg]'])}
 
         # classify events per ground point
-        events_per_gp = {group : [[t_start,duration,severity,event_type,t_corr]
+        if events.empty:
+            events_per_gp = {}
+        else:
+            events_per_gp = {group : [[t_start,duration,severity,event_type,t_corr]
                                   # gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
                                   for *_,t_start,duration,severity,event_type,t_corr,_ in data.values]
                         for group,data in events.groupby(['lat [deg]', 'lon [deg]'])}
@@ -1311,7 +1319,7 @@ class SimulationElementFactory:
                                                     time_step=dt) 
                 
                 preplanner, replanner = \
-                    SimulationElementFactory.load_planners(planner_dict, logger)
+                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, logger)
                 
                 return SatelliteAgent(agent_name, 
                                       results_path,
@@ -1591,7 +1599,7 @@ class SimulationElementFactory:
         # return nothing
         return None  
 
-    def load_planners(planner_dict : dict, logger : logging.Logger) -> tuple:
+    def load_planners(agent_name : str, planner_dict : dict, orbitdata_dir : str, logger : logging.Logger) -> tuple:
         # check if planner dictionary is empty
         if planner_dict is None: return None, None
 
@@ -1632,6 +1640,18 @@ class SimulationElementFactory:
 
                 preplanner = DynamicProgrammingPlanner(horizon, period, debug, logger)
             
+            elif preplanner_type.lower() == 'dealer':
+                mode = preplanner_dict.get('mode', 'test').lower()
+                
+                # load client orbit data 
+                clients : dict = OrbitData.from_directory(orbitdata_dir)
+                
+                # remove self from clients
+                clients.pop(agent_name, None) 
+
+                if mode == 'test':                   
+                    preplanner = TestingDealer(clients, horizon, period)
+
             # elif... # add more preplanners here
             
             else:
@@ -1658,6 +1678,10 @@ class SimulationElementFactory:
                     replanner = PeriodicBroadcasterReplanner(period, debug, logger)
                 else:
                     raise ValueError(f'`mode` of type `{mode}` not supported for broadcaster replanner.')
+
+            elif replanner_type.lower() == 'worker':
+                
+                replanner = WorkerReplanner(debug, logger)
 
             elif replanner_type.lower() == 'acbba': 
                 threshold = replanner_dict.get('threshold', 1)

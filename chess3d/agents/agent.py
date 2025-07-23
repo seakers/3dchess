@@ -839,7 +839,7 @@ class SimulatedAgent(AbstractAgent):
                 # -------------------------------------
 
                 # Modify current Plan      
-                self.plan : Plan = self.replanner.generate_plan(state, 
+                self.plan : Replan = self.replanner.generate_plan(state, 
                                                                 self.specs,
                                                                 self.plan,
                                                                 self._clock_config,
@@ -867,9 +867,9 @@ class SimulatedAgent(AbstractAgent):
         plan_out = self.get_next_actions(state)
 
         # --- FOR DEBUGGING PURPOSES ONLY: ---
-        # plan_out_dict = [action.to_dict() for action in plan_out]
-        # self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
-        # x = 1 # breakpoint
+        plan_out_dict = [action.to_dict() for action in plan_out]
+        self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
+        x = 1 # breakpoint
         # -------------------------------------
         
         return plan_out
