@@ -24,6 +24,7 @@ from dmas.clocks import *
 
 from chess3d.agents.agents import *
 from chess3d.agents.planning.preplanners.dealer import TestingDealer
+from chess3d.agents.planning.preplanners.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.replanners.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
 from chess3d.agents.planning.replanners.worker import WorkerReplanner
 from chess3d.agents.science.processing import LookupProcessor
@@ -35,10 +36,10 @@ from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule
-from chess3d.agents.planning.preplanners.heuristic import HeuristicInsertionPlanner
-from chess3d.agents.planning.preplanners.earliest import EarliestAccessPlanner
-from chess3d.agents.planning.preplanners.nadir import NadirPointingPlaner
-from chess3d.agents.planning.preplanners.dynamic import DynamicProgrammingPlanner
+from chess3d.agents.planning.preplanners.decentralized.heuristic import HeuristicInsertionPlanner
+from chess3d.agents.planning.preplanners.decentralized.earliest import EarliestAccessPlanner
+from chess3d.agents.planning.preplanners.decentralized.nadir import NadirPointingPlaner
+from chess3d.agents.planning.preplanners.decentralized.dynamic import DynamicProgrammingPlanner
 from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.science.module import *
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes
@@ -1651,6 +1652,14 @@ class SimulationElementFactory:
 
                 if mode == 'test':                   
                     preplanner = TestingDealer(clients, horizon, period)
+
+            elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
+                obj = preplanner_dict.get('objective', 'reward').lower()
+                license_path = preplanner_dict.get('licensePath', None)
+                if license_path is None: raise ValueError('license path for Gurobi MILP preplanner not specified.')
+        
+
+                preplanner = SingleSatMILP(obj, license_path, horizon, period, debug, logger)
 
             # elif... # add more preplanners here
             

@@ -2,7 +2,7 @@ from dmas.modules import ClockConfig
 import numpy as np
 from chess3d.agents.actions import ObservationAction
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.preplanners.earliest import EarliestAccessPlanner
+from chess3d.agents.planning.preplanners.decentralized.earliest import EarliestAccessPlanner
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.messages import ClockConfig
 

@@ -1,6 +1,6 @@
 from dmas.utils import runtime_tracker
 
-from chess3d.agents.planning.preplanners.heuristic import HeuristicInsertionPlanner
+from chess3d.agents.planning.preplanners.decentralized.heuristic import HeuristicInsertionPlanner
 
 class EarliestAccessPlanner(HeuristicInsertionPlanner):
     """ Schedules observations based on the earliest feasible access point """

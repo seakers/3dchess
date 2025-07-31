@@ -173,3 +173,4 @@ cython_debug/
 *.tar.xz
 *.png
 .zip
+*.lic

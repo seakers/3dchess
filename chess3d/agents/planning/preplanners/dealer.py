@@ -75,7 +75,7 @@ class DealerPreplanner(AbstractPreplanner):
         """
         Schedules broadcasts to be performed based on the generated plans for each agent.
         """
-        broadcasts = []
+        broadcasts : list[BroadcastMessageAction] = []
         for client in client_plans:
             # get access intervals with the client agent within the planning horizon         
             access_intervals : list[Interval] = self._calculate_broadcast_opportunities(client, orbitdata, state.t, state.t + self.period)
@@ -95,7 +95,8 @@ class DealerPreplanner(AbstractPreplanner):
             plan_broadcast = BroadcastMessageAction(plan_msg.to_dict(), t_broadcast)
             broadcasts.append(plan_broadcast)
 
-        return broadcasts
+        # return sorted broadcasts by broadcast start time
+        return sorted(broadcasts, key=lambda x: x.t_start)
 
     def _calculate_broadcast_opportunities(self, client : str, orbitdata: OrbitData, t_start : float, t_end : float) -> dict:
         """ calculates future broadcast times based on inter-agent access opportunities """
