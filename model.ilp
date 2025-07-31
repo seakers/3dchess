@@ -1,0 +1,29 @@
+\ Model single-sat_milp_planner_copy
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+Maximize
+ 
+Subject To
+ observation_start_time_constraint_1_198: 608.6154330243345 x[198]
+   - tau[198] <= 0
+ observation_start_and_duration_constraint_198: - 614.261216262037 x[198]
+   + tau[198] + delta[198] <= 0
+ slew_time_constraint_1_198_209: 1242.768679221209 z[198,209] + tau[198]
+   - tau[209] + delta[198] <= 1224.393679221209
+ slew_time_constraint_2_198_209: - 1242.768679221209 z[198,209] - tau[198]
+   + tau[209] + delta[209] <= -18.375
+ slew_time_constraint_2_198_516: - 1242.768679221209 z[198,516] - tau[198]
+   + tau[516] + delta[516] <= -32.45
+ observation_start_time_constraint_1_209: 619.9069994997396 x[209]
+   - tau[209] <= 0
+ observation_start_time_constraint_2_209: - 625.5527827374422 x[209]
+   + tau[209] <= 0
+ slew_time_constraint_2_209_795: - 1242.768679221209 z[209,795] - tau[209]
+   + tau[795] + delta[795] <= -11.355
+ z_x_link1_209_795: - x[209] + z[209,795] <= 0
+ z_x_link4_198_516: - x[198] + z[198,516] <= 0
+Bounds
+ tau[198] free
+ tau[209] free
+Binaries
+ x[198] x[209] z[198,209] z[198,516] z[209,795]
+End

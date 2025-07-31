@@ -13,6 +13,7 @@ class SingleSatMILP(AbstractPreplanner):
                  horizon = np.Inf, period = np.Inf, debug = False, logger = None):
         super().__init__(horizon, period, debug, logger)
 
+        assert os.path.isfile(licence_path), f"Provided Gurobi licence path `{licence_path}` is not a valid file."
         os.environ['GRB_LICENSE_FILE'] = licence_path
 
         assert objective in ["reward", "duration"], "Objective must be either 'reward' or 'duration'."
@@ -26,7 +27,7 @@ class SingleSatMILP(AbstractPreplanner):
         """
         t_end = max(task.accessibility.right for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)) if schedulable_tasks else 0
         t_start = min(task.accessibility.left for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)) if schedulable_tasks else 0
-        return t_end - t_start + 1  # Example calculation, adjust as needed
+        return t_end + self.horizon  # Example calculation, adjust as needed
 
     @runtime_tracker
     def _schedule_observations(self, 
@@ -55,11 +56,14 @@ class SingleSatMILP(AbstractPreplanner):
         max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
         
+        assert max(task.accessibility.right for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)) <= state.t + self.horizon, \
+            f"Tasks exceed the planning horizon of {self.horizon} seconds. "
+
         # Create a new model
-        model = gp.Model("coins matrix")
+        model = gp.Model("single-sat_milp_planner")
 
         # Set parameter to suppress output
-        model.setParam('OutputFlag', 0)
+        # model.setParam('OutputFlag', int(self.debug))
 
         # List tasks by their index
         task_indices = list(range(len(schedulable_tasks)))
@@ -90,12 +94,13 @@ class SingleSatMILP(AbstractPreplanner):
             model.setObjective(gp.quicksum(rewards[i] * delta[i] for i in task_indices), GRB.MAXIMIZE)
         
         # Add constraints
-        for j in tqdm(x.keys(), desc=f"{state.agent_name}: Building optimization model", unit='tasks', leave=False):
+        for j in tqdm(x.keys(), desc=f"{state.agent_name}/PREPLANNER: Building optimization model", unit='tasks', leave=False):
             # Observation time constraint
             model.addConstr(t_start[j] * x[j] <= tau[j], 
                             name=f"observation_start_time_constraint_1_{j}")
-            model.addConstr(tau[j] <= t_end[j], 
+            model.addConstr(tau[j] <= t_end[j] * x[j], 
                             name=f"observation_start_time_constraint_2_{j}")
+            
             model.addConstr(tau[j] + delta[j] <= t_end[j] * x[j], 
                             name=f"observation_start_and_duration_constraint_{j}")
             
@@ -104,15 +109,32 @@ class SingleSatMILP(AbstractPreplanner):
                             name=f"min_duration_constraint_{j}")
             model.addConstr(delta[j] <= x[j] * (t_end[j] - t_start[j]), 
                             name=f"max_duration_constraint_{j}")
+            
             # Slew time constraints
             for j_p in x.keys():
                 if j != j_p:
-                    model.addConstr(tau[j] + delta[j] + m[j,j_p] - M * (1 - z[j, j_p]) <= tau[j_p], 
+                    
+
+                    model.addConstr(tau[j] + delta[j] + m[j, j_p] <= tau[j_p] + M * (1 - z[j, j_p]),
                                     name=f"slew_time_constraint_1_{j}_{j_p}")
-                    model.addConstr(tau[j_p] + delta[j_p] + m[j_p,j] - M * z[j, j_p] <= tau[j], 
+                    model.addConstr(tau[j_p] + delta[j_p] + m[j_p, j] <= tau[j] + M * (1 - z[j, j_p]), 
                                     name=f"slew_time_constraint_2_{j}_{j_p}")
-                    model.addConstr(z[j, j_p] + z[j_p, j] <= x[j] + x[j_p], 
-                                    name=f"slew_binary_constraint_{j}_{j_p}")
+                    
+                else:
+                    model.addConstr(z[j, j_p] == 0, 
+                                    name=f"slew_binary_constraint_2_{j}_{j_p}_self")
+                    model.addConstr(z[j_p, j] == 0, 
+                                    name=f"slew_binary_constraint_1_{j_p}_{j}_self")
+                    
+                #TODO Add constraints for tasks with the same parent task
+                if schedulable_tasks[j].parent == schedulable_tasks[j_p].parent:
+                    model.addConstr(x[j] + x[j_p] <= 1, name=f"parent_task_sequence_{j}_{j_p}")
+
+                model.addConstr(z[j, j_p] + z[j_p, j] <= 1, name=f"sequence_direction_{j}_{j_p}")
+                model.addConstr(z[j, j_p] <= x[j], name=f"z_x_link1_{j}_{j_p}")
+                model.addConstr(z[j, j_p] <= x[j_p], name=f"z_x_link2_{j}_{j_p}")
+                model.addConstr(z[j_p, j] <= x[j], name=f"z_x_link3_{j_p}_{j}")
+                model.addConstr(z[j_p, j] <= x[j_p], name=f"z_x_link4_{j_p}_{j}")
 
         # Optimize model
         model.optimize()

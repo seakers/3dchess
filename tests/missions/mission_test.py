@@ -612,6 +612,7 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
                         "preplanner" : {
                             "@type" : "milp",
                             "licensePath": "./gurobi.lic",
+                            "objective" : "duration",
                             "period": 1000,
                             # "horizon": 500,
                         },
