@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import ObservationHistory, SchedulableObservationTask
+from chess3d.agents.planning.tasks import ObservationHistory, SpecificObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -41,7 +41,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         cross_track_fovs : dict = self.collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        schedulable_tasks : list[SchedulableObservationTask] = self.sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, observation_history)
+        schedulable_tasks : list[SpecificObservationTask] = self.sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -154,7 +154,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
     @runtime_tracker
     def sort_tasks_by_heuristic(self, state : SimulationAgentState, tasks : list, specs : Spacecraft, cross_track_fovs : dict, orbitdata : OrbitData, observation_history : ObservationHistory) -> list:
         """ Sorts tasks by heuristic value """
-        tasks : list[SchedulableObservationTask] = tasks
+        tasks : list[SpecificObservationTask] = tasks
         
         if tasks:
             # estimate maximum number of tasks in the planning horizon
@@ -180,7 +180,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
     
     @runtime_tracker
     def calc_heuristic(self,
-                        task : SchedulableObservationTask, 
+                        task : SpecificObservationTask, 
                         specs : Spacecraft, 
                         cross_track_fovs : dict, 
                         orbitdata : OrbitData, 

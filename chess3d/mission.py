@@ -88,17 +88,13 @@ class GeophysicalEvent:
         assert isinstance(t_start, (int, float)), "Start time must be a number"
         assert isinstance(t_end, (int, float)), "End time must be a number"
         assert t_start < t_end, "Start time must be less than end time"
-        # assert t_corr is None or isinstance(t_corr, (int, float)), "Correlation time must be a number or None"
-        # assert t_corr is None or t_corr >= 0, "Correlation time must be greater than 0 or None"
-        # assert t_corr is None or t_corr <= (t_end - t_start), "Correlation time must be less than or equal to (t_end - t_start) or None"
-
+        
         # Set attributes
         self.event_type : str = event_type.lower()
         self.severity : float = severity
         self.location : list = location
         self.t_start : float = t_start
         self.t_end : float = t_end
-        # self.t_corr : float = t_corr if t_corr is not None else (t_end - t_start)
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def is_active(self, t: float) -> bool:
@@ -288,8 +284,8 @@ class MissionObjective:
         self.priority : float = priority
         self.parameter : str = parameter
         self.requirements : Dict[str, MissionRequirement] = {requirement.attribute : requirement for requirement in requirements}
-        self.valid_instruments = [instrument.lower() for instrument in valid_instruments]
-        self.reobservation_strategy = reobservation_strategy.lower()
+        self.valid_instruments = [instrument.lower() for instrument in valid_instruments] # TODO remove this and implement knoledge graph in agent
+        self.reobservation_strategy = reobservation_strategy.lower() # TODO replace with temporal resolution requirements
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def eval_performance(self, measurement: dict) -> float:

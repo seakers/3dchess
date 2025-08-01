@@ -25,8 +25,8 @@ class SingleSatMILP(AbstractPreplanner):
         Calculate the big-M constant for the MILP formulation.
         This is a placeholder function and should be implemented based on specific requirements.
         """
-        t_end = max(task.accessibility.right for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)) if schedulable_tasks else 0
-        t_start = min(task.accessibility.left for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)) if schedulable_tasks else 0
+        t_end = max(task.accessibility.right for task in schedulable_tasks if isinstance(task, SpecificObservationTask)) if schedulable_tasks else 0
+        t_start = min(task.accessibility.left for task in schedulable_tasks if isinstance(task, SpecificObservationTask)) if schedulable_tasks else 0
         return t_end + self.horizon  # Example calculation, adjust as needed
 
     @runtime_tracker
@@ -56,7 +56,7 @@ class SingleSatMILP(AbstractPreplanner):
         max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
         
-        assert max(task.accessibility.right for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)) <= state.t + self.horizon, \
+        assert max(task.accessibility.right for task in schedulable_tasks if isinstance(task, SpecificObservationTask)) <= state.t + self.horizon, \
             f"Tasks exceed the planning horizon of {self.horizon} seconds. "
 
         # Create a new model
@@ -77,10 +77,10 @@ class SingleSatMILP(AbstractPreplanner):
         # Set constants
         rewards = np.array([self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
                             for task in tqdm(schedulable_tasks,leave=False,desc='SATELLITE: Calculating task rewards')])
-        t_start = np.array([task.accessibility.left for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)])
-        t_end   = np.array([task.accessibility.right for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)])
+        t_start = np.array([task.accessibility.left for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
+        t_end   = np.array([task.accessibility.right for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
         d       = np.array([0 for _ in schedulable_tasks])  # Assuming no minimum measurement duration for simplicity
-        th_imgs = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in schedulable_tasks if isinstance(task, SchedulableObservationTask)])
+        th_imgs = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
         m       = np.array([[abs(th_imgs[i]-th_imgs[j]) / max_slew_rate 
                             for j,_ in enumerate(schedulable_tasks)]
                             for i,__ in enumerate(schedulable_tasks)
@@ -127,8 +127,8 @@ class SingleSatMILP(AbstractPreplanner):
                                     name=f"slew_binary_constraint_1_{j_p}_{j}_self")
                     
                 #TODO Add constraints for tasks with the same parent task
-                if schedulable_tasks[j].parent == schedulable_tasks[j_p].parent:
-                    model.addConstr(x[j] + x[j_p] <= 1, name=f"parent_task_sequence_{j}_{j_p}")
+                # if schedulable_tasks[j].parent == schedulable_tasks[j_p].parent:
+                #     model.addConstr(x[j] + x[j_p] <= 1, name=f"parent_task_sequence_{j}_{j_p}")
 
                 model.addConstr(z[j, j_p] + z[j_p, j] <= 1, name=f"sequence_direction_{j}_{j_p}")
                 model.addConstr(z[j, j_p] <= x[j], name=f"z_x_link1_{j}_{j_p}")
@@ -168,7 +168,7 @@ class SingleSatMILP(AbstractPreplanner):
 
         # Extract scheduled tasks
         scheduled_task_indices = [i for i in task_indices if x[i].X > 0.5]
-        scheduled_tasks : list[SchedulableObservationTask] = \
+        scheduled_tasks : list[SpecificObservationTask] = \
             [schedulable_tasks[i] for i in scheduled_task_indices]
         
         # Create observation actions from scheduled tasks

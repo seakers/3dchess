@@ -10,7 +10,7 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
-from chess3d.agents.planning.tasks import ObservationHistory, SchedulableObservationTask
+from chess3d.agents.planning.tasks import ObservationHistory, SpecificObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -66,11 +66,11 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
         # sort tasks by start time
-        schedulable_tasks : list[SchedulableObservationTask] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -len(t.parent_tasks)))
+        schedulable_tasks : list[SpecificObservationTask] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -len(t.parent_tasks)))
 
         # add dummy task to represent initial state
         instrument_names = list(payload.keys())
-        dummy_task = SchedulableObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), Interval(state.attitude[0],state.attitude[0]))
+        dummy_task = SpecificObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), Interval(state.attitude[0],state.attitude[0]))
         schedulable_tasks.insert(0,dummy_task)
 
         # initiate results arrays
@@ -89,7 +89,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                         desc=f'{state.agent_name}-PLANNER: Generating Observation Actions from Tasks',
                         leave=False):
             # get task i
-            task_i : SchedulableObservationTask = schedulable_tasks[i]
+            task_i : SpecificObservationTask = schedulable_tasks[i]
 
             # collect all targets and objectives
             targets_i = [[target[0], target[1], 0.0] 

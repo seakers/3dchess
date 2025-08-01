@@ -154,7 +154,7 @@ class EventObservationTask(GenericObservationTask):
     def __repr__(self):
         return f"EventObservationTask(event={self.event}, mission={self.mission}, objective={self.objective}, targets={self.targets}, availability={self.availability}, reward={self.reward}, reobservation_strategy={self.reobservation_strategy}, id={self.id})"
 
-class SchedulableObservationTask:
+class SpecificObservationTask:
     def __init__(self,
                  parent_tasks : Union[GenericObservationTask, set],
                  instrument_name : str, 
@@ -187,7 +187,7 @@ class SchedulableObservationTask:
         """ Check if two tasks can be combined based on their time and slew angle. """
         
         # Check if the other task is an instance of ObservationTask
-        if not isinstance(other_task, SchedulableObservationTask):
+        if not isinstance(other_task, SpecificObservationTask):
             raise ValueError("The other task must be an instance of Task.")
         
         # Check if the instrument names are the same
@@ -231,7 +231,7 @@ class SchedulableObservationTask:
     def merge(self, other_task : object) -> object:
         try:
             """ Merge two tasks into one. """
-            assert isinstance(other_task, SchedulableObservationTask), "The other task must be an instance of ObservationTask."
+            assert isinstance(other_task, SpecificObservationTask), "The other task must be an instance of ObservationTask."
             assert self.can_combine(other_task), "Tasks cannot be combined."
 
             # Combine the time intervals and slew angles
@@ -244,7 +244,7 @@ class SchedulableObservationTask:
             accessibility = combined_time_interval
             slew_angles = combined_slew_angles
             
-            return SchedulableObservationTask(parent_tasks, self.instrument_name, accessibility, slew_angles, self.id)
+            return SpecificObservationTask(parent_tasks, self.instrument_name, accessibility, slew_angles, self.id)
         except AssertionError as e:
             x = 1
             self.can_combine(other_task)
