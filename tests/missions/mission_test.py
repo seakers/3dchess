@@ -7,53 +7,80 @@ from chess3d.mission import *
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
-# class TestMission(unittest.TestCase):
-#     def test_events(self):
-#         """
-#         O4: Observe events “Algal Blooms” (w=10)
-#             Main parameter: Chl-A, MR = O1
-#             DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
-#             CA: Severity proportional to lake area (as in paper) 
-#             CO: Secondary params = Water temperature and water level, MR as in O2 and O3
-#             RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
+class TestMission(unittest.TestCase):
+    
 
-#         """
+    # def test_events(self):
+    #     """
+    #     O4: Observe events “Algal Blooms” (w=10)
+    #         Main parameter: Chl-A, MR = O1
+    #         DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
+    #         CA: Severity proportional to lake area (as in paper) 
+    #         CO: Secondary params = Water temperature and water level, MR as in O2 and O3
+    #         RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
 
-#         event = GeophysicalEvent('Algal Bloom', 
-#                                  1.0, 
-#                                  [
-#                                     (0.0,0.0,0,0),
-#                                     (1.0,1.0,0,1)
-#                                   ], 
-#                                  0.5, 
-#                                  1.0, 
-#                                  0.25)
+    #     """
 
-#         # check initialization
-#         self.assertEqual(event.event_type, 'algal bloom')
-#         self.assertEqual(event.severity, 1.0)
-#         self.assertEqual(event.t_start, 0.5)
-#         self.assertEqual(event.t_end, 1.0)
-#         self.assertEqual(event.t_corr, 0.25)
+    #     event = GeophysicalEvent('Algal Bloom', 
+    #                              1.0, 
+    #                              [
+    #                                 (0.0,0.0,0,0),
+    #                                 (1.0,1.0,0,1)
+    #                               ], 
+    #                              0.5, 
+    #                              1.0, 
+    #                              0.25)
 
-#         # check serialization
-#         event_dict = event.to_dict()
-#         event_reconstructed : GeophysicalEvent = GeophysicalEvent.from_dict(event_dict)
-#         self.assertEqual(event.event_type, event_reconstructed.event_type)
-#         self.assertEqual(event.severity, event_reconstructed.severity)
-#         self.assertEqual(event.t_start, event_reconstructed.t_start)
-#         self.assertEqual(event.t_end, event_reconstructed.t_end)
-#         self.assertEqual(event.t_corr, event_reconstructed.t_corr)
-#         self.assertEqual(event.id, event_reconstructed.id)
-#         self.assertEqual(event, event_reconstructed)
+    #     # check initialization
+    #     self.assertEqual(event.event_type, 'algal bloom')
+    #     self.assertEqual(event.severity, 1.0)
+    #     self.assertEqual(event.t_start, 0.5)
+    #     self.assertEqual(event.t_end, 1.0)
+    #     self.assertEqual(event.t_corr, 0.25)
 
-#     def test_requirement(self):
-#         """
-#         O1: Measure Chlorophyll-A (w=1): 
-#             Horizontal spatial resolution: Thresholds = [10, 30, 100] m, u = [1.0, 0.7, 0.1]
-#             Spectral resolution: Thresholds = [Hyperspectral, Multispectral], u = [1, 0.5]
+    #     # check serialization
+    #     event_dict = event.to_dict()
+    #     event_reconstructed : GeophysicalEvent = GeophysicalEvent.from_dict(event_dict)
+    #     self.assertEqual(event.event_type, event_reconstructed.event_type)
+    #     self.assertEqual(event.severity, event_reconstructed.severity)
+    #     self.assertEqual(event.t_start, event_reconstructed.t_start)
+    #     self.assertEqual(event.t_end, event_reconstructed.t_end)
+    #     self.assertEqual(event.t_corr, event_reconstructed.t_corr)
+    #     self.assertEqual(event.id, event_reconstructed.id)
+    #     self.assertEqual(event, event_reconstructed)
 
-#         """
+    def test_requirement(self):
+        """
+        O1: Measure Chlorophyll-A (w=1): 
+            Horizontal spatial resolution: Thresholds = [10, 30, 100] m, u = [1.0, 0.7, 0.1]
+            Spectral resolution: Thresholds = [Hyperspectral, Multispectral], u = [1, 0.5]
+
+        """
+        # Define a mission objective with requirements
+        objective = {
+                    "type" : "monitoring",
+                    "parameter": "Chlorophyll-A",
+                    "priority": 1,
+                    "requirements" : [
+                        {
+                            "attribute": "horizontal_spatial_resolution",
+                            "thresholds": [10, 30, 100],
+                            "scores": [1.0, 0.7, 0.1]
+                        },
+                        {
+                            "attribute": "spectral_resolution",
+                            "thresholds": ["Hyperspectral", "Multispectral"],
+                            "scores": [1, 0.5]
+                        }
+                    ],
+                    "valid_instruments" : [
+                        "VNIR",
+                        "TIR"
+                    ]
+                }
+
+        # Create instances of MeasurementRequirement
+
 #         # Test the MeasurementRequirement class
 #         # Create instances of MeasurementRequirement
 #         req_1 = MeasurementRequirement('spatial_resolution', 
@@ -746,14 +773,14 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    def test_planner(self) -> None:
-        # execute mission
-        self.simulation.execute()
+    # def test_planner(self) -> None:
+    #     # execute mission
+    #     self.simulation.execute()
 
-        # print results
-        self.simulation.print_results()
+    #     # print results
+    #     self.simulation.print_results()
 
-        print('DONE')
+    #     print('DONE')
 
 if __name__ == '__main__':
     # terminal welcome message

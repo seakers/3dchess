@@ -4,6 +4,7 @@
             "name": "Algal blooms monitoring",
             "objectives" : [
                 {
+                    "type" : "monitoring",
                     "parameter": "Chlorophyll-A",
                     "priority": 1,
                     "requirements" : [

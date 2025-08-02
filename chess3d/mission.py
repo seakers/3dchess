@@ -1,7 +1,9 @@
 
-from typing import Dict, Union
+from numbers import Number
+from typing import Any, Dict, Union
 import uuid
 import numpy as np
+from pyparsing import ABC, abstractmethod
 
 def monitoring(kwargs) -> float:
     """
@@ -147,92 +149,101 @@ class GeophysicalEvent:
             "id": self.id
         }
 
-class MissionRequirement:
-    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None):
+class MissionRequirement(ABC):
+    CATEG = 'categorical'
+    DISCRETE = 'discrete'
+    CONTINUOUS = 'continuous'
+    SPATIAL = 'spatial'
+    TEMPORAL = 'temporal'
+
+    def __init__(self, req_type : str, attribute: str, preference_function : callable, id : str = None):
         """
         ### Mission Requirement 
         
         Initialize a mission requirement with an attribute, thresholds, and scores.
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
-        - :`thresholds`: A list of threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10,30,100] m.
-        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1,0.7,0.2]
-                
+        - :`preference_function`: maps values of perforamnce to requirement satisfaction score in [0,1].        
+        """
+        self.req_type = req_type
+        self.attribute : str = attribute.lower()
+        self.preference_function : callable = preference_function
+        self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
+
+    def calc_preference_value(self, value : Any) -> float:
+        """Calculate the preference value for a given value."""
+        # calculate preference value
+        result = self.preference_function(value)
+
+        # Validate the result
+        if not isinstance(result, Number):
+            raise TypeError(f"Expected a numeric return value, got {type(result).__name__}")
+
+        if not (0.0 <= result <= 1.0):
+            raise ValueError(f"Return value {result} is not in [0, 1]")
+
+        # Return the preference value
+        return result
+    
+    @abstractmethod
+    def copy(self) -> 'MissionRequirement':
+        """Create a copy of the measurement requirement."""
+
+    @abstractmethod
+    def to_dict(self) -> Dict[str, Union[str, float]]:
+        """Convert the measurement requirement to a dictionary."""
+    
+    @abstractmethod
+    def __repr__(self):
+        """String representation of the measurement requirement."""
+
+class CategoricalRequirement(MissionRequirement):
+    def __init__(self, req_type: str, attribute: str, thresholds: list, scores: list, id: str = None, **kwargs):
+        """
+        ### Categorical Requirement
+        Initialize a categorical requirement with an attribute, thresholds, and scores.
+        - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
+        - :`thresholds`: A list of qualitative threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., ["low", "medium", "high"].
+        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1.0, 0.7, 0.2].
         """
         # Validate inputs
         assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
-        
-        # Check if scores are sorted
-        assert all(scores[i] >= scores[i + 1] for i in range(len(scores) - 1)), "Scores must be sorted in descending order"
-
-        # Check if score values are between 0 and 1
+        assert all(isinstance(threshold, str) for threshold in thresholds), "All thresholds must be strings"
         assert all(0 <= score <= 1 for score in scores), "Scores must be between 0 and 1"
 
-        # Set attributes
-        self.attribute : str = attribute.lower()
-        self.thresholds : list = thresholds
-        self.scores : list[float] = scores
-        self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
+        # Convert thresholds to lowercase
+        self.thresholds = [threshold.lower() for threshold in thresholds]
+        
+        # Set scores attributes
+        self.scores = scores
 
-        # Determine if thresholds are categorical or numeric
-        if isinstance(thresholds[0], str): # Categorical thresholds          
-            # Check if all thresholds are strings
-            assert all(isinstance(threshold, str) for threshold in thresholds), "All thresholds must be strings"
+        # Build preference function
+        preference_function = self._build_categorical_preference_function(thresholds, scores)
 
-            # Convert all thresholds to lowercase
-            self.thresholds = [threshold.lower() for threshold in thresholds]
+        # Initialize the parent class
+        super().__init__(self.CATEG, attribute, preference_function, id)
 
-            # Create performance function
-            self.preference_function = self._build_categorical_preference_function()
-
-        else: # Numerical thresholds
-            # Check if thresholds are sorted
-            assert all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "Thresholds must be sorted"
-
-            # Create performance function
-            self.preference_function = self._build_continous_preference_function()
-
-    def _build_categorical_preference_function(self) -> callable:
+    def _build_categorical_preference_function(self, thresholds: list, scores: list) -> callable:
         """Creates a categorical preference function."""
-        def preference(value : str) -> float:
-            if value.lower() not in self.thresholds: return 0.0 
+        def preference(value: str) -> float:
+            value = value.lower()
+            if value not in thresholds:
+                return 0.0
             
-            index = self.thresholds.index(value.lower())
-            return self.scores[index]
-            
-        return preference
-
-    def _build_continous_preference_function(self) -> callable:
-        """Creates a piecewise-linear + exponential tail preference function."""
-        def preference(x : float) -> float:
-            # Unpack thresholds and scores
-            T, S = self.thresholds, self.scores
-            
-            # Check if x is below the first threshold
-            if x <= T[0]:
-                # Maximum score for values below the first threshold
-                return S[0]
-            
-            # Check if x is between thresholds
-            for i in range(1, len(T)):
-                if x <= T[i]:
-                    # Linear interpolation between T[i-1] and T[i]
-                    slope = (S[i] - S[i - 1]) / (T[i] - T[i - 1])
-                    return S[i - 1] + slope * (x - T[i - 1])
-                
-            # Beyond worst threshold: exponential drop-off
-            return S[-1] * np.exp(-(x - T[-1]))
+            index = thresholds.index(value)
+            return scores[index]
         
         return preference
 
-    def calc_preference_value(self, value: float) -> float:
-        return self.preference_function(value)
-    
     def copy(self) -> 'MissionRequirement':
         """Create a copy of the measurement requirement."""
-        return MissionRequirement(self.attribute, self.thresholds, self.scores, self.id)
-
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the measurement requirement to a dictionary."""
+        return CategoricalRequirement(
+            attribute=self.attribute,
+            thresholds=self.thresholds,
+            scores=self.scores,
+            id=self.id
+        )
+    
+    def to_dict(self):
         return {
             "attribute": self.attribute,
             "thresholds": self.thresholds,
@@ -241,7 +252,222 @@ class MissionRequirement:
         }
     
     def __repr__(self):
-        return f"MeasurementRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+        return f"CategoricalRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+
+class DiscreeteRequirement(MissionRequirement):
+    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
+        """
+        ### Discrete Requirement
+        Initialize a discrete requirement with an attribute, thresholds, and scores.
+        - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
+        - :`thresholds`: A list of discrete threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10, 30, 100].
+        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1.0, 0.7, 0.2].
+        """
+        # Validate inputs
+        assert all(isinstance(threshold, (int, float)) for threshold in thresholds), "All thresholds must be numbers"
+        assert all(isinstance(score, (int, float)) for score in scores), "All scores must be numbers"
+        assert len(thresholds) > 0, "At least one threshold is needed"
+        assert len(scores) > 0, "At least one preference score value is needed"
+        assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
+        assert all(0 <= score <= 1 for score in scores), "Scores must be values between 0 and 1"
+        assert all(scores[i] >= scores[i + 1] for i in range(len(scores) - 1)), "Scores must be sorted in descending order"
+        assert all(thresholds[i] >= thresholds[i + 1] for i in range(len(thresholds) - 1)) or all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "Thresholds must be sorted."
+
+        # Set thresholds and scores attributes
+        self.thresholds = thresholds
+        self.scores = scores
+
+        # Build preference function
+        preference_function = self._build_discrete_preference_function(thresholds, scores)
+
+        # Initialize the parent class
+        super().__init__(self.DISCRETE, attribute, preference_function, id)
+
+    def _build_discrete_preference_function(self, thresholds: list, scores: list) -> callable:
+        """Creates a discrete preference function."""
+        # Check if thresholds are increasing or decreasing
+        increasing : bool = all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)) if thresholds else True
+
+        # Create preference function based on increasing or decreasing thresholds
+        if increasing:
+            def preference(value: float) -> float:
+                for threshold in thresholds:
+                    if value <= threshold:
+                        index = thresholds.index(threshold)
+                        return scores[index]
+                
+                return scores[-1]  # Beyond worst threshold: return worst score
+        else:
+            def preference(value: float) -> float:
+                for threshold in thresholds:
+                    if value >= threshold:
+                        index = thresholds.index(threshold)
+                        return scores[index]
+
+                return scores[-1]  # Beyond worst threshold: return worst score
+        
+        # Return the preference function    
+        return preference
+
+    def copy(self) -> 'MissionRequirement':
+        """Create a copy of the measurement requirement."""
+        return DiscreeteRequirement(
+            attribute=self.attribute,
+            thresholds=self.thresholds,
+            scores=self.scores,
+            id=self.id
+        )
+    
+    def to_dict(self):
+        return {
+            "attribute": self.attribute,
+            "thresholds": self.thresholds,
+            "scores": self.scores,
+            "id": self.id
+        }
+    
+    def __repr__(self):
+        return f"DiscreeteRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+
+class ContinuousRequirement(MissionRequirement):
+    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
+        """
+        ### Continuous Requirement
+        Initialize a continuous requirement with an attribute, thresholds, and scores.
+        - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
+        - :`thresholds`: A list of continuous threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10.0, 30.0, 100.0].
+        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1.0, 0.7, 0.2].
+        """
+        # Validate inputs
+        assert all(isinstance(threshold, (int, float)) for threshold in thresholds), "All thresholds must be numbers"
+        assert all(isinstance(score, (int, float)) for score in scores), "All scores must be numbers"
+        assert len(thresholds) > 0, "At least one threshold is needed"
+        assert len(scores) > 0, "At least one preference score value is needed"
+        assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
+        assert all(0 <= score <= 1 for score in scores), "Scores must be values between 0 and 1"
+        assert all(thresholds[i] >= thresholds[i + 1] for i in range(len(thresholds) - 1)) or all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "Thresholds must be sorted."
+
+        # Set thresholds and scores attributes
+        self.thresholds = thresholds
+        self.scores = scores
+
+        # Build preference function
+        preference_function = self._build_continuous_preference_function(thresholds, scores)
+
+        # Initialize the parent class
+        super().__init__(self.CONTINUOUS, attribute, preference_function, id)
+
+    def _build_continuous_preference_function(self, thresholds: list, scores: list) -> callable:
+        """Creates a piecewise-linear + exponential tail preference function."""
+        def preference(x: float) -> float:
+            return np.interp(x, thresholds, scores, left=scores[0], right=scores[-1])
+                
+        return preference
+
+# class CoverageRequirement(MissionRequirement):
+#     def __init__(self, ):
+#         preference_function = self._build_preference_function()
+        
+#         super().__init__("coverage", preference_function)
+
+#     def _build_preference_function() -> callable:
+#         pass
+
+# class MissionRequirement:
+    # def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None):
+    #     """
+    #     ### Mission Requirement 
+        
+    #     Initialize a mission requirement with an attribute, thresholds, and scores.
+    #     - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
+    #     - :`thresholds`: A list of threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10,30,100] m.
+    #     - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1,0.7,0.2]
+                
+    #     """
+#         # Validate inputs
+#         assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
+        
+#         # Check if scores are sorted
+#         assert all(scores[i] >= scores[i + 1] for i in range(len(scores) - 1)), "Scores must be sorted in descending order"
+
+#         # Check if score values are between 0 and 1
+#         assert all(0 <= score <= 1 for score in scores), "Scores must be between 0 and 1"
+
+#         # Set attributes
+#         self.attribute : str = attribute.lower()
+#         self.thresholds : list = thresholds
+#         self.scores : list[float] = scores
+#         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
+
+#         # Determine if thresholds are categorical or numeric
+#         if isinstance(thresholds[0], str): # Categorical thresholds          
+#             # Check if all thresholds are strings
+#             assert all(isinstance(threshold, str) for threshold in thresholds), "All thresholds must be strings"
+
+#             # Convert all thresholds to lowercase
+#             self.thresholds = [threshold.lower() for threshold in thresholds]
+
+#             # Create performance function
+#             self.preference_function = self._build_categorical_preference_function()
+
+#         else: # Numerical thresholds
+#             # Check if thresholds are sorted
+#             assert all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "Thresholds must be sorted"
+
+#             # Create performance function
+#             self.preference_function = self._build_continous_preference_function()
+
+    # def _build_categorical_preference_function(self) -> callable:
+    #     """Creates a categorical preference function."""
+    #     def preference(value : str) -> float:
+    #         if value.lower() not in self.thresholds: return 0.0 
+            
+    #         index = self.thresholds.index(value.lower())
+    #         return self.scores[index]
+            
+    #     return preference
+
+#     def _build_continous_preference_function(self) -> callable:
+#         """Creates a piecewise-linear + exponential tail preference function."""
+#         def preference(x : float) -> float:
+#             # Unpack thresholds and scores
+#             T, S = self.thresholds, self.scores
+            
+#             # Check if x is below the first threshold
+#             if x <= T[0]:
+#                 # Maximum score for values below the first threshold
+#                 return S[0]
+            
+#             # Check if x is between thresholds
+#             for i in range(1, len(T)):
+#                 if x <= T[i]:
+#                     # Linear interpolation between T[i-1] and T[i]
+#                     slope = (S[i] - S[i - 1]) / (T[i] - T[i - 1])
+#                     return S[i - 1] + slope * (x - T[i - 1])
+                
+#             # Beyond worst threshold: exponential drop-off
+#             return S[-1] * np.exp(-(x - T[-1]))
+        
+#         return preference
+
+#     def calc_preference_value(self, value: float) -> float:
+#         return self.preference_function(value)
+    
+#     def copy(self) -> 'MissionRequirement':
+#         """Create a copy of the measurement requirement."""
+#         return MissionRequirement(self.attribute, self.thresholds, self.scores, self.id)
+
+    # def to_dict(self) -> Dict[str, Union[str, float]]:
+    #     """Convert the measurement requirement to a dictionary."""
+    #     return {
+    #         "attribute": self.attribute,
+    #         "thresholds": self.thresholds,
+    #         "scores": self.scores,
+    #         "id": self.id
+    #     }
+    
+    # def __repr__(self):
+    #     return f"MeasurementRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
 class MissionObjective:
     def __init__(self, 
