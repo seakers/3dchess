@@ -1,6 +1,6 @@
 
 from numbers import Number
-from typing import Any, Dict, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 import uuid
 import numpy as np
 from pyparsing import ABC, abstractmethod
@@ -152,6 +152,7 @@ class MissionRequirement(ABC):
     DISCRETE = 'discrete'
     CONTINUOUS = 'continuous'
     TEMPORAL = 'temporal'
+    SPATIAL = 'spatial'
 
     def __init__(self, req_type : str, attribute: str, preference_function : callable, id : str = None):
         """
@@ -161,7 +162,7 @@ class MissionRequirement(ABC):
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
         - :`preference_function`: maps values of perforamnce to requirement satisfaction score in [0,1].        
         """
-        assert any([req_type == t for t in [self.CATEG, self.DISCRETE, self.CONTINUOUS, self.TEMPORAL]]), \
+        assert any([req_type == t for t in [self.CATEG, self.DISCRETE, self.CONTINUOUS, self.TEMPORAL, self.SPATIAL]]), \
             f"Unknown requirement type: {req_type}"
 
         self.req_type = req_type
@@ -216,6 +217,18 @@ class MissionRequirement(ABC):
 
         elif req_type == MissionRequirement.TEMPORAL:
             return TemporalRequirement(attribute, thresholds, scores, id)
+        
+        elif req_type == MissionRequirement.SPATIAL:
+            target_type = dict.get("target_type", None)
+            if target_type == SpatialRequirement.POINT:
+                pass
+            elif target_type == SpatialRequirement.LIST:
+                targets = dict.get("targets", [])
+                return TargetListSpatialRequirement(targets, id)
+            elif target_type == SpatialRequirement.GRID:
+                pass
+            else:
+                raise ValueError(f"Unknown spatial requirement type: {target_type}")
 
         raise ValueError(f"Unknown requirement type: {req_type}")
 
@@ -428,13 +441,190 @@ class TemporalRequirement(ContinuousRequirement):
     def __repr__(self):
         return f"TemporalRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
+class SpatialRequirement(MissionRequirement):
+    POINT = 'point'
+    LIST = 'list'
+    GRID = 'grid'
+
+    def __init__(self, target_type : str, distance_threshold: float = 1, id = None):
+        """
+        ### Spatial Mission Requirement
+        Initialize a spatial requirement with a target type and a distance threshold.
+        - :`target_type`: The type of target location (e.g., "point", "list", "grid").
+        - :`distance_threshold`: The distance threshold for the requirement in [km].
+        """
+        super().__init__(self.SPATIAL, 'location', self._build_spatial_preference_function(distance_threshold), id)
+        assert target_type in [self.POINT, self.LIST, self.GRID], f"Invalid target type: {target_type}. Must be one of {self.POINT} or {self.GRID}."
+        self.target_type = target_type
+        self.distance_threshold = distance_threshold
+
+    @abstractmethod
+    def _build_spatial_preference_function(self, distance_threshold: float) -> callable:
+        """Creates a spatial preference function based on a distance threshold."""
+        raise NotImplementedError("Subclasses must implement this method")
+
+    def haversine_np(self, lat1 : float, lon1 : float, lat2 : float, lon2 : float) -> float:
+        """
+        Calculate the great circle distance between two points on the earth in [km] (specified in decimal degrees)
+        """
+        # Convert to radians
+        lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+        
+        # Calculate angular difference in radians
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        
+        # Haversine formula
+        a = np.sin(dlat/2.0)**2 + np.cos(lon1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+        
+        # Calculate the arc distance
+        c = 2 * np.arcsin(np.sqrt(a))
+
+        # Return great circle distance in kilometers
+        return 6378.137 * c
+
+class TargetListSpatialRequirement(SpatialRequirement):
+    def __init__(self, targets: List[Tuple[float, float, int, int]], distance_threshold: float, id=None, **kwargs):
+        super().__init__(self.LIST, distance_threshold, id)
+
+        # Validate inputs
+        assert isinstance(targets, list) and len(targets) > 0, \
+            "Targets must be a non-empty list"
+        assert all(isinstance(t, (tuple, list)) and len(t) == 4 for t in targets), \
+            "Each target must be a tuple/list of (lat, lon, grid index, gp index)"
+
+        # Set attributes
+        self.targets: List[Tuple[float, float, int, int]] = [tuple(t) for t in targets]
+
+    def _is_location_in_targets(self, location: Tuple[float, float, int, int], distance_threshold: float) -> float:
+        """Check if a location is in the targets list or within a distance threshold."""
+        # Validate location input
+        if not (isinstance(location, (tuple, list)) and len(location) == 4):
+            raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index)")
+
+        # Exact match
+        if tuple(location) in self.targets:
+            return 1.0
+
+        # Proximity match (lat/lon only)
+        for loc in self.targets:
+            if self.haversine_np(loc[0], loc[1], location[0], location[1]) <= distance_threshold:
+                return 1.0
+
+        return 0.0
+
+    def _build_spatial_preference_function(self, distance_threshold: float) -> Callable[[Any], float]:
+        """Creates a spatial preference function that returns 1.0 if a location is in targets (exact or within threshold), else 0.0."""
+        def preference(location: Any) -> float:
+            if isinstance(location, (list, tuple)) and len(location) == 4:
+                return self._is_location_in_targets(location, distance_threshold)
+            elif isinstance(location, list):
+                return float(any(
+                    self._is_location_in_targets(loc, distance_threshold)
+                    for loc in location
+                ))
+            else:
+                raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index) or a list of such elements.")
+
+        return preference
+
+    def copy(self) -> 'MissionRequirement':
+        """Create a copy of the measurement requirement."""
+        return TargetListSpatialRequirement(
+            targets=self.targets,
+            distance_threshold=self.distance_threshold,
+            id=self.id
+        )
+    
+    def to_dict(self):
+        return {
+            "req_type": self.req_type,
+            "attribute": self.attribute,
+            "target_type": self.target_type,
+            "targets": self.targets,
+            "distance_threshold": self.distance_threshold,
+            "id": self.id
+        }
+    
+    def __repr__(self):
+        return f"SpatialRequirement(type={self.target_type},targets={self.targets}, distance_threshold={self.distance_threshold}, id={self.id})"
+
+# class TargetListSpatialRequirement(SpatialRequirement):
+#     def __init__(self, targets : list, id=None):
+#         super().__init__(self.LIST, id)
+        
+#         # Validate inputs
+#         assert isinstance(targets, list), "Location must be a list of coordinates"
+#         assert len(targets) > 0, "Location list must not be empty"
+#         assert all(isinstance(loc, (tuple, list)) and len(loc) == 4 for loc in targets), "Each location must be a tuple or list of length 4 (lat, lon, grid index, gp index)"
+
+#         # Set attributes
+#         self.targets : list[tuple] = [pos for pos in targets]
+
+#     def __is_location_in_targets(self, location: tuple, distance_threshold : float) -> bool:
+#         if isinstance(location,(list, tuple)) and len(location) == 4:
+#             for tar in self.targets:
+#                 # Check if the location matches one of the locations in self.targets
+#                 if all([tar[i] == location[i] for i in range(4)]): return 1.0
+
+#             # If not exact match, check haversine distance
+#             if any([self.haversine_np(loc[1], loc[0], location[1], location[0]) <= distance_threshold for loc in self.targets]): return 1.0
+
+#             return 0.0
+        
+#         raise ValueError("Target must be a tuple or list of length 4 (lat, lon, grid index, gp index)")
+
+#     def _build_spatial_preference_function(self, distance_threshold: float = 1e-6) -> callable:
+#         """Creates a spatial preference function based on a distance threshold."""
+#         def preference(location: Any) -> float:
+#             if isinstance(location,(list, tuple)) and len(location) == 4:
+#                 return self.__is_location_in_targets(location, distance_threshold)
+#             elif isinstance(location, list):
+#                 return any(self.__is_location_in_targets(loc, distance_threshold) for loc in location)
+#             else:
+#                 raise ValueError("Location must be a tuple or list of length 4 (lat, lon, grid index, gp index) or a list containing such tuples or lists")
+            
+#         return preference
+
+#     def __init__(self, location_type : str, location : Any, distance_threshold: float = 1e-6, id : str = None, **kwargs):
+#         """
+#         ### Spatial Mission Requirement
+#         Initialize a spatial requirement with a location and a distance threshold.
+#         - :`location_type`: The type of location (e.g., "point" or "grid").
+#         - :`location`: The specific location (e.g., coordinates for a point or a grid cell).
+#         - :`distance_threshold`: The distance threshold for the requirement.
+#         - :`id`: An optional ID for the requirement.
+#         """
+#         super().__init__(self.SPATIAL, 'location', self._build_spatial_preference_function(distance_threshold), id)
+        
+#         assert location_type in [self.POINT, self.GRID], f"Invalid location type: {location_type}. Must be one of {self.POINT} or {self.GRID}."
+#         assert isinstance(distance_threshold, (int, float)), "Distance threshold must be a number"
+#         assert distance_threshold >= 0, "Distance threshold must be non-negative"
+        
+#         self.location_type = location_type
+#         self.location = location
+#         self.distance_threshold = distance_threshold
+
+#     def _build_spatial_preference_function(self, distance_threshold: float) -> callable:
+#         """Creates a spatial preference function based on a distance threshold."""
+#         if location 
+#             def preference(location: Any) -> float:
+#                 # Calculate the distance from the location to the target
+#                 distance = self._calculate_distance(location, self.target_location)
+#                 # Apply the distance threshold
+#                 if distance < distance_threshold:
+#                     return 1.0  # Full score if within threshold
+#                 else:
+#                     return 0.0  # No score if outside threshold
+
+#         return preference
+
 class MissionObjective:
     def __init__(self, 
                  parameter: str, 
                  priority: float, 
                  requirements: list, 
                  valid_instruments : list, 
-                 reobservation_strategy : str = "monitoring", 
                  id : str = None):
         """ 
         ### Objective
@@ -444,14 +634,6 @@ class MissionObjective:
         - :`priority`: The priority of the objective.
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
         - :`valid_instruments`: A list of valid instruments that can be used to measure the parameter.
-        - :`reobservation_strategy`: The strategy for reobserving the event. Can be one of the following:
-            - "linar_increase"
-            - "linar_decrease"
-            - "decaying_increase"
-            - "decaying_decrease"
-            - "immediate_decrease"
-            - "no_change"
-            - "monitoring"
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
         if all([isinstance(req, dict) for req in requirements]):
@@ -462,7 +644,7 @@ class MissionObjective:
         assert isinstance(parameter, str), "Parameter must be a string"
         assert len(requirements) > 0, "At least one requirement is needed"
         assert all(isinstance(req, MissionRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
-        assert reobservation_strategy in RO, f"Invalid reobservation strategy: {reobservation_strategy}. Available strategies: {list(RO.keys())}"
+        assert any(isinstance(req, TemporalRequirement) for req in requirements), "At least one requirement must be a `TemporalRequirement`"
         assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
 
         # Set attributes
@@ -470,27 +652,28 @@ class MissionObjective:
         self.parameter : str = parameter
         self.requirements : Dict[str, MissionRequirement] = {requirement.attribute : requirement for requirement in requirements}
         self.valid_instruments = [instrument.lower() for instrument in valid_instruments] # TODO remove this and implement knoledge graph in agent
-        self.reobservation_strategy = reobservation_strategy.lower() # TODO replace with temporal resolution requirements
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
-    def eval_performance(self, measurement: dict) -> float:
+    def eval_measurement_performance(self, measurement: dict) -> float:
         """Evaluate the product of satisfaction scores given a measurement dict {attr: value}"""
         try:
-            scores = []
+            # Check if the measurement contains the required parameter
+            # TODO replace with knowledge graph
             if measurement['instrument'].lower() not in self.valid_instruments:
                 # measurement does not meet requirement
                 return 0.0
 
-            for attribute,req in self.requirements.items():
-                if attribute not in measurement:
-                    # measurement does not meet requirement
-                    scores.append(0)
-                else:
-                    # calculate measurement performance score
-                    scores.append(req.calc_preference_value(measurement[attribute]))
-            
+            # Calculate the performance score for each requirement
+            # If the attribute is not in the measurement, return 0
+            # Otherwise, calculate the preference value using the requirement's preference function
+            scores = [
+                0 if attribute not in measurement
+                else req.calc_preference_value(measurement[attribute])
+                for attribute, req in self.requirements.items()
+            ]
+
             # return the product of all scores
-            return np.prod(scores) 
+            return np.prod(scores)
         
         except Exception as e:
             raise(e)
@@ -620,14 +803,14 @@ class Mission:
 
     def evaluate_measurement(self, measurements: dict) -> float:
         """Sum weighted objective scores across all objectives"""
-        return sum([obj.priority * obj.eval_performance(measurements) 
+        return sum([obj.priority * obj.eval_measurement_performance(measurements) 
                     for obj in self.objectives
                     if not isinstance(obj, EventDrivenObjective)
                     ])
     
     def evaluate_event_measurement(self, measurements: dict) -> float:
         """Sum weighted objective scores across all objectives"""
-        return sum([obj.priority * obj.eval_performance(measurements) 
+        return sum([obj.priority * obj.eval_measurement_performance(measurements) 
                     for obj in self.objectives
                     if isinstance(obj, EventDrivenObjective)
                     ])

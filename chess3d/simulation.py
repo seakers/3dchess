@@ -23,7 +23,7 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
-from chess3d.agents.planning.preplanners.dealer import TestingDealer
+from chess3d.agents.planning.preplanners.centralized.dealer import TestingDealer
 from chess3d.agents.planning.preplanners.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.replanners.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
 from chess3d.agents.planning.replanners.worker import WorkerReplanner

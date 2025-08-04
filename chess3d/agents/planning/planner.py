@@ -426,7 +426,7 @@ class AbstractPlanner(ABC):
             
             # calculate task priority, performance, score and severity
             task_priority = parent_task.objective.priority
-            task_performance = parent_task.objective.eval_performance(observation_performance)
+            task_performance = parent_task.objective.eval_measurement_performance(observation_performance)
             task_score = parent_task.objective.calc_reward(observation_performance)
             task_severity = parent_task.event.severity if isinstance(parent_task, EventObservationTask) else 1.0
             

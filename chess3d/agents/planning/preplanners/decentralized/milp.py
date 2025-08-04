@@ -113,8 +113,6 @@ class SingleSatMILP(AbstractPreplanner):
             # Slew time constraints
             for j_p in x.keys():
                 if j != j_p:
-                    
-
                     model.addConstr(tau[j] + delta[j] + m[j, j_p] <= tau[j_p] + M * (1 - z[j, j_p]),
                                     name=f"slew_time_constraint_1_{j}_{j_p}")
                     model.addConstr(tau[j_p] + delta[j_p] + m[j_p, j] <= tau[j] + M * (1 - z[j, j_p]), 
