@@ -7,77 +7,275 @@ from chess3d.mission import *
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
-class TestMission(unittest.TestCase):
-    
+class TestRequirements(unittest.TestCase):
+    # Categorical Requirements
+    def test_categorical_requirement_valid(self):
+        thresholds = ["low", "medium", "high"]
+        scores = [1.0, 0.5, 0.0]
+        req = CategoricalRequirement("cloud_cover", thresholds, scores)
+        self.assertEqual(req.attribute, "cloud_cover")
+        self.assertTrue(all(threshold in thresholds for threshold in req.thresholds))   
+        self.assertTrue(all(score in scores for score in req.scores))
+        self.assertEqual(req.calc_preference_value("Medium"),0.5)
+    def test_categorical_requirement_invalid_score_range(self):
+        self.assertRaises(AssertionError, CategoricalRequirement, "cloud_cover", ["Low", "High"], [1.2, 0.0])    
+    def test_categorical_requirement_mismatched_lists(self):
+        self.assertRaises(AssertionError, CategoricalRequirement, "cloud_cover", ["Low", "Medium"], [1.0])
+    def test_categorical_copy(self):
+        req = CategoricalRequirement("cloud", ["low", "high"], [1.0, 0.0])
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_categorical_to_from_dict(self):
+        original = CategoricalRequirement("cloud", ["low", "medium", "high"], [1.0, 0.5, 0.0])
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, CategoricalRequirement)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
-    # def test_events(self):
+    # Discrete Value Requirements
+    def test_discrete_requirement_valid(self):
+        increasing_req = DiscreteRequirement("test", 
+                                             thresholds =[0.1, 0.3, 0.5], 
+                                             scores     =[1.0, 0.7, 0.4])
+        self.assertEqual(increasing_req.attribute, "test")
+        self.assertEqual(increasing_req.calc_preference_value(0.3), 0.7)
+        self.assertEqual(increasing_req.calc_preference_value(0.2), 0.7)
+
+        decreasing_req = DiscreteRequirement("test", 
+                                             thresholds =[0.5, 0.3, 0.1], 
+                                             scores     =[1.0, 0.7, 0.4])
+        self.assertEqual(decreasing_req.attribute, "test")
+        self.assertEqual(decreasing_req.calc_preference_value(0.3), 0.7)
+        self.assertEqual(decreasing_req.calc_preference_value(0.2), 0.4)
+    def test_discrete_requirement_unsorted_thresholds(self):
+        self.assertRaises(AssertionError, DiscreteRequirement, "test",
+                          thresholds=[0.3, 0.1, 0.5], scores=[1.0, 0.7, 0.4])
+    def test_discrete_requirement_out_of_bounds_score(self):
+        self.assertRaises(AssertionError, DiscreteRequirement, "test", 
+                          thresholds=[0.1, 0.2], scores=[1.1, 0.9])   
+    def test_discrete_copy(self):
+        req = DiscreteRequirement("ndvi", [0.1, 0.3], [1.0, 0.5])
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_discrete_to_from_dict(self):
+        original = DiscreteRequirement("ndvi", [0.1, 0.2], [1.0, 0.6])
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, DiscreteRequirement)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+
+    # Continuous Value Requirements
+    def test_continuous_requirement_valid(self):
+        req = ContinuousRequirement("temp", [10, 20, 30], [1.0, 0.5, 0.0])
+        self.assertAlmostEqual(req.calc_preference_value(15), 0.75)
+    def test_continuous_requirement_out_of_bounds(self):
+        req = ContinuousRequirement("temp", [10, 20, 30], [1.0, 0.5, 0.0])
+        self.assertAlmostEqual(req.calc_preference_value(35), 0.0)
+    def test_continuous_copy(self):
+        req = ContinuousRequirement("temp", [10, 20], [1.0, 0.0])
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_continuous_to_from_dict(self):
+        original = ContinuousRequirement("temp", [5.0, 25.0], [1.0, 0.2])
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, ContinuousRequirement)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+
+    # Temporal Requirements
+    def test_temporal_requirement(self):
+        req = TemporalRequirement("time_since_obs", 
+                                  thresholds=[3600, 7200, 10800], 
+                                  scores    =[1.0, 0.5, 0.1])
+        self.assertTrue(isinstance(req, TemporalRequirement))
+        self.assertEqual(req.req_type, MissionRequirement.TEMPORAL)
+        self.assertTrue(req.calc_preference_value(4000) <= 1.0)  
+    def test_temporal_copy(self):
+        req = TemporalRequirement("time_since_obs", [3600, 7200], [1.0, 0.5])
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_temporal_to_from_dict(self):
+        original = TemporalRequirement("time_since_obs", [3600.0, 7200.0], [1.0, 0.5])
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, TemporalRequirement)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+
+    def test_from_dict_invalid_type(self):
+        bad_dict = {
+            "req_type": "unknown_type",
+            "attribute": "foo",
+            "thresholds": [1, 2, 3],
+            "scores": [1.0, 0.5, 0.0]
+        }
+        self.assertRaises(ValueError, MissionRequirement.from_dict, bad_dict)
+
+class TestGeophysicalEvent(unittest.TestCase):
+    """
+    O4: Observe events “Algal Blooms” (w=10)
+        Main parameter: Chl-A, MR = O1
+        DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
+        CA: Severity proportional to lake area (as in paper) 
+        CO: Secondary params = Water temperature and water level, MR as in O2 and O3
+        RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
+
+    """
+    def test_initialization_valid(self):
+        event = GeophysicalEvent('Algal Bloom', 
+                                 1.0, 
+                                 [
+                                    (0.0,0.0,0,0),
+                                    (1.0,1.0,0,1)
+                                  ], 
+                                 0.5, 
+                                 1.0
+                                )
+        self.assertEqual(event.event_type, "algal bloom")
+        self.assertEqual(event.severity, 1.0)
+        self.assertEqual(event.location, [(0.0,0.0,0,0), (1.0,1.0,0,1)])
+        self.assertEqual(event.t_start, 0.5)
+        self.assertEqual(event.t_end, 1.0)
+        self.assertIsInstance(uuid.UUID(event.id), uuid.UUID)
+
+    def test_invalid_event_type(self):
+        with self.assertRaises(AssertionError):
+            GeophysicalEvent(event_type=123, severity=0.5, location=[0, 0, 0, 0], t_start=0, t_end=1)
+
+    def test_invalid_severity(self):
+        with self.assertRaises(AssertionError):
+            GeophysicalEvent(event_type="flood", severity="high", location=[0, 0, 0, 0], t_start=0, t_end=1)
+
+    def test_invalid_location_type(self):
+        with self.assertRaises(AssertionError):
+            GeophysicalEvent(event_type="flood", severity=0.7, location="bad location", t_start=0, t_end=1)
+
+    def test_invalid_location_length(self):
+        with self.assertRaises(AssertionError):
+            GeophysicalEvent(event_type="flood", severity=0.7, location=[0, 0], t_start=0, t_end=1)
+
+    def test_invalid_t_start(self):
+        with self.assertRaises(AssertionError):
+            GeophysicalEvent(event_type="fire", severity=0.6, location=[1, 2, 3, 4], t_start="0", t_end=1)
+
+    def test_invalid_t_end(self):
+        with self.assertRaises(AssertionError):
+            GeophysicalEvent(event_type="fire", severity=0.6, location=[1, 2, 3, 4], t_start=0, t_end="1")
+
+    def test_invalid_time_order(self):
+        with self.assertRaises(AssertionError):
+            GeophysicalEvent(event_type="quake", severity=0.5, location=[1, 2, 3, 4], t_start=100, t_end=50)
+
+    def test_temporal_status_methods(self):
+        event = GeophysicalEvent("flood", 1.0, [1, 2, 3, 4], 100, 200)
+
+        self.assertTrue(event.is_future(50))
+        self.assertFalse(event.is_active(50))
+        self.assertFalse(event.is_expired(50))
+
+        self.assertTrue(event.is_active(150))
+        self.assertFalse(event.is_future(150))
+        self.assertFalse(event.is_expired(150))
+
+        self.assertTrue(event.is_expired(250))
+        self.assertFalse(event.is_active(250))
+        self.assertFalse(event.is_future(250))
+
+    def test_to_dict_and_from_dict(self):
+        original = GeophysicalEvent("flood", 0.9, [0.0, 1.0, 2, 3], 100, 200)
+        as_dict = original.to_dict()
+        recreated = GeophysicalEvent.from_dict(as_dict)
+
+        self.assertIsInstance(recreated, GeophysicalEvent)
+        self.assertEqual(original, recreated)
+
+    def test_event_equality_and_hash(self):
+        e1 = GeophysicalEvent("fire", 0.6, [1, 1, 1, 1], 0, 10)
+        e2 = GeophysicalEvent.from_dict(e1.to_dict())
+
+        self.assertEqual(e1, e2)
+        self.assertEqual(hash(e1), hash(e2))
+
+    def test_repr_and_str(self):
+        event = GeophysicalEvent("storm", 0.7, [10, 20, 1, 2], 0, 50)
+        rep = repr(event)
+        s = str(event)
+
+        self.assertIn("storm", rep)
+        self.assertIn("storm", s)
+        self.assertIn("Severity", s)
+        self.assertIn("t_start", rep)
+
+
+# class TestGeophysicalEvent(unittest.TestCase):
+#     def test_events(self):
+        # """
+        # O4: Observe events “Algal Blooms” (w=10)
+        #     Main parameter: Chl-A, MR = O1
+        #     DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
+        #     CA: Severity proportional to lake area (as in paper) 
+        #     CO: Secondary params = Water temperature and water level, MR as in O2 and O3
+        #     RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
+
+        # """
+
+        # event = GeophysicalEvent('Algal Bloom', 
+        #                          1.0, 
+        #                          [
+        #                             (0.0,0.0,0,0),
+        #                             (1.0,1.0,0,1)
+        #                           ], 
+        #                          0.5, 
+        #                          1.0,)
+
+#         # check initialization
+#         self.assertEqual(event.event_type, 'algal bloom')
+#         self.assertEqual(event.severity, 1.0)
+#         self.assertEqual(event.t_start, 0.5)
+#         self.assertEqual(event.t_end, 1.0)
+
+#         # check serialization
+#         event_dict = event.to_dict()
+#         event_reconstructed : GeophysicalEvent = GeophysicalEvent.from_dict(event_dict)
+#         self.assertEqual(event.event_type, event_reconstructed.event_type)
+#         self.assertEqual(event.severity, event_reconstructed.severity)
+#         self.assertEqual(event.t_start, event_reconstructed.t_start)
+#         self.assertEqual(event.t_end, event_reconstructed.t_end)
+#         self.assertEqual(event.id, event_reconstructed.id)
+#     #     self.assertEqual(event, event_reconstructed)
+
+    # def test_requirement(self):
     #     """
-    #     O4: Observe events “Algal Blooms” (w=10)
-    #         Main parameter: Chl-A, MR = O1
-    #         DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
-    #         CA: Severity proportional to lake area (as in paper) 
-    #         CO: Secondary params = Water temperature and water level, MR as in O2 and O3
-    #         RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
+    #     O1: Measure Chlorophyll-A (w=1): 
+    #         Horizontal spatial resolution: Thresholds = [10, 30, 100] m, u = [1.0, 0.7, 0.1]
+    #         Spectral resolution: Thresholds = [Hyperspectral, Multispectral], u = [1, 0.5]
 
     #     """
-
-    #     event = GeophysicalEvent('Algal Bloom', 
-    #                              1.0, 
-    #                              [
-    #                                 (0.0,0.0,0,0),
-    #                                 (1.0,1.0,0,1)
-    #                               ], 
-    #                              0.5, 
-    #                              1.0, 
-    #                              0.25)
-
-    #     # check initialization
-    #     self.assertEqual(event.event_type, 'algal bloom')
-    #     self.assertEqual(event.severity, 1.0)
-    #     self.assertEqual(event.t_start, 0.5)
-    #     self.assertEqual(event.t_end, 1.0)
-    #     self.assertEqual(event.t_corr, 0.25)
-
-    #     # check serialization
-    #     event_dict = event.to_dict()
-    #     event_reconstructed : GeophysicalEvent = GeophysicalEvent.from_dict(event_dict)
-    #     self.assertEqual(event.event_type, event_reconstructed.event_type)
-    #     self.assertEqual(event.severity, event_reconstructed.severity)
-    #     self.assertEqual(event.t_start, event_reconstructed.t_start)
-    #     self.assertEqual(event.t_end, event_reconstructed.t_end)
-    #     self.assertEqual(event.t_corr, event_reconstructed.t_corr)
-    #     self.assertEqual(event.id, event_reconstructed.id)
-    #     self.assertEqual(event, event_reconstructed)
-
-    def test_requirement(self):
-        """
-        O1: Measure Chlorophyll-A (w=1): 
-            Horizontal spatial resolution: Thresholds = [10, 30, 100] m, u = [1.0, 0.7, 0.1]
-            Spectral resolution: Thresholds = [Hyperspectral, Multispectral], u = [1, 0.5]
-
-        """
-        # Define a mission objective with requirements
-        objective = {
-                    "type" : "monitoring",
-                    "parameter": "Chlorophyll-A",
-                    "priority": 1,
-                    "requirements" : [
-                        {
-                            "attribute": "horizontal_spatial_resolution",
-                            "thresholds": [10, 30, 100],
-                            "scores": [1.0, 0.7, 0.1]
-                        },
-                        {
-                            "attribute": "spectral_resolution",
-                            "thresholds": ["Hyperspectral", "Multispectral"],
-                            "scores": [1, 0.5]
-                        }
-                    ],
-                    "valid_instruments" : [
-                        "VNIR",
-                        "TIR"
-                    ]
-                }
+    #     # Define a mission objective with requirements
+    #     objective = {
+    #                 "type" : "monitoring",
+    #                 "parameter": "Chlorophyll-A",
+    #                 "priority": 1,
+    #                 "requirements" : [
+    #                     {
+    #                         "attribute": "horizontal_spatial_resolution",
+    #                         "thresholds": [10, 30, 100],
+    #                         "scores": [1.0, 0.7, 0.1]
+    #                     },
+    #                     {
+    #                         "attribute": "spectral_resolution",
+    #                         "thresholds": ["Hyperspectral", "Multispectral"],
+    #                         "scores": [1, 0.5]
+    #                     }
+    #                 ],
+    #                 "valid_instruments" : [
+    #                     "VNIR",
+    #                     "TIR"
+    #                 ]
+    #             }
 
         # Create instances of MeasurementRequirement
 

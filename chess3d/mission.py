@@ -58,7 +58,6 @@ class GeophysicalEvent:
                  location : list,
                  t_start : float,
                  t_end : float,
-                #  t_corr : float = None,
                  id : str = None
                  ):
         """ 
@@ -84,9 +83,9 @@ class GeophysicalEvent:
             if len(location) == 4:
                 # Check if all elements are numbers
                 assert all(isinstance(loc, (int, float)) for loc in location), "All elements of location must be numbers"
-            else:
-                
-                assert all(len(loc) == 4 for loc in location), "Location must be a lat-lon-grid index-gp index tuple of length 4"
+            else:                
+                # Check if all elements are tuples of length 4
+                assert all(isinstance(loc, (tuple, list)) and len(loc) == 4 for loc in location), "Location must be a list of tuples or lists of length 4"
         assert isinstance(t_start, (int, float)), "Start time must be a number"
         assert isinstance(t_end, (int, float)), "End time must be a number"
         assert t_start < t_end, "Start time must be less than end time"
@@ -121,11 +120,11 @@ class GeophysicalEvent:
     
     def __repr__(self) -> str:
         """String representation of the event."""
-        return f"GeophysicalEvent({self.event_type}, severity={self.severity}, t_start={self.t_start}, t_end={self.t_end}, t_corr={self.t_corr})"
+        return f"GeophysicalEvent({self.event_type}, severity={self.severity}, t_start={self.t_start}, t_end={self.t_end}, id={self.id})"
     
     def __str__(self) -> str:
         """String representation of the event."""
-        return f"Event: {self.event_type}, Severity: {self.severity}, Start: {self.t_start}, End: {self.t_end}, Correlation Time: {self.t_corr}"
+        return f"Event: {self.event_type}, Severity: {self.severity}, Start: {self.t_start}, End: {self.t_end}, Location: {self.location}, ID: {self.id}"
     
     def __eq__(self, other) -> bool:
         """Check if two events are equal."""
@@ -145,7 +144,6 @@ class GeophysicalEvent:
             "location": self.location,
             "t_start": self.t_start,
             "t_end": self.t_end,
-            # "t_corr": self.t_corr,
             "id": self.id
         }
 
@@ -153,7 +151,6 @@ class MissionRequirement(ABC):
     CATEG = 'categorical'
     DISCRETE = 'discrete'
     CONTINUOUS = 'continuous'
-    SPATIAL = 'spatial'
     TEMPORAL = 'temporal'
 
     def __init__(self, req_type : str, attribute: str, preference_function : callable, id : str = None):
@@ -164,6 +161,9 @@ class MissionRequirement(ABC):
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
         - :`preference_function`: maps values of perforamnce to requirement satisfaction score in [0,1].        
         """
+        assert any([req_type == t for t in [self.CATEG, self.DISCRETE, self.CONTINUOUS, self.TEMPORAL]]), \
+            f"Unknown requirement type: {req_type}"
+
         self.req_type = req_type
         self.attribute : str = attribute.lower()
         self.preference_function : callable = preference_function
@@ -196,10 +196,33 @@ class MissionRequirement(ABC):
     def __repr__(self):
         """String representation of the measurement requirement."""
 
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'MissionRequirement':
+        """Create a measurement requirement from a dictionary."""
+        req_type = dict.get("req_type")
+        attribute = dict.get("attribute")
+        thresholds = dict.get("thresholds", [])
+        scores = dict.get("scores", [])
+        id = dict.get("id")
+
+        if req_type == MissionRequirement.CATEG:
+            return CategoricalRequirement(attribute, thresholds, scores, id)
+
+        elif req_type == MissionRequirement.DISCRETE:
+            return DiscreteRequirement(attribute, thresholds, scores, id)
+
+        elif req_type == MissionRequirement.CONTINUOUS:
+            return ContinuousRequirement(attribute, thresholds, scores, id)
+
+        elif req_type == MissionRequirement.TEMPORAL:
+            return TemporalRequirement(attribute, thresholds, scores, id)
+
+        raise ValueError(f"Unknown requirement type: {req_type}")
+
 class CategoricalRequirement(MissionRequirement):
-    def __init__(self, req_type: str, attribute: str, thresholds: list, scores: list, id: str = None, **kwargs):
+    def __init__(self, attribute: str, thresholds: list, scores: list, id: str = None, **_):
         """
-        ### Categorical Requirement
+        ### Categorical Mission Requirement
         Initialize a categorical requirement with an attribute, thresholds, and scores.
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
         - :`thresholds`: A list of qualitative threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., ["low", "medium", "high"].
@@ -245,6 +268,7 @@ class CategoricalRequirement(MissionRequirement):
     
     def to_dict(self):
         return {
+            "req_type": self.req_type,
             "attribute": self.attribute,
             "thresholds": self.thresholds,
             "scores": self.scores,
@@ -254,10 +278,10 @@ class CategoricalRequirement(MissionRequirement):
     def __repr__(self):
         return f"CategoricalRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
-class DiscreeteRequirement(MissionRequirement):
-    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
+class DiscreteRequirement(MissionRequirement):
+    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **_):
         """
-        ### Discrete Requirement
+        ### Discrete Value Mission Requirement
         Initialize a discrete requirement with an attribute, thresholds, and scores.
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
         - :`thresholds`: A list of discrete threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10, 30, 100].
@@ -311,7 +335,7 @@ class DiscreeteRequirement(MissionRequirement):
 
     def copy(self) -> 'MissionRequirement':
         """Create a copy of the measurement requirement."""
-        return DiscreeteRequirement(
+        return DiscreteRequirement(
             attribute=self.attribute,
             thresholds=self.thresholds,
             scores=self.scores,
@@ -320,6 +344,7 @@ class DiscreeteRequirement(MissionRequirement):
     
     def to_dict(self):
         return {
+            "req_type": self.req_type,
             "attribute": self.attribute,
             "thresholds": self.thresholds,
             "scores": self.scores,
@@ -327,12 +352,12 @@ class DiscreeteRequirement(MissionRequirement):
         }
     
     def __repr__(self):
-        return f"DiscreeteRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+        return f"DiscreteRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
 class ContinuousRequirement(MissionRequirement):
     def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
         """
-        ### Continuous Requirement
+        ### Continuous Value Mission Requirement
         Initialize a continuous requirement with an attribute, thresholds, and scores.
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
         - :`thresholds`: A list of continuous threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10.0, 30.0, 100.0].
@@ -364,110 +389,44 @@ class ContinuousRequirement(MissionRequirement):
                 
         return preference
 
-# class CoverageRequirement(MissionRequirement):
-#     def __init__(self, ):
-#         preference_function = self._build_preference_function()
-        
-#         super().__init__("coverage", preference_function)
-
-#     def _build_preference_function() -> callable:
-#         pass
-
-# class MissionRequirement:
-    # def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None):
-    #     """
-    #     ### Mission Requirement 
-        
-    #     Initialize a mission requirement with an attribute, thresholds, and scores.
-    #     - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
-    #     - :`thresholds`: A list of threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10,30,100] m.
-    #     - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1,0.7,0.2]
-                
-    #     """
-#         # Validate inputs
-#         assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
-        
-#         # Check if scores are sorted
-#         assert all(scores[i] >= scores[i + 1] for i in range(len(scores) - 1)), "Scores must be sorted in descending order"
-
-#         # Check if score values are between 0 and 1
-#         assert all(0 <= score <= 1 for score in scores), "Scores must be between 0 and 1"
-
-#         # Set attributes
-#         self.attribute : str = attribute.lower()
-#         self.thresholds : list = thresholds
-#         self.scores : list[float] = scores
-#         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
-
-#         # Determine if thresholds are categorical or numeric
-#         if isinstance(thresholds[0], str): # Categorical thresholds          
-#             # Check if all thresholds are strings
-#             assert all(isinstance(threshold, str) for threshold in thresholds), "All thresholds must be strings"
-
-#             # Convert all thresholds to lowercase
-#             self.thresholds = [threshold.lower() for threshold in thresholds]
-
-#             # Create performance function
-#             self.preference_function = self._build_categorical_preference_function()
-
-#         else: # Numerical thresholds
-#             # Check if thresholds are sorted
-#             assert all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "Thresholds must be sorted"
-
-#             # Create performance function
-#             self.preference_function = self._build_continous_preference_function()
-
-    # def _build_categorical_preference_function(self) -> callable:
-    #     """Creates a categorical preference function."""
-    #     def preference(value : str) -> float:
-    #         if value.lower() not in self.thresholds: return 0.0 
-            
-    #         index = self.thresholds.index(value.lower())
-    #         return self.scores[index]
-            
-    #     return preference
-
-#     def _build_continous_preference_function(self) -> callable:
-#         """Creates a piecewise-linear + exponential tail preference function."""
-#         def preference(x : float) -> float:
-#             # Unpack thresholds and scores
-#             T, S = self.thresholds, self.scores
-            
-#             # Check if x is below the first threshold
-#             if x <= T[0]:
-#                 # Maximum score for values below the first threshold
-#                 return S[0]
-            
-#             # Check if x is between thresholds
-#             for i in range(1, len(T)):
-#                 if x <= T[i]:
-#                     # Linear interpolation between T[i-1] and T[i]
-#                     slope = (S[i] - S[i - 1]) / (T[i] - T[i - 1])
-#                     return S[i - 1] + slope * (x - T[i - 1])
-                
-#             # Beyond worst threshold: exponential drop-off
-#             return S[-1] * np.exp(-(x - T[-1]))
-        
-#         return preference
-
-#     def calc_preference_value(self, value: float) -> float:
-#         return self.preference_function(value)
+    def copy(self):
+        """Create a copy of the measurement requirement."""
+        return ContinuousRequirement(
+            attribute=self.attribute,
+            thresholds=self.thresholds,
+            scores=self.scores,
+            id=self.id
+        )
     
-#     def copy(self) -> 'MissionRequirement':
-#         """Create a copy of the measurement requirement."""
-#         return MissionRequirement(self.attribute, self.thresholds, self.scores, self.id)
+    def to_dict(self):
+        return {
+            "req_type": self.req_type,
+            "attribute": self.attribute,
+            "thresholds": self.thresholds,
+            "scores": self.scores,
+            "id": self.id
+        }
 
-    # def to_dict(self) -> Dict[str, Union[str, float]]:
-    #     """Convert the measurement requirement to a dictionary."""
-    #     return {
-    #         "attribute": self.attribute,
-    #         "thresholds": self.thresholds,
-    #         "scores": self.scores,
-    #         "id": self.id
-    #     }
-    
-    # def __repr__(self):
-    #     return f"MeasurementRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+    def __repr__(self):
+        return f"ContinousRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+
+class TemporalRequirement(ContinuousRequirement):
+    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
+        """
+        ### Temporal Mission Requirement
+        Initialize a temporal requirement with an attribute, thresholds, and scores.
+        - :`attribute`: The attribute being measured (e.g., "time since last observation").
+        - :`thresholds`: A list of time thresholds that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [3600.0, 7200.0, 10800.0] seconds.
+        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1.0, 0.7, 0.2].
+        """
+        super().__init__(attribute, thresholds, scores, id)
+        self.req_type = self.TEMPORAL
+
+    def copy(self):
+        return TemporalRequirement(self.attribute, self.thresholds, self.scores, self.id)
+
+    def __repr__(self):
+        return f"TemporalRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
 class MissionObjective:
     def __init__(self, 
