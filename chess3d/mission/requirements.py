@@ -1,111 +1,9 @@
-
 from numbers import Number
 from typing import Any, Callable, Dict, List, Tuple, Union
 import uuid
 import numpy as np
 from pyparsing import ABC, abstractmethod
 
-
-CO = {
-    # Coobservation Strategies
-    "no_change" : lambda _ : 1.0
-}
-
-class GeophysicalEvent:
-    def __init__(self,
-                 event_type : str,
-                 severity : str,
-                 location : list,
-                 t_start : float,
-                 t_end : float,
-                 id : str = None
-                 ):
-        """ 
-        ### Geophysical Event
-
-        Initialize a geophysical event with a type, severity, start time, end time, and correlation time.
-        - :`event_type`: The type of event (e.g., "algal bloom", "flood").
-        - :`severity`: The severity of the event.
-        - :`location`: The location of the event as a list of lat-lon-alt coordinates.
-        - :`t_start`: The start time of the event.
-        - :`t_end`: The end time of the event.
-        - :`t_corr`: The decorrelation time of the event. If None, it is set to (t_end - t_start).
-        
-        """
-
-        # Validate inputs
-        assert isinstance(event_type, str), "Event type must be a string"
-        assert isinstance(severity, (int, float)), "Severity must be a number"
-        assert isinstance(location, tuple) or isinstance(location, list), "Location must be a tuple or a list"
-        if isinstance(location, tuple):
-            assert len(location) == 4, "Location must be a lat-lon-grid index-gp index tuple of length 4"
-        elif isinstance(location, list):
-            if len(location) == 4:
-                # Check if all elements are numbers
-                assert all(isinstance(loc, (int, float)) for loc in location), "All elements of location must be numbers"
-            else:                
-                # Check if all elements are tuples of length 4
-                assert all(isinstance(loc, (tuple, list)) and len(loc) == 4 for loc in location), "Location must be a list of tuples or lists of length 4"
-        assert isinstance(t_start, (int, float)), "Start time must be a number"
-        assert isinstance(t_end, (int, float)), "End time must be a number"
-        assert t_start < t_end, "Start time must be less than end time"
-        
-        # Set attributes
-        self.event_type : str = event_type.lower()
-        self.severity : float = severity
-        self.location : list = location
-        self.t_start : float = t_start
-        self.t_end : float = t_end
-        self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
-
-    def is_active(self, t: float) -> bool:
-        """Check if the event is active at time t."""
-        return self.t_start <= t <= self.t_end
-    
-    def is_expired(self, t: float) -> bool:
-        """Check if the event is expired at time t."""
-        return t > self.t_end
-    
-    def is_future(self, t: float) -> bool:
-        """Check if the event is in the future at time t."""
-        return t < self.t_start
-
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the event to a dictionary."""
-        return self.__dict__
-    
-    def from_dict(event_dict: Dict[str, Union[str, float]]) -> 'GeophysicalEvent':
-        """Create an event from a dictionary."""
-        return GeophysicalEvent(**event_dict)
-    
-    def __repr__(self) -> str:
-        """String representation of the event."""
-        return f"GeophysicalEvent({self.event_type}, severity={self.severity}, t_start={self.t_start}, t_end={self.t_end}, id={self.id})"
-    
-    def __str__(self) -> str:
-        """String representation of the event."""
-        return f"Event: {self.event_type}, Severity: {self.severity}, Start: {self.t_start}, End: {self.t_end}, Location: {self.location}, ID: {self.id}"
-    
-    def __eq__(self, other) -> bool:
-        """Check if two events are equal."""
-        if not isinstance(other, GeophysicalEvent):
-            return False
-        return self.to_dict() == other.to_dict()
-    
-    def __hash__(self) -> int:
-        """Hash the event for use in sets and dictionaries."""
-        return hash((self.event_type, self.severity, self.t_start, self.t_end, self.id))
-    
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the event to a dictionary."""
-        return {
-            "event_type": self.event_type,
-            "severity": self.severity,
-            "location": self.location,
-            "t_start": self.t_start,
-            "t_end": self.t_end,
-            "id": self.id
-        }
 
 class MissionRequirement(ABC):
     CATEGORICAL = 'categorical'
@@ -424,33 +322,49 @@ class RevisitTemporalRequirement(TemporalRequirement, ContinuousRequirement):
         return f"RevisitTemporalRequirement(thresholds={self.thresholds}, scores={self.scores}, id={self.id})"
 
 class ReobservationStrategyRequirement(TemporalRequirement):
-    RO = {
-        # Reobservation Strategies
-        "linear_increase" : lambda n_obs : n_obs,
-        "linear_decrease" : lambda n_obs : max((4 - n_obs)/4, 0),
-        "decaying_increase" : lambda n_obs : np.log(n_obs) + 1,
-        "decaying_decrease" : lambda n_obs : np.exp(1 - n_obs),
-        "immediate_decrease" : lambda n_obs : 0.0 if n_obs > 0 else 1.0,
-        "no_change" : lambda _ : 1.0,
-        # "monitoring" : monitoring,
-    }
-    
+    # Reobservation Strategies
+    ## No change
+    NO_CHANGE = 'no_change'
+    ## More obs = better    
+    EXP_SATURATION = 'exp_saturation'
+    LOG_THRESHOLD = 'log_threshold'
+    ## Less obs = better    
+    EXP_DECAY = 'exp_decay'
+    ## Thresholds
+    STEP_THRESHOLD = 'step_threshold'
+    LINEAR_THRESHOLD = 'linear_threshold'
+    GAUSSIAN_THRESHOLD = 'gaussian_threshold'
+    TRIANGLE_THRESHOLD = 'triangle_threshold'
+
+    # RO = {
+    #     # Reobservation Strategies
+    #     "linear_increase" : lambda n_obs : n_obs,
+    #     "linear_decrease" : lambda n_obs : max((4 - n_obs)/4, 0),
+    #     "decaying_increase" : lambda n_obs : np.log(n_obs) + 1,
+    #     "decaying_decrease" : lambda n_obs : np.exp(1 - n_obs),
+    #     "immediate_decrease" : lambda n_obs : 0.0 if n_obs > 0 else 1.0,
+    #     "no_change" : lambda _ : 1.0,
+    #     # "monitoring" : monitoring,
+    # }
+
     def __init__(self, strategy : str, id : str = None, **_):
         """
         ### Reobservation Strategy Requirement
         Initialize a reobservation strategy requirement with a strategy and an ID.
-        - :`strategy`: The reobservation strategy to use (e.g., "linear_increase", "linear_decrease").
         - :`id`: An optional unique identifier for the requirement.
         """
 
         # Validate inputs
-        assert strategy in self.RO, f"Unknown reobservation strategy: {strategy}. Must be one of {list(self.RO.keys())}."
-        
-        super().__init__(MissionRequirement.TEMPORAL, TemporalRequirement.N_OBS, ReobservationStrategyRequirement.RO[strategy], id)
-        self.strategy = strategy
+        assert isinstance(strategy, str), "Strategy must be a string"
+        assert strategy.lower() in [self.NO_CHANGE, self.EXP_SATURATION, self.LOG_THRESHOLD, self.EXP_DECAY, self.STEP_THRESHOLD, self.LINEAR_THRESHOLD, self.GAUSSIAN_THRESHOLD, self.TRIANGLE_THRESHOLD], \
+            f"Unknown strategy: {strategy}. Must be one of {self.NO_CHANGE}, {self.EXP_SATURATION}, {self.LOG_THRESHOLD}, {self.EXP_DECAY}, {self.STEP_THRESHOLD}, {self.LINEAR_THRESHOLD}, {self.GAUSSIAN_THRESHOLD}, {self.TRIANGLE_THRESHOLD}."
 
-    def copy(self):
-        return ReobservationStrategyRequirement(self.strategy, self.id)
+        super().__init__(MissionRequirement.TEMPORAL, TemporalRequirement.N_OBS, self._build_reobservation_strategy(), id)
+        self.strategy = strategy.lower()
+
+    @abstractmethod
+    def _build_reobservation_strategy(self) -> Callable[[Any], float]:
+        """Creates a reobservation strategy preference function."""
 
     def to_dict(self):
         d = super().to_dict()
@@ -461,6 +375,8 @@ class ReobservationStrategyRequirement(TemporalRequirement):
 
     def __repr__(self):
         return f"ReobservationStrategyRequirement(strategy={self.strategy}, id={self.id})"
+    
+# class ExponentialSaturationRequirement()
 
 class SpatialRequirement(MissionRequirement):
     POINT = 'point'
@@ -682,224 +598,3 @@ class GridTargetSpatialRequirement(SpatialRequirement):
     
     def __repr__(self):
         return f"GridTargetSpatialRequirement(grid_name={self.grid_name}, grid_index={self.grid_index}, grid_size={self.grid_size}, id={self.id})"
-
-class MissionObjective:
-    def __init__(self, 
-                 parameter: str, 
-                 priority: float, 
-                 requirements: list, 
-                 valid_instruments : list, 
-                 id : str = None):
-        """ 
-        ### Objective
-         
-        Initialize an objective with a priority, parameter, and requirements.
-        - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
-        - :`priority`: The priority of the objective.
-        - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
-        - :`valid_instruments`: A list of valid instruments that can be used to measure the parameter.
-        - :`id`: An optional ID for the objective. If None, a new UUID is generated.
-        """
-        if all([isinstance(req, dict) for req in requirements]):
-            requirements = [MissionRequirement(**req) for req in requirements]
-
-        # Validate inputs
-        assert isinstance(priority, (int, float)), "Priority must be a number"
-        assert isinstance(parameter, str), "Parameter must be a string"
-        assert len(requirements) > 0, "At least one requirement is needed"
-        assert all(isinstance(req, MissionRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
-        assert any(isinstance(req, TemporalRequirement) for req in requirements), "At least one requirement must be a `TemporalRequirement`"
-        assert any(isinstance(req, SpatialRequirement) for req in requirements), "At least one requirement must be a `SpatialRequirement`"
-        assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
-
-        # Set attributes
-        self.priority : float = priority
-        self.parameter : str = parameter
-        self.requirements : Dict[str, MissionRequirement] = {requirement.attribute : requirement 
-                                                             for requirement in requirements 
-                                                             if isinstance(requirement, MissionRequirement)}
-        self.valid_instruments = [instrument.lower() 
-                                  for instrument in valid_instruments
-                                  if isinstance(instrument, str)] # TODO remove this and implement knoledge graph in agent
-        self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
-
-    def eval_measurement_performance(self, measurement: dict) -> float:
-        """Evaluate the product of satisfaction scores given a measurement dict {attr: value}"""
-        try:
-            # Check if the measurement contains the required parameter
-            # TODO replace with knowledge graph
-            if measurement['instrument'].lower() not in self.valid_instruments:
-                # measurement does not meet requirement
-                return 0.0
-
-            # Calculate the performance score for each requirement
-            # If the attribute is not in the measurement, return 0
-            # Otherwise, calculate the preference value using the requirement's preference function
-            scores = [
-                0 if attribute not in measurement
-                else req.calc_preference_value(measurement[attribute])
-                for attribute, req in self.requirements.items()
-            ]
-
-            # return the product of all scores
-            return np.prod(scores)
-        
-        except Exception as e:
-            raise(e)
-        
-    def calc_reward(self, measurement: dict) -> float:
-        """Calculate the reward for the objective based on the measurement."""
-        return RO[self.reobservation_strategy](measurement)
-    
-    def __repr__(self):
-        """String representation of the objective."""
-        return f"MissionObjective({self.parameter}, priority={self.priority}, requirements={self.requirements})"
-    
-    def __str__(self):
-        """String representation of the objective."""
-        return f"Objective: {self.parameter}, Priority: {self.priority}, Requirements: {self.requirements}"
-
-    def copy(self) -> 'MissionObjective':
-        """Create a copy of the objective."""
-        return MissionObjective(self.parameter, self.priority, [req.copy() for req in self.requirements.values()], self.valid_instruments, self.reobservation_strategy, self.id)
-
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the objective to a dictionary."""
-        out : dict = dict(self.__dict__)
-        out['requirements'] = {key: req.to_dict() 
-                            for key,req in self.requirements.items()}
-        return out
-    
-    def from_dict(obj_dict: Dict[str, Union[str, float]]) -> 'MissionObjective':
-        """Create an objective from a dictionary."""
-        if 'event_type' in obj_dict:
-            # EventDrivenObjective
-            requirements = [MissionRequirement(**req) for _,req in obj_dict['requirements'].items()]
-            return EventDrivenObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['event_type'], obj_dict['valid_instruments'], obj_dict['reobservation_strategy'], obj_dict['id'])
-        else:
-            requirements = [MissionRequirement(**req) for _,req in obj_dict['requirements'].items()]
-            return MissionObjective(obj_dict['parameter'], obj_dict['priority'], requirements, obj_dict['valid_instruments'], obj_dict['reobservation_strategy'], obj_dict['id'])
-
-    def can_perform(self, instrument: str) -> bool:
-        """Check if the objective can be performed by the given instrument."""
-        return instrument.lower() in self.valid_instruments
-
-class EventDrivenObjective(MissionObjective):
-    def __init__(self, 
-                 parameter: str, 
-                 priority: float, 
-                 requirements: list, 
-                 event_type: str,
-                 valid_instruments : list,
-                 reobservation_strategy: str,
-                 synergistic_parameters: list,
-                 coobservation_strategy: str,
-                 t_corr : float = None,
-                 id : str = None
-                 ):
-        """ 
-        ### Event Driven Objective
-         
-        Initialize an event-driven objective with a priority, parameter, and requirements.
-        - :`priority`: The priority of the objective.
-        - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
-        - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
-        - :`event_type`: The type of geophysical event associated with the objective.
-        - :`valid_instruments`: A list of valid instruments that can be used to measure the parameter.
-        - :`reobservation_strategy`: The strategy for reobserving the event. Can be one of the following:
-            - "linar_increase"
-            - "linar_decrease"
-            - "decaying_increase"
-            - "decaying_decrease"
-            - "immediate_decrease"
-            - "no_change"
-            - "monitoring"
-        - :`id`: An optional ID for the objective. If None, a new UUID is generated.
-        """
-        super().__init__(parameter, priority, requirements, valid_instruments, reobservation_strategy, id)
-        
-        # Validate inputs
-        assert isinstance(event_type, str), "Event type must be a string"
-        assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
-        assert all(isinstance(param, str) for param in synergistic_parameters), "Synergistic parameters must be strings"
-        assert parameter not in synergistic_parameters, "Main parameter cannot be in list of synergistic parameters."
-        assert isinstance(coobservation_strategy, str), "Coobservation strategy must be a string"
-        assert coobservation_strategy in CO, f"Invalid coobservation strategy: {coobservation_strategy}. Available strategies: {list(CO.keys())}"
-        
-        # Set attributes
-        self.event_type = event_type.lower() 
-        self.synergistic_parameters = [param.lower() for param in synergistic_parameters]
-        self.coobservation_strategy = coobservation_strategy.lower()
-        self.t_corr = t_corr if t_corr is not None else np.Inf
-
-    def __repr__(self):
-        """String representation of the objective."""
-        return f"EventDrivenObjective({self.parameter}, priority={self.priority}, requirements={self.requirements})"
-    
-    def __str__(self):
-        """String representation of the objective."""
-        return f"Event-driven Objective: {self.parameter}, Priority: {self.priority}, Requirements: {self.requirements}"
-
-    def copy(self):
-        return EventDrivenObjective(self.parameter, 
-                                    self.priority, 
-                                    [req.copy() for req in self.requirements.values()], 
-                                    self.event_type, 
-                                    self.valid_instruments, 
-                                    self.reobservation_strategy, 
-                                    self.synergistic_parameters,
-                                    self.coobservation_strategy,
-                                    self.t_corr,
-                                    self.id)
-
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the objective to a dictionary."""
-        out : dict = dict(self.__dict__)
-        out['requirements'] = {key: req.to_dict() 
-                            for key,req in self.requirements.items()}
-        return out
-
-class Mission:
-    def __init__(self, name : str, objectives: list):
-        # Validate inputs
-        assert isinstance(name, str), "Mission name must be a string"
-        assert len(objectives) > 0, "At least one objective is needed"
-        assert all(isinstance(obj, MissionObjective) for obj in objectives), "All objectives must be instances of `Objective`"
-
-        # Set attributes
-        self.name : str = name.lower()
-        self.objectives : list[MissionObjective] = objectives
-
-    def evaluate_measurement(self, measurements: dict) -> float:
-        """Sum weighted objective scores across all objectives"""
-        return sum([obj.priority * obj.eval_measurement_performance(measurements) 
-                    for obj in self.objectives
-                    if not isinstance(obj, EventDrivenObjective)
-                    ])
-    
-    def evaluate_event_measurement(self, measurements: dict) -> float:
-        """Sum weighted objective scores across all objectives"""
-        return sum([obj.priority * obj.eval_measurement_performance(measurements) 
-                    for obj in self.objectives
-                    if isinstance(obj, EventDrivenObjective)
-                    ])
-
-    def __repr__(self):
-        """String representation of the mission."""
-        return f"Mission({self.name}, objectives={self.objectives})"
-    
-    def __str__(self):
-        """String representation of the mission."""
-        return f"Mission: {self.name}, Objectives: {self.objectives}"
-    
-    def __iter__(self):
-        """Iterate over the objectives."""
-        return iter(self.objectives)
-    
-    def copy(self) -> 'Mission':
-        """Create a copy of the mission."""
-        return Mission(self.name, [obj.copy() for obj in self.objectives])
-    
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the mission to a dictionary."""
-        return self.__dict__

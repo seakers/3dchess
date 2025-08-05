@@ -28,7 +28,7 @@ from chess3d.agents.planning.preplanners.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.replanners.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
 from chess3d.agents.planning.replanners.worker import WorkerReplanner
 from chess3d.agents.science.processing import LookupProcessor
-from chess3d.mission import *
+from chess3d.mission.mission import *
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
