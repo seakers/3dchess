@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Union
 
 import numpy as np
-from chess3d.mission import MissionObjective
+from chess3d.mission.mission import MissionObjective
 from chess3d.utils import CoordinateTypes
 from dmas.agents import AgentAction
    

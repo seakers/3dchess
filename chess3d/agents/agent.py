@@ -25,7 +25,7 @@ from chess3d.messages import *
 from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
-from chess3d.mission import Mission
+from chess3d.mission.mission import Mission
 
 class AbstractAgent(Agent):
     """

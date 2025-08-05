@@ -2,44 +2,56 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 from chess3d.agents.actions import ObservationAction
+from chess3d.mission.events import GeophysicalEvent
 from chess3d.orbitdata import OrbitData
-from chess3d.mission import *
+from chess3d.mission.mission import *
 from chess3d.utils import Interval
 
 
 class GenericObservationTask(ABC):
+    DEFAULT = 'default_mission_task'
+    EVENT = 'event_driven_task'
+
     def __init__(self,
-                 mission : str,
-                 objective : MissionObjective,
+                 task_type : str,
+                 parameter : str,
                  targets: list,
                  availability: Interval,
-                 reward : float,
-                 reobservation_strategy : str,
-                 id : str = None,
+                 relevant_objective : MissionObjective,
                  duration_requirements : Interval = Interval(0.0, np.Inf),
+                 id : str = None,
                 ):
-        
+        """
+        Generic observation task to be scheduled by an agent.
+        - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
+        - :`targets`: A list of targets to be observed, each represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
+        - :`availability`: The time interval during which the task is available.
+        - :`reward`: The reward for completing the task.
+        - :`relevant_objective`: The relevant mission objective associated with the task by the agent who initialized it.
+        - :`duration_requirements`: The duration requirements for the task.
+        - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
+        """
+
         # validate inputs
-        assert isinstance(mission, str), "Mission must be a string."
-        assert isinstance(objective, MissionObjective), "Objective must be a MissionObjective."
+        assert isinstance(task_type, str), "Task type must be a string."
+        assert task_type in [self.DEFAULT, self.EVENT], "Task type must be either 'default_mission_task' or 'event_driven_task'."
+        assert isinstance(parameter, str), "Parameter must be a string."
         assert isinstance(targets, list), "Targets must be a list."
         assert all([isinstance(target, tuple) for target in targets]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
         assert all([len(target) == 4 for target in targets]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
         assert isinstance(availability, Interval), "Availability must be an Interval."
         assert availability.left >= 0.0, "Start of availability must be non-negative."
-        assert isinstance(reward, (int, float)), "Reward must be a number."
-        assert reward >= 0.0, "Reward must be non-negative."
-        assert isinstance(reobservation_strategy, str), "Reobservation strategy must be a string."
+        assert isinstance(relevant_objective, MissionObjective), "Objective must be a MissionObjective."
         assert isinstance(duration_requirements, Interval), "Duration requirements must be an Interval."
 
-        self.mission = mission
-        self.objective = objective
-        self.targets = targets
-        self.availability = availability
-        self.reward = reward
-        self.reobservation_strategy = reobservation_strategy
-        self.duration_requirements = duration_requirements
-        self.id = id if id is not None else self.generate_id()
+        # Set attributes
+        self.task_type : str = task_type
+        self.parameter : str = parameter
+        self.targets : list[tuple] = targets
+        self.availability : Interval = availability
+        self.objective : MissionObjective = relevant_objective
+        self.duration_requirements : Interval = duration_requirements
+        self.id : str = id if id is not None else self.generate_id()
 
     @abstractmethod
     def generate_id(self) -> str:
@@ -51,11 +63,6 @@ class GenericObservationTask(ABC):
         """ Create a deep copy of the task. """
         pass
 
-    def calculate_utility(self, **kargs) -> float:
-        """ Calculate the utility of the task based on the observation. """
-        # Placeholder for utility calculation logic
-        return self.reward
-    
     def available(self, time : float) -> bool:
         """ Check if the task is available at a given time. """
         return time in self.availability    
@@ -63,19 +70,31 @@ class GenericObservationTask(ABC):
     def to_dict(self) -> dict:
         """ Convert the task to a dictionary. """
         return {
-            "mission": self.mission,
-            "objective": self.objective.to_dict(),
+            "parameter": self.parameter,
             "targets": [target for target in self.targets],
             "availability": self.availability.to_dict(),
-            "reward": self.reward,
-            "reobservation_strategy": self.reobservation_strategy,
+            "objective": self.objective.to_dict(),
             "id": self.id,
             "duration_requirements": self.duration_requirements.to_dict()
         }
+    
+    @classmethod
+    def from_dict(cls, task_dict: dict) -> 'GenericObservationTask':
+        """ Create a task from a dictionary. """
+        task_type = task_dict['task_type']
         
-class MonitoringObservationTask(GenericObservationTask):
+
+        if task_type == cls.DEFAULT:
+            return DefaultObservationTask.from_dict(task_dict)
+        
+        # elif task_type == cls.EVENT:
+        #     return EventObservationTask.from_dict(task_dict)
+
+        return ValueError(f"Unknown task type: {task_type}")
+        
+class DefaultObservationTask(GenericObservationTask):
     def __init__(self,
-                 mission : str,
+                 parameter : str,
                  objective : MissionObjective,
                  target: list,
                  reward : float,
@@ -83,6 +102,18 @@ class MonitoringObservationTask(GenericObservationTask):
                  id : str = None,
                  duration_requirements = Interval(0.0, np.Inf)
                 ):
+        """
+        ### Default Observation Task
+        Represents a default observation task of a point target to be scheduled by an agent.
+        - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
+        - :`objective`: The mission objective associated with the task.
+        - :`target`: The target to be observed, represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
+        - :`reward`: The reward for completing the task.
+        - :`mission_duration`: The duration of the mission in seconds.
+        - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
+        - :`duration_requirements`: The duration requirements for the task.
+        """
+
         # validate inputs
         assert isinstance(target, tuple), "Target must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
         assert len(target) == 4, "Target must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
@@ -95,19 +126,18 @@ class MonitoringObservationTask(GenericObservationTask):
         reobservation_strategy = "monitoring"
 
         # initialte parent class
-        super().__init__(mission, objective, target, availability, reward, reobservation_strategy, id, duration_requirements)
+        super().__init__(parameter, objective, target, availability, reward, reobservation_strategy, id, duration_requirements)
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"{self.mission}_{self.objective.parameter}_{self.targets[0][2]}_{self.targets[0][3]}"
+        return f"{self.parameter}_{self.objective.parameter}_{self.targets[0][2]}_{self.targets[0][3]}"
     
     def copy(self) -> object:
         """ Create a deep copy of the task. """
-        return MonitoringObservationTask(
-            self.mission,
+        return DefaultObservationTask(
+            self.parameter,
             self.objective,
             self.targets[0],
-            self.reward,
             self.availability.right,
             id=self.id,
             duration_requirements=self.duration_requirements
@@ -115,6 +145,19 @@ class MonitoringObservationTask(GenericObservationTask):
     
     def __repr__(self):
         return f"MonitoringObservationTask(mission={self.mission}, objective={self.objective}, targets={self.targets}, availability={self.availability}, reward={self.reward}, reobservation_strategy={self.reobservation_strategy}, id={self.id})"
+
+    @classmethod
+    def from_dict(cls, task_dict: dict) -> 'DefaultObservationTask':
+        """ Create a task from a dictionary. """
+        return cls(
+            parameter=task_dict['parameter'],
+            objective=MissionObjective.from_dict(task_dict['objective']),
+            target=task_dict['targets'][0],
+            reward=task_dict.get('reward', 0.0),
+            mission_duration=task_dict['availability']['right'],
+            id=task_dict.get('id'),
+            duration_requirements=Interval.from_dict(task_dict['duration_requirements'])
+        )
 
 class EventObservationTask(GenericObservationTask):
     def __init__(self,

@@ -212,6 +212,20 @@ class Interval:
         """ Create a deep copy of the interval. """
         return Interval(self.left, self.right, self.left_open, self.right_open)
 
+    def to_dict(self) -> dict:
+        """ Convert the interval to a dictionary. """
+        return {
+            "left": self.left,
+            "right": self.right,
+            "left_open": self.left_open,
+            "right_open": self.right_open
+        }
+
+    @classmethod
+    def from_dict(cls, interval_dict: dict) -> 'Interval':
+        """ Create an interval from a dictionary. """
+        return cls(interval_dict['left'], interval_dict['right'], interval_dict['left_open'], interval_dict['right_open'])
+
 class EmptyInterval(Interval):
     """ Represents an empty interval """
 

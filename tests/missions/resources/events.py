@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import tqdm
 
-from chess3d.mission import GeophysicalEvent
+from chess3d.mission.events import GeophysicalEvent
 from chess3d.utils import print_welcome, LEVELS
 
 

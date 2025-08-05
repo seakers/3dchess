@@ -1,10 +1,9 @@
-import os
 import unittest
 
-import numpy as np
-
-from chess3d.mission import *
-from chess3d.simulation import Simulation
+from chess3d.mission.events import GeophysicalEvent
+from chess3d.mission.mission import *
+from chess3d.mission.requirements import *
+from chess3d.mission.objectives import *
 from chess3d.utils import print_welcome
 
 
@@ -20,51 +19,48 @@ class TestGeophysicalEvent(unittest.TestCase):
     """
     def test_initialization_valid(self):
         event = GeophysicalEvent('Algal Bloom', 
-                                 1.0, 
                                  [
                                     (0.0,0.0,0,0),
                                     (1.0,1.0,0,1)
                                   ], 
+                                 1.0, 
                                  0.5, 
                                  1.0
                                 )
         self.assertEqual(event.event_type, "algal bloom")
-        self.assertEqual(event.severity, 1.0)
         self.assertEqual(event.location, [(0.0,0.0,0,0), (1.0,1.0,0,1)])
-        self.assertEqual(event.t_start, 0.5)
-        self.assertEqual(event.t_end, 1.0)
+        self.assertEqual(event.t_detect, 1.0)
+        self.assertEqual(event.d_exp, 0.5)
+        self.assertEqual(event.severity, 1.0)
+        self.assertEqual(event.t_start, 1.0)
         self.assertIsInstance(uuid.UUID(event.id), uuid.UUID)
 
     def test_invalid_event_type(self):
         with self.assertRaises(AssertionError):
-            GeophysicalEvent(event_type=123, severity=0.5, location=[0, 0, 0, 0], t_start=0, t_end=1)
+            GeophysicalEvent(event_type=123, severity=0.5, location=[0, 0, 0, 0], t_detect=0, d_exp=1)
 
     def test_invalid_severity(self):
         with self.assertRaises(AssertionError):
-            GeophysicalEvent(event_type="flood", severity="high", location=[0, 0, 0, 0], t_start=0, t_end=1)
+            GeophysicalEvent(event_type="flood", severity="high", location=[0, 0, 0, 0], t_detect=0, d_exp=1)
 
     def test_invalid_location_type(self):
         with self.assertRaises(AssertionError):
-            GeophysicalEvent(event_type="flood", severity=0.7, location="bad location", t_start=0, t_end=1)
+            GeophysicalEvent(event_type="flood", severity=0.7, location="bad location", t_detect=0, d_exp=1)
 
     def test_invalid_location_length(self):
         with self.assertRaises(AssertionError):
-            GeophysicalEvent(event_type="flood", severity=0.7, location=[0, 0], t_start=0, t_end=1)
+            GeophysicalEvent(event_type="flood", severity=0.7, location=[0, 0], t_detect=0, d_exp=1)
 
     def test_invalid_t_start(self):
         with self.assertRaises(AssertionError):
-            GeophysicalEvent(event_type="fire", severity=0.6, location=[1, 2, 3, 4], t_start="0", t_end=1)
+            GeophysicalEvent(event_type="fire", severity=0.6, location=[1, 2, 3, 4], t_detect="0", d_exp=1)
 
     def test_invalid_t_end(self):
         with self.assertRaises(AssertionError):
-            GeophysicalEvent(event_type="fire", severity=0.6, location=[1, 2, 3, 4], t_start=0, t_end="1")
-
-    def test_invalid_time_order(self):
-        with self.assertRaises(AssertionError):
-            GeophysicalEvent(event_type="quake", severity=0.5, location=[1, 2, 3, 4], t_start=100, t_end=50)
+            GeophysicalEvent(event_type="fire", severity=0.6, location=[1, 2, 3, 4], t_detect=0, d_exp="1")
 
     def test_temporal_status_methods(self):
-        event = GeophysicalEvent("flood", 1.0, [1, 2, 3, 4], 100, 200)
+        event = GeophysicalEvent("flood", [1, 2, 3, 4], 0, 100, 1.0, 100)
 
         self.assertTrue(event.is_future(50))
         self.assertFalse(event.is_active(50))
@@ -79,7 +75,7 @@ class TestGeophysicalEvent(unittest.TestCase):
         self.assertFalse(event.is_future(250))
 
     def test_to_dict_and_from_dict(self):
-        original = GeophysicalEvent("flood", 0.9, [0.0, 1.0, 2, 3], 100, 200)
+        original = GeophysicalEvent("flood", [0.0, 1.0, 2, 3], 100, 100, 0.9)
         as_dict = original.to_dict()
         recreated = GeophysicalEvent.from_dict(as_dict)
 
@@ -87,14 +83,14 @@ class TestGeophysicalEvent(unittest.TestCase):
         self.assertEqual(original, recreated)
 
     def test_event_equality_and_hash(self):
-        e1 = GeophysicalEvent("fire", 0.6, [1, 1, 1, 1], 0, 10)
+        e1 = GeophysicalEvent("fire", [1, 1, 1, 1], 0, 10, 0.6)
         e2 = GeophysicalEvent.from_dict(e1.to_dict())
 
         self.assertEqual(e1, e2)
         self.assertEqual(hash(e1), hash(e2))
 
     def test_repr_and_str(self):
-        event = GeophysicalEvent("storm", 0.7, [10, 20, 1, 2], 0, 50)
+        event = GeophysicalEvent("storm", [10, 20, 1, 2], 0, 50, 0.7)
         rep = repr(event)
         s = str(event)
 
@@ -104,6 +100,16 @@ class TestGeophysicalEvent(unittest.TestCase):
         self.assertIn("t_start", rep)
 
 class TestRequirements(unittest.TestCase):
+    # MissionRequirement base class
+    def test_from_dict_invalid_type(self):
+        bad_dict = {
+            "req_type": "unknown_type",
+            "attribute": "foo",
+            "thresholds": [1, 2, 3],
+            "scores": [1.0, 0.5, 0.0]
+        }
+        self.assertRaises(ValueError, MissionRequirement.from_dict, bad_dict)
+
     # Categorical Requirements
     def test_categorical_requirement_valid(self):
         thresholds = ["low", "medium", "high"]
@@ -182,6 +188,7 @@ class TestRequirements(unittest.TestCase):
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
     # Temporal Requirements
+    ## Revisit Temporal Requirement
     def test_revisit_time_requirement(self):
         req = RevisitTemporalRequirement([3600, 7200, 10800], [1.0, 0.5, 0.1])
         self.assertTrue(isinstance(req, RevisitTemporalRequirement))
@@ -202,41 +209,133 @@ class TestRequirements(unittest.TestCase):
         self.assertIsInstance(reconstructed, RevisitTemporalRequirement)
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
     
-    def test_reobservation_strategy_requirement(self):
-        req = ReobservationStrategyRequirement("linear_increase")
+    def test_no_change_reobservation_strategy_requirement(self):
+        req = NoChangeReobservationStrategy()
         self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
         self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
         self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
+        self.assertTrue(isinstance(req, NoChangeReobservationStrategy))
         self.assertEqual(req.calc_preference_value(1), 1.0)
-        self.assertEqual(req.calc_preference_value(2), 2.0)
+        self.assertEqual(req.calc_preference_value(2), 1.0)
+    def test_no_change_reobservation_strategy_copy(self):
+        req = NoChangeReobservationStrategy()
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_no_change_reobservation_strategy_to_from_dict(self):
+        original = NoChangeReobservationStrategy()
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, NoChangeReobservationStrategy)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+    
+    def test_exponential_saturation_reobservation_strategy(self):
+        req = ExpSaturationReobservationsStrategy(0.5)
+        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
+        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
+        self.assertTrue(isinstance(req, ExpSaturationReobservationsStrategy))
+        self.assertTrue(req.calc_preference_value(1) <= 0.5)
+        self.assertTrue(0.5 <= req.calc_preference_value(2))
+    def test_exponential_saturation_reobservation_strategy_copy(self):
+        req = ExpSaturationReobservationsStrategy(0.5)
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_exponential_saturation_reobservation_strategy_to_from_dict(self):
+        original = ExpSaturationReobservationsStrategy(0.5)
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, ExpSaturationReobservationsStrategy)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+    
+    def test_logarithmic_threshold_reobservation_strategy(self):
+        req = LogThresholdReobservationsStrategy(2, 0.5)
+        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
+        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
+        self.assertTrue(isinstance(req, LogThresholdReobservationsStrategy))        
+        self.assertTrue(req.calc_preference_value(1) < 0.5)
+        self.assertAlmostEqual(req.calc_preference_value(2), 0.5)
+        self.assertAlmostEqual(req.calc_preference_value(10), 0.98, places=2)
+    def test_logarithmic_threshold_reobservation_strategy_copy(self):
+        req = LogThresholdReobservationsStrategy(2, 0.5)
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_logarithmic_threshold_reobservation_strategy_to_from_dict(self):
+        original = LogThresholdReobservationsStrategy(2, 0.5)
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, LogThresholdReobservationsStrategy)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+    
+    def test_exponential_decay_reobservation_strategy(self):
+        req = ExpDecayReobservationStrategy(2)
+        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
+        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
+        self.assertTrue(isinstance(req, ExpDecayReobservationStrategy))
+        self.assertEqual(req.calc_preference_value(0), 1.0)
+        self.assertTrue(0 < req.calc_preference_value(1) <= 0.5)
+        self.assertAlmostEqual(req.calc_preference_value(4), 0.0, places=2)
+    def test_exponential_decay_reobservation_strategy_copy(self):
+        req = ExpDecayReobservationStrategy(2)
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_exponential_decay_reobservation_strategy_to_from_dict(self):
+        original = ExpDecayReobservationStrategy(2)
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, ExpDecayReobservationStrategy)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+    
+    def test_guassian_threshold_reobservation_strategy(self):
+        req = GaussianThresholdReobservationsStrategy(4, 0.5)
+        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
+        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
+        self.assertTrue(isinstance(req, GaussianThresholdReobservationsStrategy))
+        self.assertAlmostEqual(req.calc_preference_value(0), 0.0, places=4)
+        self.assertTrue(0 < req.calc_preference_value(3) <= 0.5, "Value should be between 0 and 0.5")
+        self.assertAlmostEqual(req.calc_preference_value(4), 1, places=4)
+        self.assertTrue(0 < req.calc_preference_value(5) <= 0.5, "Value should be between 0 and 0.5")
+        self.assertAlmostEqual(req.calc_preference_value(8), 0.0, places=4)
+    def test_guassian_threshold_reobservation_strategy_copy(self):
+        req = GaussianThresholdReobservationsStrategy(4, 0.5)
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_guassian_threshold_reobservation_strategy_to_from_dict(self):
+        original = GaussianThresholdReobservationsStrategy(4, 0.5)
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, GaussianThresholdReobservationsStrategy)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
-    # def test_temporal_requirement(self):
-    #     req = TemporalRequirement("time_since_obs", 
-    #                               thresholds=[3600, 7200, 10800], 
-    #                               scores    =[1.0, 0.5, 0.1])
-    #     self.assertTrue(isinstance(req, TemporalRequirement))
-    #     self.assertEqual(req.req_type, MissionRequirement.TEMPORAL)
-    #     self.assertTrue(req.calc_preference_value(4000) <= 1.0)  
-    # def test_temporal_copy(self):
-    #     req = TemporalRequirement("time_since_obs", [3600, 7200], [1.0, 0.5])
-    #     req_copy = req.copy()
-    #     self.assertEqual(req.to_dict(), req_copy.to_dict())
-    #     self.assertIsNot(req, req_copy)
-    # def test_temporal_to_from_dict(self):
-    #     original = TemporalRequirement("time_since_obs", [3600.0, 7200.0], [1.0, 0.5])
-    #     as_dict = original.to_dict()
-    #     reconstructed = MissionRequirement.from_dict(as_dict)
-    #     self.assertIsInstance(reconstructed, TemporalRequirement)
-    #     self.assertEqual(original.to_dict(), reconstructed.to_dict())
-
-    # def test_from_dict_invalid_type(self):
-    #     bad_dict = {
-    #         "req_type": "unknown_type",
-    #         "attribute": "foo",
-    #         "thresholds": [1, 2, 3],
-    #         "scores": [1.0, 0.5, 0.0]
-    #     }
-    #     self.assertRaises(ValueError, MissionRequirement.from_dict, bad_dict)
+    def test_triangle_threshold_reobservation_strategy(self):
+        req = TriangleThresholdReobservationsStrategy(4, 2.0)
+        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
+        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
+        self.assertTrue(isinstance(req, TriangleThresholdReobservationsStrategy))
+        self.assertAlmostEqual(req.calc_preference_value(0), 0.0, places=4)
+        self.assertAlmostEqual(req.calc_preference_value(3), 0.5, places=4)
+        self.assertAlmostEqual(req.calc_preference_value(4), 1, places=4)
+        self.assertAlmostEqual(req.calc_preference_value(5), 0.5, places=4)
+        self.assertAlmostEqual(req.calc_preference_value(8), 0.0, places=4)
+    def test_triangle_threshold_reobservation_strategy_copy(self):
+        req = TriangleThresholdReobservationsStrategy(4, 2.0)
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_triangle_threshold_reobservation_strategy_to_from_dict(self):
+        original = TriangleThresholdReobservationsStrategy(4, 2.0)
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, TriangleThresholdReobservationsStrategy)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
     # Spatial Requirements
     ## Point Target Spatial Requirement
@@ -368,7 +467,8 @@ class TestRequirements(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 req.calc_preference_value((0.0, 0.0, grid_index, grid_size))  # gp index equal to grid size
 
-
+class TestObjectives(unittest.TestCase):
+    ...
 #     def test_objective(self):
 #         """
 #         O1: Measure Chlorophyll-A (w=1): 
@@ -500,547 +600,6 @@ class TestRequirements(unittest.TestCase):
 #         self.assertAlmostEqual(o_4_1.eval_performance(measurement_2), 0.85*1.0*2.0)
 #         self.assertAlmostEqual(o_4_1.eval_performance(measurement_3), 0.0)
 #         self.assertAlmostEqual(o_4_1.eval_performance(measurement_4), 0.0)
-
-
-class TestToySatCase(unittest.TestCase):
-    def setUp(self) -> None:
-        # terminal welcome message
-        print_welcome('Simulation Loading Test')
-        
-        # load scenario json file
-        scenario_specs : dict = {
-            "epoch": {
-                "@type": "GREGORIAN_UT1",
-                "year": 2020,
-                "month": 1,
-                "day": 1,
-                "hour": 0,
-                "minute": 0,
-                "second": 0
-            },
-            "duration": 1.0 / 24.0,
-            "propagator": {
-                "@type": "J2 ANALYTICAL PROPAGATOR",
-            },
-            "spacecraft": [
-                {
-                    "@id": "thermal_sat_0_0",
-                    "name": "thermal_0",
-                    "spacecraftBus": {
-                        "name": "BlueCanyon",
-                        "mass": 20,
-                        "volume": 0.5,
-                        "orientation": {
-                            "referenceFrame": "NADIR_POINTING",
-                            "convention": "REF_FRAME_ALIGNED"
-                        },
-                        "components": {
-                            "adcs" : {
-                                "maxTorque" : 1000,
-                                "maxRate" : 1
-                            }
-                        }
-                    },
-                    "instrument": {
-                        # "name": "Altimeter",
-                        # "@id" : "altimeter",
-                        # "@type" : "Altimeter",
-                        # "chirpBandwidth": 150e6,
-                        # "pulseWidth": 50e-6,  
-                        # "orientation": {
-                        #     "referenceFrame": "NADIR_POINTING",
-                        #     "convention": "REF_FRAME_ALIGNED"
-                        # },
-                        # "fieldOfViewGeometry": { 
-                        #     "shape": "RECTANGULAR", 
-                        #     "angleHeight": 2.5, 
-                        #     "angleWidth": 45.0
-                        # },
-                        # "maneuver" : {
-                        #     "maneuverType":"SINGLE_ROLL_ONLY",
-                        #     "A_rollMin": -50,
-                        #     "A_rollMax": 50
-                        # }
-                        "name": "TIR",
-                        "@id" : "vnir_hyp_imager",
-                        "@type" : "VNIR",
-                        "detectorWidth": 6.6e-6,
-                        "focalLength": 3.6,  
-                        "orientation": {
-                            "referenceFrame": "NADIR_POINTING",
-                            "convention": "REF_FRAME_ALIGNED"
-                        },
-                        "fieldOfViewGeometry": { 
-                            "shape": "RECTANGULAR", 
-                            "angleHeight": 2.5, 
-                            "angleWidth": 45.0
-                        },
-                        "maneuver" : {
-                            "maneuverType":"SINGLE_ROLL_ONLY",
-                            "A_rollMin": -50,
-                            "A_rollMax": 50
-                        },
-                        "spectral_resolution" : "Multispectral"
-                    },
-                    "orbitState": {
-                        "date": {
-                            "@type": "GREGORIAN_UT1",
-                            "year": 2020,
-                            "month": 1,
-                            "day": 1,
-                            "hour": 0,
-                            "minute": 0,
-                            "second": 0
-                        },
-                        "state": {
-                            "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                            "sma": 7078,
-                            "ecc": 0.01,
-                            "inc": 0.0,
-                            "raan": 0.0,
-                            "aop": 0.0,
-                            "ta": 95.0
-                        }
-                    },
-                    "planner" : {
-                        "preplanner" : {
-                            "@type" : "heuristic",
-                            "period": 1000,
-                            # "horizon": 500,
-                        },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster",
-                        #     "period" : 400
-                        # },
-                    },
-                    "science" : {
-                        "@type": "lookup", 
-                        "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
-                    },
-                    "mission" : "Algal blooms monitoring"
-                }
-            ],
-            "grid": [
-                {
-                    "@type": "customGrid",
-                    "covGridFilePath": "./tests/missions/resources/grids/toy_points.csv"
-                }
-            ],
-            "scenario": {   
-                "connectivity" : "FULL", 
-                "events" : {
-                    "@type": "PREDEF", 
-                    "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
-                },
-                "clock" : {
-                    "@type" : "EVENT"
-                },
-                "scenarioPath" : "./tests/missions/",
-                "name" : "toy_sat_case",
-                "missionsPath" : "./tests/missions/resources/missions/missions.json"
-            },
-            "settings": {
-                "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/missions/orbit_data/toy_sat_case",
-            }
-        }
-
-        # set outdir
-        orbitdata_dir = os.path.join('./tests/missions', 'orbit_data')
-        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'toy_sat_case')
-        if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
-        if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
-
-        # initialize mission
-        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
-
-        # check type of mission object
-        self.assertTrue(isinstance(self.simulation, Simulation))
-
-
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.simulation.execute()
-
-    #     # print results
-    #     self.simulation.print_results()
-
-    #     print('DONE')
-
-class TestSingleSatCase(unittest.TestCase):
-    def setUp(self) -> None:
-        # terminal welcome message
-        print_welcome('Simulation Loading Test')
-        
-        # load scenario json file
-        scenario_specs : dict = {
-            "epoch": {
-                "@type": "GREGORIAN_UT1",
-                "year": 2020,
-                "month": 1,
-                "day": 1,
-                "hour": 0,
-                "minute": 0,
-                "second": 0
-            },
-            "duration": 1500 / 3600 / 24.0,
-            "propagator": {
-                "@type": "J2 ANALYTICAL PROPAGATOR",
-            },
-            "spacecraft": [
-                {
-                    "@id": "thermal_sat_0_0",
-                    "name": "thermal_0",
-                    "spacecraftBus": {
-                        "name": "BlueCanyon",
-                        "mass": 20,
-                        "volume": 0.5,
-                        "orientation": {
-                            "referenceFrame": "NADIR_POINTING",
-                            "convention": "REF_FRAME_ALIGNED"
-                        },
-                        "components": {
-                            "adcs" : {
-                                "maxTorque" : 1000,
-                                "maxRate" : 1
-                            }
-                        }
-                    },
-                    "instrument": {
-                        "name": "TIR",
-                        "@id" : "vnir_hyp_imager",
-                        "@type" : "VNIR",
-                        "detectorWidth": 6.6e-6,
-                        "focalLength": 3.6,  
-                        "orientation": {
-                            "referenceFrame": "NADIR_POINTING",
-                            "convention": "REF_FRAME_ALIGNED"
-                        },
-                        "fieldOfViewGeometry": { 
-                            "shape": "RECTANGULAR", 
-                            "angleHeight": 2.5, 
-                            "angleWidth": 5.0
-                        },
-                        "maneuver" : {
-                            "maneuverType":"SINGLE_ROLL_ONLY",
-                            "A_rollMin": -50,
-                            "A_rollMax": 50
-                        },
-                        "spectral_resolution" : "Multispectral"
-                    },
-                    "orbitState": {
-                        "date": {
-                            "@type": "GREGORIAN_UT1",
-                            "year": 2020,
-                            "month": 1,
-                            "day": 1,
-                            "hour": 0,
-                            "minute": 0,
-                            "second": 0
-                        },
-                        "state": {
-                            "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                            "sma": 7078,
-                            "ecc": 0.01,
-                            "inc": 60.0,
-                            "raan": 0.0,
-                            "aop": 0.0,
-                            "ta": 95.0
-                        }
-                    },
-                    "planner" : {
-                        "preplanner" : {
-                            "@type" : "heuristic",
-                            "period": 1000,
-                            # "horizon": 500,
-                        },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster",
-                        #     "period" : 400
-                        # },
-                    },
-                    "science" : {
-                        "@type": "lookup", 
-                        "eventsPath" : "./tests/missions/resources/events/toy_events.csv"
-                    },
-                    "mission" : "Algal blooms monitoring"
-                }
-            ],
-            "grid": [
-                {
-                    "@type": "customGrid",
-                    "covGridFilePath": "./tests/missions/resources/grids/lake_event_points.csv"
-                }
-            ],
-            "scenario": {   
-                "connectivity" : "FULL", 
-                "events" : {
-                    "@type": "PREDEF", 
-                    "eventsPath" : "./tests/missions/resources/events/lake_events_seed-1000.csv"
-                },
-                "clock" : {
-                    "@type" : "EVENT"
-                },
-                "scenarioPath" : "./tests/missions/",
-                "name" : "single_sat_case",
-                "missionsPath" : "./tests/missions/resources/missions/missions.json"
-            },
-            "settings": {
-                "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/missions/orbit_data/single_sat_case",
-            }
-        }
-
-        # set outdir
-        orbitdata_dir = os.path.join('./tests/missions', 'orbit_data')
-        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'single_sat_case')
-        scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
-        if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
-        if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
-
-        # initialize mission
-        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
-
-        # check type of mission object
-        self.assertTrue(isinstance(self.simulation, Simulation))
-
-
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.simulation.execute()
-
-    #     # print results
-    #     self.simulation.print_results()
-
-    #     print('DONE')
-
-class TestSingleSatNoEventsCase(unittest.TestCase):
-    def setUp(self) -> None:
-        # terminal welcome message
-        print_welcome('Simulation Loading Test')
-        
-        # load scenario json file
-        scenario_specs : dict = {
-            "epoch": {
-                "@type": "GREGORIAN_UT1",
-                "year": 2020,
-                "month": 1,
-                "day": 1,
-                "hour": 0,
-                "minute": 0,
-                "second": 0
-            },
-            "duration": 70 / 60 / 24.0,
-            "propagator": {
-                "@type": "J2 ANALYTICAL PROPAGATOR",
-            },
-            "spacecraft": [
-                {
-                    "@id": "thermal_sat_0_0",
-                    "name": "thermal_0",
-                    "spacecraftBus": {
-                        "name": "BlueCanyon",
-                        "mass": 20,
-                        "volume": 0.5,
-                        "orientation": {
-                            "referenceFrame": "NADIR_POINTING",
-                            "convention": "REF_FRAME_ALIGNED"
-                        },
-                        "components": {
-                            "adcs" : {
-                                "maxTorque" : 1000,
-                                "maxRate" : 1
-                            }
-                        }
-                    },
-                    "instrument": {
-                        "name": "TIR",
-                        "@id" : "vnir_hyp_imager",
-                        "@type" : "VNIR",
-                        "detectorWidth": 6.6e-6,
-                        "focalLength": 3.6,  
-                        "orientation": {
-                            "referenceFrame": "NADIR_POINTING",
-                            "convention": "REF_FRAME_ALIGNED"
-                        },
-                        "fieldOfViewGeometry": { 
-                            "shape": "RECTANGULAR", 
-                            "angleHeight": 2.5, 
-                            "angleWidth": 5.0
-                        },
-                        "maneuver" : {
-                            "maneuverType":"SINGLE_ROLL_ONLY",
-                            "A_rollMin": -50,
-                            "A_rollMax": 50
-                        },
-                        "spectral_resolution" : "Multispectral"
-                    },
-                    "orbitState": {
-                        "date": {
-                            "@type": "GREGORIAN_UT1",
-                            "year": 2020,
-                            "month": 1,
-                            "day": 1,
-                            "hour": 0,
-                            "minute": 0,
-                            "second": 0
-                        },
-                        "state": {
-                            "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                            "sma": 7078,
-                            "ecc": 0.01,
-                            "inc": 60.0,
-                            "raan": 0.0,
-                            "aop": 0.0,
-                            "ta": 0.0
-                        }
-                    },
-                    "planner" : {
-                        "preplanner" : {
-                            "@type" : "milp",
-                            "licensePath": "./gurobi.lic",
-                            "objective" : "duration",
-                            "period": 1000,
-                            # "horizon": 500,
-                        },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster",
-                        #     "mode" : "opportunistic",
-                        #     "period" : 400
-                        # },
-                    },
-                    "science" : {
-                        "@type": "lookup", 
-                        "eventsPath" : "./tests/missions/resources/events/no_events.csv"
-                    },
-                    "mission" : "Algal blooms monitoring"
-                },
-                # {
-                #     "@id": "thermal_sat_0_1",
-                #     "name": "thermal_1",
-                #     "spacecraftBus": {
-                #         "name": "BlueCanyon",
-                #         "mass": 20,
-                #         "volume": 0.5,
-                #         "orientation": {
-                #             "referenceFrame": "NADIR_POINTING",
-                #             "convention": "REF_FRAME_ALIGNED"
-                #         },
-                #         "components": {
-                #             "adcs" : {
-                #                 "maxTorque" : 1000,
-                #                 "maxRate" : 1
-                #             }
-                #         }
-                #     },
-                #     "instrument": {
-                #         "name": "TIR",
-                #         "@id" : "vnir_hyp_imager",
-                #         "@type" : "VNIR",
-                #         "detectorWidth": 6.6e-6,
-                #         "focalLength": 3.6,  
-                #         "orientation": {
-                #             "referenceFrame": "NADIR_POINTING",
-                #             "convention": "REF_FRAME_ALIGNED"
-                #         },
-                #         "fieldOfViewGeometry": { 
-                #             "shape": "RECTANGULAR", 
-                #             "angleHeight": 2.5, 
-                #             "angleWidth": 5.0
-                #         },
-                #         "maneuver" : {
-                #             "maneuverType":"SINGLE_ROLL_ONLY",
-                #             "A_rollMin": -50,
-                #             "A_rollMax": 50
-                #         },
-                #         "spectral_resolution" : "Multispectral"
-                #     },
-                #     "orbitState": {
-                #         "date": {
-                #             "@type": "GREGORIAN_UT1",
-                #             "year": 2020,
-                #             "month": 1,
-                #             "day": 1,
-                #             "hour": 0,
-                #             "minute": 0,
-                #             "second": 0
-                #         },
-                #         "state": {
-                #             "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                #             "sma": 7078,
-                #             "ecc": 0.01,
-                #             "inc": -120.0,
-                #             "raan": 0.0,
-                #             "aop": 0.0,
-                #             "ta": 270.0
-                #         }
-                #     },
-                #     "planner" : {
-                #         # "preplanner" : {
-                #         #     "@type" : "heuristic",
-                #         #     "period": 1000,
-                #         #     # "horizon": 500,
-                #         # },
-                #         "replanner" : {
-                #             "@type" : "worker",
-                #             # "mode" : "opportunistic",
-                #             # "period" : 400
-                #         },
-                #     },
-                #     "science" : {
-                #         "@type": "lookup", 
-                #         "eventsPath" : "./tests/missions/resources/events/no_events.csv"
-                #     },
-                #     "mission" : "Algal blooms monitoring"
-                # }
-            ],
-            "grid": [
-                {
-                    "@type": "customGrid",
-                    "covGridFilePath": "./tests/missions/resources/grids/lake_event_points.csv"
-                }
-            ],
-            "scenario": {   
-                "connectivity" : "LOS", 
-                "events" : {
-                    "@type": "PREDEF", 
-                    "eventsPath" : "./tests/missions/resources/events/no_events.csv"
-                },
-                "clock" : {
-                    "@type" : "EVENT"
-                },
-                "scenarioPath" : "./tests/missions/",
-                "name" : "single_sat_no_events_case",
-                "missionsPath" : "./tests/missions/resources/missions/missions.json"
-            },
-            "settings": {
-                "coverageType": "GRID COVERAGE",
-                "outDir" : "./tests/missions/orbit_data/single_sat_no_events_case",
-            }
-        }
-
-        # set outdir
-        orbitdata_dir = os.path.join('./tests/missions', 'orbit_data')
-        scenario_orbitdata_dir = os.path.join(orbitdata_dir, 'single_sat_no_events_case')
-        scenario_specs['settings']['outDir'] = scenario_orbitdata_dir
-        if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
-        if not os.path.isdir(scenario_orbitdata_dir): os.mkdir(scenario_orbitdata_dir)
-
-        # initialize mission
-        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
-
-        # check type of mission object
-        self.assertTrue(isinstance(self.simulation, Simulation))
-
-
-    # def test_planner(self) -> None:
-    #     # execute mission
-    #     self.simulation.execute()
-
-    #     # print results
-    #     self.simulation.print_results()
-
-    #     print('DONE')
 
 if __name__ == '__main__':
     # terminal welcome message

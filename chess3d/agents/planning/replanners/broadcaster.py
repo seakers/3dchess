@@ -12,7 +12,7 @@ from chess3d.orbitdata import IntervalData, OrbitData
 from chess3d.agents.planning.plan import *
 from chess3d.agents.planning.tasks import ObservationHistory, ObservationTracker
 from chess3d.agents.states import SimulationAgentState
-from chess3d.mission import Mission
+from chess3d.mission.mission import Mission
 from chess3d.utils import Interval
 
 class BroadcasterReplanner(AbstractReplanner):

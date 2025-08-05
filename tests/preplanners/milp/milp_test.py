@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from chess3d.mission import *
+from chess3d.mission.mission import *
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 

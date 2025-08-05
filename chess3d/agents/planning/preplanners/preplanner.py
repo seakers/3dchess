@@ -15,7 +15,7 @@ from chess3d.agents.planning.planner import AbstractPlanner
 from chess3d.agents.planning.tasks import GenericObservationTask, ObservationHistory, SpecificObservationTask
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
-from chess3d.mission import Mission
+from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 

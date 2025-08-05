@@ -53,3 +53,5 @@ class Mission:
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the mission to a dictionary."""
         return self.__dict__
+
+    # TODO match geophysical event to objective

@@ -11,7 +11,7 @@ from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 from chess3d.agents.planning.tasks import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import  PlanMessage
-from chess3d.mission import Mission
+from chess3d.mission.mission import Mission
 from chess3d.orbitdata import IntervalData, OrbitData
 from chess3d.utils import Interval
 

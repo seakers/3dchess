@@ -4,7 +4,8 @@ from instrupy.base import Instrument
 import pandas as pd
 from chess3d.messages import *
 from chess3d.agents.science.requests import TaskRequest, TaskRequest
-from chess3d.mission import *
+from chess3d.mission.events import GeophysicalEvent
+from chess3d.mission.mission import *
 
 class DataProcessor(ABC):
     """

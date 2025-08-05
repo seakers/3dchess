@@ -81,34 +81,10 @@ class MissionRequirement(ABC):
             return ContinuousRequirement(attribute, thresholds, scores, id)
 
         elif requirement_type == MissionRequirement.TEMPORAL:
-            if attribute == TemporalRequirement.REVISIT:
-                return RevisitTemporalRequirement(thresholds, scores, id)
-            
-            elif attribute == TemporalRequirement.N_OBS:
-                strategy = dict.get("strategy", None)
-                return ReobservationStrategyRequirement(strategy, id)
-            
-            raise ValueError(f"Unknown temporal requirement for attribute: {attribute}")
+            return TemporalRequirement.from_dict(dict)
         
         elif requirement_type == MissionRequirement.SPATIAL:
-            target_type = dict.get("target_type", None)
-            distance_threshold = dict.get("distance_threshold", 1.0)
-            
-            if target_type == SpatialRequirement.POINT:
-                target = dict.get("target", None)
-                if target is None: raise ValueError("Target must be provided for point spatial requirement")
-                return PointTargetSpatialRequirement(target, distance_threshold, id)
-            
-            elif target_type == SpatialRequirement.LIST:
-                targets = dict.get("targets", [])
-                return TargetListSpatialRequirement(targets, distance_threshold, id)
-            
-            elif target_type == SpatialRequirement.GRID:
-                grid_name = dict.get("grid_name", None)
-                grid_index = dict.get("grid_index", None)
-                grid_size = dict.get("grid_size", None)
-
-                return GridTargetSpatialRequirement(grid_name, grid_index, grid_size, id)
+            return SpatialRequirement.from_dict(dict)
 
         raise ValueError(f"Unknown requirement type: {requirement_type}")
 
@@ -304,6 +280,24 @@ class TemporalRequirement(MissionRequirement):
     REVISIT = 'revisit'
     N_OBS = 'n_observations'
 
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'TemporalRequirement':
+        """Create a temporal requirement from a dictionary."""
+        requirement_type = dict.get("requirement_type")
+        attribute = dict.get("attribute")
+        id = dict.get("id")
+
+        if requirement_type == MissionRequirement.TEMPORAL:
+            if attribute == cls.REVISIT:
+                thresholds = dict.get("thresholds", [])
+                scores = dict.get("scores", [])
+                return RevisitTemporalRequirement(thresholds, scores, id)
+            
+            elif attribute == cls.N_OBS:
+                return ReobservationStrategyRequirement.from_dict(dict)
+        
+        raise ValueError(f"Unknown temporal requirement for attribute: {attribute}")
+
 class RevisitTemporalRequirement(TemporalRequirement, ContinuousRequirement):
     def __init__(self, thresholds: list, scores: list, id: str = None, **kwargs):
         """"
@@ -374,9 +368,220 @@ class ReobservationStrategyRequirement(TemporalRequirement):
         return d
 
     def __repr__(self):
-        return f"ReobservationStrategyRequirement(strategy={self.strategy}, id={self.id})"
+        return f"ReobservationStrategy(strategy={self.strategy}, id={self.id})"
     
-# class ExponentialSaturationRequirement()
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ReobservationStrategyRequirement':
+        """Create a reobservation strategy requirement from a dictionary."""
+        strategy = dict.get("strategy")
+        id = dict.get("id")
+        
+        if strategy == cls.NO_CHANGE:
+            return NoChangeReobservationStrategy(id)
+        elif strategy == cls.EXP_SATURATION:
+            assert "saturation_rate" in dict, "Saturation rate must be provided for `exp_saturation` strategy"
+            saturation_rate = dict.get("saturation_rate")
+            return ExpSaturationReobservationsStrategy(saturation_rate, id)
+        elif strategy == cls.LOG_THRESHOLD:
+            assert "threshold" in dict and "slope" in dict, "Threshold and slope must be provided for `log_threshold` strategy"
+            threshold = dict.get("threshold")
+            slope = dict.get("slope")
+            return LogThresholdReobservationsStrategy(threshold, slope, id)
+        elif strategy == cls.EXP_DECAY:
+            assert "decay_rate" in dict, "Decay rate must be provided for `exp_decay` strategy"
+            decay_rate = dict.get("decay_rate")
+            return ExpDecayReobservationStrategy(decay_rate, id)
+        # elif strategy == cls.STEP_THRESHOLD:
+        #     TODO
+        #     return StepThresholdReobservationsStrategy(id)
+        # elif strategy == cls.LINEAR_THRESHOLD:
+        #     TODO
+        #     return LinearThresholdReobservationsStrategy(id)
+        elif strategy == cls.GAUSSIAN_THRESHOLD:
+            assert "n_target" in dict and "stddev" in dict, "N_target and standard deviation must be provided for `gaussian_threshold` strategy"
+            n_target = dict.get("n_target")
+            stddev = dict.get("stddev")
+            return GaussianThresholdReobservationsStrategy(n_target, stddev, id)
+        elif strategy == cls.TRIANGLE_THRESHOLD:
+            assert "n_target" in dict and "width" in dict, "N_target and triangle width must be provided for `triangle_threshold` strategy"
+            n_target = dict.get("n_target")
+            width = dict.get("width")
+            return TriangleThresholdReobservationsStrategy(n_target, width, id)
+
+        raise ValueError(f"Unknown reobservation strategy: {strategy}")
+    
+
+class NoChangeReobservationStrategy(ReobservationStrategyRequirement):
+    def __init__(self, id = None, **_):
+        super().__init__(self.NO_CHANGE, id, **_)
+    
+    def _build_reobservation_strategy(self):
+        def preference(n_obs: int) -> float:
+            assert n_obs >= 0, "Number of observations must be non-negative"
+            return 1.0
+        return preference
+    
+    def copy(self):
+        return NoChangeReobservationStrategy(self.id)
+
+class ExpSaturationReobservationsStrategy(ReobservationStrategyRequirement):
+    def __init__(self, saturation_rate : float, id = None, **_):
+        super().__init__(self.EXP_SATURATION, id)
+        
+        # Validate inputs
+        assert isinstance(saturation_rate, (int, float)), "Saturation rate must be a number"
+        assert saturation_rate >= 0, "Saturation rate must be non-negative"
+
+        # Set attributes
+        self.saturation_rate : float = saturation_rate
+    
+    def _build_reobservation_strategy(self):
+        def preference(n_obs: int) -> float:
+            assert n_obs >= 0, "Number of observations must be non-negative"
+            return 1.0 - np.exp(-self.saturation_rate * n_obs)
+        return preference
+    
+    def copy(self):
+        return ExpSaturationReobservationsStrategy(self.saturation_rate, self.id)
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "saturation_rate": self.saturation_rate
+        })
+        return d
+    
+    def __repr__(self):
+        return f"ReobservationStrategy(strategy={self.strategy}, saturation_rate={self.saturation_rate}, id={self.id})"
+    
+class LogThresholdReobservationsStrategy(ReobservationStrategyRequirement):
+    def __init__(self, threshold: float, slope: float, id = None, **_):
+        super().__init__(self.LOG_THRESHOLD, id)
+        
+        # Validate inputs
+        assert isinstance(threshold, (int, float)), "Threshold must be a number"
+        assert isinstance(slope, (int, float)), "Slope must be a number"
+        assert threshold >= 0, "Threshold must be non-negative"
+        assert slope >= 0, "Slope must be non-negative"
+        
+        # Set attributes        
+        self.threshold : float = threshold
+        self.slope : float = slope
+
+    def _build_reobservation_strategy(self):
+        def preference(n_obs: int) -> float:
+            assert n_obs >= 0, "Number of observations must be non-negative"
+            return 1 / (1 + np.exp(-self.slope * (n_obs - self.threshold)))
+        return preference
+    
+    def copy(self):
+        return LogThresholdReobservationsStrategy(self.threshold, self.slope, self.id)
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "threshold": self.threshold,
+            "slope": self.slope
+        })
+        return d
+    
+    def __repr__(self):
+        return f"ReobservationStrategy(strategy={self.strategy}, threshold={self.threshold}, slope={self.slope}, id={self.id})"
+
+class ExpDecayReobservationStrategy(ReobservationStrategyRequirement):
+    def __init__(self, decay_rate: float, id = None, **_):
+        super().__init__(self.EXP_DECAY, id)
+        
+        # Validate inputs
+        assert isinstance(decay_rate, (int, float)), "Decay rate must be a number"
+        assert decay_rate >= 0, "Decay rate must be non-negative"
+
+        # Set attributes
+        self.decay_rate : float = decay_rate
+
+    def _build_reobservation_strategy(self):
+        def preference(n_obs: int) -> float:
+            assert n_obs >= 0, "Number of observations must be non-negative"
+            return np.exp(-self.decay_rate * n_obs)
+        return preference
+    
+    def copy(self):
+        return ExpDecayReobservationStrategy(self.decay_rate, self.id)
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "decay_rate": self.decay_rate
+        })
+        return d
+    
+    def __repr__(self):
+        return f"ReobservationStrategy(strategy={self.strategy}, decay_rate={self.decay_rate}, id={self.id})"
+
+class GaussianThresholdReobservationsStrategy(ReobservationStrategyRequirement):
+    def __init__(self, n_target: int, stddev: float, id = None, **_):
+        super().__init__(self.GAUSSIAN_THRESHOLD, id)
+
+        # Validate inputs
+        assert isinstance(n_target, (int, float)), "Target number of observations must be a number"
+        assert isinstance(stddev, (int, float)), "Standard deviation must be a number"
+        assert n_target >= 0, "Target number of observations must be non-negative"
+        assert stddev > 0, "Standard deviation must be positive"
+
+        self.n_target : int = n_target
+        self.stddev : float = stddev
+
+    def _build_reobservation_strategy(self):
+        def preference(n_obs: int) -> float:
+            assert n_obs >= 0, "Number of observations must be non-negative"
+            return np.exp(-0.5 * ((n_obs - self.n_target) / self.stddev) ** 2)
+        return preference
+    
+    def copy(self):
+        return GaussianThresholdReobservationsStrategy(self.n_target, self.stddev, self.id)
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "n_target": self.n_target,
+            "stddev": self.stddev
+        })
+        return d
+    
+    def __repr__(self):
+        return f"ReobservationStrategy(strategy={self.strategy}, mean={self.n_target}, stddev={self.stddev}, id={self.id})"
+
+class TriangleThresholdReobservationsStrategy(ReobservationStrategyRequirement):
+    def __init__(self, n_target : int, width : float, id = None, **_):
+        super().__init__(self.TRIANGLE_THRESHOLD, id)
+
+        # Validate inputs
+        assert isinstance(n_target, int) and n_target >= 0, "Target number of observations must be a non-negative integer"
+        assert isinstance(width, (int, float)) and width > 0, "Width must be a positive number"
+
+        # Set attributes
+        self.n_target : float = n_target
+        self.width : float = width
+
+    def _build_reobservation_strategy(self):
+        def preference(n_obs: int) -> float:
+            assert n_obs >= 0, "Number of observations must be non-negative"
+            return max(0.0, 1.0 - abs(n_obs - self.n_target) / self.width)
+        return preference
+    
+    def copy(self):
+        return TriangleThresholdReobservationsStrategy(self.n_target, self.width, self.id)
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "n_target": self.n_target,
+            "width": self.width
+        })
+        return d
+    
+    def __repr__(self):
+        return f"ReobservationStrategy(strategy={self.strategy}, n_target={self.n_target}, width={self.width}, id={self.id})"
 
 class SpatialRequirement(MissionRequirement):
     POINT = 'point'
@@ -427,6 +632,30 @@ class SpatialRequirement(MissionRequirement):
             "distance_threshold": self.distance_threshold
         })
         return d
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'SpatialRequirement':
+        """Create a spatial requirement from a dictionary."""
+        target_type = dict.get("target_type")
+        id = dict.get("id")
+
+        if target_type == cls.POINT:
+            target = dict.get("target")
+            distance_threshold = dict.get("distance_threshold", 1.0)
+            return PointTargetSpatialRequirement(target, distance_threshold, id)
+        
+        elif target_type == cls.LIST:
+            targets = dict.get("targets", [])
+            distance_threshold = dict.get("distance_threshold", 1.0)
+            return TargetListSpatialRequirement(targets, distance_threshold, id)
+        
+        elif target_type == cls.GRID:
+            grid_name = dict.get("grid_name")
+            grid_index = dict.get("grid_index")
+            grid_size = dict.get("grid_size")
+            return GridTargetSpatialRequirement(grid_name, grid_index, grid_size, id)
+
+        raise ValueError(f"Unknown spatial requirement type: {target_type}")
     
 class PointTargetSpatialRequirement(SpatialRequirement):
     def __init__(self, target: Tuple[float, float, int, int], distance_threshold: float = 1.0, id: str = None, **kwargs):

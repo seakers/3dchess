@@ -3,7 +3,8 @@ import numpy as np
 import uuid
 
 from chess3d.agents.planning.tasks import EventObservationTask
-from chess3d.mission import *
+from chess3d.mission.events import GeophysicalEvent
+from chess3d.mission.mission import *
     
 class TaskRequest:
     def __init__(self,
