@@ -81,6 +81,18 @@
             }
         },
         {
+            "name": "TEST TASKS",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/tasks/tasks_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
             "name": "TEST HEURISTIC PREPLANNER",
             "type": "debugpy",
             "request": "launch",

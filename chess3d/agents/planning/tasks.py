@@ -15,14 +15,14 @@ class GenericObservationTask(ABC):
     def __init__(self,
                  task_type : str,
                  parameter : str,
-                 targets: list,
+                 locations: list,
                  availability: Interval,
                  id : str = None,
                 ):
         """
         Generic observation task to be scheduled by an agent.
         - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
-        - :`targets`: A list of targets to be observed, each represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
+        - :`locations`: A list of locations to be observed, each represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
         - :`availability`: The time interval during which the task is available.
         - :`reward`: The reward for completing the task.
         - :`relevant_objective`: The relevant mission objective associated with the task by the agent who initialized it.
@@ -34,16 +34,16 @@ class GenericObservationTask(ABC):
         assert isinstance(task_type, str), "Task type must be a string."
         assert task_type in [self.DEFAULT, self.EVENT], "Task type must be either 'default_mission_task' or 'event_driven_task'."
         assert isinstance(parameter, str), "Parameter must be a string."
-        assert isinstance(targets, list), "Targets must be a list."
-        assert all([isinstance(target, tuple) for target in targets]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
-        assert all([len(target) == 4 for target in targets]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert isinstance(locations, list), "Locations must be a list."
+        assert all([isinstance(location, tuple) for location in locations]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert all([len(location) == 4 for location in locations]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
         assert isinstance(availability, Interval), "Availability must be an Interval."
         assert availability.left >= 0.0, "Start of availability must be non-negative."
 
         # Set attributes
         self.task_type : str = task_type
         self.parameter : str = parameter
-        self.targets : list[tuple] = targets
+        self.locations : list[tuple] = locations
         self.availability : Interval = availability
         self.id : str = id if id is not None else self.generate_id()
 
@@ -57,126 +57,178 @@ class GenericObservationTask(ABC):
         """ Create a deep copy of the task. """
         pass
 
-    def available(self, time : float) -> bool:
+    def is_available(self, time : float) -> bool:
         """ Check if the task is available at a given time. """
+        assert time >= 0, "Time must be non-negative."
         return time in self.availability    
     
     def to_dict(self) -> dict:
         """ Convert the task to a dictionary. """
         return {
+            "task_type": self.task_type,
             "parameter": self.parameter,
-            "targets": [target for target in self.targets],
+            "locations": [location for location in self.locations],
             "availability": self.availability.to_dict(),
             "id": self.id,
         }
     
+    @abstractmethod
+    def __repr__(self):
+        """ String representation of the task. """
+
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'GenericObservationTask':
         """ Create a task from a dictionary. """
-        task_type = task_dict['task_type']
-        
+        assert 'task_type' in task_dict, "Task type must be specified in the dictionary."
+        task_type = task_dict['task_type']        
 
         if task_type == cls.DEFAULT:
-            return DefaultObservationTask.from_dict(task_dict)
+            return DefaultMissionTask.from_dict(task_dict)
         
-        # elif task_type == cls.EVENT:
-        #     return EventObservationTask.from_dict(task_dict)
+        elif task_type == cls.EVENT:
+            return EventObservationTask.from_dict(task_dict)
 
         return ValueError(f"Unknown task type: {task_type}")
         
-class DefaultObservationTask(GenericObservationTask):
+class DefaultMissionTask(GenericObservationTask):
     def __init__(self,
                  parameter : str,
-                 target: list,
+                 location: list,
                  mission_duration : float,
                  id : str = None
                 ):
         """
         ### Default Observation Task
-        Represents a default observation task of a point target to be scheduled by an agent.
+        Represents a default observation task of a point location to be scheduled by an agent.
         - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
-        - :`target`: The target to be observed, represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
+        - :`location`: The location to be observed, represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
         - :`mission_duration`: The duration of the mission in seconds.
         - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
         """
 
         # validate inputs
-        assert isinstance(target, tuple), "Target must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
-        assert len(target) == 4, "Target must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
-        assert all([isinstance(coordinate, float) or isinstance(coordinate, int) for coordinate in target]), \
-            "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert isinstance(location, tuple), "Location must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
+        assert len(location) == 4, "Location must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
+        assert all([isinstance(coordinate, float) or isinstance(coordinate, int) for coordinate in location]), \
+            "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
 
         # initialte default values
-        targets = [target]
+        locations = [location]
         availability = Interval(0.0, mission_duration)
 
         # initialte parent class
-        super().__init__(GenericObservationTask.DEFAULT,parameter, targets, availability, id)
+        super().__init__(GenericObservationTask.DEFAULT, parameter, locations, availability, id)
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"GenericObservation_{self.parameter}_{self.targets[0][2]}_{self.targets[0][3]}"
+        return f"GenericObservation_{self.parameter}_{self.locations[0][2]}_{self.locations[0][3]}"
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
-        return DefaultObservationTask(
+        return DefaultMissionTask(
             self.parameter,
-            self.targets[0],
+            self.locations[0],
             self.availability.right,
-            id=self.id,
+            self.id,
         )
     
     def __repr__(self):
-        return f"DefaultObservationTask(parameter={self.parameter}, targets={self.targets}, availability={self.availability}, id={self.id})"
+        return f"DefaultMissionTask(parameter={self.parameter}, locations={self.locations}, availability={self.availability}, id={self.id})"
 
     @classmethod
-    def from_dict(cls, task_dict: dict) -> 'DefaultObservationTask':
+    def from_dict(cls, task_dict: dict) -> 'DefaultMissionTask':
         """ Create a task from a dictionary. """
+        assert 'task_type' in task_dict, "Task type must be specified in the dictionary."
+        assert task_dict['task_type'] == GenericObservationTask.DEFAULT, "Task type must be 'default_mission_task'."
+        assert 'parameter' in task_dict, "Parameter must be specified in the dictionary."
+        assert 'locations' in task_dict, "Locations must be specified in the dictionary."
+        assert 'availability' in task_dict, "Availability must be specified in the dictionary."
+
         return cls(
             parameter=task_dict['parameter'],
-            target=task_dict['targets'][0],
+            location=task_dict['locations'][0],
             mission_duration=task_dict['availability']['right'],
-            id=task_dict.get('id'),
+            id=task_dict.get('id',None),
         )
 
 class EventObservationTask(GenericObservationTask):
-    def __init__(self,
+    def __init__(self,  
+                 parameter : str, 
                  event : GeophysicalEvent,
-                 mission : str,
-                 objective : MissionObjective,
-                 reobservation_strategy : str,
-                 id : str = None,
-                 duration_requirements = Interval(0.0, np.Inf)
-                ):
-        # validate inputs
+                 objective : MissionObjective = None,
+                 id = None
+                 ):
+        """
+        ### Event Observation Task
+        Represents an event observation task to be scheduled by an agent.
+        - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
+        - :`event`: The geophysical event to be observed, represented as a `GeophysicalEvent` object.
+        - :`objective`: Reference mission objective associated with the task by the requesting agent, represented as a `MissionObjective` object.
+        - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
+        """
+
+        # Validate Inputs
         assert isinstance(event, GeophysicalEvent), "Event must be a GeophysicalEvent."
-        
-        # set default values
-        targets = [tuple(target for target in event.location)]
-        availability = Interval(event.t_start, event.t_end)
-        reward = event.severity
+        assert isinstance(objective, MissionObjective) or objective is None, "Objective must be a MissionObjective."
+        if objective is not None: assert parameter == objective.parameter, "Target parameter must match the objective's parameter."
 
-        # initialte default values
+        # Set attributes
         self.event = event
-        super().__init__(mission, objective, targets, availability, reward, reobservation_strategy, id, duration_requirements)
+        self.severity = event.severity
+        self.objective = objective
 
-    def copy(self):
-        return EventObservationTask(
-            self.event,
-            self.mission,
-            self.objective,
-            self.reobservation_strategy,
-            id=self.id,
-            duration_requirements=self.duration_requirements
-        )
-    
+        # Extract event attributes
+        availability = Interval(event.t_start, event.t_start + event.d_exp)
+        locations = [tuple(target) for target in event.location]
+
+        # Initialize parent class
+        super().__init__(GenericObservationTask.EVENT, parameter, locations, availability, id)
+
+
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"{self.mission}_{self.objective.parameter}_{self.targets[0][2]}_{self.targets[0][3]}_EVENT-{self.event.id.split('-')[0]}"
-    
-    def __repr__(self):
-        return f"EventObservationTask(event={self.event}, mission={self.mission}, objective={self.objective}, targets={self.targets}, availability={self.availability}, reward={self.reward}, reobservation_strategy={self.reobservation_strategy}, id={self.id})"
+        return f"EventObservationTask_{self.parameter}_{self.locations[0][2]}_{self.locations[0][3]}_EVENT-{self.event.id.split('-')[0]}"
 
+    def copy(self) -> object:
+        """ Create a deep copy of the task. """
+        return EventObservationTask(
+            parameter=self.parameter,
+            event=self.event,
+            objective=self.objective,
+            id=self.id
+        )
+
+    def __repr__(self):
+        return f"EventObservationTask(parameter={self.parameter}, event={self.event}, locations={self.locations}, availability={self.availability}, id={self.id})"
+    
+    def to_dict(self) -> dict:
+        """ Convert the task to a dictionary. """
+        d = super().to_dict()
+        d.update({
+            "event": self.event.to_dict(),
+            "objective": self.objective.to_dict() if self.objective else None,
+        })
+        return d
+
+    @classmethod
+    def from_dict(cls, task_dict: dict) -> 'EventObservationTask':
+        """ Create a task from a dictionary. """
+        assert 'task_type' in task_dict, "Task type must be specified in the dictionary."
+        assert task_dict['task_type'] == GenericObservationTask.EVENT, "Task type must be 'event_observation_task'."
+        assert 'parameter' in task_dict, "Parameter must be specified in the dictionary."
+        assert 'event' in task_dict, "Event must be specified in the dictionary."
+
+        event = GeophysicalEvent.from_dict(task_dict['event'])
+        objective = MissionObjective.from_dict(task_dict['objective']) if 'objective' in task_dict else None
+        
+        return cls(
+            parameter=task_dict['parameter'],
+            event=event,
+            objective=objective,
+            id=task_dict.get('id',None),
+        )
+    
+# TODO: Update specific observation tasks
 class SpecificObservationTask:
     def __init__(self,
                  parent_tasks : Union[GenericObservationTask, set],
@@ -282,110 +334,3 @@ class SpecificObservationTask:
     def __hash__(self):
         return hash(self.id)
 
-class ObservationTracker:
-    def __init__(self, lat : float, lon : float, grid_index : int, gp_index : int, t_last : str = -1, n_obs : int = 0, latest_observation : dict = None):
-        """ 
-        Class to track the observation tasks and their history.
-        """
-        # validate inputs
-        assert isinstance(lat, (float, int)), "Latitude must be a float or int."
-        assert isinstance(lon, (float, int)), "Longitude must be a float or int."
-        assert isinstance(grid_index, int), "Grid index must be an integer."
-        assert isinstance(gp_index, int), "Ground point index must be an integer."
-        assert isinstance(t_last, (int, float)), "Last observation time must be a float or int."
-        assert isinstance(n_obs, int), "Number of observations must be an integer."
-        assert n_obs >= 0, "Number of observations must be non-negative."
-        assert lat >= -90 and lat <= 90, "Latitude must be between -90 and 90 degrees."
-        assert lon >= -180 and lon <= 180, "Longitude must be between -180 and 180 degrees."
-        assert grid_index >= 0, "Grid index must be non-negative."
-        assert gp_index >= 0, "Ground point index must be non-negative."
-
-        # assign parameters
-        self.lat = lat
-        self.lon = lon
-        self.grid_index = grid_index
-        self.gp_index = gp_index
-        self.t_last = t_last
-        self.n_obs = n_obs
-        self.latest_observation = latest_observation
-        self.observations : list[dict] = []
-    
-    def update(self, observation : dict) -> None:
-        """ Update the observation tracker with a new observation."""        
-        # update number of observations at this target
-        self.n_obs += 1
-
-        # update list of known observations 
-        self.observations.append(observation)
-
-        # update last observation time
-        if observation['t_end'] >= self.t_last:
-            self.t_last = observation['t_end']
-            self.latest_observation = observation
-
-    def __repr__(self):
-        return f"ObservationTracker(grid_index={self.grid_index}, gp_index={self.gp_index}, lat={self.lat}, lon={self.lon}, t_last={self.t_last}, n_obs={self.n_obs})"
-
-class ObservationHistory:
-    def __init__(self, orbitdata : OrbitData):
-        """
-        Class to track the observation history of the agent.
-        """
-        self.history = {}
-        self.grid_lookup = {}
-
-        for gp_index in range(len(orbitdata.grid_data)):
-            grid : pd.DataFrame = orbitdata.grid_data[gp_index]
-            
-            for _,row in grid.iterrows():
-                lat = row["lat [deg]"]
-                lon = row["lon [deg]"]
-                grid_index = int(row["grid index"])
-                gp_index = int(row["GP index"])
-
-                # create a new entry for the grid point
-                if grid_index not in self.history:
-                    self.history[grid_index] = {}
-                
-                # create a new entry for the grid point
-                if gp_index not in self.history[grid_index]:
-                    self.history[grid_index][gp_index] = ObservationTracker(lat, lon, grid_index, gp_index) 
-                
-                # create a lookup table for the grid points
-                lat_key = round(row["lat [deg]"], 6)
-                lon_key = round(row["lon [deg]"], 6)
-                self.grid_lookup[(lat_key, lon_key)] = (
-                    int(row["grid index"]),
-                    int(row["GP index"])
-                )
-
-    def update(self, observations : list) -> None:
-        """
-        Update the observation history with the new observations.
-        """
-        for _,observations_data in observations:
-            for observation in observations_data:
-                grid_index = observation['grid index']
-                gp_index = observation['GP index']
-                
-                tracker : ObservationTracker = self.history[grid_index][gp_index]
-                tracker.update(observation)
-
-                # grid_index = observation['grid index']
-                # gp_index = observation['GP index']
-                # t_end = observation['t_end']
-                
-                # tracker : ObservationTracker = self.history[grid_index][gp_index]
-
-                # tracker.t_last = t_end
-                # tracker.n_obs += 1
-                # tracker.latest_observation = observation
-
-
-    def get_observation_history(self, grid_index : int, gp_index : int) -> ObservationTracker:
-        if grid_index in self.history and gp_index in self.history[grid_index]:
-            return self.history[grid_index][gp_index]
-        else:
-            raise ValueError(f"Observation history for grid index {grid_index} and ground point index {gp_index} not found.")
-
-        

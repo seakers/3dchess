@@ -729,7 +729,7 @@ class SimulatedAgent(AbstractAgent):
         # filter tasks to only include active tasks
         if available_only: 
             self.tasks = [task for task in self.tasks 
-                          if task.available(self.get_current_time())]
+                          if task.is_available(self.get_current_time())]
 
 
     @runtime_tracker
