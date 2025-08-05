@@ -237,7 +237,12 @@ class ContinuousRequirement(MissionRequirement):
         assert len(scores) > 0, "At least one preference score value is needed"
         assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
         assert all(0 <= score <= 1 for score in scores), "Scores must be values between 0 and 1"
-        assert all(thresholds[i] >= thresholds[i + 1] for i in range(len(thresholds) - 1)) or all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "Thresholds must be sorted."
+        if all(thresholds[i] >= thresholds[i + 1] for i in range(len(thresholds) - 1)):
+            # thresholds are in descending order; reverse them
+            thresholds = list(reversed(thresholds))
+            scores = list(reversed(scores))
+        assert all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), \
+                "Thresholds must be sorted."
 
         # Set thresholds and scores attributes
         self.thresholds = thresholds
@@ -251,9 +256,11 @@ class ContinuousRequirement(MissionRequirement):
 
     def _build_continuous_preference_function(self, thresholds: list, scores: list) -> callable:
         """Creates a piecewise-linear + exponential tail preference function."""
-        def preference(x: float) -> float:
-            return np.interp(x, thresholds, scores, left=scores[0], right=scores[-1])
-                
+
+        def preference(value: float) -> float:
+            return np.interp(value, thresholds, scores, left=scores[0], right=scores[-1])
+        
+        # Return the preference function
         return preference
 
     def copy(self):
@@ -277,7 +284,8 @@ class ContinuousRequirement(MissionRequirement):
         return f"ContinousRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
 class TemporalRequirement(MissionRequirement):
-    REVISIT = 'revisit'
+    DURATION = 'measurement_duration'
+    REVISIT = 'revisit_time'
     N_OBS = 'n_observations'
 
     @classmethod
@@ -288,7 +296,14 @@ class TemporalRequirement(MissionRequirement):
         id = dict.get("id")
 
         if requirement_type == MissionRequirement.TEMPORAL:
-            if attribute == cls.REVISIT:
+            if attribute == cls.DURATION:
+                assert "thresholds" in dict and "scores" in dict, "Thresholds and scores must be provided for `measurement_duration` requirement"
+                thresholds = dict.get("thresholds", [])
+                scores = dict.get("scores", [])
+                return MeasurementDurationRequirement(thresholds, scores, id)
+
+            elif attribute == cls.REVISIT:
+                assert "thresholds" in dict and "scores" in dict, "Thresholds and scores must be provided for `revisit_time` requirement"
                 thresholds = dict.get("thresholds", [])
                 scores = dict.get("scores", [])
                 return RevisitTemporalRequirement(thresholds, scores, id)
@@ -297,6 +312,28 @@ class TemporalRequirement(MissionRequirement):
                 return ReobservationStrategyRequirement.from_dict(dict)
         
         raise ValueError(f"Unknown temporal requirement for attribute: {attribute}")
+
+class MeasurementDurationRequirement(TemporalRequirement, ContinuousRequirement):
+    def __init__(self, thresholds: list, scores: list, id: str = None, **kwargs):
+        """
+        ### Measurement Duration Requirement
+        Initialize a measurement duration requirement with thresholds and scores.
+        - :`thresholds`: A list of time thresholds that define the performance levels.
+        - :`scores`: A list of scores corresponding to the thresholds.
+        """
+        super().__init__(TemporalRequirement.DURATION, thresholds, scores, id)
+        
+        # Validate inputs
+        assert all(threshold >= 0 for threshold in thresholds), "All threshold values must be non-negative."
+
+        # Set Requirement Type
+        self.requirement_type = MissionRequirement.TEMPORAL
+    
+    def copy(self):
+        return MeasurementDurationRequirement(self.thresholds, self.scores, self.id)
+    
+    def __repr__(self):
+        return f"MeasurementDurationRequirement(thresholds={self.thresholds}, scores={self.scores}, id={self.id})"
 
 class RevisitTemporalRequirement(TemporalRequirement, ContinuousRequirement):
     def __init__(self, thresholds: list, scores: list, id: str = None, **kwargs):

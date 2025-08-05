@@ -188,7 +188,20 @@ class TestRequirements(unittest.TestCase):
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
     # Temporal Requirements
-    ## Revisit Temporal Requirement
+    
+    def test_measurement_duration_requirement(self):
+        req = MeasurementDurationRequirement([10800, 7200, 3600], 
+                                             [  1.0,  0.5,  0.1])
+        self.assertTrue(isinstance(req, MeasurementDurationRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
+        self.assertEqual(req.attribute, TemporalRequirement.DURATION)
+        self.assertEqual(req.calc_preference_value(0), 0.1)  # Should be 0.1
+        self.assertEqual(req.calc_preference_value(3600), 0.1)  # Should be 0.1
+        self.assertTrue(0.5 >= req.calc_preference_value(4000) >= 0.1)  # Should be between 0.5 and 0.1
+        self.assertTrue(1.0 >= req.calc_preference_value(8000) >= 0.5)  # Should be between 1.0 and 0.5
+        self.assertEqual(req.calc_preference_value(10800), 1.0)  # Should be 1.0
+        self.assertEqual(req.calc_preference_value(20000), 1.0)  # Should be 0.1
+
     def test_revisit_time_requirement(self):
         req = RevisitTemporalRequirement([3600, 7200, 10800], [1.0, 0.5, 0.1])
         self.assertTrue(isinstance(req, RevisitTemporalRequirement))

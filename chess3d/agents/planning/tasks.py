@@ -17,8 +17,6 @@ class GenericObservationTask(ABC):
                  parameter : str,
                  targets: list,
                  availability: Interval,
-                 relevant_objective : MissionObjective,
-                 duration_requirements : Interval = Interval(0.0, np.Inf),
                  id : str = None,
                 ):
         """
@@ -41,16 +39,12 @@ class GenericObservationTask(ABC):
         assert all([len(target) == 4 for target in targets]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
         assert isinstance(availability, Interval), "Availability must be an Interval."
         assert availability.left >= 0.0, "Start of availability must be non-negative."
-        assert isinstance(relevant_objective, MissionObjective), "Objective must be a MissionObjective."
-        assert isinstance(duration_requirements, Interval), "Duration requirements must be an Interval."
 
         # Set attributes
         self.task_type : str = task_type
         self.parameter : str = parameter
         self.targets : list[tuple] = targets
         self.availability : Interval = availability
-        self.objective : MissionObjective = relevant_objective
-        self.duration_requirements : Interval = duration_requirements
         self.id : str = id if id is not None else self.generate_id()
 
     @abstractmethod
@@ -73,9 +67,7 @@ class GenericObservationTask(ABC):
             "parameter": self.parameter,
             "targets": [target for target in self.targets],
             "availability": self.availability.to_dict(),
-            "objective": self.objective.to_dict(),
             "id": self.id,
-            "duration_requirements": self.duration_requirements.to_dict()
         }
     
     @classmethod
