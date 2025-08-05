@@ -255,7 +255,7 @@ class ContinuousRequirement(MissionRequirement):
         super().__init__(self.CONTINUOUS, attribute, preference_function, id)
 
     def _build_continuous_preference_function(self, thresholds: list, scores: list) -> callable:
-        """Creates a piecewise-linear + exponential tail preference function."""
+        """Creates a continuous interpolated preference function."""
 
         def preference(value: float) -> float:
             return np.interp(value, thresholds, scores, left=scores[0], right=scores[-1])

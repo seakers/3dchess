@@ -87,68 +87,56 @@ class GenericObservationTask(ABC):
 class DefaultObservationTask(GenericObservationTask):
     def __init__(self,
                  parameter : str,
-                 objective : MissionObjective,
                  target: list,
-                 reward : float,
-                 mission_duration : float,           # in [s]
-                 id : str = None,
-                 duration_requirements = Interval(0.0, np.Inf)
+                 mission_duration : float,
+                 id : str = None
                 ):
         """
         ### Default Observation Task
         Represents a default observation task of a point target to be scheduled by an agent.
         - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
-        - :`objective`: The mission objective associated with the task.
         - :`target`: The target to be observed, represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
-        - :`reward`: The reward for completing the task.
         - :`mission_duration`: The duration of the mission in seconds.
         - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
-        - :`duration_requirements`: The duration requirements for the task.
         """
 
         # validate inputs
         assert isinstance(target, tuple), "Target must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
         assert len(target) == 4, "Target must be a tuple of type (lat[deg], lon[deg], grid index, gp index)."
-        assert all([isinstance(coordinate, float) or isinstance(coordinate, int) for coordinate in target]), "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert all([isinstance(coordinate, float) or isinstance(coordinate, int) for coordinate in target]), \
+            "All targets must tuples of type (lat[deg], lon[deg], grid index, gp index)."
 
         # initialte default values
-        target = [target]
+        targets = [target]
         availability = Interval(0.0, mission_duration)
-        duration_requirements = Interval(0.0, mission_duration)
-        reobservation_strategy = "monitoring"
 
         # initialte parent class
-        super().__init__(parameter, objective, target, availability, reward, reobservation_strategy, id, duration_requirements)
+        super().__init__(GenericObservationTask.DEFAULT,parameter, targets, availability, id)
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"{self.parameter}_{self.objective.parameter}_{self.targets[0][2]}_{self.targets[0][3]}"
-    
+        return f"GenericObservation_{self.parameter}_{self.targets[0][2]}_{self.targets[0][3]}"
+
     def copy(self) -> object:
         """ Create a deep copy of the task. """
         return DefaultObservationTask(
             self.parameter,
-            self.objective,
             self.targets[0],
             self.availability.right,
             id=self.id,
-            duration_requirements=self.duration_requirements
         )
     
     def __repr__(self):
-        return f"MonitoringObservationTask(mission={self.mission}, objective={self.objective}, targets={self.targets}, availability={self.availability}, reward={self.reward}, reobservation_strategy={self.reobservation_strategy}, id={self.id})"
+        return f"DefaultObservationTask(parameter={self.parameter}, targets={self.targets}, availability={self.availability}, id={self.id})"
 
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'DefaultObservationTask':
         """ Create a task from a dictionary. """
         return cls(
             parameter=task_dict['parameter'],
-            objective=MissionObjective.from_dict(task_dict['objective']),
             target=task_dict['targets'][0],
-            reward=task_dict.get('reward', 0.0),
             mission_duration=task_dict['availability']['right'],
             id=task_dict.get('id'),
-            duration_requirements=Interval.from_dict(task_dict['duration_requirements'])
         )
 
 class EventObservationTask(GenericObservationTask):
