@@ -351,3 +351,34 @@ LEVELS = {  'DEBUG' : logging.DEBUG,
             'CRITICAL' : logging.CRITICAL, 
             'ERROR' : logging.ERROR
         }
+
+
+def monitoring(kwargs) -> float:
+    """
+    ### Monitoring Utility Function
+
+    This function calculates the utility of a monitoring observation based on the time since the last observation.
+    The utility is calculated as the time since the last observation divided by the total time available for monitoring.
+
+    - :`observation`: The current observation.
+    - :`unobserved_reward_rate`: The rate at which the reward decreases for unobserved events.    - :`latest_observation`: The latest observation.
+    - :`kwargs`: Additional keyword arguments (not used in this function).
+    
+    """
+    t_img = kwargs['t_start']
+    t_prev = kwargs.get('t_prev',0.0)
+    unobserved_reward_rate = kwargs.get('unobserved_reward_rate', 1.0)
+    n_obs = kwargs.get('n_obs', 0)
+        
+    assert (t_img - t_prev) >= 0.0 # TODO fix acbba triggering this
+
+    # calculate reward
+    reward = (t_img - t_prev) * unobserved_reward_rate / 3600 
+    
+    # clip reward to [0, 1]
+    reward = np.clip(reward, 0.0, 1.0)
+
+    # return reward
+    return reward
+
+

@@ -5,46 +5,6 @@ import uuid
 import numpy as np
 from pyparsing import ABC, abstractmethod
 
-def monitoring(kwargs) -> float:
-    """
-    ### Monitoring Utility Function
-
-    This function calculates the utility of a monitoring observation based on the time since the last observation.
-    The utility is calculated as the time since the last observation divided by the total time available for monitoring.
-
-    - :`observation`: The current observation.
-    - :`unobserved_reward_rate`: The rate at which the reward decreases for unobserved events.    - :`latest_observation`: The latest observation.
-    - :`kwargs`: Additional keyword arguments (not used in this function).
-    
-    """
-    t_img = kwargs['t_start']
-    t_prev = kwargs.get('t_prev',0.0)
-    unobserved_reward_rate = kwargs.get('unobserved_reward_rate', 1.0)
-    n_obs = kwargs.get('n_obs', 0)
-    if n_obs > 0:
-        x = 1
-        
-    assert (t_img - t_prev) >= 0.0 # TODO fix acbba triggering this
-
-    # calculate reward
-    reward = (t_img - t_prev) * unobserved_reward_rate / 3600 
-    
-    # clip reward to [0, 1]
-    reward = np.clip(reward, 0.0, 1.0)
-
-    # return reward
-    return reward
-
-RO = {
-    # Reobservation Strategies
-    "linear_increase" : lambda kwargs : kwargs['n_obs'],
-    "linear_decrease" : lambda kwargs : max((4 - kwargs['n_obs'])/4, 0),
-    "decaying_increase" : lambda kwargs : np.log(kwargs['n_obs']) + 1,
-    "decaying_decrease" : lambda kwargs : np.exp(1 - kwargs['n_obs']),
-    "immediate_decrease" : lambda kwargs : 0.0 if kwargs['n_obs'] > 0 else 1.0,
-    "no_change" : lambda _ : 1.0,
-    "monitoring" : monitoring,
-}
 
 CO = {
     # Coobservation Strategies
@@ -148,24 +108,25 @@ class GeophysicalEvent:
         }
 
 class MissionRequirement(ABC):
-    CATEG = 'categorical'
+    CATEGORICAL = 'categorical'
     DISCRETE = 'discrete'
     CONTINUOUS = 'continuous'
     TEMPORAL = 'temporal'
     SPATIAL = 'spatial'
 
-    def __init__(self, req_type : str, attribute: str, preference_function : callable, id : str = None):
+    def __init__(self, requirement_type : str, attribute: str, preference_function : callable, id : str = None):
         """
         ### Mission Requirement 
         
         Initialize a mission requirement with an attribute, thresholds, and scores.
+        - :`requirement_type`: The type of requirement (e.g., "categorical", "discrete", "continuous", "temporal", "spatial").
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
         - :`preference_function`: maps values of perforamnce to requirement satisfaction score in [0,1].        
         """
-        assert any([req_type == t for t in [self.CATEG, self.DISCRETE, self.CONTINUOUS, self.TEMPORAL, self.SPATIAL]]), \
-            f"Unknown requirement type: {req_type}"
+        assert any([requirement_type == t for t in [self.CATEGORICAL, self.DISCRETE, self.CONTINUOUS, self.TEMPORAL, self.SPATIAL]]), \
+            f"Unknown requirement type: {requirement_type}"
 
-        self.req_type = req_type
+        self.requirement_type = requirement_type
         self.attribute : str = attribute.lower()
         self.preference_function : callable = preference_function
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
@@ -192,6 +153,12 @@ class MissionRequirement(ABC):
     @abstractmethod
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the measurement requirement to a dictionary."""
+        return {
+            "requirement_type": self.requirement_type,
+            "attribute": self.attribute,
+            # "preference_function": self.preference_function.__name__,
+            "id": self.id
+        }
     
     @abstractmethod
     def __repr__(self):
@@ -200,37 +167,52 @@ class MissionRequirement(ABC):
     @classmethod
     def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'MissionRequirement':
         """Create a measurement requirement from a dictionary."""
-        req_type = dict.get("req_type")
+        requirement_type = dict.get("requirement_type")
         attribute = dict.get("attribute")
         thresholds = dict.get("thresholds", [])
         scores = dict.get("scores", [])
         id = dict.get("id")
 
-        if req_type == MissionRequirement.CATEG:
+        if requirement_type == MissionRequirement.CATEGORICAL:
             return CategoricalRequirement(attribute, thresholds, scores, id)
 
-        elif req_type == MissionRequirement.DISCRETE:
+        elif requirement_type == MissionRequirement.DISCRETE:
             return DiscreteRequirement(attribute, thresholds, scores, id)
 
-        elif req_type == MissionRequirement.CONTINUOUS:
+        elif requirement_type == MissionRequirement.CONTINUOUS:
             return ContinuousRequirement(attribute, thresholds, scores, id)
 
-        elif req_type == MissionRequirement.TEMPORAL:
-            return TemporalRequirement(attribute, thresholds, scores, id)
+        elif requirement_type == MissionRequirement.TEMPORAL:
+            if attribute == TemporalRequirement.REVISIT:
+                return RevisitTemporalRequirement(thresholds, scores, id)
+            
+            elif attribute == TemporalRequirement.N_OBS:
+                strategy = dict.get("strategy", None)
+                return ReobservationStrategyRequirement(strategy, id)
+            
+            raise ValueError(f"Unknown temporal requirement for attribute: {attribute}")
         
-        elif req_type == MissionRequirement.SPATIAL:
+        elif requirement_type == MissionRequirement.SPATIAL:
             target_type = dict.get("target_type", None)
+            distance_threshold = dict.get("distance_threshold", 1.0)
+            
             if target_type == SpatialRequirement.POINT:
-                pass
+                target = dict.get("target", None)
+                if target is None: raise ValueError("Target must be provided for point spatial requirement")
+                return PointTargetSpatialRequirement(target, distance_threshold, id)
+            
             elif target_type == SpatialRequirement.LIST:
                 targets = dict.get("targets", [])
-                return TargetListSpatialRequirement(targets, id)
+                return TargetListSpatialRequirement(targets, distance_threshold, id)
+            
             elif target_type == SpatialRequirement.GRID:
-                pass
-            else:
-                raise ValueError(f"Unknown spatial requirement type: {target_type}")
+                grid_name = dict.get("grid_name", None)
+                grid_index = dict.get("grid_index", None)
+                grid_size = dict.get("grid_size", None)
 
-        raise ValueError(f"Unknown requirement type: {req_type}")
+                return GridTargetSpatialRequirement(grid_name, grid_index, grid_size, id)
+
+        raise ValueError(f"Unknown requirement type: {requirement_type}")
 
 class CategoricalRequirement(MissionRequirement):
     def __init__(self, attribute: str, thresholds: list, scores: list, id: str = None, **_):
@@ -256,7 +238,7 @@ class CategoricalRequirement(MissionRequirement):
         preference_function = self._build_categorical_preference_function(thresholds, scores)
 
         # Initialize the parent class
-        super().__init__(self.CATEG, attribute, preference_function, id)
+        super().__init__(self.CATEGORICAL, attribute, preference_function, id)
 
     def _build_categorical_preference_function(self, thresholds: list, scores: list) -> callable:
         """Creates a categorical preference function."""
@@ -280,19 +262,18 @@ class CategoricalRequirement(MissionRequirement):
         )
     
     def to_dict(self):
-        return {
-            "req_type": self.req_type,
-            "attribute": self.attribute,
+        d = super().to_dict()
+        d.update({
             "thresholds": self.thresholds,
-            "scores": self.scores,
-            "id": self.id
-        }
+            "scores": self.scores
+        })
+        return d
     
     def __repr__(self):
         return f"CategoricalRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
 class DiscreteRequirement(MissionRequirement):
-    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **_):
+    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
         """
         ### Discrete Value Mission Requirement
         Initialize a discrete requirement with an attribute, thresholds, and scores.
@@ -356,13 +337,12 @@ class DiscreteRequirement(MissionRequirement):
         )
     
     def to_dict(self):
-        return {
-            "req_type": self.req_type,
-            "attribute": self.attribute,
+        d = super().to_dict()
+        d.update({
             "thresholds": self.thresholds,
-            "scores": self.scores,
-            "id": self.id
-        }
+            "scores": self.scores
+        })
+        return d
     
     def __repr__(self):
         return f"DiscreteRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
@@ -412,34 +392,75 @@ class ContinuousRequirement(MissionRequirement):
         )
     
     def to_dict(self):
-        return {
-            "req_type": self.req_type,
-            "attribute": self.attribute,
+        d = super().to_dict()
+        d.update({
             "thresholds": self.thresholds,
-            "scores": self.scores,
-            "id": self.id
-        }
+            "scores": self.scores
+        })
+        return d
 
     def __repr__(self):
         return f"ContinousRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
-class TemporalRequirement(ContinuousRequirement):
-    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
+class TemporalRequirement(MissionRequirement):
+    REVISIT = 'revisit'
+    N_OBS = 'n_observations'
+
+class RevisitTemporalRequirement(TemporalRequirement, ContinuousRequirement):
+    def __init__(self, thresholds: list, scores: list, id: str = None, **kwargs):
+        """"
+        ### Revisit Temporal Requirement
+        Initialize a revisit temporal requirement with thresholds and scores.
+        - :`thresholds`: A list of time thresholds that define the performance levels.
+        - :`scores`: A list of scores corresponding to the thresholds.
         """
-        ### Temporal Mission Requirement
-        Initialize a temporal requirement with an attribute, thresholds, and scores.
-        - :`attribute`: The attribute being measured (e.g., "time since last observation").
-        - :`thresholds`: A list of time thresholds that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [3600.0, 7200.0, 10800.0] seconds.
-        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1.0, 0.7, 0.2].
+        super().__init__(TemporalRequirement.REVISIT, thresholds, scores, id)
+        self.requirement_type = MissionRequirement.TEMPORAL
+    
+    def copy(self):
+        return RevisitTemporalRequirement(self.thresholds, self.scores, self.id)
+        
+    def __repr__(self):
+        return f"RevisitTemporalRequirement(thresholds={self.thresholds}, scores={self.scores}, id={self.id})"
+
+class ReobservationStrategyRequirement(TemporalRequirement):
+    RO = {
+        # Reobservation Strategies
+        "linear_increase" : lambda n_obs : n_obs,
+        "linear_decrease" : lambda n_obs : max((4 - n_obs)/4, 0),
+        "decaying_increase" : lambda n_obs : np.log(n_obs) + 1,
+        "decaying_decrease" : lambda n_obs : np.exp(1 - n_obs),
+        "immediate_decrease" : lambda n_obs : 0.0 if n_obs > 0 else 1.0,
+        "no_change" : lambda _ : 1.0,
+        # "monitoring" : monitoring,
+    }
+    
+    def __init__(self, strategy : str, id : str = None, **_):
         """
-        super().__init__(attribute, thresholds, scores, id)
-        self.req_type = self.TEMPORAL
+        ### Reobservation Strategy Requirement
+        Initialize a reobservation strategy requirement with a strategy and an ID.
+        - :`strategy`: The reobservation strategy to use (e.g., "linear_increase", "linear_decrease").
+        - :`id`: An optional unique identifier for the requirement.
+        """
+
+        # Validate inputs
+        assert strategy in self.RO, f"Unknown reobservation strategy: {strategy}. Must be one of {list(self.RO.keys())}."
+        
+        super().__init__(MissionRequirement.TEMPORAL, TemporalRequirement.N_OBS, ReobservationStrategyRequirement.RO[strategy], id)
+        self.strategy = strategy
 
     def copy(self):
-        return TemporalRequirement(self.attribute, self.thresholds, self.scores, self.id)
+        return ReobservationStrategyRequirement(self.strategy, self.id)
+
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "strategy": self.strategy
+        })
+        return d
 
     def __repr__(self):
-        return f"TemporalRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+        return f"ReobservationStrategyRequirement(strategy={self.strategy}, id={self.id})"
 
 class SpatialRequirement(MissionRequirement):
     POINT = 'point'
@@ -482,6 +503,60 @@ class SpatialRequirement(MissionRequirement):
 
         # Return great circle distance in kilometers
         return 6378.137 * c
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "target_type": self.target_type,
+            "distance_threshold": self.distance_threshold
+        })
+        return d
+    
+class PointTargetSpatialRequirement(SpatialRequirement):
+    def __init__(self, target: Tuple[float, float, int, int], distance_threshold: float = 1.0, id: str = None, **kwargs):
+        super().__init__(self.POINT, distance_threshold, id)
+        
+        # Validate inputs
+        assert isinstance(target, (tuple, list)) and len(target) == 4, \
+            "Target must be a tuple or list of length 4 (lat, lon, grid index, gp index)"
+        
+        # Set attributes
+        self.target = target
+
+    def _is_location_in_target(self, location: Tuple[float, float, int, int], distance_threshold: float) -> bool:
+        if not (isinstance(location, (tuple, list)) and len(location) == 4):
+            raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index)")
+        
+        # Check for exact match
+        if self.target == location: return True
+        
+        # Proximity match (lat/lon only)
+        return self.haversine_np(self.target[0], self.target[1], location[0], location[1]) <= distance_threshold
+
+    def _build_spatial_preference_function(self, distance_threshold: float) -> Callable[[Any], float]:
+        """Creates a spatial preference function that returns 1.0 if a location is the target or within a distance threshold, else 0.0."""
+        def preference(location: Any) -> float:
+            # Validate location input
+            if not (isinstance(location, (tuple, list)) and len(location) == 4):
+                raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index)")
+            
+            return float(self._is_location_in_target(location, distance_threshold))
+        
+        return preference
+    
+    def copy(self):
+        """Create a copy of the measurement requirement."""
+        return PointTargetSpatialRequirement(self.target, self.distance_threshold, self.id)
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "target": self.target
+        })
+        return d
+    
+    def __repr__(self):
+        return f"PointTargetSpatialRequirement(target={self.target}, distance_threshold={self.distance_threshold}, id={self.id})"
 
 class TargetListSpatialRequirement(SpatialRequirement):
     def __init__(self, targets: List[Tuple[float, float, int, int]], distance_threshold: float, id=None, **kwargs):
@@ -496,28 +571,28 @@ class TargetListSpatialRequirement(SpatialRequirement):
         # Set attributes
         self.targets: List[Tuple[float, float, int, int]] = [tuple(t) for t in targets]
 
-    def _is_location_in_targets(self, location: Tuple[float, float, int, int], distance_threshold: float) -> float:
+    def _is_location_in_targets(self, location: Tuple[float, float, int, int], distance_threshold: float) -> bool:
         """Check if a location is in the targets list or within a distance threshold."""
         # Validate location input
         if not (isinstance(location, (tuple, list)) and len(location) == 4):
             raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index)")
 
-        # Exact match
+        # Check for exact match
         if tuple(location) in self.targets:
-            return 1.0
+            return True
 
         # Proximity match (lat/lon only)
         for loc in self.targets:
             if self.haversine_np(loc[0], loc[1], location[0], location[1]) <= distance_threshold:
-                return 1.0
+                return True
 
-        return 0.0
+        return False
 
     def _build_spatial_preference_function(self, distance_threshold: float) -> Callable[[Any], float]:
         """Creates a spatial preference function that returns 1.0 if a location is in targets (exact or within threshold), else 0.0."""
         def preference(location: Any) -> float:
             if isinstance(location, (list, tuple)) and len(location) == 4:
-                return self._is_location_in_targets(location, distance_threshold)
+                return float(self._is_location_in_targets(location, distance_threshold))
             elif isinstance(location, list):
                 return float(any(
                     self._is_location_in_targets(loc, distance_threshold)
@@ -537,87 +612,76 @@ class TargetListSpatialRequirement(SpatialRequirement):
         )
     
     def to_dict(self):
-        return {
-            "req_type": self.req_type,
-            "attribute": self.attribute,
-            "target_type": self.target_type,
-            "targets": self.targets,
-            "distance_threshold": self.distance_threshold,
-            "id": self.id
-        }
+        d = super().to_dict()
+        d.update({
+            "targets": self.targets
+        })
+        return d
     
     def __repr__(self):
         return f"SpatialRequirement(type={self.target_type},targets={self.targets}, distance_threshold={self.distance_threshold}, id={self.id})"
 
-# class TargetListSpatialRequirement(SpatialRequirement):
-#     def __init__(self, targets : list, id=None):
-#         super().__init__(self.LIST, id)
+class GridTargetSpatialRequirement(SpatialRequirement):
+    def __init__(self, grid_name: str, grid_index: int, grid_size : int, id: str = None, **kwargs):
+        """
+        ### Grid Target Spatial Requirement
+        Initialize a grid target spatial requirement with a grid name, grid index, and grid size.
+        - :`grid_name`: The name of the grid (e.g., "global", "regional").
+        - :`grid_index`: The index of the grid cell.
+        - :`grid_size`: The size of the grid cell in degrees.
+        """
+        super().__init__(self.GRID, id=id)
         
-#         # Validate inputs
-#         assert isinstance(targets, list), "Location must be a list of coordinates"
-#         assert len(targets) > 0, "Location list must not be empty"
-#         assert all(isinstance(loc, (tuple, list)) and len(loc) == 4 for loc in targets), "Each location must be a tuple or list of length 4 (lat, lon, grid index, gp index)"
+        # Validate inputs
+        assert isinstance(grid_name, str), "Grid name must be a string"
+        assert isinstance(grid_index, int) and grid_index >= 0, "Grid index must be a non-negative integer"
+        assert isinstance(grid_size, (int, float)) and grid_size > 0, "Grid size must be a positive number"
 
-#         # Set attributes
-#         self.targets : list[tuple] = [pos for pos in targets]
+        # Set attributes
+        self.grid_name = grid_name
+        self.grid_index = grid_index
+        self.grid_size = grid_size
 
-#     def __is_location_in_targets(self, location: tuple, distance_threshold : float) -> bool:
-#         if isinstance(location,(list, tuple)) and len(location) == 4:
-#             for tar in self.targets:
-#                 # Check if the location matches one of the locations in self.targets
-#                 if all([tar[i] == location[i] for i in range(4)]): return 1.0
-
-#             # If not exact match, check haversine distance
-#             if any([self.haversine_np(loc[1], loc[0], location[1], location[0]) <= distance_threshold for loc in self.targets]): return 1.0
-
-#             return 0.0
-        
-#         raise ValueError("Target must be a tuple or list of length 4 (lat, lon, grid index, gp index)")
-
-#     def _build_spatial_preference_function(self, distance_threshold: float = 1e-6) -> callable:
-#         """Creates a spatial preference function based on a distance threshold."""
-#         def preference(location: Any) -> float:
-#             if isinstance(location,(list, tuple)) and len(location) == 4:
-#                 return self.__is_location_in_targets(location, distance_threshold)
-#             elif isinstance(location, list):
-#                 return any(self.__is_location_in_targets(loc, distance_threshold) for loc in location)
-#             else:
-#                 raise ValueError("Location must be a tuple or list of length 4 (lat, lon, grid index, gp index) or a list containing such tuples or lists")
+    def _build_spatial_preference_function(self, _: float) -> Callable[[Any], float]:
+        """Creates a spatial preference function that checks if a location is within the grid cell."""
+        def preference(location: Any) -> float:
+            assert isinstance(location, (list, tuple)) and len(location) == 4, \
+                "Location must be a tuple/list of (lat, lon, grid index, gp index)"
             
-#         return preference
+            *_, grid_idx, gp_idx = location
 
-#     def __init__(self, location_type : str, location : Any, distance_threshold: float = 1e-6, id : str = None, **kwargs):
-#         """
-#         ### Spatial Mission Requirement
-#         Initialize a spatial requirement with a location and a distance threshold.
-#         - :`location_type`: The type of location (e.g., "point" or "grid").
-#         - :`location`: The specific location (e.g., coordinates for a point or a grid cell).
-#         - :`distance_threshold`: The distance threshold for the requirement.
-#         - :`id`: An optional ID for the requirement.
-#         """
-#         super().__init__(self.SPATIAL, 'location', self._build_spatial_preference_function(distance_threshold), id)
+            assert isinstance(grid_idx, int) and grid_idx >= 0, "Grid index must be a non-negative integer"
+            assert isinstance(gp_idx, int) and 0 <= gp_idx, "GP index must be a non-negative integer"
+
+            # TODO add support for point outside of grid list but within tolerance distance 
+
+            return float(
+                grid_idx == self.grid_index and
+                0 <= gp_idx < self.grid_size
+            )
         
-#         assert location_type in [self.POINT, self.GRID], f"Invalid location type: {location_type}. Must be one of {self.POINT} or {self.GRID}."
-#         assert isinstance(distance_threshold, (int, float)), "Distance threshold must be a number"
-#         assert distance_threshold >= 0, "Distance threshold must be non-negative"
-        
-#         self.location_type = location_type
-#         self.location = location
-#         self.distance_threshold = distance_threshold
-
-#     def _build_spatial_preference_function(self, distance_threshold: float) -> callable:
-#         """Creates a spatial preference function based on a distance threshold."""
-#         if location 
-#             def preference(location: Any) -> float:
-#                 # Calculate the distance from the location to the target
-#                 distance = self._calculate_distance(location, self.target_location)
-#                 # Apply the distance threshold
-#                 if distance < distance_threshold:
-#                     return 1.0  # Full score if within threshold
-#                 else:
-#                     return 0.0  # No score if outside threshold
-
-#         return preference
+        return preference
+    
+    def copy(self) -> 'MissionRequirement':
+        """Create a copy of the measurement requirement."""
+        return GridTargetSpatialRequirement(
+            grid_name=self.grid_name,
+            grid_index=self.grid_index,
+            grid_size=self.grid_size,
+            id=self.id
+        )
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "grid_name": self.grid_name,
+            "grid_index": self.grid_index,
+            "grid_size": self.grid_size
+        })
+        return d
+    
+    def __repr__(self):
+        return f"GridTargetSpatialRequirement(grid_name={self.grid_name}, grid_index={self.grid_index}, grid_size={self.grid_size}, id={self.id})"
 
 class MissionObjective:
     def __init__(self, 
@@ -645,13 +709,18 @@ class MissionObjective:
         assert len(requirements) > 0, "At least one requirement is needed"
         assert all(isinstance(req, MissionRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
         assert any(isinstance(req, TemporalRequirement) for req in requirements), "At least one requirement must be a `TemporalRequirement`"
+        assert any(isinstance(req, SpatialRequirement) for req in requirements), "At least one requirement must be a `SpatialRequirement`"
         assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
 
         # Set attributes
         self.priority : float = priority
         self.parameter : str = parameter
-        self.requirements : Dict[str, MissionRequirement] = {requirement.attribute : requirement for requirement in requirements}
-        self.valid_instruments = [instrument.lower() for instrument in valid_instruments] # TODO remove this and implement knoledge graph in agent
+        self.requirements : Dict[str, MissionRequirement] = {requirement.attribute : requirement 
+                                                             for requirement in requirements 
+                                                             if isinstance(requirement, MissionRequirement)}
+        self.valid_instruments = [instrument.lower() 
+                                  for instrument in valid_instruments
+                                  if isinstance(instrument, str)] # TODO remove this and implement knoledge graph in agent
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def eval_measurement_performance(self, measurement: dict) -> float:

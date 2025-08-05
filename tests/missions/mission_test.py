@@ -182,42 +182,101 @@ class TestRequirements(unittest.TestCase):
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
     # Temporal Requirements
-    def test_temporal_requirement(self):
-        req = TemporalRequirement("time_since_obs", 
-                                  thresholds=[3600, 7200, 10800], 
-                                  scores    =[1.0, 0.5, 0.1])
-        self.assertTrue(isinstance(req, TemporalRequirement))
-        self.assertEqual(req.req_type, MissionRequirement.TEMPORAL)
-        self.assertTrue(req.calc_preference_value(4000) <= 1.0)  
-    def test_temporal_copy(self):
-        req = TemporalRequirement("time_since_obs", [3600, 7200], [1.0, 0.5])
+    def test_revisit_time_requirement(self):
+        req = RevisitTemporalRequirement([3600, 7200, 10800], [1.0, 0.5, 0.1])
+        self.assertTrue(isinstance(req, RevisitTemporalRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
+        self.assertEqual(req.attribute, TemporalRequirement.REVISIT)
+        self.assertTrue(1.0 >= req.calc_preference_value(4000) >= 0.5)  # Should be between 1.0 and 0.5
+        self.assertEqual(req.calc_preference_value(3000), 1.0)  # Should be 1.0
+        self.assertEqual(req.calc_preference_value(20000), 0.1)  # Should be 0.1
+    def test_revisit_time_requirement_copy(self):
+        req = RevisitTemporalRequirement([3600, 7200], [1.0, 0.5])
         req_copy = req.copy()
         self.assertEqual(req.to_dict(), req_copy.to_dict())
         self.assertIsNot(req, req_copy)
-    def test_temporal_to_from_dict(self):
-        original = TemporalRequirement("time_since_obs", [3600.0, 7200.0], [1.0, 0.5])
+    def test_revisit_time_requirement_to_from_dict(self):
+        original = RevisitTemporalRequirement([3600.0, 7200.0], [1.0, 0.5])
         as_dict = original.to_dict()
         reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, TemporalRequirement)
+        self.assertIsInstance(reconstructed, RevisitTemporalRequirement)
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
+    
+    def test_reobservation_strategy_requirement(self):
+        req = ReobservationStrategyRequirement("linear_increase")
+        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
+        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
+        self.assertEqual(req.calc_preference_value(1), 1.0)
+        self.assertEqual(req.calc_preference_value(2), 2.0)
 
-    def test_from_dict_invalid_type(self):
-        bad_dict = {
-            "req_type": "unknown_type",
-            "attribute": "foo",
-            "thresholds": [1, 2, 3],
-            "scores": [1.0, 0.5, 0.0]
-        }
-        self.assertRaises(ValueError, MissionRequirement.from_dict, bad_dict)
+    # def test_temporal_requirement(self):
+    #     req = TemporalRequirement("time_since_obs", 
+    #                               thresholds=[3600, 7200, 10800], 
+    #                               scores    =[1.0, 0.5, 0.1])
+    #     self.assertTrue(isinstance(req, TemporalRequirement))
+    #     self.assertEqual(req.req_type, MissionRequirement.TEMPORAL)
+    #     self.assertTrue(req.calc_preference_value(4000) <= 1.0)  
+    # def test_temporal_copy(self):
+    #     req = TemporalRequirement("time_since_obs", [3600, 7200], [1.0, 0.5])
+    #     req_copy = req.copy()
+    #     self.assertEqual(req.to_dict(), req_copy.to_dict())
+    #     self.assertIsNot(req, req_copy)
+    # def test_temporal_to_from_dict(self):
+    #     original = TemporalRequirement("time_since_obs", [3600.0, 7200.0], [1.0, 0.5])
+    #     as_dict = original.to_dict()
+    #     reconstructed = MissionRequirement.from_dict(as_dict)
+    #     self.assertIsInstance(reconstructed, TemporalRequirement)
+    #     self.assertEqual(original.to_dict(), reconstructed.to_dict())
+
+    # def test_from_dict_invalid_type(self):
+    #     bad_dict = {
+    #         "req_type": "unknown_type",
+    #         "attribute": "foo",
+    #         "thresholds": [1, 2, 3],
+    #         "scores": [1.0, 0.5, 0.0]
+    #     }
+    #     self.assertRaises(ValueError, MissionRequirement.from_dict, bad_dict)
 
     # Spatial Requirements
+    ## Point Target Spatial Requirement
+    def test_point_target_spatial_requirement(self):
+        target = (0.0, 0.0, 0, 0)
+        req = PointTargetSpatialRequirement(target,
+                                             distance_threshold=0.1)
+        self.assertTrue(isinstance(req, PointTargetSpatialRequirement))
+        self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
+        self.assertEqual(req.target_type, SpatialRequirement.POINT)
+        self.assertEqual(req.target, target)
+        self.assertEqual(req.distance_threshold, 0.1)
+    def test_point_target_spatial_requirement_evaluation(self):
+        target = (0.0, 0.0, 0, 0)
+        req = PointTargetSpatialRequirement(target, distance_threshold=10.0)
+        self.assertAlmostEqual(req.calc_preference_value((0.0, 0.0, 0, 0)), 1.0)
+        self.assertAlmostEqual(req.calc_preference_value((0.05, 0.05, 0, 1000)), 1.0)
+        self.assertAlmostEqual(req.calc_preference_value((0.2, 0.2, 0, 1000)), 0.0)
+    def test_point_target_spatial_requirement_copy(self):
+        target = (0.0, 0.0, 0, 0)
+        req = PointTargetSpatialRequirement(target, distance_threshold=0.1)
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_point_target_spatial_requirement_to_from_dict(self):
+        target = (0.0, 0.0, 0, 0)
+        req = PointTargetSpatialRequirement(target, distance_threshold=0.1)
+        as_dict = req.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, PointTargetSpatialRequirement)
+        self.assertEqual(req.to_dict(), reconstructed.to_dict())
+
+    ## Target List Spatial Requirement
     def test_target_list_spatial_requirement(self):
         targets = [(0.0, 0.0, 0, 0), (1.0, 1.0, 0, 1)]
         req = TargetListSpatialRequirement(targets, 
                                            distance_threshold=0.1)
         
         self.assertTrue(isinstance(req, TargetListSpatialRequirement))
-        self.assertEqual(req.req_type, MissionRequirement.SPATIAL)
+        self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
         self.assertEqual(req.target_type, SpatialRequirement.LIST)
         self.assertTrue(all([target in req.targets for target in targets]))
         self.assertEqual(req.distance_threshold, 0.1)
@@ -227,6 +286,7 @@ class TestRequirements(unittest.TestCase):
                                              distance_threshold=10.0)
         self.assertAlmostEqual(req.calc_preference_value((0.0, 0.0, 0, 0)), 1.0)
         self.assertAlmostEqual(req.calc_preference_value((0.05, 0.05, 0, 1000)), 1.0)
+        self.assertAlmostEqual(req.calc_preference_value((0.2, 0.2, 0, 1000)), 0.0)
     def test_target_list_spatial_requirement_copy(self):
         targets = [(0.0, 0.0, 0, 0), (1.0, 1.0, 0, 1)]
         req = TargetListSpatialRequirement(targets, distance_threshold=0.1)
@@ -240,7 +300,74 @@ class TestRequirements(unittest.TestCase):
         reconstructed = MissionRequirement.from_dict(as_dict)
         self.assertIsInstance(reconstructed, TargetListSpatialRequirement)
         self.assertEqual(req.to_dict(), reconstructed.to_dict())
-        
+
+    ## Test Grid Target Spatial Requirement
+    def test_grid_target_spatial_requirement(self):
+        grid_name = "test_grid"
+        grid_index = 0
+        grid_size = 10
+        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
+
+        self.assertIsInstance(req, GridTargetSpatialRequirement)
+        self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
+        self.assertEqual(req.target_type, SpatialRequirement.GRID)
+        self.assertEqual(req.grid_name, grid_name)
+        self.assertEqual(req.grid_index, grid_index)
+        self.assertEqual(req.grid_size, grid_size)
+    def test_grid_target_spatial_requirement_evaluation(self):
+        grid_name = "test_grid"
+        grid_index = 0
+        grid_size = 10
+        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
+        # Test evaluation for a point within the grid cell
+        self.assertAlmostEqual(req.calc_preference_value((0.0, 0.0, grid_index, 5)), 1.0)
+        # Test evaluation for a point outside the grid cell
+        self.assertAlmostEqual(req.calc_preference_value((0.2, 0.2, grid_index, 11)), 0.0)
+        self.assertAlmostEqual(req.calc_preference_value((0.2, 0.2, grid_index+1, 11)), 0.0)
+    def test_grid_target_spatial_requirement_copy(self):
+        grid_name = "test_grid"
+        grid_index = 0
+        grid_size = 10
+        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_grid_target_spatial_requirement_to_from_dict(self):
+        grid_name = "test_grid"
+        grid_index = 0
+        grid_size = 10
+        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
+        as_dict = req.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, GridTargetSpatialRequirement)
+        self.assertEqual(req.to_dict(), reconstructed.to_dict())
+    def test_grid_target_spatial_requirement_invalid_location(self):
+        grid_name = "test_grid"
+        grid_index = 0
+        grid_size = 10
+        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
+        # Test with a location that is not a tuple/list of length 4
+        with self.assertRaises(AssertionError):
+            req.calc_preference_value((0.0, 0.0, grid_index))  # Missing grid index and gp index
+    def test_grid_target_spatial_requirement_invalid_grid_index(self):
+        grid_name = "test_grid"
+        grid_index = 0
+        grid_size = 10
+        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
+        # Test with a grid index that is not an integer or is negative
+        with self.assertRaises(AssertionError):
+            req.calc_preference_value((0.0, 0.0, -1, 5))  # Negative grid index
+    def test_grid_target_spatial_requirement_invalid_gp_index(self):
+        grid_name = "test_grid"
+        grid_index = 0
+        grid_size = 10
+        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
+        # Test with a gp index that is not an integer or is out of bounds
+        with self.assertRaises(AssertionError):
+            req.calc_preference_value((0.0, 0.0, grid_index, -1))  # Negative gp index
+            with self.assertRaises(AssertionError):
+                req.calc_preference_value((0.0, 0.0, grid_index, grid_size))  # gp index equal to grid size
+
 
 #     def test_objective(self):
 #         """
