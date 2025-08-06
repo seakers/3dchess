@@ -18,6 +18,11 @@ Spatiotemporal coverage and sampling are by far the most common attributes on wh
 ### Other attributes
 Many other attributes can be used to specify requirements. Some of the most common ones may be spectral coverage and sampling, radiometric resolution, or signal-to-noise ratio. Higher-level attributes can also be used, such as day-night or all-weather capability. Continuous or discrete preference functions can be defined for these and other attributes using the method described above, even for more qualitative attributes as demonstrated in the VASSAR papers (Selva et al., 2014; Selva & Crawley, 2013). 
 
+### Capability attributes
+Mapping an agent’s capabilities to mission objectives is a critical step in designing and implementing onboard satellite operations. Before high-level scheduling decisions can be made, it is essential to determine whether a satellite's instruments or control systems can support the collection of a desired geophysical parameter. This evaluation can be facilitated through knowledge graphs or other formal knowledge representations.
+
+As a practical intermediate step, these capabilities can be encoded as a set of measurement requirements. In this context, the associated preference functions quantify how well a given agent’s components align with the demands of the mission objective, providing a form of feasibility check.
+
 ## Geophysical Events of Interest
 An event of interest can be detected by an agent. An **event** $E$ is defined by a tuple $E =⟨eventType, loc, t_{detect}, d_{exp}, S⟩$. It is initially characterized by a type, location $loc$, and detection time $t_{detect}$ . On board data processing is used to determine an expected duration $d_{exp}$ and severity $S$. 
 

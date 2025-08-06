@@ -4,24 +4,27 @@
             "name": "Algal blooms monitoring",
             "objectives" : [
                 {
-                    "type" : "monitoring",
+                    "objective_type" : "default_mission",
                     "parameter": "Chlorophyll-A",
                     "priority": 1,
                     "requirements" : [
                         {
                             "attribute": "horizontal_spatial_resolution",
+                            "requirement_type": "discrete",
                             "thresholds": [10, 30, 100],
                             "scores": [1.0, 0.7, 0.1]
                         },
                         {
+                            "requirement_type": "discrete",
                             "attribute": "spectral_resolution",
                             "thresholds": ["Hyperspectral", "Multispectral"],
                             "scores": [1, 0.5]
+                        },
+                        {
+                            "requirement_type": "capability",
+                            "attribute": "instrument",
+                            "valid_values": ["VNIR", "TIR"]
                         }
-                    ],
-                    "valid_instruments" : [
-                        "VNIR",
-                        "TIR"
                     ]
                 },
                 {
@@ -32,10 +35,12 @@
                             "attribute": "horizontal_spatial_resolution",
                             "thresholds": [30, 100],
                             "scores": [1.0, 0.3]
+                        },
+                        {
+                            "requirement_type": "capability",
+                            "attribute": "instrument",
+                            "valid_values": ["TIR"]
                         }
-                    ],
-                    "valid_instruments" : [
-                        "TIR"
                     ]
                 },
                 {
@@ -51,10 +56,12 @@
                             "attribute": "accuracy",
                             "thresholds": [1, 5, 10],
                             "scores": [1.0, 0.5, 0.1]
+                        },
+                        {
+                            "requirement_type": "capability",
+                            "attribute": "instrument",
+                            "valid_values": ["Altimieter"]
                         }
-                    ],
-                    "valid_instruments" : [
-                        "Altimeter"
                     ]
                 }
             ],
@@ -73,13 +80,14 @@
                             "attribute": "spectral_resolution",
                             "thresholds": ["Hyperspectral", "Multispectral"],
                             "scores": [1, 0.5]
+                        },
+                        {
+                            "requirement_type": "capability",
+                            "attribute": "instrument",
+                            "valid_values": ["VNIR", "TIR"]
                         }
                     ],
                     "reobservation_strategy" : "linear_increase",
-                    "valid_instruments" : [
-                        "VNIR",
-                        "TIR"
-                    ],
                     "coobservation_strategy" : "no_change",
                     "synergistic_parameters" : [
                         "Water temperature",

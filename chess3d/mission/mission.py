@@ -57,3 +57,9 @@ class Mission:
     # TODO match geophysical event to objective
 
     # TODO event task from objective and events
+
+    # Include Rel_{jk} for mapping tasks to objectives in the definition or in the evaluation of tasks
+
+    # @abstractmethod
+    # def calc_measurement_performance(self, measurement: dict) -> float:
+    #     """Calculate the performance of the measurement based on this objective's requirements."""

@@ -6,15 +6,6 @@ from chess3d.utils import print_welcome
 
 
 class TestGeophysicalEvent(unittest.TestCase):
-    """
-    O4: Observe events “Algal Blooms” (w=10)
-        Main parameter: Chl-A, MR = O1
-        DA: See slides (Chl-A from VNIR radiances using formula, then compare to historical values for that location)
-        CA: Severity proportional to lake area (as in paper) 
-        CO: Secondary params = Water temperature and water level, MR as in O2 and O3
-        RO: From Ben’s paper, rewards for subsequent observations or something simple like U(n) first increases to guarantee some reobs but then decreases exponentially beyond a certain #obs (e.g., 3)
-
-    """
     def test_initialization_valid(self):
         event = GeophysicalEvent('Algal Bloom', 
                                  [
@@ -100,7 +91,7 @@ class TestGeophysicalEvent(unittest.TestCase):
 
 if __name__ == '__main__':
     # terminal welcome message
-    print_welcome('Mission Definitions Test')
-    
+    print_welcome('Geophysical Event Definition Test')
+
     # run tests
     unittest.main()

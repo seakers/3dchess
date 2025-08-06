@@ -7,9 +7,6 @@ from chess3d.mission.objectives import *
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
-
-
-
 class TestToySatCase(unittest.TestCase):
     def setUp(self) -> None:
         # terminal welcome message
@@ -541,7 +538,7 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
         self.assertTrue(isinstance(self.simulation, Simulation))
 
 
-    # def test_planner(self) -> None:
+    # def test_case(self) -> None:
     #     # execute mission
     #     self.simulation.execute()
 
@@ -549,3 +546,11 @@ class TestSingleSatNoEventsCase(unittest.TestCase):
     #     self.simulation.print_results()
 
     #     print('DONE')
+
+
+if __name__ == '__main__':
+    # terminal welcome message
+    print_welcome('Mission Test Case')
+    
+    # run tests
+    unittest.main()

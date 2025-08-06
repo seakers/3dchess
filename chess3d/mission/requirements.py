@@ -11,6 +11,7 @@ class MissionRequirement(ABC):
     CONTINUOUS = 'continuous'
     TEMPORAL = 'temporal'
     SPATIAL = 'spatial'
+    CAPABILITY = 'capability'
 
     def __init__(self, requirement_type : str, attribute: str, preference_function : callable, id : str = None):
         """
@@ -21,9 +22,14 @@ class MissionRequirement(ABC):
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
         - :`preference_function`: maps values of perforamnce to requirement satisfaction score in [0,1].        
         """
-        assert any([requirement_type == t for t in [self.CATEGORICAL, self.DISCRETE, self.CONTINUOUS, self.TEMPORAL, self.SPATIAL]]), \
-            f"Unknown requirement type: {requirement_type}"
 
+        # Validate inputs
+        assert any([requirement_type == t for t in [self.CATEGORICAL, self.DISCRETE, self.CONTINUOUS, self.TEMPORAL, self.SPATIAL, self.CAPABILITY]]), \
+            f"Unknown requirement type: {requirement_type}"
+        assert isinstance(attribute, str), "Attribute must be a string"
+        assert callable(preference_function), "Preference function must be callable"
+        
+        # Set attributes
         self.requirement_type = requirement_type
         self.attribute : str = attribute.lower()
         self.preference_function : callable = preference_function
@@ -66,25 +72,24 @@ class MissionRequirement(ABC):
     def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'MissionRequirement':
         """Create a measurement requirement from a dictionary."""
         requirement_type = dict.get("requirement_type")
-        attribute = dict.get("attribute")
-        thresholds = dict.get("thresholds", [])
-        scores = dict.get("scores", [])
-        id = dict.get("id")
 
         if requirement_type == MissionRequirement.CATEGORICAL:
-            return CategoricalRequirement(attribute, thresholds, scores, id)
+            return CategoricalRequirement.from_dict(dict)
 
         elif requirement_type == MissionRequirement.DISCRETE:
-            return DiscreteRequirement(attribute, thresholds, scores, id)
+            return DiscreteRequirement.from_dict(dict)
 
         elif requirement_type == MissionRequirement.CONTINUOUS:
-            return ContinuousRequirement(attribute, thresholds, scores, id)
+            return ContinuousRequirement.from_dict(dict)
 
         elif requirement_type == MissionRequirement.TEMPORAL:
             return TemporalRequirement.from_dict(dict)
         
         elif requirement_type == MissionRequirement.SPATIAL:
             return SpatialRequirement.from_dict(dict)
+        
+        elif requirement_type == MissionRequirement.CAPABILITY:
+            return CapabilityRequirement.from_dict(dict)
 
         raise ValueError(f"Unknown requirement type: {requirement_type}")
 
@@ -142,6 +147,23 @@ class CategoricalRequirement(MissionRequirement):
             "scores": self.scores
         })
         return d
+
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'CategoricalRequirement':
+        """Create a categorical requirement from a dictionary."""
+        # Validate Inputs
+        assert "attribute" in dict, "Attribute must be provided for categorical requirement"
+        assert "thresholds" in dict, "Thresholds must be provided for categorical requirement"
+        assert "scores" in dict, "Scores must be provided for categorical requirement"
+        
+        # Create and return the CategoricalRequirement
+        return cls(
+            attribute=dict["attribute"],
+            thresholds=dict["thresholds"],
+            scores=dict["scores"],
+            id=dict.get("id")
+        )
+
     
     def __repr__(self):
         return f"CategoricalRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
@@ -218,6 +240,21 @@ class DiscreteRequirement(MissionRequirement):
         })
         return d
     
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'DiscreteRequirement':
+        """Create a discrete requirement from a dictionary."""
+        # Validate Inputs
+        assert "attribute" in dict, "Attribute must be provided for discrete requirement"
+        assert "thresholds" in dict, "Thresholds must be provided for discrete requirement"
+        assert "scores" in dict, "Scores must be provided for discrete requirement"
+        # Create and return the DiscreteRequirement
+        return cls(
+            attribute=dict["attribute"],
+            thresholds=dict["thresholds"],
+            scores=dict["scores"],
+            id=dict.get("id")
+        )
+
     def __repr__(self):
         return f"DiscreteRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
@@ -280,8 +317,24 @@ class ContinuousRequirement(MissionRequirement):
         })
         return d
 
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ContinuousRequirement':
+        """Create a continuous requirement from a dictionary."""
+        # Validate Inputs
+        assert "attribute" in dict, "Attribute must be provided for continuous requirement"
+        assert "thresholds" in dict, "Thresholds must be provided for continuous requirement"
+        assert "scores" in dict, "Scores must be provided for continuous requirement"
+        
+        # Create and return the ContinuousRequirement
+        return cls(
+            attribute=dict["attribute"],
+            thresholds=dict["thresholds"],
+            scores=dict["scores"],
+            id=dict.get("id")
+        )
+
     def __repr__(self):
-        return f"ContinousRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
+        return f"ContinuousRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
 class TemporalRequirement(MissionRequirement):
     DURATION = 'measurement_duration'
@@ -410,40 +463,27 @@ class ReobservationStrategyRequirement(TemporalRequirement):
     @classmethod
     def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ReobservationStrategyRequirement':
         """Create a reobservation strategy requirement from a dictionary."""
+        assert "strategy" in dict, "Strategy must be provided for reobservation strategy requirement"
         strategy = dict.get("strategy")
-        id = dict.get("id")
         
         if strategy == cls.NO_CHANGE:
-            return NoChangeReobservationStrategy(id)
+            return NoChangeReobservationStrategy.from_dict(dict)
         elif strategy == cls.EXP_SATURATION:
-            assert "saturation_rate" in dict, "Saturation rate must be provided for `exp_saturation` strategy"
-            saturation_rate = dict.get("saturation_rate")
-            return ExpSaturationReobservationsStrategy(saturation_rate, id)
+            return ExpSaturationReobservationsStrategy.from_dict(dict)
         elif strategy == cls.LOG_THRESHOLD:
-            assert "threshold" in dict and "slope" in dict, "Threshold and slope must be provided for `log_threshold` strategy"
-            threshold = dict.get("threshold")
-            slope = dict.get("slope")
-            return LogThresholdReobservationsStrategy(threshold, slope, id)
+            return LogThresholdReobservationsStrategy.from_dict(dict)
         elif strategy == cls.EXP_DECAY:
-            assert "decay_rate" in dict, "Decay rate must be provided for `exp_decay` strategy"
-            decay_rate = dict.get("decay_rate")
-            return ExpDecayReobservationStrategy(decay_rate, id)
+            return ExpDecayReobservationStrategy.from_dict(dict)
         # elif strategy == cls.STEP_THRESHOLD:
         #     TODO
-        #     return StepThresholdReobservationsStrategy(id)
+        #     return StepThresholdReobservationsStrategy.from_dict(dict)
         # elif strategy == cls.LINEAR_THRESHOLD:
         #     TODO
-        #     return LinearThresholdReobservationsStrategy(id)
+        #     return LinearThresholdReobservationsStrategy.from_dict(dict)
         elif strategy == cls.GAUSSIAN_THRESHOLD:
-            assert "n_target" in dict and "stddev" in dict, "N_target and standard deviation must be provided for `gaussian_threshold` strategy"
-            n_target = dict.get("n_target")
-            stddev = dict.get("stddev")
-            return GaussianThresholdReobservationsStrategy(n_target, stddev, id)
+            return GaussianThresholdReobservationsStrategy.from_dict(dict)
         elif strategy == cls.TRIANGLE_THRESHOLD:
-            assert "n_target" in dict and "width" in dict, "N_target and triangle width must be provided for `triangle_threshold` strategy"
-            n_target = dict.get("n_target")
-            width = dict.get("width")
-            return TriangleThresholdReobservationsStrategy(n_target, width, id)
+            return TriangleThresholdReobservationsStrategy.from_dict(dict)
 
         raise ValueError(f"Unknown reobservation strategy: {strategy}")
     
@@ -460,6 +500,18 @@ class NoChangeReobservationStrategy(ReobservationStrategyRequirement):
     
     def copy(self):
         return NoChangeReobservationStrategy(self.id)
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'NoChangeReobservationStrategy':
+        """Create a no change reobservation strategy from a dictionary."""
+        # Validate Inputs
+        assert "strategy" in dict and dict["strategy"] == cls.NO_CHANGE, "Strategy must be 'no_change' for NoChangeReobservationStrategy"
+        
+        # Get the ID if provided
+        id = dict.get("id",None)
+
+        # Create and return the NoChangeReobservationStrategy
+        return cls(id=id)
 
 class ExpSaturationReobservationsStrategy(ReobservationStrategyRequirement):
     def __init__(self, saturation_rate : float, id = None, **_):
@@ -487,6 +539,20 @@ class ExpSaturationReobservationsStrategy(ReobservationStrategyRequirement):
             "saturation_rate": self.saturation_rate
         })
         return d
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ExpSaturationReobservationsStrategy':
+        """Create an exponential saturation reobservation strategy from a dictionary."""
+        # Validate Inputs
+        assert "strategy" in dict and dict["strategy"] == cls.EXP_SATURATION, "Strategy must be 'exp_saturation' for ExpSaturationReobservationsStrategy"
+        assert "saturation_rate" in dict, "Saturation rate must be provided for ExpSaturationReobservationsStrategy"
+        
+        # Get the saturation rate and ID if provided
+        saturation_rate = dict.get("saturation_rate")
+        id = dict.get("id", None)
+        
+        # Create and return the ExpSaturationReobservationsStrategy
+        return cls(saturation_rate=saturation_rate, id=id)
     
     def __repr__(self):
         return f"ReobservationStrategy(strategy={self.strategy}, saturation_rate={self.saturation_rate}, id={self.id})"
@@ -522,6 +588,22 @@ class LogThresholdReobservationsStrategy(ReobservationStrategyRequirement):
         })
         return d
     
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'LogThresholdReobservationsStrategy':
+        """Create a log threshold reobservation strategy from a dictionary."""
+        # Validate Inputs
+        assert "strategy" in dict and dict["strategy"] == cls.LOG_THRESHOLD, "Strategy must be 'log_threshold' for LogThresholdReobservationsStrategy"
+        assert "threshold" in dict, "Threshold must be provided for LogThresholdReobservationsStrategy"
+        assert "slope" in dict, "Slope must be provided for LogThresholdReobservationsStrategy"
+        
+        # Get the threshold, slope and ID if provided
+        threshold = dict.get("threshold")
+        slope = dict.get("slope")
+        id = dict.get("id", None)
+        
+        # Create and return the LogThresholdReobservationsStrategy
+        return cls(threshold=threshold, slope=slope, id=id)
+    
     def __repr__(self):
         return f"ReobservationStrategy(strategy={self.strategy}, threshold={self.threshold}, slope={self.slope}, id={self.id})"
 
@@ -552,6 +634,20 @@ class ExpDecayReobservationStrategy(ReobservationStrategyRequirement):
         })
         return d
     
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ExpDecayReobservationStrategy':
+        """Create an exponential decay reobservation strategy from a dictionary."""
+        # Validate Inputs
+        assert "strategy" in dict and dict["strategy"] == cls.EXP_DECAY, "Strategy must be 'exp_decay' for ExpDecayReobservationStrategy"
+        assert "decay_rate" in dict, "Decay rate must be provided for ExpDecayReobservationStrategy"
+        
+        # Get the decay rate and ID if provided
+        decay_rate = dict.get("decay_rate")
+        id = dict.get("id", None)
+        
+        # Create and return the ExpDecayReobservationStrategy
+        return cls(decay_rate=decay_rate, id=id)
+
     def __repr__(self):
         return f"ReobservationStrategy(strategy={self.strategy}, decay_rate={self.decay_rate}, id={self.id})"
 
@@ -585,6 +681,22 @@ class GaussianThresholdReobservationsStrategy(ReobservationStrategyRequirement):
         })
         return d
     
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'GaussianThresholdReobservationsStrategy':
+        """Create a Gaussian threshold reobservation strategy from a dictionary."""
+        # Validate Inputs
+        assert "strategy" in dict and dict["strategy"] == cls.GAUSSIAN_THRESHOLD, "Strategy must be 'gaussian_threshold' for GaussianThresholdReobservationsStrategy"
+        assert "n_target" in dict, "Target number of observations must be provided for GaussianThresholdReobservationsStrategy"
+        assert "stddev" in dict, "Standard deviation must be provided for GaussianThresholdReobservationsStrategy"
+        
+        # Get the target number of observations, standard deviation and ID if provided
+        n_target = dict.get("n_target")
+        stddev = dict.get("stddev")
+        id = dict.get("id", None)
+        
+        # Create and return the GaussianThresholdReobservationsStrategy
+        return cls(n_target=n_target, stddev=stddev, id=id)
+    
     def __repr__(self):
         return f"ReobservationStrategy(strategy={self.strategy}, mean={self.n_target}, stddev={self.stddev}, id={self.id})"
 
@@ -617,6 +729,22 @@ class TriangleThresholdReobservationsStrategy(ReobservationStrategyRequirement):
         })
         return d
     
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'TriangleThresholdReobservationsStrategy':
+        """Create a triangle threshold reobservation strategy from a dictionary."""
+        # Validate Inputs
+        assert "strategy" in dict and dict["strategy"] == cls.TRIANGLE_THRESHOLD, "Strategy must be 'triangle_threshold' for TriangleThresholdReobservationsStrategy"
+        assert "n_target" in dict, "Target number of observations must be provided for TriangleThresholdReobservationsStrategy"
+        assert "width" in dict, "Width must be provided for TriangleThresholdReobservationsStrategy"
+        
+        # Get the target number of observations, width and ID if provided
+        n_target = dict.get("n_target")
+        width = dict.get("width")
+        id = dict.get("id", None)
+        
+        # Create and return the TriangleThresholdReobservationsStrategy
+        return cls(n_target=n_target, width=width, id=id)
+
     def __repr__(self):
         return f"ReobservationStrategy(strategy={self.strategy}, n_target={self.n_target}, width={self.width}, id={self.id})"
 
@@ -625,16 +753,16 @@ class SpatialRequirement(MissionRequirement):
     LIST = 'list'
     GRID = 'grid'
 
-    def __init__(self, target_type : str, distance_threshold: float = 1, id = None):
+    def __init__(self, location_type : str, distance_threshold: float = 1, id = None):
         """
         ### Spatial Mission Requirement
-        Initialize a spatial requirement with a target type and a distance threshold.
-        - :`target_type`: The type of target location (e.g., "point", "list", "grid").
+        Initialize a spatial requirement with a location type and a distance threshold.
+        - :`location_type`: The type of target location (e.g., "point", "list", "grid").
         - :`distance_threshold`: The distance threshold for the requirement in [km].
         """
         super().__init__(self.SPATIAL, 'location', self._build_spatial_preference_function(distance_threshold), id)
-        assert target_type in [self.POINT, self.LIST, self.GRID], f"Invalid target type: {target_type}. Must be one of {self.POINT} or {self.GRID}."
-        self.target_type = target_type
+        assert location_type in [self.POINT, self.LIST, self.GRID], f"Invalid location type: {location_type}. Must be one of {self.POINT}, {self.LIST}, or {self.GRID}."
+        self.location_type = location_type
         self.distance_threshold = distance_threshold
 
     @abstractmethod
@@ -665,7 +793,7 @@ class SpatialRequirement(MissionRequirement):
     def to_dict(self):
         d = super().to_dict()
         d.update({
-            "target_type": self.target_type,
+            "location_type": self.location_type,
             "distance_threshold": self.distance_threshold
         })
         return d
@@ -673,26 +801,19 @@ class SpatialRequirement(MissionRequirement):
     @classmethod
     def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'SpatialRequirement':
         """Create a spatial requirement from a dictionary."""
-        target_type = dict.get("target_type")
-        id = dict.get("id")
+        assert "location_type" in dict, "Location type must be provided for spatial requirement"
+        location_type = dict.get("location_type")
 
-        if target_type == cls.POINT:
-            target = dict.get("target")
-            distance_threshold = dict.get("distance_threshold", 1.0)
-            return PointTargetSpatialRequirement(target, distance_threshold, id)
-        
-        elif target_type == cls.LIST:
-            targets = dict.get("targets", [])
-            distance_threshold = dict.get("distance_threshold", 1.0)
-            return TargetListSpatialRequirement(targets, distance_threshold, id)
-        
-        elif target_type == cls.GRID:
-            grid_name = dict.get("grid_name")
-            grid_index = dict.get("grid_index")
-            grid_size = dict.get("grid_size")
-            return GridTargetSpatialRequirement(grid_name, grid_index, grid_size, id)
+        if location_type == cls.POINT:
+            return PointTargetSpatialRequirement.from_dict(dict)
 
-        raise ValueError(f"Unknown spatial requirement type: {target_type}")
+        elif location_type == cls.LIST:
+            return TargetListSpatialRequirement.from_dict(dict)
+        
+        elif location_type == cls.GRID:
+            return GridTargetSpatialRequirement.from_dict(dict)
+
+        raise ValueError(f"Unknown spatial requirement type: {location_type}")
     
 class PointTargetSpatialRequirement(SpatialRequirement):
     def __init__(self, target: Tuple[float, float, int, int], distance_threshold: float = 1.0, id: str = None, **kwargs):
@@ -737,6 +858,23 @@ class PointTargetSpatialRequirement(SpatialRequirement):
         })
         return d
     
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'PointTargetSpatialRequirement':
+        """Create a point target spatial requirement from a dictionary."""
+        
+        # Validate Inputs
+        assert "target" in dict, "Target must be provided for point target spatial requirement"
+        target = dict.get("target")
+        
+        # Validate target
+        assert isinstance(target, (tuple, list)) and len(target) == 4, \
+            "Target must be a tuple or list of length 4 (lat, lon, grid index, gp index)"
+        target = tuple(target)
+        distance_threshold = dict.get("distance_threshold", 1.0)
+
+        # Return the PointTargetSpatialRequirement instance
+        return cls(target=target, distance_threshold=distance_threshold, id=dict.get("id", None))
+
     def __repr__(self):
         return f"PointTargetSpatialRequirement(target={self.target}, distance_threshold={self.distance_threshold}, id={self.id})"
 
@@ -800,11 +938,28 @@ class TargetListSpatialRequirement(SpatialRequirement):
         })
         return d
     
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'TargetListSpatialRequirement':
+        """Create a target list spatial requirement from a dictionary."""
+        # Validate Inputs
+        assert "targets" in dict, "Targets must be provided for target list spatial requirement"
+        targets = dict.get("targets")
+        
+        # Validate targets
+        assert isinstance(targets, list) and len(targets) > 0, "Targets must be a non-empty list"
+        assert all(isinstance(t, (tuple, list)) and len(t) == 4 for t in targets), \
+            "Each target must be a tuple/list of (lat, lon, grid index, gp index)"
+        
+        distance_threshold = dict.get("distance_threshold", 1.0)
+
+        # Return the TargetListSpatialRequirement instance
+        return cls(targets=[tuple(t) for t in targets], distance_threshold=distance_threshold, id=dict.get("id", None))
+    
     def __repr__(self):
-        return f"SpatialRequirement(type={self.target_type},targets={self.targets}, distance_threshold={self.distance_threshold}, id={self.id})"
+        return f"SpatialRequirement(type={self.location_type},targets={self.targets}, distance_threshold={self.distance_threshold}, id={self.id})"
 
 class GridTargetSpatialRequirement(SpatialRequirement):
-    def __init__(self, grid_name: str, grid_index: int, grid_size : int, id: str = None, **kwargs):
+    def __init__(self, grid_name: str, grid_index: int, grid_size : int = None, id: str = None, **kwargs):
         """
         ### Grid Target Spatial Requirement
         Initialize a grid target spatial requirement with a grid name, grid index, and grid size.
@@ -817,12 +972,12 @@ class GridTargetSpatialRequirement(SpatialRequirement):
         # Validate inputs
         assert isinstance(grid_name, str), "Grid name must be a string"
         assert isinstance(grid_index, int) and grid_index >= 0, "Grid index must be a non-negative integer"
-        assert isinstance(grid_size, (int, float)) and grid_size > 0, "Grid size must be a positive number"
+        assert grid_size is None or (isinstance(grid_size, (int, float)) and grid_size > 0), "Grid size must be a positive number"
 
         # Set attributes
         self.grid_name = grid_name
         self.grid_index = grid_index
-        self.grid_size = grid_size
+        self.grid_size = grid_size if grid_size is not None else np.Inf
 
     def _build_spatial_preference_function(self, _: float) -> Callable[[Any], float]:
         """Creates a spatial preference function that checks if a location is within the grid cell."""
@@ -862,5 +1017,91 @@ class GridTargetSpatialRequirement(SpatialRequirement):
         })
         return d
     
+    @classmethod    
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'GridTargetSpatialRequirement':
+        """Create a grid target spatial requirement from a dictionary."""
+        # Validate Inputs
+        assert "grid_name" in dict, "Grid name must be provided for grid target spatial requirement"
+        assert "grid_index" in dict, "Grid index must be provided for grid target spatial requirement"
+        assert "grid_size" in dict, "Grid size must be provided for grid target spatial requirement"
+        
+        grid_name = dict.get("grid_name")
+        grid_index = dict.get("grid_index")
+        grid_size = dict.get("grid_size", None)
+        id = dict.get("id", None)
+
+        # Return the GridTargetSpatialRequirement instance
+        return cls(
+            grid_name=grid_name,
+            grid_index=grid_index,
+            grid_size=grid_size,
+            id=id
+        )
+    
     def __repr__(self):
         return f"GridTargetSpatialRequirement(grid_name={self.grid_name}, grid_index={self.grid_index}, grid_size={self.grid_size}, id={self.id})"
+
+class CapabilityRequirement(MissionRequirement):
+    def __init__(self, attribute: str, valid_values: List[str], id: str = None, **kwargs):
+        """
+        ### Predefined Capability Requirement
+        Initialize a capability requirement with an attribute and a list of categories.
+        - :`attribute`: The attribute being evaluated (e.g., "sensor_type", "platform").
+        - :`valid_values`: A list of known values of the attribute that are considered to have a desired capability.
+
+        TODO replace these requirements with a more generic capability requirement that can be used for any attribute, a Knowledge Graph, or other forms of knowledge representation.
+        """
+
+        # Validate inputs
+        assert isinstance(valid_values, list), "Valid values must be a list"
+        assert valid_values, "Valid values must be a non-empty list"
+        if all(isinstance(cat, str) for cat in valid_values): valid_values = [cat.lower() for cat in valid_values]
+
+        # Initialize parent class
+        super().__init__(self.CAPABILITY, attribute, self._build_capability_preference_function(valid_values), id)
+        
+        # set attributes
+        self.valid_values = valid_values
+
+    def _build_capability_preference_function(self, valid_values: list) -> callable:
+        """Creates a capability preference function."""
+        def preference(value: str) -> float:
+            # if the value is a string, convert it to lowercase
+            value = value.lower() if isinstance(value, str) else value
+            
+            # only return 1.0 if the value is in the categories, else 0.0
+            return 1.0 if value in valid_values else 0.0
+        
+        return preference
+    
+    def copy(self) -> 'MissionRequirement':
+        """Create a copy of the measurement requirement."""
+        return CapabilityRequirement(
+            attribute=self.attribute,
+            valid_values=self.valid_values,
+            id=self.id
+        )
+    
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({
+            "valid_values": self.valid_values
+        })
+        return d
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'CapabilityRequirement':
+        """Create a capability requirement from a dictionary."""
+        # Validate inputs
+        assert "attribute" in dict, "Attribute must be provided for capability requirement"
+        assert "valid_values" in dict, "Valid values must be provided for capability requirement"
+
+        # Create and return the CapabilityRequirement
+        return cls(
+            attribute=dict["attribute"],
+            valid_values=dict["valid_values"],
+            id=dict.get("id", None)
+        )
+    
+    def __repr__(self):
+        return f"CapabilityRequirement({self.attribute}, valid_values={self.valid_values}, id={self.id})"

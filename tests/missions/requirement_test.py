@@ -14,6 +14,8 @@ class TestRequirements(unittest.TestCase):
         }
         self.assertRaises(ValueError, MissionRequirement.from_dict, bad_dict)
 
+
+class TestCategoricalRequirements(unittest.TestCase):
     # Categorical Requirements
     def test_categorical_requirement_valid(self):
         thresholds = ["low", "medium", "high"]
@@ -39,6 +41,8 @@ class TestRequirements(unittest.TestCase):
         self.assertIsInstance(reconstructed, CategoricalRequirement)
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
+
+class TestDiscreteRequirements(unittest.TestCase):
     # Discrete Value Requirements
     def test_discrete_requirement_valid(self):
         increasing_req = DiscreteRequirement("test", 
@@ -72,6 +76,8 @@ class TestRequirements(unittest.TestCase):
         self.assertIsInstance(reconstructed, DiscreteRequirement)
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
+
+class TestContinousRequirements(unittest.TestCase):
     # Continuous Value Requirements
     def test_continuous_requirement_valid(self):
         req = ContinuousRequirement("temp", [10, 20, 30], [1.0, 0.5, 0.0])
@@ -91,8 +97,8 @@ class TestRequirements(unittest.TestCase):
         self.assertIsInstance(reconstructed, ContinuousRequirement)
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
+class TestTemporalRequirements(unittest.TestCase):
     # Temporal Requirements
-    
     def test_measurement_duration_requirement(self):
         req = MeasurementDurationRequirement([10800, 7200, 3600], 
                                              [  1.0,  0.5,  0.1])
@@ -254,6 +260,7 @@ class TestRequirements(unittest.TestCase):
         self.assertIsInstance(reconstructed, TriangleThresholdReobservationsStrategy)
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
+class TestSpatialRequirements(unittest.TestCase):
     # Spatial Requirements
     ## Point Target Spatial Requirement
     def test_point_target_spatial_requirement(self):
@@ -262,7 +269,7 @@ class TestRequirements(unittest.TestCase):
                                              distance_threshold=0.1)
         self.assertTrue(isinstance(req, PointTargetSpatialRequirement))
         self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
-        self.assertEqual(req.target_type, SpatialRequirement.POINT)
+        self.assertEqual(req.location_type, SpatialRequirement.POINT)
         self.assertEqual(req.target, target)
         self.assertEqual(req.distance_threshold, 0.1)
     def test_point_target_spatial_requirement_evaluation(self):
@@ -293,7 +300,7 @@ class TestRequirements(unittest.TestCase):
         
         self.assertTrue(isinstance(req, TargetListSpatialRequirement))
         self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
-        self.assertEqual(req.target_type, SpatialRequirement.LIST)
+        self.assertEqual(req.location_type, SpatialRequirement.LIST)
         self.assertTrue(all([target in req.targets for target in targets]))
         self.assertEqual(req.distance_threshold, 0.1)
     def test_target_list_spatial_requirement_evaluation(self):
@@ -326,7 +333,7 @@ class TestRequirements(unittest.TestCase):
 
         self.assertIsInstance(req, GridTargetSpatialRequirement)
         self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
-        self.assertEqual(req.target_type, SpatialRequirement.GRID)
+        self.assertEqual(req.location_type, SpatialRequirement.GRID)
         self.assertEqual(req.grid_name, grid_name)
         self.assertEqual(req.grid_index, grid_index)
         self.assertEqual(req.grid_size, grid_size)
@@ -384,10 +391,37 @@ class TestRequirements(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 req.calc_preference_value((0.0, 0.0, grid_index, grid_size))  # gp index equal to grid size
 
+class TestCapabilityRequirements(unittest.TestCase):
+    def test_capability_requirement_valid(self):
+        req = CapabilityRequirement("instrument", ["optical", "radar"])
+        self.assertEqual(req.attribute, "instrument")
+        self.assertTrue(all(val in req.valid_values for val in ["optical", "radar"]))
+        self.assertEqual(req.calc_preference_value("optical"), 1.0)
+        self.assertEqual(req.calc_preference_value("radar"), 1.0)
+        self.assertEqual(req.calc_preference_value("thermal"), 0.0)
+    def test_capability_requirement_invalid(self):
+        # Test with an empty valid values list
+        with self.assertRaises(AssertionError):
+            CapabilityRequirement("instrument", [])
+        # Test with a non-list valid values
+        with self.assertRaises(AssertionError):
+            CapabilityRequirement("instrument", "optical")
+    def test_capability_requirement_copy(self):
+        req = CapabilityRequirement("sensor_type", ["optical", "radar"])
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_capability_requirement_to_from_dict(self):
+        original = CapabilityRequirement("sensor_type", ["optical", "radar"])
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, CapabilityRequirement)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+    
 
 if __name__ == '__main__':
     # terminal welcome message
-    print_welcome('Mission Definitions Test')
+    print_welcome('Requirement Definition Test')
     
     # run tests
     unittest.main()
