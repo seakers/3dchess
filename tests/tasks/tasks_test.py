@@ -1,7 +1,6 @@
 import unittest
 
 from chess3d.agents.planning.tasks import *
-# from chess3d.mission.events import GeophysicalEvent
 from chess3d.mission.mission import *
 from chess3d.mission.requirements import *
 from chess3d.mission.objectives import *

@@ -17,18 +17,15 @@ class Mission:
         self.objectives : list[MissionObjective] = objectives
         self.normalizing_parameter : float = normalizing_parameter
 
-    # def calc_measurement_performance(self, measurements: dict, objectives : list) -> float:
-    #     """Evaluate the performance of the mission based on the measurements."""
-    #     # Sum weighted objective scores across all objectives
-    #     default_performance = sum([obj.weight * obj.calc_requirement_satisfaction(measurements)
-    #                                for obj in objectives
-    #                                if not isinstance(obj, DefaultMissionObjective)])
-
-    #     event_performance = sum([obj.weight * obj.calc_requirement_satisfaction(measurements)
-    #                              for obj in objectives
-    #                              if isinstance(obj, EventDrivenObjective)])
-        
-    #     return default_performance + event_performance
+    def calc_specific_observation_task_utility(self, task: SpecificObservationTask, measurement: dict, prev_state: SimulationAgentState) -> float:
+        """Calculate the utility of a specific observation task based on the mission's objectives and the measurement."""
+        assert isinstance(task, SpecificObservationTask), "Task must be an instance of `SpecificObservationTask`"
+        assert isinstance(measurement, dict), "Measurement must be a dictionary"
+        assert isinstance(prev_state, SimulationAgentState), "Previous state must be an instance of `SimulationAgentState`"
+    
+        # Calculate the utility based on the task's value and cost
+        return sum([self.calc_task_utility(gen_task, measurement, prev_state) 
+                    for gen_task in task.parent_tasks])
 
     def calc_task_utility(self, task : GenericObservationTask, measurement: dict, prev_state : SimulationAgentState) -> float:
         """Calculate the utility of a task based on the mission's objectives and the measurement."""
@@ -117,10 +114,6 @@ class Mission:
         return self.__dict__
 
 
+    # TODO match geophysical event to objective
+
     # TODO event task from objective and events
-
-    # Include Rel_{jk} for mapping tasks to objectives in the definition or in the evaluation of tasks
-
-    # @abstractmethod
-    # def calc_measurement_performance(self, measurement: dict) -> float:
-    #     """Calculate the performance of the measurement based on this objective's requirements."""
