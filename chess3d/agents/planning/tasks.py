@@ -1,9 +1,7 @@
 from abc import ABC, abstractmethod
-import numpy as np
-import pandas as pd
-from chess3d.agents.actions import ObservationAction
+
 from chess3d.mission.events import GeophysicalEvent
-from chess3d.orbitdata import OrbitData
+from chess3d.mission.objectives import MissionObjective
 from chess3d.mission.mission import *
 from chess3d.utils import Interval
 
@@ -224,12 +222,13 @@ class EventObservationTask(GenericObservationTask):
             id=task_dict.get('id',None),
         )
         
-# TODO: Update specific observation tasks
+        
 class SpecificObservationTask:
     def __init__(self,
                  parent_tasks : Union[GenericObservationTask, set],
                  instrument_name : str, 
                  accessibility : Interval,
+                 duration_requirements : Interval,
                  slew_angles : Interval,
                  id : str = None,
                  ):
@@ -244,6 +243,8 @@ class SpecificObservationTask:
         parent_tasks : set[GenericObservationTask]
 
         assert isinstance(accessibility, Interval), "Accessibility must be an Interval."
+        assert isinstance(duration_requirements, Interval), "Duration requirements must be an Interval."
+        assert duration_requirements.left >= 0.0, "Start of duration requirements must be non-negative."
         assert isinstance(slew_angles, Interval), "Slew angles must be an Interval."
         assert all([accessibility.overlaps(parent_task.availability) for parent_task in parent_tasks]), "Accesibility interval must be within the parent tasks' availability interval."
 
@@ -251,10 +252,11 @@ class SpecificObservationTask:
         self.parent_tasks : set[GenericObservationTask] = parent_tasks
         self.instrument_name : str = instrument_name
         self.accessibility : Interval = accessibility
+        self.duration_requirements : Interval = duration_requirements
         self.slew_angles : Interval = slew_angles
         self.id : str = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
     
-    def can_combine(self, other_task : object) -> bool:
+    def can_combine(self, other_task : object, extend : bool = True) -> bool:
         """ Check if two tasks can be combined based on their time and slew angle. """
         
         # Check if the other task is an instance of ObservationTask
@@ -265,39 +267,16 @@ class SpecificObservationTask:
         if self.instrument_name != other_task.instrument_name:
             return False
         
-        # Check if the parent tasks are the same
-        parent_task_types = {type(task) for task in self.parent_tasks}
-        assert len(parent_task_types) == 1, "All parent tasks must be of the same type."
-        parent_task_type = parent_task_types.pop()
-        if any([type(task) != parent_task_type for task in other_task.parent_tasks]):
-            return False
-
-        # Check if parent tasks have the same valid instruments
-        my_valid_instruments = {instrument_name 
-                                for task in self.parent_tasks
-                                for instrument_name in task.objective.valid_instruments}
-        their_valid_instruments = {instrument_name 
-                                for task in other_task.parent_tasks
-                                for instrument_name in task.objective.valid_instruments}
-        if my_valid_instruments != their_valid_instruments: 
-            return False
-
         # Check if the availability time intervals overlap
-        accessibility_union : Interval = self.accessibility.union(other_task.accessibility, extend=True)
-        # accessibility_union : Interval = self.accessibility.union(other_task.accessibility)
+        accessibility_overlap : Interval = self.accessibility.union(other_task.accessibility, extend)
         
-        if not accessibility_union.is_empty():
-            # Check if the time intervals are within the maximum duration
-            max_parent_duration_self = min([task.duration_requirements.right for task in self.parent_tasks])
-            max_parent_duration_other = min([task.duration_requirements.right for task in other_task.parent_tasks])
-            
-            if accessibility_union.span() > min(max_parent_duration_self, max_parent_duration_other):
-                return False
-
         # Check if the slew angles overlap
         slew_angle_overlap : Interval = self.slew_angles.intersection(other_task.slew_angles) 
 
-        return not (accessibility_union.is_empty() or slew_angle_overlap.is_empty())
+        # If both overlaps are not empty and the accessibility overlap is within the duration requirements, the tasks can be combined
+        return (    not accessibility_overlap.is_empty() 
+                and not slew_angle_overlap.is_empty() 
+                and accessibility_overlap.span() <= min(self.duration_requirements.right, other_task.duration_requirements.right))
 
     def merge(self, other_task : object) -> object:
         try:
@@ -308,23 +287,22 @@ class SpecificObservationTask:
             # Combine the time intervals and slew angles
             combined_time_interval : Interval = self.accessibility.union(other_task.accessibility, extend=True)
             combined_slew_angles : Interval  = self.slew_angles.intersection(other_task.slew_angles)
+            combined_duration_reqs : Interval = self.duration_requirements.intersection(other_task.duration_requirements)
                     
             # Update the task attributes
             parent_tasks = {task for task in self.parent_tasks}
             parent_tasks.update({task for task in other_task.parent_tasks})
             accessibility = combined_time_interval
+            duration_requirements = combined_duration_reqs
             slew_angles = combined_slew_angles
             
-            return SpecificObservationTask(parent_tasks, self.instrument_name, accessibility, slew_angles, self.id)
+            return SpecificObservationTask(parent_tasks, self.instrument_name, accessibility, duration_requirements, slew_angles, self.id)
+        
         except AssertionError as e:
-            x = 1
             self.can_combine(other_task)
             raise e
     
     def __repr__(self):
-        return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
-    
-    def __str__(self):
         return f"ObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
     
     def __hash__(self):
