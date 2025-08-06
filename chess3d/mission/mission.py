@@ -93,6 +93,13 @@ class Mission:
         # TODO event task from objective and events
         raise NotImplementedError("Task generation from event is not implemented yet")
 
+    def task_from_event(self, event: GeophysicalEvent) -> GenericObservationTask:
+        """Generate a task from a geophysical event."""
+        assert isinstance(event, GeophysicalEvent), "Event must be an instance of `GeophysicalEvent`"
+        
+        # TODO event task from objective and events
+        raise NotImplementedError("Task generation from event is not implemented yet")
+
     def __repr__(self):
         """String representation of the mission."""
         return f"Mission({self.name}, objectives={self.objectives})"
@@ -112,8 +119,3 @@ class Mission:
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the mission to a dictionary."""
         return self.__dict__
-
-
-    # TODO match geophysical event to objective
-
-    # TODO event task from objective and events
