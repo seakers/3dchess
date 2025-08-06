@@ -97,7 +97,7 @@ class Mission:
         """Generate a task from a geophysical event."""
         assert isinstance(event, GeophysicalEvent), "Event must be an instance of `GeophysicalEvent`"
         
-        # TODO event task from objective and events
+        # TODO event task from event and mission objectives
         raise NotImplementedError("Task generation from event is not implemented yet")
 
     def __repr__(self):
