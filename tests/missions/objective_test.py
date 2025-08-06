@@ -6,10 +6,6 @@ from chess3d.mission.requirements import *
 from chess3d.mission.objectives import *
 from chess3d.utils import print_welcome
 
-
-class TestMission(unittest.TestCase):
-    ...
-
 if __name__ == '__main__':
     # terminal welcome message
     print_welcome('Mission Definitions Test')

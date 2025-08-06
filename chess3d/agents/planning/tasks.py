@@ -15,14 +15,14 @@ class GenericObservationTask(ABC):
     def __init__(self,
                  task_type : str,
                  parameter : str,
-                 locations: list,
+                 location: list,
                  availability: Interval,
                  id : str = None,
                 ):
         """
         Generic observation task to be scheduled by an agent.
         - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
-        - :`locations`: A list of locations to be observed, each represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
+        - :`location`: Location or list of locations to be observed, each represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
         - :`availability`: The time interval during which the task is available.
         - :`reward`: The reward for completing the task.
         - :`relevant_objective`: The relevant mission objective associated with the task by the agent who initialized it.
@@ -34,16 +34,16 @@ class GenericObservationTask(ABC):
         assert isinstance(task_type, str), "Task type must be a string."
         assert task_type in [self.DEFAULT, self.EVENT], "Task type must be either 'default_mission_task' or 'event_driven_task'."
         assert isinstance(parameter, str), "Parameter must be a string."
-        assert isinstance(locations, list), "Locations must be a list."
-        assert all([isinstance(location, tuple) for location in locations]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
-        assert all([len(location) == 4 for location in locations]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert isinstance(location, list), "Locations must be a list."
+        assert all([isinstance(location, tuple) for location in location]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert all([len(location) == 4 for location in location]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
         assert isinstance(availability, Interval), "Availability must be an Interval."
         assert availability.left >= 0.0, "Start of availability must be non-negative."
 
         # Set attributes
         self.task_type : str = task_type
         self.parameter : str = parameter
-        self.locations : list[tuple] = locations
+        self.location : list[tuple] = location
         self.availability : Interval = availability
         self.id : str = id if id is not None else self.generate_id()
 
@@ -67,7 +67,7 @@ class GenericObservationTask(ABC):
         return {
             "task_type": self.task_type,
             "parameter": self.parameter,
-            "locations": [location for location in self.locations],
+            "location": [loc for loc in self.location],
             "availability": self.availability.to_dict(),
             "id": self.id,
         }
@@ -112,41 +112,37 @@ class DefaultMissionTask(GenericObservationTask):
         assert all([isinstance(coordinate, float) or isinstance(coordinate, int) for coordinate in location]), \
             "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
 
-        # initialte default values
-        locations = [location]
-        availability = Interval(0.0, mission_duration)
-
         # initialte parent class
-        super().__init__(GenericObservationTask.DEFAULT, parameter, locations, availability, id)
+        super().__init__(GenericObservationTask.DEFAULT, parameter, [location], Interval(0.0, mission_duration), id)
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"GenericObservation_{self.parameter}_{self.locations[0][2]}_{self.locations[0][3]}"
+        return f"GenericObservation_{self.parameter}_{self.location[0][2]}_{self.location[0][3]}"
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
         return DefaultMissionTask(
             self.parameter,
-            self.locations[0],
+            self.location[0],
             self.availability.right,
             self.id,
         )
     
     def __repr__(self):
-        return f"DefaultMissionTask(parameter={self.parameter}, locations={self.locations}, availability={self.availability}, id={self.id})"
+        return f"DefaultMissionTask(parameter={self.parameter}, location={self.location}, availability={self.availability}, id={self.id})"
 
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'DefaultMissionTask':
         """ Create a task from a dictionary. """
         assert 'task_type' in task_dict, "Task type must be specified in the dictionary."
         assert task_dict['task_type'] == GenericObservationTask.DEFAULT, "Task type must be 'default_mission_task'."
-        assert 'parameter' in task_dict, "Parameter must be specified in the dictionary."
-        assert 'locations' in task_dict, "Locations must be specified in the dictionary."
-        assert 'availability' in task_dict, "Availability must be specified in the dictionary."
+        assert 'parameter' in task_dict, "Task observation parameter must be specified in the dictionary."
+        assert 'location' in task_dict, "Task location must be specified in the dictionary."
+        assert 'availability' in task_dict, "Task availability must be specified in the dictionary."
 
         return cls(
             parameter=task_dict['parameter'],
-            location=task_dict['locations'][0],
+            location=task_dict['location'][0],
             mission_duration=task_dict['availability']['right'],
             id=task_dict.get('id',None),
         )
@@ -187,7 +183,7 @@ class EventObservationTask(GenericObservationTask):
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"EventObservationTask_{self.parameter}_{self.locations[0][2]}_{self.locations[0][3]}_EVENT-{self.event.id.split('-')[0]}"
+        return f"EventObservationTask_{self.parameter}_{self.location[0][2]}_{self.location[0][3]}_EVENT-{self.event.id.split('-')[0]}"
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
@@ -199,7 +195,7 @@ class EventObservationTask(GenericObservationTask):
         )
 
     def __repr__(self):
-        return f"EventObservationTask(parameter={self.parameter}, event={self.event}, locations={self.locations}, availability={self.availability}, id={self.id})"
+        return f"EventObservationTask(parameter={self.parameter}, event={self.event}, location={self.location}, availability={self.availability}, id={self.id})"
     
     def to_dict(self) -> dict:
         """ Convert the task to a dictionary. """
@@ -227,7 +223,7 @@ class EventObservationTask(GenericObservationTask):
             objective=objective,
             id=task_dict.get('id',None),
         )
-    
+        
 # TODO: Update specific observation tasks
 class SpecificObservationTask:
     def __init__(self,

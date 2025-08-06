@@ -69,7 +69,31 @@
             }
         },
         {
-            "name": "TEST MISSION GENERATION",
+            "name": "TEST REQUIREMENT DEFINITION",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/missions/requirement_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
+            "name": "TEST OBJECTIVE DEFINITION",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/missions/objective_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
+            "name": "TEST MISSION DEFINITION",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/missions/mission_test.py",
@@ -81,7 +105,7 @@
             }
         },
         {
-            "name": "TEST TASKS",
+            "name": "TEST TASKS DEFINITION",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/tasks/tasks_test.py",

@@ -55,3 +55,5 @@ class Mission:
         return self.__dict__
 
     # TODO match geophysical event to objective
+
+    # TODO event task from objective and events
