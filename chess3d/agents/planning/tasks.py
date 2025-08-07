@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import Union
+import uuid
 
 from chess3d.mission.events import GeophysicalEvent
 from chess3d.mission.objectives import MissionObjective
@@ -15,6 +17,7 @@ class GenericObservationTask(ABC):
                  parameter : str,
                  location: list,
                  availability: Interval,
+                 priority : float, 
                  id : str = None,
                 ):
         """
@@ -24,7 +27,7 @@ class GenericObservationTask(ABC):
         - :`availability`: The time interval during which the task is available.
         - :`reward`: The reward for completing the task.
         - :`relevant_objective`: The relevant mission objective associated with the task by the agent who initialized it.
-        - :`duration_requirements`: The duration requirements for the task.
+        - :`priority`: The priority of the task, which can be used to determine its importance relative to other tasks.
         - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
         """
 
@@ -37,12 +40,15 @@ class GenericObservationTask(ABC):
         assert all([len(location) == 4 for location in location]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
         assert isinstance(availability, Interval), "Availability must be an Interval."
         assert availability.left >= 0.0, "Start of availability must be non-negative."
+        assert isinstance(priority, (float, int)), "Priority must be a number."
+        assert priority >= 0, "Priority must be non-negative."
 
         # Set attributes
         self.task_type : str = task_type
         self.parameter : str = parameter
         self.location : list[tuple] = location
         self.availability : Interval = availability
+        self.priority : float = priority
         self.id : str = id if id is not None else self.generate_id()
 
     @abstractmethod
@@ -67,6 +73,7 @@ class GenericObservationTask(ABC):
             "parameter": self.parameter,
             "location": [loc for loc in self.location],
             "availability": self.availability.to_dict(),
+            "priority": self.priority,
             "id": self.id,
         }
     
@@ -93,6 +100,7 @@ class DefaultMissionTask(GenericObservationTask):
                  parameter : str,
                  location: list,
                  mission_duration : float,
+                 priority : float = 1.0,
                  id : str = None
                 ):
         """
@@ -101,6 +109,7 @@ class DefaultMissionTask(GenericObservationTask):
         - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
         - :`location`: The location to be observed, represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
         - :`mission_duration`: The duration of the mission in seconds.
+        - :`priority`: The priority of the task, which can be used to determine its importance relative to other tasks. Is 1 by default.
         - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
         """
 
@@ -111,11 +120,11 @@ class DefaultMissionTask(GenericObservationTask):
             "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
 
         # initialte parent class
-        super().__init__(GenericObservationTask.DEFAULT, parameter, [location], Interval(0.0, mission_duration), id)
+        super().__init__(GenericObservationTask.DEFAULT, parameter, [location], Interval(0.0, mission_duration), priority, id)
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"GenericObservation_{self.parameter}_{self.location[0][2]}_{self.location[0][3]}"
+        return f"GenericObservation_{self.parameter}_{self.priority}_{self.location[0][2]}_{self.location[0][3]}"
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
@@ -123,11 +132,12 @@ class DefaultMissionTask(GenericObservationTask):
             self.parameter,
             self.location[0],
             self.availability.right,
+            self.priority,
             self.id,
         )
     
     def __repr__(self):
-        return f"DefaultMissionTask(parameter={self.parameter}, location={self.location}, availability={self.availability}, id={self.id})"
+        return f"DefaultMissionTask(parameter={self.parameter}, priority={self.priority}, location={self.location}, availability={self.availability}, id={self.id})"
 
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'DefaultMissionTask':
@@ -142,13 +152,14 @@ class DefaultMissionTask(GenericObservationTask):
             parameter=task_dict['parameter'],
             location=task_dict['location'][0],
             mission_duration=task_dict['availability']['right'],
+            priority=task_dict.get('priority', 1.0),
             id=task_dict.get('id',None),
         )
 
 class EventObservationTask(GenericObservationTask):
     def __init__(self,  
                  parameter : str, 
-                 event : GeophysicalEvent,
+                 event : GeophysicalEvent = None,
                  objective : MissionObjective = None,
                  id = None
                  ):
@@ -162,26 +173,24 @@ class EventObservationTask(GenericObservationTask):
         """
 
         # Validate Inputs
-        assert isinstance(event, GeophysicalEvent), "Event must be a GeophysicalEvent."
-        assert isinstance(objective, MissionObjective) or objective is None, "Objective must be a MissionObjective."
+        assert isinstance(event, GeophysicalEvent) or event is None, "If specified, event must be a `GeophysicalEvent`."
+        assert isinstance(objective, MissionObjective) or objective is None, "If specified, objective must be a `MissionObjective`."
         if objective is not None: assert parameter == objective.parameter, "Target parameter must match the objective's parameter."
-
-        # Set attributes
-        self.event = event
-        self.severity = event.severity
-        self.objective = objective
 
         # Extract event attributes
         availability = Interval(event.t_start, event.t_start + event.d_exp)
         locations = [tuple(target) for target in event.location]
 
         # Initialize parent class
-        super().__init__(GenericObservationTask.EVENT, parameter, locations, availability, id)
+        super().__init__(GenericObservationTask.EVENT, parameter, locations, availability, event.severity, id)
 
+        # Set attributes
+        self.event : GeophysicalEvent = event
+        self.objective : MissionObjective = objective
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"EventObservationTask_{self.parameter}_{self.location[0][2]}_{self.location[0][3]}_EVENT-{self.event.id.split('-')[0]}"
+        return f"EventObservationTask_{self.parameter}_{self.priority}_{self.location[0][2]}_{self.location[0][3]}_EVENT-{self.event.id.split('-')[0]}"
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
@@ -193,13 +202,13 @@ class EventObservationTask(GenericObservationTask):
         )
 
     def __repr__(self):
-        return f"EventObservationTask(parameter={self.parameter}, event={self.event}, location={self.location}, availability={self.availability}, id={self.id})"
-    
+        return f"EventObservationTask(parameter={self.parameter}, priority={self.priority}, event={self.event}, location={self.location}, availability={self.availability}, id={self.id})"
+
     def to_dict(self) -> dict:
         """ Convert the task to a dictionary. """
         d = super().to_dict()
         d.update({
-            "event": self.event.to_dict(),
+            "event": self.event.to_dict() if self.event else None,
             "objective": self.objective.to_dict() if self.objective else None,
         })
         return d
@@ -212,7 +221,7 @@ class EventObservationTask(GenericObservationTask):
         assert 'parameter' in task_dict, "Parameter must be specified in the dictionary."
         assert 'event' in task_dict, "Event must be specified in the dictionary."
 
-        event = GeophysicalEvent.from_dict(task_dict['event'])
+        event = GeophysicalEvent.from_dict(task_dict['event']) if 'event' in task_dict else None
         objective = MissionObjective.from_dict(task_dict['objective']) if 'objective' in task_dict else None
         
         return cls(
@@ -220,9 +229,8 @@ class EventObservationTask(GenericObservationTask):
             event=event,
             objective=objective,
             id=task_dict.get('id',None),
-        )
-        
-        
+        )        
+
 class SpecificObservationTask:
     def __init__(self,
                  parent_tasks : Union[GenericObservationTask, set],

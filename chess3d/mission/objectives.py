@@ -3,6 +3,7 @@ from typing import Dict, Union
 import uuid
 import numpy as np
 
+from chess3d.mission.events import GeophysicalEvent
 from chess3d.mission.requirements import *
 
 
@@ -44,7 +45,7 @@ class MissionObjective(ABC):
         self.requirements : list[MissionRequirement] = [requirement for requirement in requirements]
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
-    def calc_requirement_satisfaction(self, measurement: dict) -> float:
+    def eval_measurement_performance(self, measurement: dict) -> float:
         """Calculate the satisfaction score for the objective based on the preference scores of the measurement to the objective's requirements."""
 
         # Validate measurement input
@@ -221,3 +222,13 @@ class EventDrivenObjective(MissionObjective):
                                     requirements=requirements,
                                     synergistic_parameters=obj_dict.get('synergistic_parameters', []),
                                     id=obj_dict.get('id', None))
+
+    def from_default_objective(self, event : GeophysicalEvent, default_objective: DefaultMissionObjective) -> 'EventDrivenObjective':
+        """Create an EventDrivenObjective from a default objective and an event."""
+        # TODO
+        raise NotImplementedError("This method is not implemented yet.")
+        # return EventDrivenObjective(event_type=event.event_type,
+        #                             parameter=default_objective.parameter,
+        #                             priority=default_objective.priority,
+        #                             requirements=default_objective.requirements,
+        #                             synergistic_parameters=default_objective.synergistic_parameters)

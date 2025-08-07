@@ -14,7 +14,7 @@ class Mission:
 
         # Set attributes
         self.name : str = name.lower()
-        self.objectives : list[MissionObjective] = objectives
+        self.objectives : list[MissionObjective] = [obj for obj in objectives]
         self.normalizing_parameter : float = normalizing_parameter
 
     def calc_specific_observation_task_utility(self, task: SpecificObservationTask, measurement: dict, prev_state: SimulationAgentState) -> float:
@@ -40,31 +40,11 @@ class Mission:
         obj_relevances : Dict[MissionObjective, float] = self.relate_objectives_to_task(task)
 
         # Calculate the value of the task based on the objectives and their relevance
-        values = [objective.priority * self.calc_measurement_task_performance(task, 
-                                                                              measurement, 
-                                                                              objective, 
-                                                                              obj_relevances[objective])
+        values = [objective.priority * obj_relevances[objective] * objective.eval_measurement_performance(measurement)
                  for objective in self.objectives]
         
         # Return the sum of values for all objectives
-        return sum(values)
-    
-    def calc_measurement_task_performance(self, 
-                                          task: GenericObservationTask, 
-                                          measurement: dict, 
-                                          objective: MissionObjective,
-                                          relevance : float) -> float:
-        """Calculate the performance of a measurement based on the task and objective."""
-        assert isinstance(task, GenericObservationTask), "Task must be an instance of `GenericObservationTask`"
-        assert isinstance(measurement, dict), "Measurement must be a dictionary"
-        assert isinstance(objective, MissionObjective), "Objective must be an instance of `MissionObjective`"
-
-        if isinstance(task, DefaultMissionTask):
-            return relevance *  objective.calc_requirement_satisfaction(measurement)
-        elif isinstance(task, EventObservationTask):
-            return task.severity * relevance *  objective.calc_requirement_satisfaction(measurement)
-        else:
-            raise ValueError("Unsupported task type for performance calculation")
+        return task.priority * sum(values)
 
     def relate_objectives_to_task(self, task: GenericObservationTask) -> Dict[MissionObjective, float]:
         """Relate objectives to a task based on the task's parameters."""
