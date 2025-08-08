@@ -1,7 +1,5 @@
 import unittest
 
-from chess3d.mission.events import GeophysicalEvent
-from chess3d.mission.mission import *
 from chess3d.mission.requirements import *
 from chess3d.mission.objectives import *
 from chess3d.utils import print_welcome
@@ -175,6 +173,18 @@ class TestObjectives(unittest.TestCase):
         self.assertEqual(objective_dict['requirements'][2]['attribute'], "instrument")
         self.assertEqual(objective_dict['requirements'][3]['attribute'], "revisit_time")
         self.assertEqual(objective_dict['requirements'][4]['attribute'], "location")
+    def test_measurement_performance(self):
+        objective = MissionObjective.from_dict(self.default_objective_dict)
+        measurement = {
+            "horizontal_spatial_resolution": 20,
+            "spectral_resolution": "Hyperspectral",
+            "instrument": "VNIR",
+            "revisit_time": 7200,
+            "location": (34.0522, -118.2437, 0, 0)
+        }
+        performance = objective.eval_measurement_performance(measurement)
+        self.assertGreater(performance, 0)
+        self.assertLessEqual(performance, 1)
 
 if __name__ == '__main__':
     # terminal welcome message

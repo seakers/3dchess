@@ -108,9 +108,10 @@ class CategoricalRequirement(MissionRequirement):
         assert all(0 <= score <= 1 for score in scores), "Scores must be between 0 and 1"
 
         # Convert thresholds to lowercase
-        self.thresholds = [threshold.lower() for threshold in thresholds]
+        thresholds = [threshold.lower() for threshold in thresholds]
         
         # Set scores attributes
+        self.thresholds = thresholds
         self.scores = scores
 
         # Build preference function

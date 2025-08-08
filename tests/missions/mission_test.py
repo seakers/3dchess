@@ -100,41 +100,36 @@ class TestMission(unittest.TestCase):
             requirements=reqs_3
         )
 
-        event_objective_1 = EventDrivenObjective(
-            event_type="algal bloom",
-            parameter="Chlorophyll-A",
-            priority=10,
-            requirements=reqs_1,
-            synergistic_parameters=["Water temperature", "Water level"]
-        )
-
-        event_objective_2 = EventDrivenObjective(
-            event_type="algal bloom",
-            parameter="Water temperature",
-            priority=10,
-            requirements=reqs_2,
-            synergistic_parameters=["Chlorophyll-A", "Water level"]
-        )
-
-        event_objective_3 = EventDrivenObjective(
-            event_type="algal bloom",
-            parameter="Water level",
-            priority=10,
-            requirements=reqs_3,
-            synergistic_parameters=["Water temperature", "Chlorophyll-A"]
-        )
-
         self.objectives = [
             default_objective_1,
             default_objective_2,
-            default_objective_3,
-            event_objective_1,
-            event_objective_2,
-            event_objective_3
+            default_objective_3
         ]
-    
-    def test_mission_initialization(self):
-        ...
+    def test_default_mission_initialization(self):
+        mission = Mission(
+            name="Test Mission",
+            objectives=self.objectives,
+            normalizing_parameter=1.0
+        )
+        self.assertEqual(mission.name, "Test Mission".lower())
+        self.assertEqual(len(mission.objectives), 3)
+        self.assertTrue(all(isinstance(obj, DefaultMissionObjective) for obj in mission.objectives))
+        self.assertTrue(all(obj in self.objectives for obj in mission.objectives))
+        self.assertEqual(mission.normalizing_parameter, 1.0)
+    # def calc_
+
+    def test_objectives_from_event(self):
+        pass
+        # TODO
+        # event = GeophysicalEvent(
+        #     event_type="algal bloom",
+        #     severity=5.0,
+        #     location=(34.0522, -118.2437, 0, 0),  # Example lat-lon-grid index-gp index
+        #     t_detect=1622547800.0,  # Example detection time
+        #     d_exp=3600.0,  # Example duration in seconds
+        #     t_start=None,
+        #     id=None
+        # )
 
 if __name__ == '__main__':
     # terminal welcome message

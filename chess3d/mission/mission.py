@@ -66,7 +66,7 @@ class Mission:
         # For now, return a dummy cost value
         return 0.0  # Replace with actual cost calculation logic
 
-    def tasks_from_event(self, event: GeophysicalEvent) -> list[GenericObservationTask]:
+    def tasks_from_event(self, event: GeophysicalEvent) -> List[GenericObservationTask]:
         """Generate tasks based on a geophysical event."""
         assert isinstance(event, GeophysicalEvent), "Event must be an instance of `GeophysicalEvent`"
     
