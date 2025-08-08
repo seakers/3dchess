@@ -94,7 +94,7 @@ class DefaultMissionObjective(MissionObjective):
     def __init__(self, 
                  parameter: str, 
                  priority: float, 
-                 requirements: list, 
+                 requirements: list = [], 
                  id : str = None):
         """ 
         ### Monitoring Objective

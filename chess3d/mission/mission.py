@@ -1,8 +1,8 @@
 
 from typing import  Dict, Union
 
-from chess3d.agents.planning.tasks import *
 from chess3d.agents.states import SimulationAgentState
+from chess3d.agents.planning.tasks import *
 from chess3d.mission.objectives import *
 
 class Mission:
