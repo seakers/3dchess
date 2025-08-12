@@ -33,7 +33,9 @@ A (measurement) **requirement** is defined by a tuple $MR=⟨At,p(x)⟩$ where $
 
 
 ## Geophysical Events of Interest
-An event of interest can be detected by an agent. An **event** $E$ is defined by a tuple $E =⟨eventType, loc, t_{detect}, d_{exp}, S⟩$. It is initially characterized by a type, location $loc$, and detection time $t_{detect}$ . On board data processing is used to determine an expected duration $d_{exp}$ and severity $S$. 
+An event of interest can be detected by an agent. An **event** $E$ is defined by a tuple:
+$$E =⟨eventType, loc, t_{detect}, d_{exp}, S⟩$$
+It is initially characterized by a type, location $loc$, and detection time $t_{detect}$ . On board data processing is used to determine an expected duration $d_{exp}$ and severity $S$. 
 
 ## Generalized Task Definition
 When scheduling operations, satellites require a set of observation tasks that can be evaluated for performance, prioritized, and ultimately assigned. In a constellation, these tasks should also be shareable so that all satellites operate from a common pool of known tasks.
@@ -45,7 +47,7 @@ To enable sharing, tasks are defined in two tiers:
 - **Specific Observation Task**: a satellite-specific version of a generic task, enriched with details relevant only to that satellite (e.g., required attitude, instrument used, access time window, measurement duration, etc.). This information is not shared and is used exclusively for that satellite’s scheduling process.
 
 ### Generic Observation Tasks
-Generic observation tasks are high-level representations that define **what** should be observed, **where**, and **when**, along with a **priority** and the **mission or event context**.  
+Generic observation tasks are high-level representations that define **what** should be observed, **where**, and **when**, along with a **priority** and any additional **context**.  
 
 Each task can be represented as:  
 $$\tau = \langle param, loc, time, r, context \rangle$$
@@ -146,10 +148,10 @@ Accordingly, the utility $U_{in}$ of satellite $i$ performing specific task $n$ 
 $$U_{in} = \sum_{j \in \Tau_n} V_{ij} - \alpha E_{in} $$
 
 Where:
-- $V_{ij}$ is the value of parent generic task $j$ to satellite $i$,
-- $\Tau_{n}$ is the set of parent generic tasks of the specific task $n$,
-- $E_{in}$ is the energy cost for satellite ss to perform task $n$,
-- $\alpha$ is a small positive coefficient balancing the importance of energy cost.
+<!-- - $V_{ij}$ is the value of parent generic task $j$ to satellite $i$, -->
+- $\Tau_{n}$ - The set of parent generic tasks of the specific task $n$
+- $E_{in}$ - Energy cost for satellite $i$ to perform task $n$
+- $\alpha$ - Task cost normalizing parameter
 
 <!-- Finally, for the purposes of task planning and scheduling, we may want to consider the cost of performing a task in addition to its scientific value. Therefore, **specific observation tasks** are evaluated instead of generic tasks by using the sum of the values of their parent tasks along with the cost of performing said specific task to define a utility funciton. 
 

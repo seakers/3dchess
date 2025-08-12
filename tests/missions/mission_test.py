@@ -116,6 +116,12 @@ class TestMission(unittest.TestCase):
         self.assertTrue(all(isinstance(obj, DefaultMissionObjective) for obj in mission.objectives))
         self.assertTrue(all(obj in self.objectives for obj in mission.objectives))
         self.assertEqual(mission.normalizing_parameter, 1.0)
+
+        self.assertRaises(AssertionError, Mission, name=123, objectives=self.objectives, normalizing_parameter=1.0)
+        self.assertRaises(AssertionError, Mission, name="Test Mission", objectives=[], normalizing_parameter=1.0)
+        self.assertRaises(AssertionError, Mission, name="Test Mission", objectives=['objective'], normalizing_parameter=1.0)
+        self.assertRaises(AssertionError, Mission, name="Test Mission", objectives=self.objectives, normalizing_parameter=-1.0)
+
     # def calc_
 
     def test_objectives_from_event(self):

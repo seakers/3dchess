@@ -154,6 +154,17 @@ class TestDefaultObjectives(unittest.TestCase):
         }
         performance = objective.eval_measurement_performance(measurement)
         self.assertLessEqual(performance, 0.0) # Should be low due to deficient measurement location
+    def test_missing_measurement_performance(self):
+        objective = MissionObjective.from_dict(self.default_objective_dict)
+        measurement = {
+            "horizontal_spatial_resolution": 20,
+            "spectral_resolution": "Hyperspectral",
+            "instrument": "VNIR",
+            "revisit_time": 7200
+            # missing measurement location
+        }
+        performance = objective.eval_measurement_performance(measurement)
+        self.assertLessEqual(performance, 0.0) # Should be low due to missing measurement location
 
 class TestEventObjectives(unittest.TestCase):
     def setUp(self):

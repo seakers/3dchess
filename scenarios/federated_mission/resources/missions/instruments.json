@@ -1,6 +1,6 @@
 {
     "VNIR hyp" : {
-        "name": "VNIR",
+        "name": "VNIR hyper",
         "@id" : "vnir_hyp_imager",
         "@type" : "VNIR",
         "detectorWidth": 6.6e-6,

@@ -51,12 +51,14 @@ class MissionObjective(ABC):
         # Validate measurement input
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
 
-        assert all(req.attribute in measurement for req in self.requirements),\
-            f"Measurement must contain all required attributes: {[req.attribute for req in self.requirements]}"
+        # Evaluate measurement performance for each requirement attribute
+        pref_values = [req.calc_preference_value(measurement[req.attribute]) \
+                       if req.attribute in measurement else 0.0
+                       for req in self.requirements]
 
-        pref_values = [req.calc_preference_value(measurement[req.attribute]) for req in self.requirements]
-        return np.prod(pref_values)   
-    
+        # Return product of all preference values
+        return np.prod(pref_values)
+
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the objective to a dictionary."""
         return {

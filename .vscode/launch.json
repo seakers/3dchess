@@ -254,6 +254,18 @@
         //         "PYTHONPATH": "${workspaceRoot}/chess3d"
         //     }
         // }
+        {
+            "name": "Federated Mission Case",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/scenarios/federated_mission/test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
         
     ],
     "compounds": [

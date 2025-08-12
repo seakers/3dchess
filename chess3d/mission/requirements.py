@@ -91,7 +91,7 @@ class MissionRequirement(ABC):
         elif requirement_type == MissionRequirement.CAPABILITY:
             return CapabilityRequirement.from_dict(dict)
 
-        raise ValueError(f"Unknown requirement type: {requirement_type}")
+        raise ValueError(f"Unknown requirement type: {requirement_type}. Must be one of {MissionRequirement.CATEGORICAL}, {MissionRequirement.DISCRETE}, {MissionRequirement.CONTINUOUS}, {MissionRequirement.TEMPORAL}, {MissionRequirement.SPATIAL}, {MissionRequirement.CAPABILITY}.")
 
 class CategoricalRequirement(MissionRequirement):
     def __init__(self, attribute: str, thresholds: list, scores: list, id: str = None, **_):
