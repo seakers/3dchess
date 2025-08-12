@@ -202,14 +202,3 @@ $$U_{in} = \sum_{j}^{\tau_j \in \Tau_n} V_{ij} - \alpha E_{in} $$ -->
 | $U_{in} = \sum_{j \in \Tau_n} V_{ij} - \alpha E_{in} $ | Utility of agent $i$ performing specific task $n$ |
 | $E_{in}$ | Cost of agent $i$ for performing specific task $n$ | 
 | $\alpha$ | Task cost normalizing parameter | 
-
-
-<!--
-
-Where:
-
-- 
-- 
-- 
--   
--  -->
