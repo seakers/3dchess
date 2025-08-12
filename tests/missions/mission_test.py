@@ -84,19 +84,19 @@ class TestMission(unittest.TestCase):
         
         default_objective_1 = DefaultMissionObjective(
             parameter="Chlorophyll-A",
-            priority=1,
+            weight=1,
             requirements=reqs_1
         )
 
         default_objective_2 = DefaultMissionObjective(
             parameter="Water temperature",
-            priority=1,
+            weight=1,
             requirements=reqs_2
         )
 
         default_objective_3 = DefaultMissionObjective(
             parameter="Water level",
-            priority=1,
+            weight=1,
             requirements=reqs_3
         )
 

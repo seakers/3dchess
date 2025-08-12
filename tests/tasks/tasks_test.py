@@ -148,7 +148,7 @@ class TestGenericTasks(unittest.TestCase):
         # Create a mission objective
         objective = DefaultMissionObjective(
             parameter="test_parameter",
-            priority=1.0
+            weight=1.0
         )
 
         task = EventObservationTask(
