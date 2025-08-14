@@ -2,12 +2,16 @@ import time
 import logging
 import asyncio
 
+from matplotlib.pyplot import grid
 import pandas as pd
 from tqdm import tqdm
 
 from chess3d.agents.agent import RealtimeAgent, SimulatedAgent
+from chess3d.agents.planning.tracker import ObservationHistory
+from chess3d.mission.objectives import DefaultMissionObjective
+from chess3d.mission.requirements import GridTargetSpatialRequirement, SpatialRequirement
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import DefaultMissionTask, ObservationHistory, GenericObservationTask
+from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
 
 
 class RealtimeGroundStationAgent(RealtimeAgent):
@@ -99,27 +103,18 @@ class SatelliteAgent(SimulatedAgent):
         # initialize observation history
         self.observation_history = ObservationHistory(self.orbitdata)
 
-        # get initial set of tasks from groud targets
-        ## compile task information from ground targets
-        monitoring_task_info = [ (objective, grid_index, gp_index, lat, lon)
-                                for objective in self.mission
-                                for grid in self.orbitdata.grid_data
-                                for lat,lon,grid_index,gp_index in grid.values]
-
-        ## generate tasks from ground targets
-        self.tasks : list[GenericObservationTask]= [
-            DefaultMissionTask(
-                                        self.mission.name,
-                                        objective,
-                                        (lat, lon, grid_index, gp_index),
-                                        1.0,
-                                        self.orbitdata.duration * 24 * 3600
-                                    )
-            for objective,grid_index,gp_index,lat,lon in tqdm(monitoring_task_info,
-                                                              desc="SATELLITE: Generating monitoring tasks from targets and mission objectives", 
-                                                              unit="task",
-                                                              leave=False)
+        # create monitoring tasks from mission objectives
+        monitoring_tasks : list[GenericObservationTask] = [
+            DefaultMissionObjective(
+                        objective.parameter,
+                        requirements=[req for req in objective.requirements]
+                    )
+            for objective in self.mission
+            if isinstance(objective, DefaultMissionObjective)
         ]
+
+        # add to list of known tasks
+        self.tasks.extend([ task for task in monitoring_tasks ])
 
         return
     

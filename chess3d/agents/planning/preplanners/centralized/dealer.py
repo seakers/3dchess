@@ -8,7 +8,7 @@ from dmas.agents import AgentAction
 from chess3d.agents.actions import BroadcastMessageAction, ObservationAction
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
-from chess3d.agents.planning.tasks import ObservationHistory
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import  PlanMessage
 from chess3d.mission.mission import Mission

@@ -13,7 +13,8 @@ from dmas.utils import runtime_tracker
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan
-from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, ObservationTracker, SpecificObservationTask
+from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *

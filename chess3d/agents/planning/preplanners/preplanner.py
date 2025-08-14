@@ -12,7 +12,8 @@ from dmas.agents import AgentAction
 from chess3d.agents.actions import ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPlanner
-from chess3d.agents.planning.tasks import GenericObservationTask, ObservationHistory, SpecificObservationTask
+from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.mission.mission import Mission

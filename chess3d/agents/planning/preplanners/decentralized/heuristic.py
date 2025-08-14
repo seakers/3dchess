@@ -7,8 +7,9 @@ from dmas.clocks import *
 from tqdm import tqdm
 
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import ObservationHistory, SpecificObservationTask
+from chess3d.agents.planning.tasks import SpecificObservationTask
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *

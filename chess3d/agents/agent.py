@@ -17,7 +17,8 @@ from chess3d.agents.planning.plan import Replan, Plan, Preplan
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
 from chess3d.agents.planning.replanners.replanner import AbstractReplanner
-from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, ObservationHistory, ObservationTracker
+from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask
+from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *

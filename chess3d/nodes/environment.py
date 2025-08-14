@@ -144,11 +144,11 @@ class SimulationEnvironment(EnvironmentNode):
 
             event = GeophysicalEvent(
                 row['event type'],
-                row['severity'],
                 (row['lat [deg]'], row['lon [deg]'], row.get('grid index', 0), row['gp_index']),
                 row['start time [s]'],
-                (row['start time [s]'] + row['duration [s]']),
-                # row['decorrelation time [s]'],
+                row['duration [s]'],
+                row['severity'],
+                row['start time [s]'],
                 row['id']
             )
             events.append(event)

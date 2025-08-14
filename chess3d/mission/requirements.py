@@ -418,6 +418,7 @@ class ReobservationStrategyRequirement(TemporalRequirement):
     ## Thresholds
     STEP_THRESHOLD = 'step_threshold'
     LINEAR_THRESHOLD = 'linear_threshold'
+    ## Bounded 
     GAUSSIAN_THRESHOLD = 'gaussian_threshold'
     TRIANGLE_THRESHOLD = 'triangle_threshold'
 
@@ -566,9 +567,9 @@ class LogThresholdReobservationsStrategy(ReobservationStrategyRequirement):
         assert isinstance(threshold, (int, float)), "Threshold must be a number"
         assert isinstance(slope, (int, float)), "Slope must be a number"
         assert threshold >= 0, "Threshold must be non-negative"
-        assert slope >= 0, "Slope must be non-negative"
-        
-        # Set attributes        
+        assert slope > 0, "Slope must be positive"
+
+        # Set attributes
         self.threshold : float = threshold
         self.slope : float = slope
 

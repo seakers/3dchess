@@ -5,7 +5,7 @@ from dmas.modules import ClockConfig
 
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.planner import AbstractPlanner
-from chess3d.agents.planning.tasks import ObservationHistory
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
 from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData

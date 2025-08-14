@@ -95,9 +95,11 @@ class MissionObjective(ABC):
 class DefaultMissionObjective(MissionObjective):
     def __init__(self, 
                  parameter: str, 
-                 weight: float, 
+                 weight: float = 1.0, 
                  requirements: list = [], 
-                 id : str = None):
+                 id : str = None,
+                 outputFlag : bool = False
+                 ):
         """ 
         ### Monitoring Objective
          
@@ -109,10 +111,10 @@ class DefaultMissionObjective(MissionObjective):
         """
         # Validate inputs
         if not any(isinstance(req, SpatialRequirement) for req in requirements):
-            print("WARNING:No spatial requirement found, adding default grid target spatial requirement.")
-            requirements.append(GridTargetSpatialRequirement('grid', 0, 1))
+            if outputFlag: print("WARNING:No spatial requirement found, adding default grid target spatial requirement.")
+            requirements.append(GridTargetSpatialRequirement('grid', 0))
         if not any(isinstance(req, TemporalRequirement) for req in requirements):
-            print("WARNING: No temporal requirement found, adding default temporal requirement.")
+            if outputFlag: print("WARNING: No temporal requirement found, adding default temporal requirement.")
             requirements.append(RevisitTemporalRequirement([3600, 3600*4, 24*3600], [1, 0.5, 0.0]))
 
         super().__init__(MissionObjective.DEFAULT, parameter, weight, requirements, id)
@@ -155,7 +157,8 @@ class EventDrivenObjective(MissionObjective):
                  weight: float, 
                  requirements: list, 
                  synergistic_parameters: list = [],
-                 id : str = None
+                 id : str = None,
+                 outputFlag : bool = False
                  ):
         """ 
         ### Event Driven Objective
@@ -168,6 +171,14 @@ class EventDrivenObjective(MissionObjective):
         - :`synergistic_parameters`: A list of additional parameters that are synergistic with the main parameter.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
+        # Validate inputs
+        if not any(isinstance(req, SpatialRequirement) for req in requirements):
+            if outputFlag: print("WARNING:No spatial requirement found, adding default grid target spatial requirement.")
+            requirements.append(GridTargetSpatialRequirement('grid', 0))
+        if not any(isinstance(req, TemporalRequirement) for req in requirements):
+            if outputFlag: print("WARNING: No temporal requirement found, adding default temporal requirement.")
+            requirements.append(RevisitTemporalRequirement([3600, 3600*4, 24*3600], [1, 0.5, 0.0]))
+
         # Initialize the parent class
         super().__init__(MissionObjective.EVENT, parameter, weight, requirements, id)
         

@@ -10,7 +10,11 @@ class SingleSatMILP(AbstractPreplanner):
     def __init__(self, 
                  objective : str, 
                  licence_path : str, 
-                 horizon = np.Inf, period = np.Inf, debug = False, logger = None):
+                 horizon = np.Inf, 
+                 period = np.Inf, 
+                 debug = False, 
+                 logger = None
+                ):
         super().__init__(horizon, period, debug, logger)
 
         assert os.path.isfile(licence_path), f"Provided Gurobi licence path `{licence_path}` is not a valid file."

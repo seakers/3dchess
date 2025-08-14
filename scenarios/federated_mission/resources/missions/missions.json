@@ -91,6 +91,12 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["VNIR hyper", "TIR"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [3600, 5000, 7200],
+                            "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "event_type" : "algal_blooms"
@@ -110,6 +116,12 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["TIR"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [3600, 5000, 7200],
+                            "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "event_type" : "algal_blooms"
@@ -135,6 +147,12 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["Altimeter"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [3600, 5000, 7200],
+                            "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "event_type" : "algal_blooms"
@@ -238,6 +256,12 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["Altimeter"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [3600, 5000, 7200],
+                            "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "event_type" : "high_flow_event"
@@ -263,6 +287,12 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["VNIR multi"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [3600, 5000, 7200],
+                            "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "event_type" : "high_flow_event"
@@ -288,6 +318,12 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["VNIR multi"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [3600, 5000, 7200],
+                            "scores": [1.0, 0.5, 0.1]
                         }
                     ],
                     "event_type" : "high_flow_event"
