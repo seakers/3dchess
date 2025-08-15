@@ -4,6 +4,8 @@ import uuid
 import numpy as np
 from pyparsing import ABC, abstractmethod
 
+from chess3d.utils import Interval
+
 
 class MissionRequirement(ABC):
     CATEGORICAL = 'categorical'
@@ -338,6 +340,7 @@ class ContinuousRequirement(MissionRequirement):
         return f"ContinuousRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
 
 class TemporalRequirement(MissionRequirement):
+    AVAILABILITY = 't_img'
     DURATION = 'measurement_duration'
     REVISIT = 'revisit_time'
     N_OBS = 'n_observations'
@@ -347,25 +350,72 @@ class TemporalRequirement(MissionRequirement):
         """Create a temporal requirement from a dictionary."""
         requirement_type = dict.get("requirement_type")
         attribute = dict.get("attribute")
-        id = dict.get("id")
 
-        if requirement_type == MissionRequirement.TEMPORAL:
-            if attribute == cls.DURATION:
-                assert "thresholds" in dict and "scores" in dict, "Thresholds and scores must be provided for `measurement_duration` requirement"
-                thresholds = dict.get("thresholds", [])
-                scores = dict.get("scores", [])
-                return MeasurementDurationRequirement(thresholds, scores, id)
+        # validate requirement type
+        assert requirement_type == MissionRequirement.TEMPORAL, "Requirement type must be 'temporal' for temporal requirements"
 
-            elif attribute == cls.REVISIT:
-                assert "thresholds" in dict and "scores" in dict, "Thresholds and scores must be provided for `revisit_time` requirement"
-                thresholds = dict.get("thresholds", [])
-                scores = dict.get("scores", [])
-                return RevisitTemporalRequirement(thresholds, scores, id)
-            
-            elif attribute == cls.N_OBS:
-                return ReobservationStrategyRequirement.from_dict(dict)
+        # create temporal requirement from attribute type
+        if attribute == cls.AVAILABILITY:
+            return AvailabilityRequirement.from_dict(dict)
         
+        elif attribute == cls.DURATION:
+            return MeasurementDurationRequirement.from_dict(dict)
+
+        elif attribute == cls.REVISIT:
+            return RevisitTemporalRequirement.from_dict(dict)
+
+        elif attribute == cls.N_OBS:
+            return ReobservationStrategyRequirement.from_dict(dict)
+    
         raise ValueError(f"Unknown temporal requirement for attribute: {attribute}")
+
+class AvailabilityRequirement(TemporalRequirement):
+    def __init__(self, t_start : float, t_end : float, id: str = None):
+        """
+        ### Availability Requirement
+        Initialize an availability requirement with thresholds and scores.
+        - :`thresholds`: A list of time thresholds that define the performance levels.
+        - :`scores`: A list of scores corresponding to the thresholds.
+        """
+        super().__init__(MissionRequirement.TEMPORAL, 
+                         TemporalRequirement.AVAILABILITY, 
+                         self.build_step_preference_function(), 
+                         id)
+
+        # set attributes
+        self.availability = Interval(t_start, t_end)
+
+    def build_step_preference_function(self) -> callable:
+        def step_preference_function(t: float) -> float:
+            assert t >= 0, "Time must be non-negative"
+            return int(t in self.availability)
+        return step_preference_function
+
+    def __repr__(self):
+        return f"AvailabilityRequirement(t_start={self.availability.left}, t_end={self.availability.right}, id={self.id})"
+    
+    def copy(self):
+        return AvailabilityRequirement(self.availability.left, self.availability.right, self.id)
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d["t_start"] = self.availability.left
+        d["t_end"] = self.availability.right
+        return d
+
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'AvailabilityRequirement':
+        """Create an `AvailabilityRequirement` from a dictionary."""
+        # Validate Inputs
+        assert "t_start" in dict and "t_end" in dict, "Start and end times must be provided for `availability` requirement"
+        
+        # Upack dictionary
+        t_start = dict.get("t_start")
+        t_end = dict.get("t_end")
+        id = dict.get("id", None)
+
+        # Return Requirement
+        return AvailabilityRequirement(t_start, t_end, id)
 
 class MeasurementDurationRequirement(TemporalRequirement, ContinuousRequirement):
     def __init__(self, thresholds: list, scores: list, id: str = None, **kwargs):
@@ -389,6 +439,19 @@ class MeasurementDurationRequirement(TemporalRequirement, ContinuousRequirement)
     def __repr__(self):
         return f"MeasurementDurationRequirement(thresholds={self.thresholds}, scores={self.scores}, id={self.id})"
 
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'MeasurementDurationRequirement':
+        # Validate Inputs
+        assert "thresholds" in dict and "scores" in dict, "Thresholds and scores must be provided for `measurement_duration` requirement"
+
+        # Unpack dictionary
+        thresholds = dict.get("thresholds", [])
+        scores = dict.get("scores", [])
+        id = dict.get("id", None)
+
+        # Return Requirement
+        return MeasurementDurationRequirement(thresholds, scores, id)
+
 class RevisitTemporalRequirement(TemporalRequirement, ContinuousRequirement):
     def __init__(self, thresholds: list, scores: list, id: str = None, **kwargs):
         """"
@@ -405,6 +468,19 @@ class RevisitTemporalRequirement(TemporalRequirement, ContinuousRequirement):
         
     def __repr__(self):
         return f"RevisitTemporalRequirement(thresholds={self.thresholds}, scores={self.scores}, id={self.id})"
+
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'RevisitTemporalRequirement':
+        # Validate Inputs
+        assert "thresholds" in dict and "scores" in dict, "Thresholds and scores must be provided for `revisit_time` requirement"
+
+        # Unpack dictionary
+        thresholds = dict.get("thresholds", [])
+        scores = dict.get("scores", [])
+        id = dict.get("id", None)
+
+        # Return Requirement
+        return RevisitTemporalRequirement(thresholds, scores, id)
 
 class ReobservationStrategyRequirement(TemporalRequirement):
     # Reobservation Strategies

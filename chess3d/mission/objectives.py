@@ -92,6 +92,10 @@ class MissionObjective(ABC):
     def __repr__(self) -> str:
         """String representation of the objective."""
 
+    def __iter__(self):
+        """Iterate over the objectives."""
+        return iter(self.requirements)
+
 class DefaultMissionObjective(MissionObjective):
     def __init__(self, 
                  parameter: str, 

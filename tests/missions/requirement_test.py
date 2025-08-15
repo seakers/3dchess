@@ -97,8 +97,32 @@ class TestContinousRequirements(unittest.TestCase):
         self.assertIsInstance(reconstructed, ContinuousRequirement)
         self.assertEqual(original.to_dict(), reconstructed.to_dict())
 
+# Temporal Requirements
 class TestTemporalRequirements(unittest.TestCase):
-    # Temporal Requirements
+    def test_availability_requirement(self):
+        req = AvailabilityRequirement(0,10)
+        self.assertTrue(isinstance(req, AvailabilityRequirement))
+        self.assertEqual(req.availability.left, 0)
+        self.assertEqual(req.availability.right, 10)
+    def test_availability_requirement_evaluation(self):
+        req = AvailabilityRequirement(0, 10)
+        self.assertEqual(req.calc_preference_value(0), 1.0)
+        self.assertEqual(req.calc_preference_value(5), 1.0)
+        self.assertEqual(req.calc_preference_value(10), 1.0)
+        self.assertEqual(req.calc_preference_value(11), 0.0)
+        self.assertRaises(AssertionError, req.calc_preference_value, -1)
+    def test_availability_requirement_copy(self):
+        req = AvailabilityRequirement(0, 10)
+        req_copy = req.copy()
+        self.assertEqual(req.to_dict(), req_copy.to_dict())
+        self.assertIsNot(req, req_copy)
+    def test_availability_requirement_to_from_dict(self):
+        original = AvailabilityRequirement(0, 10)
+        as_dict = original.to_dict()
+        reconstructed = MissionRequirement.from_dict(as_dict)
+        self.assertIsInstance(reconstructed, AvailabilityRequirement)
+        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+
     def test_measurement_duration_requirement(self):
         req = MeasurementDurationRequirement([10800, 7200, 3600], 
                                              [  1.0,  0.5,  0.1])

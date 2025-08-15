@@ -101,15 +101,20 @@ class AbstractPreplanner(AbstractPlanner):
         # compile instrument field of view specifications   
         cross_track_fovs : dict = self.collect_fov_specs(specs)
 
-        # calculate coverage opportunities for tasks
-        access_opportunities = self.calculate_access_opportunities(state, specs, orbitdata)
+        # Outline planning horizon interval
+        planning_horizon = Interval(state.t, state.t + self.horizon)
 
         # get only available tasks
-        available_tasks : list[GenericObservationTask] = self.get_available_tasks(tasks, state.t)
+        available_tasks : list[GenericObservationTask] = self.get_available_tasks(tasks, planning_horizon)
+        
+        # calculate coverage opportunities for tasks
+        access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, specs, planning_horizon, orbitdata)
 
         # create schedulable tasks from known tasks and future access opportunities
         schedulable_tasks : list[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs)
         
+        raise NotImplementedError(f'Preplanner for agents of type `{type(state)}` not yet implemented.')
+
         # schedule observation tasks
         observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, observation_history)
         assert isinstance(observations, list) and all([isinstance(obs, ObservationAction) for obs in observations]), \
@@ -131,21 +136,33 @@ class AbstractPreplanner(AbstractPlanner):
 
         # return plan and save local copy
         return self.plan.copy()
+            
+    @runtime_tracker
+    def get_available_tasks(self, tasks : list, planning_horizon : Interval) -> list:
+        """ Returns a list of tasks that are available at the given time """
+        if not isinstance(tasks, list):
+            raise ValueError(f'`tasks` needs to be of type `list`. Is of type `{type(tasks)}`.')
+        
+        # TODO add check for capability of the agent to perform the task?      
+
+        # Check if task is available within the proposed planning horizon
+        return [task for task in tasks 
+                if isinstance(task, GenericObservationTask)
+                and task.availability.overlaps(planning_horizon)]
     
     @runtime_tracker
     def calculate_access_opportunities(self, 
                                        state : SimulationAgentState, 
                                        specs : Spacecraft,
+                                       planning_horizon : Interval,
                                        orbitdata : OrbitData
                                     ) -> dict:
-        # define planning horizon
-        t_start = state.t
-        t_end = t_start+self.horizon
+        """ Calculate access opportunities for targets visible in the planning horizon """
 
         # compile coverage data
-        raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(t_start, t_end)
+        raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(planning_horizon.left, planning_horizon.right)
 
-        # initiate accestimes 
+        # initiate access times
         access_opportunities = {}
         
         for i in tqdm(range(len(raw_coverage_data['time [s]'])), 
@@ -184,27 +201,9 @@ class AbstractPreplanner(AbstractPlanner):
 
             if not found:
                 access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
-
-        # convert to `list`
-        access_opportunities = [    (grid_index, gp_index, instrument, interval, t, th)
-                                    for grid_index in access_opportunities
-                                    for gp_index in access_opportunities[grid_index]
-                                    for instrument in access_opportunities[grid_index][gp_index]
-                                    for interval, t, th in access_opportunities[grid_index][gp_index][instrument]
-                                ]
                 
         # return access times and grid information
         return access_opportunities
-        
-    @runtime_tracker
-    def get_available_tasks(self, tasks : list, t : float) -> list:
-        """ Returns a list of tasks that are available at the given time """
-        if not isinstance(tasks, list):
-            raise ValueError(f'`tasks` needs to be of type `list`. Is of type `{type(tasks)}`.')
-        
-        # TODO add check for capability of the agent to perform the task
-
-        return [task for task in tasks if task.available(t)]
 
     @abstractmethod
     def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list, observation_history : ObservationHistory) -> list:

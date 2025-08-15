@@ -127,11 +127,11 @@ class TestGenericTasks(unittest.TestCase):
             t_detect=1000.0,
             d_exp=3600.0
         )
-
         task = EventObservationTask(
             parameter="test_parameter",
             event=event
         )
+
         self.assertEqual(task.parameter, "test_parameter")
         self.assertEqual(task.task_type, GenericObservationTask.EVENT)
         self.assertEqual(task.event, event)
@@ -141,20 +141,43 @@ class TestGenericTasks(unittest.TestCase):
         self.assertEqual(task.priority, event.severity)
         self.assertEqual(task.id, f"EventObservationTask_test_parameter_{event.severity}_0_1_EVENT-{event.id.split('-')[0]}")
         self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", event=1.0)
-        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", event=event, location=[(45.0, 90.0, 0, 1)])
-        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", event=event, availability=Interval(0.0, 3600.0))
-        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", event=event, priority=1.0)
+        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter") # no event, objective, or task information specified
+        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", availability=Interval(0.0, 3600.0), priority=10) # no event, objective, or task location specified
+        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", location=[(45.0, 90.0, 0, 1)], priority=10) # no event, objective, or task availability specified
+        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", location=[(45.0, 90.0, 0, 1)], availability=Interval(0.0, 3600.0)) # no event, objective, or task priority specified
     def test_event_driven_task_no_event_with_objective(self):
         # Create a mission objective
-        objective = DefaultMissionObjective(
+        objective = EventDrivenObjective(
+            event_type="flood",
             parameter="test_parameter",
-            weight=1.0
+            weight=1.0,
+            requirements=[
+                # Define any specific requirements for the objective here
+                PointTargetSpatialRequirement((45.0, 90.0, 0, 1)),
+                AvailabilityRequirement(0, 3600.0),
+            ],
+
+        )
+        no_target_objective = EventDrivenObjective(
+            event_type="flood",
+            parameter="test_parameter",
+            weight=1.0,
+            requirements=[
+                AvailabilityRequirement(0, 3600.0),
+            ],
+        )
+        no_availability_objective = EventDrivenObjective(
+            event_type="flood",
+            parameter="test_parameter",
+            weight=1.0,
+            requirements=[
+                PointTargetSpatialRequirement((45.0, 90.0, 0, 1))
+            ],
+
         )
 
         task = EventObservationTask(
             parameter="test_parameter",
-            location=[(45.0, 90.0, 0, 1)],
-            availability=Interval(0.0, 3600.0),
             priority=1.0,
             objective=objective
         )
@@ -167,8 +190,11 @@ class TestGenericTasks(unittest.TestCase):
         self.assertEqual(task.availability.right, 3600.0)
         self.assertEqual(task.priority, 1.0)
         self.assertEqual(task.id, "EventObservationTask_test_parameter_1.0_0_1_EVENT-None")
-        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", objective=1.0)
-        self.assertRaises(AssertionError, EventObservationTask, parameter="other_parameter", objective=objective)
+        self.assertRaises(AssertionError, EventObservationTask, parameter="test_parameter", objective=1.0) # wrong type for objective parameter
+        self.assertRaises(NotImplementedError, EventObservationTask, parameter="other_parameter", objective=no_target_objective, priority=10) # no location given or specified in objective
+        self.assertRaises(AssertionError, EventObservationTask, parameter="other_parameter", objective=no_availability_objective, priority=10) # no availability given or specified in objective
+        self.assertRaises(AssertionError, EventObservationTask, parameter="other_parameter", objective=objective) # no priority given 
+
     def test_event_driven_objective_copy(self):
         # Create a geophysical event
         event = GeophysicalEvent(

@@ -29,10 +29,10 @@ class Interval:
 
     def __init__(self, left:float, right:float, left_open:bool=False, right_open:bool=False):
         self.left : float = left
-        self.left_open : bool = left_open
+        self.left_open : bool = left_open if not np.isneginf(left) else True
 
         self.right : float = right
-        self.right_open : bool = right_open
+        self.right_open : bool = right_open if not np.isinf(right) else True
 
         if self.right < self.left:
             raise Exception('The right side of interval must be later than the left side of the interval.')
@@ -197,12 +197,12 @@ class Interval:
     
     def __repr__(self) -> str:
         l_bracket = '(' if self.left_open else '['
-        r_bracket = ')' if self.left_open else ']'
+        r_bracket = ')' if self.right_open else ']'
         return f'Interval{l_bracket}{self.left},{self.right}{r_bracket}'
     
     def __str__(self) -> str:
         l_bracket = '(' if self.left_open else '['
-        r_bracket = ')' if self.left_open else ']'
+        r_bracket = ')' if self.right_open else ']'
         return f'{l_bracket}{np.round(self.left,3)},{np.round(self.right,3)}{r_bracket}'
     
     def __hash__(self) -> int:

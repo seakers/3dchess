@@ -17,6 +17,7 @@ class GenericObservationTask(ABC):
                  location: list,
                  availability: Interval,
                  priority : float, 
+                 objective : MissionObjective = None,
                  id : str = None,
                 ):
         """
@@ -27,6 +28,7 @@ class GenericObservationTask(ABC):
         - :`reward`: The reward for completing the task.
         - :`relevant_objective`: The relevant mission objective associated with the task by the agent who initialized it.
         - :`priority`: The priority of the task, which can be used to determine its importance relative to other tasks.
+        - :`objective`: The objective of the mission, which defines the goal of the task.
         - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
         """
 
@@ -41,6 +43,12 @@ class GenericObservationTask(ABC):
         assert availability.left >= 0.0, "Start of availability must be non-negative."
         assert isinstance(priority, (float, int)), "Priority must be a number."
         assert priority >= 0, "Priority must be non-negative."
+        assert isinstance(objective, MissionObjective) or objective is None, f"If specified, objective must be a `MissionObjective`. Is of type {type(objective)}."
+        assert id is None or isinstance(id, str), "ID must be a string or None."
+
+        if objective is not None:
+            # Objective specified; check objective attributes 
+            assert parameter == objective.parameter, "Target parameter must match the objective's parameter."
 
         # Set attributes
         self.task_type : str = task_type
@@ -48,6 +56,7 @@ class GenericObservationTask(ABC):
         self.location : list[tuple] = location
         self.availability : Interval = availability
         self.priority : float = priority
+        self.objective : MissionObjective = objective
         self.id : str = id if id is not None else self.generate_id()
 
     @abstractmethod
@@ -73,6 +82,7 @@ class GenericObservationTask(ABC):
             "location": [loc for loc in self.location],
             "availability": self.availability.to_dict(),
             "priority": self.priority,
+            "objective" : self.objective.to_dict() if self.objective else None,
             "id": self.id,
         }
     
@@ -100,6 +110,7 @@ class DefaultMissionTask(GenericObservationTask):
                  location: list,
                  mission_duration : float,
                  priority : float = 1.0,
+                 objective : MissionObjective = None,
                  id : str = None
                 ):
         """
@@ -109,6 +120,7 @@ class DefaultMissionTask(GenericObservationTask):
         - :`location`: The location to be observed, represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
         - :`mission_duration`: The duration of the mission in seconds.
         - :`priority`: The priority of the task, which can be used to determine its importance relative to other tasks. Is 1 by default.
+        - :`objective`: The objective of the mission, which defines the goal of the task.
         - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
         """
 
@@ -119,7 +131,7 @@ class DefaultMissionTask(GenericObservationTask):
             "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
 
         # initialte parent class
-        super().__init__(GenericObservationTask.DEFAULT, parameter, [location], Interval(0.0, mission_duration), priority, id)
+        super().__init__(GenericObservationTask.DEFAULT, parameter, [location], Interval(0.0, mission_duration), priority, objective, id)
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
@@ -132,6 +144,7 @@ class DefaultMissionTask(GenericObservationTask):
             self.location[0],
             self.availability.right,
             self.priority,
+            self.objective,
             self.id,
         )
     
@@ -147,11 +160,18 @@ class DefaultMissionTask(GenericObservationTask):
         assert 'location' in task_dict, "Task location must be specified in the dictionary."
         assert 'availability' in task_dict, "Task availability must be specified in the dictionary."
 
+        if 'objective' in task_dict:
+            assert isinstance(task_dict['objective'], dict), "Objective must be a dictionary."
+            objective = MissionObjective.from_dict(task_dict['objective'])
+        else:
+            objective = None
+
         return cls(
             parameter=task_dict['parameter'],
             location=task_dict['location'][0],
             mission_duration=task_dict['availability']['right'],
             priority=task_dict.get('priority', 1.0),
+            objective=objective,
             id=task_dict.get('id',None),
         )
 
@@ -179,34 +199,51 @@ class EventObservationTask(GenericObservationTask):
 
         # Validate Inputs
         assert isinstance(event, GeophysicalEvent) or event is None, "If specified, event must be a `GeophysicalEvent`."
-        assert isinstance(objective, MissionObjective) or objective is None, f"If specified, objective must be a `MissionObjective`. Is of type {type(objective)}."
+        assert isinstance(objective, MissionObjective) or objective is None, "If specified, objective must be a `MissionObjective`."
 
         if event is None and objective is None:
             assert location is not None, "If no event or objective is specified, locations must be provided."
             assert availability is not None, "If no event or objective is specified, availability must be provided."
             assert priority is not None, "If no event or objective is specified, priority must be provided."
 
-        # Extract event attributes
+        # Extract event or objective attributes if given
         if event is not None: 
             # Event specified; use event attributes
-            assert location is None, "Locations must be None if event is specified."
-            assert availability is None, "Availability must be None if event is specified."
-            assert priority is None, "Priority must be None if event is specified."
+            location = event.location if location is None else location
+            availability = Interval(event.t_start, event.t_start + event.d_exp) if availability is None else availability   
+            priority = event.severity if priority is None else priority
 
-            location = event.location
-            availability = Interval(event.t_start, event.t_start + event.d_exp)
-            priority = event.severity
+        elif objective is not None:
+            # Objective specified; use objective attributes
 
-        if objective is not None:
-            # Objective specified; check objective attributes 
-            assert parameter == objective.parameter, "Target parameter must match the objective's parameter."
+            ## Extract spatial measurement requirements
+            spatial_req = [req for req in objective.requirements
+                           if isinstance(req, SpatialRequirement)]
+            spatial_req : SpatialRequirement = spatial_req[0] if spatial_req else None
+            assert spatial_req is not None or location is not None, \
+                "If no event is specified, either a specified location or a spatial requirement must be provided."
+            
+            if isinstance(spatial_req, PointTargetSpatialRequirement):
+                location = [spatial_req.target] if location is None else location
+            else:
+                raise NotImplementedError(f"Default task creation for spatial requirement type {type(spatial_req)} is not implemented yet")
+            
+            ## Extract temporal measurement requirements
+            availability_req = [req for req in objective.requirements
+                                if isinstance(req, AvailabilityRequirement)]
+            availability_req : AvailabilityRequirement = availability_req[0] if availability_req else None
+            assert availability_req is not None or availability is not None, \
+                "If no event is specified, either a specified availability or an availability requirement must be provided."
+            availability = availability_req.availability if availability is None else availability
+
+            ## Validate task priority 
+            assert priority is not None, "If no event is specified, priority must be provided."
 
         # Set attributes
         self.event : GeophysicalEvent = event
-        self.objective : MissionObjective = objective
 
         # Initialize parent class
-        super().__init__(GenericObservationTask.EVENT, parameter, location, availability, priority, id)
+        super().__init__(GenericObservationTask.EVENT, parameter, location, availability, priority, objective, id)
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
@@ -216,6 +253,9 @@ class EventObservationTask(GenericObservationTask):
         """ Create a deep copy of the task. """
         return EventObservationTask(
             parameter=self.parameter,
+            location=self.location,
+            availability=self.availability,
+            priority=self.priority,
             event=self.event,
             objective=self.objective,
             id=self.id
@@ -228,22 +268,24 @@ class EventObservationTask(GenericObservationTask):
         """ Convert the task to a dictionary. """
         d = super().to_dict()
         d.update({
-            "event": self.event.to_dict() if self.event else None,
-            "objective": self.objective.to_dict() if self.objective else None,
+            "event": self.event.to_dict() if self.event else None
         })
         return d
 
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'EventObservationTask':
         """ Create a task from a dictionary. """
+        # Validate Inputs
         assert 'task_type' in task_dict, "Task type must be specified in the dictionary."
         assert task_dict['task_type'] == GenericObservationTask.EVENT, "Task type must be 'event_observation_task'."
         assert 'parameter' in task_dict, "Parameter must be specified in the dictionary."
         assert 'event' in task_dict, "Event must be specified in the dictionary."
 
+        # Unpack dictionary
         event = GeophysicalEvent.from_dict(task_dict['event']) if 'event' in task_dict else None
         objective = MissionObjective.from_dict(task_dict['objective']) if 'objective' in task_dict else None
         
+        # Return task
         return cls(
             parameter=task_dict['parameter'],
             event=event,

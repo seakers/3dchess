@@ -9,7 +9,7 @@ from tqdm import tqdm
 from chess3d.agents.agent import RealtimeAgent, SimulatedAgent
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.mission.objectives import DefaultMissionObjective
-from chess3d.mission.requirements import GridTargetSpatialRequirement, SpatialRequirement
+from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
 
@@ -98,23 +98,52 @@ class SatelliteAgent(SimulatedAgent):
                          logger)
         
         self.orbitdata : OrbitData = orbitdata
-            
-    async def setup(self) -> None:
+
         # initialize observation history
         self.observation_history = ObservationHistory(self.orbitdata)
 
-        # create monitoring tasks from mission objectives
-        monitoring_tasks : list[GenericObservationTask] = [
-            DefaultMissionObjective(
-                        objective.parameter,
-                        requirements=[req for req in objective.requirements]
-                    )
-            for objective in self.mission
-            if isinstance(objective, DefaultMissionObjective)
-        ]
-
-        # add to list of known tasks
-        self.tasks.extend([ task for task in monitoring_tasks ])
-
+        # gather targets for default mission tasks
+        objective_targets = { objective : [] for objective in self.mission 
+                             # ignore non-default objectives
+                             if not isinstance(objective, DefaultMissionObjective)
+                             }
+        for objective in objective_targets:         
+            for req in objective:
+                # ignore non-spatial requirements
+                if not isinstance(req, SpatialRequirement): continue
+                
+                elif isinstance(req, PointTargetSpatialRequirement):
+                    raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                
+                elif isinstance(req, TargetListSpatialRequirement):
+                    raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
+                
+                elif isinstance(req, GridTargetSpatialRequirement):
+                    req_targets = [
+                        (lat, lon, grid_index, gp_index)
+                        for grid in self.orbitdata.grid_data
+                        for lat,lon,grid_index,gp_index in grid.values
+                        if grid_index == req.grid_index and gp_index < req.grid_size
+                    ]
+                    
+                else: 
+                    raise TypeError(f"Unknown spatial requirement type: {type(req)}")
+                    
+            # create monitoring tasks from each location in this mission objective
+            tasks = [DefaultMissionTask(objective.parameter,
+                                        location=(lat, lon, grid_index, gp_index),
+                                        mission_duration=self.orbitdata.duration*24*3600,
+                                        objective=objective,
+                                        )
+                        for lat,lon,grid_index,gp_index in req_targets
+                    ]
+            
+            # add to list of known tasks
+            self.tasks.extend(tasks)
+        
+        return
+            
+    async def setup(self) -> None:
+        # nothing to setup
         return
     

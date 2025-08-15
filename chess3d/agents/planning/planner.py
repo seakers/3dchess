@@ -97,45 +97,56 @@ class AbstractPlanner(ABC):
     
     @runtime_tracker
     def single_tasks_from_accesses(self,
-                                     available_tasks : list,
-                                     access_times : list, 
-                                     cross_track_fovs : dict) -> list:
-        
-        # index access times by ground point and grid index
-        indexed_access_times = defaultdict(list)
-        for access_time in access_times:
-            grid_index, gp_index = access_time[0], access_time[1]
-            indexed_access_times[(int(grid_index), int(gp_index))].append(access_time)
-
+                                   available_tasks : list,
+                                   access_times : list, 
+                                   cross_track_fovs : dict
+                                   ) -> list:
+        """ Creates one specific task per each access opportunity for every available task """
         # create one task per each access opportunity
         schedulable_tasks : list[SpecificObservationTask] = []
         for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
             task : GenericObservationTask
 
+            # TODO improve minimum and maximum measurement duration requirement calculation
+            if task.objective is not None:
+                duration_reqs = [req for req in task.objective
+                                 if isinstance(req, MeasurementDurationRequirement)]
+                duration_req : MeasurementDurationRequirement = duration_reqs[0] if duration_reqs else None
+            else:
+                duration_req = None
+            
+            duration_requirements = Interval(min(duration_req.thresholds),np.Inf) if duration_req is not None else Interval(0, np.Inf)
+
+
             # find access time for this task
-            for *__,grid_index,gp_index in task.targets:
+            for *__,grid_index,gp_index in task.location:
                 # get access times for this ground point and grid index
-                matching_access_times = indexed_access_times.get((int(grid_index), int(gp_index)), [])
+                matching_access_times = [
+                                         (instrument, access_interval, t, th)
+                                         for instrument in access_times[grid_index][gp_index]
+                                         for access_interval,t,th in access_times[grid_index][gp_index][instrument]
+                                         if task.availability.overlaps(access_interval)
+                                        ]
                 
                 # create a schedulable task for each access time
                 for access_time in matching_access_times:
                     # unpack access time
-                    instrument = access_time[2]
-                    accessibility = access_time[3]
-                    th = access_time[-1]
+                    instrument_name,accessibility,_,th = access_time
                     
-                    if max(th) - min(th) > cross_track_fovs[instrument]:
+                    if max(th) - min(th) > cross_track_fovs[instrument_name]:
                         # not all of the accessibility is observable with a single pass
                         continue
                         # raise NotImplementedError('No support for tasks that require multiple passes yet.')
                     else:
-                        off_axis_angles = [Interval(off_axis_angle - cross_track_fovs[instrument]/2,
-                                                    off_axis_angle + cross_track_fovs[instrument]/2)
+                        off_axis_angles = [Interval(off_axis_angle - cross_track_fovs[instrument_name]/2,
+                                                    off_axis_angle + cross_track_fovs[instrument_name]/2)
                                                     for off_axis_angle in th]
-                        slew_angles = reduce(lambda a, b: a.intersection(b), off_axis_angles)
+                        slew_angles : Interval = reduce(lambda a, b: a.intersection(b), off_axis_angles)
+
+                    if slew_angles.is_empty(): continue  # skip if no valid slew angles
 
                     # check if instrument can perform the task                    
-                    if not task.objective.can_perform(instrument): 
+                    if not self.can_perform_task(task, instrument_name): 
                         continue # skip if not
 
                     # check if access time matches task availability
@@ -143,14 +154,37 @@ class AbstractPlanner(ABC):
                         continue # skip if not
 
                     # create and add schedulable task to list of schedulable tasks
-                    schedulable_tasks.append(SpecificObservationTask(task, 
-                                                            instrument,
-                                                            accessibility,
-                                                            slew_angles))
+                    schedulable_tasks.append(SpecificObservationTask(task,
+                                                                     instrument_name,
+                                                                     accessibility,
+                                                                     duration_requirements,
+                                                                     slew_angles
+                                                                     ))
         
         # return list of schedulable tasks
         return schedulable_tasks
             
+    def can_perform_task(self, task : GenericObservationTask, instrument_name : str) -> bool:
+        """ Checks if the agent can perform the task at hand with the given instrument """
+        # TODO Replace this with KG for better reasoning capabilities
+
+        # Check if task has specified objectives
+        if task.objective is not None:
+            # Extract capability requirements from the objective
+            capability_reqs = [req for req in task.objective
+                               if isinstance(req, CapabilityRequirement)]
+            capability_req: CapabilityRequirement = capability_reqs[0] if capability_reqs else None
+
+            # Evaluate capability requirement
+            if capability_req is not None:
+                return capability_req.calc_preference_value(instrument_name) >= 0.5
+
+        # No capability objectives specified; check if instrument has general capability
+        # TODO replace with better reasoning; currently assumes instrument has general capability
+        return True
+
+        raise NotImplementedError(f"Determination of agent capability for tasks of type {type(task)} is not supported.")
+        
     @runtime_tracker
     def check_task_clusterability(self, schedulable_tasks : list) -> dict:
         schedulable_tasks : list[SpecificObservationTask] = schedulable_tasks

@@ -45,7 +45,7 @@ class TestFederatedMission(unittest.TestCase):
                         }
                     },
                     "instrument": {
-                        "name": "TIR hyper",
+                        "name": "VNIR hyper",
                         "@id" : "vnir_hyp_imager",
                         "@type" : "VNIR",
                         "detectorWidth": 6.6e-6,
@@ -86,17 +86,17 @@ class TestFederatedMission(unittest.TestCase):
                             "ta": 95.0
                         }
                     },
-                    # "planner" : {
-                        # "preplanner" : {
-                        #     "@type" : "heuristic",
-                        #     "period": 1000,
-                        #     # "horizon": 500,
-                        # },
+                    "planner" : {
+                        "preplanner" : {
+                            "@type" : "heuristic",
+                            "period": 1000,
+                            # "horizon": 500,
+                        },
                         # "replanner" : {
                         #     "@type" : "broadcaster",
                         #     "period" : 400
                         # },
-                    # },
+                    },
                     # "science" : {
                     #     "@type": "lookup", 
                     #     "eventsPath" : "./scenarios/federated_mission/resources/events/toy_events.csv"
