@@ -51,7 +51,7 @@
                             "valid_values": ["VNIR hyper", "TIR"]
                         }
                     ],
-                    "event_type" : "algal_blooms"
+                    "event_type" : "algal bloom"
                 }
             ]
         }

@@ -69,14 +69,6 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             # set task observation angle
             th_img = np.average((task.slew_angles.left, task.slew_angles.right))
             
-            # # check if there is overlap with previous scheduled observation
-            # potential_overlap = [Interval(observation.t_start,  observation.t_end) 
-            #                      for observation in observations
-            #                      if observation.t_start in task.accessibility 
-            #                       or observation.t_end in task.accessibility]
-            # if any([overlap.overlaps(task.accessibility) for overlap in potential_overlap]):
-            #     continue
-
             # find any previous scheduled observation
             actions_prev = [observation for observation in observations
                             if observation.t_start - 1e-6 <= task.accessibility.left]
@@ -95,7 +87,8 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                 t_prev = state.t
                 th_prev = state.attitude[0]
 
-            # set observation time to earliest possible time
+            # set observation time to earliest possible time and shortest alloweable duration
+            # TODO Improve observation time and duration selection?
             t_img = max(t_prev, task.accessibility.left)
             d_img = task.duration_requirements.left
 

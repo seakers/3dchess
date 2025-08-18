@@ -103,15 +103,18 @@ class AbstractPlanner(ABC):
                                    cross_track_fovs : dict
                                    ) -> list:
         """ Creates one specific task per each access opportunity for every available task """
-        # create one task per each access opportunity
+
+        # initialize list of schedulable tasks
         schedulable_tasks : list[SpecificObservationTask] = []
+
+        # create one task per each access opportunity
         for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
             task : GenericObservationTask
 
             # TODO improve minimum and maximum measurement duration requirement calculation
             if task.objective is not None:
                 duration_reqs = [req for req in task.objective
-                                 if isinstance(req, MeasurementDurationRequirement)]
+                                if isinstance(req, MeasurementDurationRequirement)]
                 duration_req : MeasurementDurationRequirement = duration_reqs[0] if duration_reqs else None
             else:
                 duration_req = None
@@ -119,12 +122,19 @@ class AbstractPlanner(ABC):
 
             # find access time for this task
             for *__,grid_index,gp_index in task.location:
+                # ensure grid_index and gp_index are integers
+                grid_index,gp_index = int(grid_index), int(gp_index)
+                
+                # check if target is accessible  
+                if grid_index not in access_times or gp_index not in access_times[grid_index]:
+                    continue
+
                 # get access times for this ground point and grid index
                 matching_access_times = [
-                                         (instrument, access_interval, t, th)
-                                         for instrument in access_times[grid_index][gp_index]
-                                         for access_interval,t,th in access_times[grid_index][gp_index][instrument]
-                                         if task.availability.overlaps(access_interval)
+                                        (instrument, access_interval, t, th)
+                                        for instrument in access_times[grid_index][gp_index]
+                                        for access_interval,t,th in access_times[grid_index][gp_index][instrument]
+                                        if task.availability.overlaps(access_interval)
                                         ]
                 
                 # create a schedulable task for each access time
@@ -154,11 +164,11 @@ class AbstractPlanner(ABC):
 
                     # create and add schedulable task to list of schedulable tasks
                     schedulable_tasks.append(SpecificObservationTask(task,
-                                                                     instrument_name,
-                                                                     accessibility,
-                                                                     duration_requirements,
-                                                                     slew_angles
-                                                                     ))
+                                                                    instrument_name,
+                                                                    accessibility,
+                                                                    duration_requirements,
+                                                                    slew_angles
+                                                                    ))
         
         # return list of schedulable tasks
         return schedulable_tasks
@@ -181,8 +191,6 @@ class AbstractPlanner(ABC):
         # No capability objectives specified; check if instrument has general capability
         # TODO replace with better reasoning; currently assumes instrument has general capability
         return True
-
-        raise NotImplementedError(f"Determination of agent capability for tasks of type {type(task)} is not supported.")
         
     @runtime_tracker
     def check_task_clusterability(self, schedulable_tasks : list) -> dict:
@@ -256,25 +264,7 @@ class AbstractPlanner(ABC):
         end while
         ```
         
-        """ 
-
-        # DEBUG ------
-        # schedulable_tasks = schedulable_tasks[:8]
-        # adj = dict()
-        # adj = {
-        #     schedulable_tasks[0].id : {schedulable_tasks[1],schedulable_tasks[2]},
-        #     schedulable_tasks[1].id : {schedulable_tasks[0],schedulable_tasks[3],schedulable_tasks[5],schedulable_tasks[7]},
-        #     schedulable_tasks[2].id : {schedulable_tasks[0],schedulable_tasks[3],schedulable_tasks[4]},
-        #     schedulable_tasks[3].id : {schedulable_tasks[1],schedulable_tasks[2],schedulable_tasks[5],schedulable_tasks[6],schedulable_tasks[7]},
-        #     schedulable_tasks[4].id : {schedulable_tasks[2],schedulable_tasks[6]},
-        #     schedulable_tasks[5].id : {schedulable_tasks[1],schedulable_tasks[3],schedulable_tasks[7]},
-        #     schedulable_tasks[6].id : {schedulable_tasks[3],schedulable_tasks[4],schedulable_tasks[7]},
-        #     schedulable_tasks[7].id : {schedulable_tasks[1],schedulable_tasks[3],schedulable_tasks[5],schedulable_tasks[6]}
-        # }
-        # cliques = []
-        # -------------
-
-        
+        """         
         schedulable_tasks : list[SpecificObservationTask]
         adj : Dict[str, set[SpecificObservationTask]] = adj
 
@@ -376,7 +366,6 @@ class AbstractPlanner(ABC):
                                      -len(neighbors_to_delete[p]),
                                      sum([parent_task.priority for parent_task in p.parent_tasks]), 
                                      -p.accessibility.left))
-        
 
     @runtime_tracker
     def estimate_task_value(self, 

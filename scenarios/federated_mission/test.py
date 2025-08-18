@@ -88,7 +88,7 @@ class TestFederatedMission(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "heuristic",
+                            "@type" : "dynamic",
                             "period": 1000,
                             # "horizon": 500,
                         },

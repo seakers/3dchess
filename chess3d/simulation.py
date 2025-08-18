@@ -559,12 +559,16 @@ class Simulation:
             observations_required = dict()
             valid_instruments = set()
 
-            for mission_name,mission in self.event_missions.items():
-                if event_type in mission_name.lower():
-                    for objective in mission:
+            for _,mission in self.missions.items():
+                for objective in mission:
+                    if isinstance(objective, EventDrivenObjective) and objective.event_type.lower() == event_type.lower():
+                        objective : MissionObjective
                         co_observation_params.add(objective.parameter)
-                        valid_instruments.update(set(objective.valid_instruments))
-                        observations_required[objective.parameter] = set(objective.valid_instruments)
+
+                        for req in objective:
+                            if isinstance(req, CapabilityRequirement) and req.attribute == 'instrument':
+                                valid_instruments.update(set(req.valid_values))
+                                observations_required[objective.parameter] = set(req.valid_values)
 
             # check if there are observations that satisfy the requirements of the request
             if len(observations_required) > 1:
@@ -602,12 +606,15 @@ class Simulation:
             observations_required = dict()
             valid_instruments = set()
 
-            for mission_name,mission in self.event_missions.items():
-                if event_type in mission_name.lower():
-                    for objective in mission:
+            for _,mission in self.missions.items():
+                for objective in mission:
+                    if isinstance(objective, EventDrivenObjective) and objective.event_type.lower() == event_type.lower():
                         co_observation_params.add(objective.parameter)
-                        valid_instruments.update(set(objective.valid_instruments))
-                        observations_required[objective.parameter] = set(objective.valid_instruments)
+
+                        for req in objective:
+                            if isinstance(req, CapabilityRequirement) and req.attribute == 'instrument':
+                                valid_instruments.update(set(req.valid_values))
+                                observations_required[objective.parameter] = set(req.valid_values)
             
             # get required measurements for a given event
             # observations_req = set(str_to_list(event[-1]))
@@ -669,16 +676,18 @@ class Simulation:
         # unpackage event
         event = tuple(event) 
 
-        # event format:
-        # gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
+        # event format: gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
         gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,id = event
 
         # get matching objectives
         observations_reqs = set()
-        for mission_name,mission in self.event_missions.items():
-            if event_type in mission_name.lower():
-                for objective in mission:
-                    observations_reqs.update(set(objective.valid_instruments))
+        for _,mission in self.missions.items():
+            for objective in mission:
+                if (isinstance(objective, EventDrivenObjective) 
+                    and objective.event_type.lower() == event_type.lower()):
+                    for req in objective:
+                        if isinstance(req, CapabilityRequirement) and req.attribute == 'instrument':
+                            observations_reqs.update(set(req.valid_values))
 
         # find accesses that overlook a given event's location
         matching_accesses = [
