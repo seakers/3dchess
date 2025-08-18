@@ -69,13 +69,13 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             # set task observation angle
             th_img = np.average((task.slew_angles.left, task.slew_angles.right))
             
-            # check if there is overlap with previous scheduled observation
-            potential_overlap = [Interval(observation.t_start,  observation.t_end) 
-                                 for observation in observations
-                                 if observation.t_start in task.accessibility 
-                                  or observation.t_end in task.accessibility]
-            if any([overlap.overlaps(task.accessibility) for overlap in potential_overlap]):
-                continue
+            # # check if there is overlap with previous scheduled observation
+            # potential_overlap = [Interval(observation.t_start,  observation.t_end) 
+            #                      for observation in observations
+            #                      if observation.t_start in task.accessibility 
+            #                       or observation.t_end in task.accessibility]
+            # if any([overlap.overlaps(task.accessibility) for overlap in potential_overlap]):
+            #     continue
 
             # find any previous scheduled observation
             actions_prev = [observation for observation in observations
@@ -89,14 +89,19 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                 
                 t_prev = action_prev.t_end
                 th_prev = action_prev.look_angle
+
             else:
                 # no prior observation exists, compare with current state
                 t_prev = state.t
                 th_prev = state.attitude[0]
 
+            # set observation time to earliest possible time
+            t_img = max(t_prev, task.accessibility.left)
+            d_img = task.duration_requirements.left
+
             # check if there is a potential previous observation conflict
             prev_action_feasible = self.is_observation_feasible(state,
-                                                                task.accessibility.left,
+                                                                t_img,
                                                                 th_img,
                                                                 t_prev,
                                                                 th_prev,
@@ -125,7 +130,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             next_action_feasible = self.is_observation_feasible(state,
                                                                 t_next,
                                                                 th_next,
-                                                                task.accessibility.right,
+                                                                t_img + d_img,
                                                                 th_img,
                                                                 max_slew_rate,
                                                                 max_torque,
@@ -134,8 +139,9 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             
             # check if the observation is feasible
             if prev_action_feasible and next_action_feasible:
-                targets = [[lat,lon,0.0] for parent_task in task.parent_tasks
-                                        for lat,lon,*_ in parent_task.targets]
+                targets = list({loc 
+                                for parent_task in task.parent_tasks
+                                for loc in parent_task.location})
                 objectives = list({parent_task.objective for parent_task in task.parent_tasks})
                 action = ObservationAction(task.instrument_name, 
                                            targets, 
@@ -185,7 +191,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         sorted_data = sorted(heuristic_vals, key=lambda x: x[1:])
         
         # return sorted tasks
-        return [task for task, *_ in sorted_data]
+        return [task for task,*_ in sorted_data]
     
     @runtime_tracker
     def calc_heuristic(self,

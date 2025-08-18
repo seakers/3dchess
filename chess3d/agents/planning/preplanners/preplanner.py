@@ -120,7 +120,7 @@ class AbstractPreplanner(AbstractPlanner):
             f'Observation actions not generated correctly. Is of type `{type(observations)}` with elements of type `{type(observations[0])}`.'
         assert self.is_observation_path_valid(state, specs, observations)
 
-        raise NotImplementedError(f'Preplanner for agents of type `{type(state)}` not yet implemented.')
+        # raise NotImplementedError(f'Preplanner for agents of type `{type(state)}` not yet implemented.')
     
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, observations, orbitdata)
