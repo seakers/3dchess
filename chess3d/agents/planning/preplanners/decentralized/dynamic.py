@@ -77,7 +77,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         # initiate results arrays
         # t_imgs : list[Interval]             = [task.accessibility for task in schedulable_tasks]
         th_imgs : list[float]               = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in schedulable_tasks]
-        rewards : list[float]               = [self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
+        rewards : list[float]               = [self.estimate_task_value(task, specs, cross_track_fovs, orbitdata, observation_history)
                                                 for task in tqdm(schedulable_tasks,leave=False,desc='SATELLITE: Calculating task rewards')]
         cumulative_rewards : list[float]    = [0.0 for _ in schedulable_tasks]
         preceeding_observations : list[int] = [np.NAN for _ in schedulable_tasks]

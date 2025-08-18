@@ -1060,20 +1060,24 @@ class GridTargetSpatialRequirement(SpatialRequirement):
     def _build_spatial_preference_function(self, _: float) -> Callable[[Any], float]:
         """Creates a spatial preference function that checks if a location is within the grid cell."""
         def preference(location: Any) -> float:
-            assert isinstance(location, (list, tuple)) and len(location) == 4, \
+            # Normalize location input
+            location = [location] if not isinstance(location, list) else location
+
+            # Validate input
+            assert all(isinstance(loc, (list, tuple)) for loc in location), \
                 "Location must be a tuple/list of (lat, lon, grid index, gp index)"
-            
-            *_, grid_idx, gp_idx = location
+            assert all([len(loc) == 4 for loc in location]), \
+                "Each location in the list must be a tuple of (lat, lon, grid index, gp index)"               
 
-            assert isinstance(grid_idx, int) and grid_idx >= 0, "Grid index must be a non-negative integer"
-            assert isinstance(gp_idx, int) and 0 <= gp_idx, "GP index must be a non-negative integer"
-
-            # TODO add support for point outside of grid list but within tolerance distance 
-
+            # return 1.0 if any location is within the grid cell
             return float(
-                grid_idx == self.grid_index and
-                0 <= gp_idx < self.grid_size
+                any(
+                    grid_idx == self.grid_index and
+                    0 <= gp_idx < self.grid_size
+                    for *_,grid_idx,gp_idx in location
+                )
             )
+
         
         return preference
     

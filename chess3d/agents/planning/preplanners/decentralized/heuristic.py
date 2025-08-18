@@ -28,6 +28,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                                _ : ClockConfig, 
                                orbitdata : OrbitData, 
                                schedulable_tasks : list,
+                               mission : Mission,
                                observation_history : ObservationHistory
                                ) -> list:
         if not isinstance(state, SatelliteAgentState):
@@ -42,7 +43,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         cross_track_fovs : dict = self.collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        schedulable_tasks : list[SpecificObservationTask] = self.sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, observation_history)
+        schedulable_tasks : list[SpecificObservationTask] = self.sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -153,7 +154,14 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         return observations_sorted
     
     @runtime_tracker
-    def sort_tasks_by_heuristic(self, state : SimulationAgentState, tasks : list, specs : Spacecraft, cross_track_fovs : dict, orbitdata : OrbitData, observation_history : ObservationHistory) -> list:
+    def sort_tasks_by_heuristic(self, 
+                                state : SimulationAgentState, 
+                                tasks : list, 
+                                specs : Spacecraft, 
+                                cross_track_fovs : dict, 
+                                orbitdata : OrbitData, 
+                                mission : Mission, 
+                                observation_history : ObservationHistory) -> list:
         """ Sorts tasks by heuristic value """
         tasks : list[SpecificObservationTask] = tasks
         
@@ -167,7 +175,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             tasks = tasks[:max_number_tasks]
 
         # calculate heuristic value for each task
-        heuristic_vals = [[self.calc_heuristic(task, specs, cross_track_fovs, orbitdata, observation_history)] 
+        heuristic_vals = [[self.calc_heuristic(task, specs, cross_track_fovs, orbitdata, mission, observation_history)] 
                           for task in tqdm(tasks, desc=f"{state.agent_name}-PREPLANNER: Calculating heuristic values", leave=False)]
         
         # insert task into heuristic values list for sorting
@@ -185,20 +193,24 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                         specs : Spacecraft, 
                         cross_track_fovs : dict, 
                         orbitdata : OrbitData, 
+                        mission : Mission,
                         observation_history : ObservationHistory
                         ) -> float:
         """ Heuristic function to sort tasks by their heuristic value. """
         # calculate task priority
-        priority = np.prod([parent_task.objective.priority  
-                            for parent_task in task.parent_tasks])
+        priority = np.sum([parent_task.priority  
+                           for parent_task in task.parent_tasks])
         # calculate task duration
         duration = task.accessibility.span()
         
-        # calculate task start time
+        # choose task earliest possible start time
         t_start = task.accessibility.left
-        
+
+        # choose shortest allowable task duration
+        duration = task.duration_requirements.left 
+
         # calculate task reward
-        task_reward = self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
+        task_reward = self.estimate_task_value(task, t_start, duration, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
         return -task_reward, -priority, -duration, t_start

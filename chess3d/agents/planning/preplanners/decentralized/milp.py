@@ -79,7 +79,7 @@ class SingleSatMILP(AbstractPreplanner):
         delta = model.addVars(task_indices, vtype=GRB.CONTINUOUS, lb=0, name="delta")
         
         # Set constants
-        rewards = np.array([self.calc_task_reward(task, specs, cross_track_fovs, orbitdata, observation_history)
+        rewards = np.array([self.estimate_task_value(task, specs, cross_track_fovs, orbitdata, observation_history)
                             for task in tqdm(schedulable_tasks,leave=False,desc='SATELLITE: Calculating task rewards')])
         t_start = np.array([task.accessibility.left for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
         t_end   = np.array([task.accessibility.right for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])

@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan
 from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, SpecificObservationTask
-from chess3d.agents.planning.tracker import ObservationHistory
+from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -89,7 +89,8 @@ class AbstractPlanner(ABC):
         # add clustered tasks to the final list of tasks available for scheduling
         schedulable_tasks.extend(combined_tasks)
 
-        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] for task in schedulable_tasks]), \
+        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] 
+                    for task in schedulable_tasks]), \
             f"Tasks have slew angles larger than the maximum allowed field of view."
 
         # return tasks
@@ -114,9 +115,7 @@ class AbstractPlanner(ABC):
                 duration_req : MeasurementDurationRequirement = duration_reqs[0] if duration_reqs else None
             else:
                 duration_req = None
-            
             duration_requirements = Interval(min(duration_req.thresholds),np.Inf) if duration_req is not None else Interval(0, np.Inf)
-
 
             # find access time for this task
             for *__,grid_index,gp_index in task.location:
@@ -356,124 +355,152 @@ class AbstractPlanner(ABC):
         degrees : dict = {task : len(adjacency[task.id]) for task in tasks}
 
         # sort tasks by degree and return
-        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.reward for parent_task in p.parent_tasks]), -p.accessibility.left))
+        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.priority for parent_task in p.parent_tasks]), -p.accessibility.left))
 
     def sort_tasks_by_common_neighbors(self, p : SpecificObservationTask, n_p : list, adjacency : dict) -> list:
+        # specify types
         n_p : list[SpecificObservationTask] = n_p
         adjacency : Dict[str, set[SpecificObservationTask]] = adjacency
 
+        # calculate common neighbors
         common_neighbors : dict = {q : adjacency[p.id].intersection(adjacency[q.id]) 
                                    for q in n_p}
+        
+        # calculate neighbors to delete
         neighbors_to_delete : dict = {q : adjacency[p.id].difference(adjacency[q.id])
                                       for q in n_p}
-
-        # DEBUGGING 
-        # vals = [(len(common_neighbors[p]), 
-        #          -len(neighbors_to_delete[p]),
-        #          sum([parent_task.reward for parent_task in p.parent_tasks]), 
-        #          -p.accessibility.left)
-        #          for p in n_p]
-        # vals.sort()
-
+        
+        # sort neighbors by number of common neighbors, number of edges to delete, priority and accessibility
         return sorted(n_p, 
                       key=lambda p: (len(common_neighbors[p]), 
                                      -len(neighbors_to_delete[p]),
-                                     sum([parent_task.reward for parent_task in p.parent_tasks]), 
+                                     sum([parent_task.priority for parent_task in p.parent_tasks]), 
                                      -p.accessibility.left))
         
 
     @runtime_tracker
-    def calc_task_reward(self, 
-                         task : SpecificObservationTask, 
-                         specs : Spacecraft, 
-                         cross_track_fovs : dict,
-                         orbitdata : OrbitData,
-                         observation_history : ObservationHistory
-                         ) -> float:
+    def estimate_task_value(self, 
+                            task : SpecificObservationTask, 
+                            t_img : float,
+                            d_img : float,
+                            specs : Spacecraft, 
+                            cross_track_fovs : dict,
+                            orbitdata : OrbitData,
+                            mission : Mission,
+                            observation_history : ObservationHistory
+                            ) -> float:
+        """ Estimates task value based on predicted observation performance. """
+
+        # estimate measurement performance metrics
+        measurement_performance_metrics : dict = self.estimate_observation_performance_metrics(task, t_img, d_img, specs, cross_track_fovs, orbitdata, observation_history)
+
+        # check if measurement performance is valid
+        if measurement_performance_metrics is None: return 0.0
+
+        # calculate and return total task reward
+        return mission.calc_specific_task_value(task, measurement_performance_metrics)
+
+    @runtime_tracker    
+    def estimate_observation_performance_metrics(self, 
+                                         task : SpecificObservationTask, 
+                                         t_img : float,
+                                         d_img : float,
+                                         specs : Spacecraft, 
+                                         cross_track_fovs : dict,
+                                         orbitdata : OrbitData,
+                                         observation_history : ObservationHistory
+                                        ) -> dict:
+
+        # get available access metrics
+        observation_performances = self.get_available_accesses(task, t_img, d_img, orbitdata, cross_track_fovs)
+        observed_locations = list({(observation_performances['lat [deg]'][i], 
+                                    observation_performances['lon [deg]'][i],
+                                    observation_performances['grid index'][i], 
+                                    observation_performances['GP index'][i]) 
+                                     for i in range(len(observation_performances['time [s]']))
+                                     })
+
+        # check if there are no valid observations for this task
+        if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
+            # no valid accesses; no reward added
+            return None
+
+        # get instrument specifications
+        instrument_spec : BasicSensorModel = next(instr 
+                                                  for instr in specs.instrument
+                                                  if instr.name.lower() == task.instrument_name.lower()).mode[0]
+                
+        # get previous observation information
+        prev_obs : list[ObservationTracker] = [observation_history.get_observation_history(grid_index, gp_index)
+                    for *_,grid_index,gp_index in observed_locations]
+
+        # get current observation information 
+        observation_performance_metrics = {col.lower() : observation_performances[col][-1] 
+                                    for col in observation_performances}
+        observation_performance_metrics.update({ 
+                "location" : observed_locations,
+                "t_start" : t_img,
+                "t_end" : t_img + d_img,
+                "duration" : d_img,
+                "n_obs" : sum(obs.n_obs for obs in prev_obs),
+                "revisit_time" : min(t_img - obs.t_last for obs in prev_obs),
+                "horizontal_spatial_resolution" : observation_performance_metrics['ground pixel cross-track resolution [m]'],
+            })
+
+        # package observation performance information
+        if 'vnir' in task.instrument_name.lower() or 'tir' in task.instrument_name.lower():
+            observation_performance_metrics.update({
+                'spectral_resolution' : instrument_spec.spectral_resolution
+            })
+        elif 'altimeter' in task.instrument_name.lower():
+            observation_performance_metrics.update({
+                "accuracy" : observation_performance_metrics['accuracy [m]'],
+            })
+        else:
+            raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
+
+        return observation_performance_metrics
+
+    def get_available_accesses(self, 
+                               task : SpecificObservationTask, 
+                               t_img : float,
+                               d_img : float,
+                               orbitdata : OrbitData, 
+                               cross_track_fovs : dict
+                            ) -> dict:
+        """ Uses pre-computed orbitdata to estimate observation metrics for a given task. """
+        
+        # get task targets
+        task_targets = {(int(grid_index), int(gp_index))
+                        for parent_task in task.parent_tasks
+                        for *_,grid_index,gp_index in parent_task.location}
+        
         # estimate observation look angle
         th_img = np.average((task.slew_angles.left, task.slew_angles.right))
 
         # get ground points accessesible during the availability of the task
-        raw_access_data = orbitdata.gp_access_data.lookup_interval(task.accessibility.left, task.accessibility.right)
+        raw_access_data : Dict[str,list] = orbitdata.gp_access_data.lookup_interval(t_img, t_img + d_img)
 
-        # get ground points that are within the agent's field of view
+        # extract ground point accesses that are within the agent's field of view
         accessible_gps_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
                                         if abs(raw_access_data['look angle [deg]'][i] - th_img) \
-                                            <= cross_track_fovs[task.instrument_name] / 2]
-        accessible_gps_performances = {col : [raw_access_data[col][i] for i in accessible_gps_data_indeces]
+                                            <= cross_track_fovs[task.instrument_name] / 2
+                                        and raw_access_data['instrument'][i] == task.instrument_name]
+        accessible_gps_performances = {col : [raw_access_data[col][i] 
+                                              for i in accessible_gps_data_indeces]
                                     for col in raw_access_data}
+        
+        # extract gp accesses of the desired targets within the task's accessibility and agent's field of view
+        valid_access_data_indeces = [i for i in range(len(accessible_gps_performances['time [s]']))
+                                    if (int(accessible_gps_performances['grid index'][i]), \
+                                        int(accessible_gps_performances['GP index'][i])) in task_targets]
+        observation_performances = {col : [accessible_gps_performances[col][i] 
+                                           for i in valid_access_data_indeces]
+                                    for col in accessible_gps_performances}
+        
+        # return estimated observation performances
+        return observation_performances
 
-        # calculate total task reward          
-        task_reward = 0
-        for parent_task in task.parent_tasks:
-
-            # get task targets
-            task_targets = {(int(grid_index), int(gp_index))
-                            for *_,grid_index,gp_index in parent_task.targets}
-            
-            # get accesses of desired targets within the task's accessibility and agent's field of view
-            valid_access_data_indeces = [i for i in range(len(accessible_gps_performances['time [s]']))
-                                        if (int(accessible_gps_performances['grid index'][i]), \
-                                            int(accessible_gps_performances['GP index'][i])) in task_targets]
-            observation_performances = {col : [accessible_gps_performances[col][i] for i in valid_access_data_indeces]
-                                        for col in accessible_gps_performances}
-            
-            # check if there are no valid observations for this task
-            if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
-                # no accesses; no reward added
-                continue
-            
-            # get target information
-            instrument_spec : BasicSensorModel = next(instr for instr in specs.instrument).mode[0]
-            grid_index = observation_performances['grid index'][0] if 'grid index' in observation_performances else None
-            gp_index = observation_performances['GP index'][0] if 'GP index' in observation_performances else None
-
-            # get previous observation information
-            prev_obs = observation_history.get_observation_history(grid_index, gp_index)
-
-            # get current observation information 
-            # TODO : add support for multiple targets within the observation
-            observation_performance = {col : observation_performances[col][0] for col in observation_performances}
-
-            # package observation performance information
-            if task.instrument_name.lower() in ['vnir', 'tir']:
-                observation_performance = {
-                    "instrument" : task.instrument_name,    
-                    "t_start" : task.accessibility.left,
-                    "t_end" : task.accessibility.right,
-                    "n_obs" : prev_obs.n_obs,
-                    "t_prev" : prev_obs.t_last,
-                    "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
-                    'spectral_resolution' : instrument_spec.spectral_resolution
-                }
-            elif task.instrument_name.lower() == 'altimeter':
-                observation_performance = {
-                    "instrument" : task.instrument_name,    
-                    "t_start" : task.accessibility.left,
-                    "t_end" : task.accessibility.right,
-                    "n_obs" : prev_obs.n_obs,
-                    "t_prev" : prev_obs.t_last,
-                    "horizontal_spatial_resolution" : observation_performance['ground pixel cross-track resolution [m]'],
-                    "accuracy" : observation_performance['accuracy [m]'],
-                }
-            else:
-                raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
-            
-            # calculate task priority, performance, score and severity
-            task_priority = parent_task.objective.priority
-            task_performance = parent_task.objective.eval_measurement_performance(observation_performance)
-            task_score = parent_task.objective.calc_reward(observation_performance)
-            task_severity = parent_task.event.severity if isinstance(parent_task, EventObservationTask) else 1.0
-            
-            # calculate utility of the task
-            u_ijk = task_priority * task_performance * task_score * task_severity
-            
-            # update task reward
-            task_reward += u_ijk
-
-        # return total task reward
-        return task_reward
-    
     @runtime_tracker
     def _create_broadcast_path(self, 
                                state : SimulationAgentState, 

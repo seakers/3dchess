@@ -72,7 +72,7 @@ class Mission:
         
         # Initialize relevances
         obj_relevances = {
-            obj: (1.0 if isinstance(obj, type_map[type(task)]) else 0.5)
+            obj: (1.0 if isinstance(obj, type_map[type(task)]) else 0.25)
             if obj.parameter == task.parameter else 0.0
             for obj in self.objectives
         }

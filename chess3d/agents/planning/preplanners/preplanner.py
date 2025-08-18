@@ -112,15 +112,16 @@ class AbstractPreplanner(AbstractPlanner):
 
         # create schedulable tasks from known tasks and future access opportunities
         schedulable_tasks : list[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs)
-        
-        raise NotImplementedError(f'Preplanner for agents of type `{type(state)}` not yet implemented.')
 
         # schedule observation tasks
-        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, observation_history)
+        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, mission, observation_history)
+
         assert isinstance(observations, list) and all([isinstance(obs, ObservationAction) for obs in observations]), \
             f'Observation actions not generated correctly. Is of type `{type(observations)}` with elements of type `{type(observations[0])}`.'
         assert self.is_observation_path_valid(state, specs, observations)
 
+        raise NotImplementedError(f'Preplanner for agents of type `{type(state)}` not yet implemented.')
+    
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, observations, orbitdata)
 
@@ -206,20 +207,8 @@ class AbstractPreplanner(AbstractPlanner):
         return access_opportunities
 
     @abstractmethod
-    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list, observation_history : ObservationHistory) -> list:
+    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list, mission : Mission, observation_history : ObservationHistory) -> list:
         """ Creates a list of observation actions to be performed by the agent """    
-
-    # @abstractmethod
-    # def _schedule_broadcasts(self, 
-    #                          state : SimulationAgentState, 
-    #                          orbitdata : OrbitData,
-    #                          **kwargs
-    #                         ) -> list:
-    #     """ 
-    #     Schedules any broadcasts to be done. 
-        
-    #     By default it schedules any pending measurement requests or message relay messages.
-    #     """
 
     @abstractmethod
     def _schedule_broadcasts(self, state: SimulationAgentState, observations : list, orbitdata: OrbitData, t : float = None) -> list:
