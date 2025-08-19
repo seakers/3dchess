@@ -43,7 +43,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         cross_track_fovs : dict = self.collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        schedulable_tasks : list[SpecificObservationTask] = self.sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
+        schedulable_tasks : list[SpecificObservationTask] = self.__sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -68,7 +68,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
 
             # get previous and future observation actions' info
             th_prev,t_prev,d_prev,th_next,t_next,d_next \
-                = self.get_previous_and_future_observation_info(state, task, observations, max_slew_rate)
+                = self.__get_previous_and_future_observation_info(state, task, observations, max_slew_rate)
             
             # set task observation angle
             th_img = np.average((task.slew_angles.left, task.slew_angles.right))
@@ -96,29 +96,18 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                                            t_img, 
                                            d_img)
                 observations.append(action)
-
-                # # DEBUG sort by start time
-                # observations_sorted = sorted(observations, key=lambda a : a.t_start)
-
-                # sorted_valid =  self.is_observation_path_valid(state, specs, observations_sorted)
-
-                # if not sorted_valid:
-                #     for j in range(len(observations_sorted)):
-                #         if not self.is_observation_path_valid(state, specs, observations_sorted[:j]):
-                #             x = self.is_observation_path_valid(state, specs, observations_sorted)
-                #             x = 1
         
         # return sorted by start time
         return sorted(observations, key=lambda a : a.t_start)
     
-    def get_previous_and_future_observation_info(self, 
+    def __get_previous_and_future_observation_info(self, 
                                                  state : SimulationAgentState, 
                                                  task : SpecificObservationTask, 
                                                  observations : list, 
                                                  max_slew_rate : float) -> tuple:
         
         # get latest previously scheduled observation
-        action_prev : ObservationAction = self.get_previous_observation_action(task, observations)
+        action_prev : ObservationAction = self.__get_previous_observation_action(task, observations)
 
         # get values from previous action
         if action_prev:    
@@ -133,7 +122,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             d_prev = 0.0
         
         # get next earliest scheduled observation
-        action_next : ObservationAction = self.get_next_observation_action(task, observations)
+        action_next : ObservationAction = self.__get_next_observation_action(task, observations)
 
         # get values from next action
         if action_next:
@@ -148,7 +137,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
 
         return th_prev, t_prev, d_prev, th_next, t_next, d_next
 
-    def get_previous_observation_action(self, task : SpecificObservationTask, observations : list) -> ObservationAction:
+    def __get_previous_observation_action(self, task : SpecificObservationTask, observations : list) -> ObservationAction:
         """ find any previously scheduled observation """
         # set types
         observations : list[ObservationAction] = observations
@@ -160,7 +149,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         # return latest observation action
         return max(actions_prev, key=lambda a: a.t_end) if actions_prev else None
     
-    def get_next_observation_action(self, task : SpecificObservationTask, observations : list) -> ObservationAction:
+    def __get_next_observation_action(self, task : SpecificObservationTask, observations : list) -> ObservationAction:
          # set types
         observations : list[ObservationAction] = observations
 
@@ -172,7 +161,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         return min(actions_next, key=lambda a: a.t_start) if actions_next else None
 
     @runtime_tracker
-    def sort_tasks_by_heuristic(self, 
+    def __sort_tasks_by_heuristic(self, 
                                 state : SimulationAgentState, 
                                 tasks : list, 
                                 specs : Spacecraft, 
@@ -193,7 +182,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             tasks = tasks[:max_number_tasks]
 
         # calculate heuristic value for each task
-        heuristic_vals = [[self.calc_heuristic(task, specs, cross_track_fovs, orbitdata, mission, observation_history)] 
+        heuristic_vals = [[self._calc_heuristic(task, specs, cross_track_fovs, orbitdata, mission, observation_history)] 
                           for task in tqdm(tasks, desc=f"{state.agent_name}-PREPLANNER: Calculating heuristic values", leave=False)]
         
         # insert task into heuristic values list for sorting
@@ -206,14 +195,14 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         return [task for task,*_ in sorted_data]
     
     @runtime_tracker
-    def calc_heuristic(self,
+    def _calc_heuristic(self,
                         task : SpecificObservationTask, 
                         specs : Spacecraft, 
                         cross_track_fovs : dict, 
                         orbitdata : OrbitData, 
                         mission : Mission,
                         observation_history : ObservationHistory
-                        ) -> float:
+                        ) -> tuple:
         """ Heuristic function to sort tasks by their heuristic value. """
         # calculate task priority
         priority = np.sum([parent_task.priority  
@@ -233,34 +222,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
         return -task_reward, -priority, -duration, t_start
     
-    def no_redundant_observations(self, 
-                                 state : SimulationAgentState, 
-                                 observations : list,
-                                 orbitdata : OrbitData
-                                 ) -> bool:
-        if isinstance(state, SatelliteAgentState):
-            for j in range(len(observations)):
-                i = j - 1
 
-                if i < 0: # there was no prior observation performed
-                    continue                
-
-                observation_prev : ObservationAction = observations[i]
-                observation_curr : ObservationAction = observations[j]
-
-                for target_prev in observation_prev.targets:
-                    for target_curr in observation_curr.targets:
-                        if (
-                            abs(target_curr[0] - target_prev[0]) <= 1e-3
-                            and abs(target_curr[1] - target_prev[1]) <= 1e-3
-                            and (observation_curr.t_start - observation_prev.t_end) <= orbitdata.time_step):
-                            return False
-            
-            return True
-
-        else:
-            raise NotImplementedError(f'Measurement path validity check for agents with state type {type(state)} not yet implemented.')
-        
     @runtime_tracker
     def _schedule_broadcasts(self, 
                              state: SimulationAgentState, 
