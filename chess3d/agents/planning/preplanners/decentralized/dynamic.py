@@ -68,7 +68,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
         # sort tasks by start time
-        schedulable_tasks : list[SpecificObservationTask] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -len(t.parent_tasks)))
+        schedulable_tasks : list[SpecificObservationTask] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -t.get_priority(), -len(t.parent_tasks)))
 
         # add dummy task to represent initial state
         instrument_names = list(payload.keys())
@@ -85,7 +85,8 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         preceeding_observations : list[int] = [np.NAN for _ in schedulable_tasks]
 
         # initialize observation actions list
-        observation_actions : list[ObservationAction] = [None for _ in schedulable_tasks]
+        earliest_observation_actions : list[ObservationAction] = [None for _ in schedulable_tasks]
+        latest_observation_actions : list[ObservationAction] = [None for _ in schedulable_tasks]
         
         # populate observation action list 
         for i in tqdm(range(len(schedulable_tasks)), 
@@ -95,23 +96,30 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             task_i : SpecificObservationTask = schedulable_tasks[i]
 
             # collect all targets and objectives
-            targets_i = [[target[0], target[1], 0.0] 
-                         for parent_task in task_i.parent_tasks
-                         for target in parent_task.targets]
-            objectives = [parent_task.objective for parent_task in task_i.parent_tasks]
+            locations_i = task_i.get_location()
+            objectives = task_i.get_objectives()
             th_i = th_imgs[i]
+            d_imgs_i = d_imgs[i]
 
             # estimate observation action for task i
-            observation_i = ObservationAction(task_i.instrument_name,
-                                              targets_i,
-                                              objectives,
-                                              th_i,
-                                              task_i.accessibility.left,
-                                              task_i.accessibility.span(),
-                                              )
+            earliest_observation_i = ObservationAction(task_i.instrument_name,
+                                                        locations_i,
+                                                        objectives,
+                                                        th_i,
+                                                        task_i.accessibility.left,
+                                                        d_imgs_i,
+                                                        )
+            latest_observation_i = ObservationAction(task_i.instrument_name,
+                                                        locations_i,
+                                                        objectives,
+                                                        th_i,
+                                                        task_i.accessibility.right-d_imgs_i,
+                                                        d_imgs_i,
+                                                        )
 
             # update observation action list
-            observation_actions[i] = observation_i if observation_actions[i] is None else observation_actions[i]
+            earliest_observation_actions[i] = earliest_observation_i
+            latest_observation_actions[i] = latest_observation_i
 
         # initialize adjancency matrix     
         adjacency = [ [False for _ in schedulable_tasks] for _ in schedulable_tasks]
@@ -122,33 +130,53 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                         leave=False):
             for j in range(i + 1, len(schedulable_tasks)):
                 # update adjacency matrix for sequence i->j
-                adjacency[i][j] = self.is_observation_path_valid(state, specs, [observation_actions[i], observation_actions[j]])
+                adjacency[i][j] = self.is_observation_path_valid(state, specs, [earliest_observation_actions[i], latest_observation_actions[j]])
 
-                # check if observation j starts after observation i ends
-                if observation_actions[i].t_end < observation_actions[j].t_start:
+                if adjacency[i][j]:
+                    # if sequence i->j is valid; enforce acyclical behavior and skip j->i
+                    continue
+                
+                elif latest_observation_actions[i].t_end < earliest_observation_actions[j].t_start:
                     # observation sequence j->i cannot be performed; skip
                     continue
-
+                
                 # update adjacency matrix for sequence j->i
-                adjacency[j][i] = self.is_observation_path_valid(state, specs, [observation_actions[j], observation_actions[i]])
+                adjacency[j][i] = self.is_observation_path_valid(state, specs, [earliest_observation_actions[j], latest_observation_actions[i]])
 
         # calculate optimal path and update results
         for j in tqdm(range(len(schedulable_tasks)), 
                       desc=f'{state.agent_name}-PLANNER: Calculating Optimal Path',
                       leave=False):
-            # get any possibly prior observation            
-            prev_opportunities : list[tuple] = [i
-                                                for i in range(0,j)
-                                                if adjacency[i][j]]
-            # there are no previous possible observations; skip
-            if not prev_opportunities: 
-                continue
+            # get indeces of possible prior observations
+            prev_indices : list[int] = [i for i in range(0,j) if adjacency[i][j]]
 
             # update cummulative reward
-            for i in prev_opportunities:
-                # update cumulative reward
-                if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j]:
+            for i in prev_indices:
+                # calculate maneuver time between tasks i and j
+                m_ij = abs(th_imgs[i] - th_imgs[j]) / max_slew_rate if max_slew_rate else None
+                
+                # calculate earliest imaging time for task j assuming task i is done before
+                t_img_j = max(t_imgs[i] + d_imgs[i] + m_ij, t_imgs[j])  if max_slew_rate else t_imgs[j]
+                
+                # estimate task value of task j if done after i
+                reward_j = self.estimate_task_value(schedulable_tasks[j], 
+                                                    t_img_j, 
+                                                    d_imgs[j], 
+                                                    specs, 
+                                                    cross_track_fovs, orbitdata, mission, observation_history)
+
+                # compare cumulative rewards
+                if cumulative_rewards[i] + reward_j > cumulative_rewards[j]:
+                    # update imaging time
+                    t_imgs[j] = t_img_j
+
+                    # update individual task reward
+                    rewards[j] = reward_j
+
+                    # update cumulative reward
                     cumulative_rewards[j] = cumulative_rewards[i] + rewards[j]
+                    
+                    # update preceeding observation 
                     preceeding_observations[j] = i
             
         # get task with highest cummulative reward
@@ -177,7 +205,14 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         observation_sequence.remove(0)
 
         # get matching observation actions
-        observations : list[ObservationAction] = [observation_actions[j] for j in observation_sequence]
+        observations : list[ObservationAction] = [ObservationAction(schedulable_tasks[j].instrument_name,
+                                                                    schedulable_tasks[j].get_location(),
+                                                                    schedulable_tasks[j].get_objectives(),
+                                                                    th_imgs[j],
+                                                                    t_imgs[j],
+                                                                    d_imgs[j]
+                                                                    )
+                                                  for j in observation_sequence]
 
         # check if all observation was scheduled are valid
         assert all([obs is not None for obs in observations]), 'Invalid observation sequence generated by DP. No observations scheduled.'
@@ -195,6 +230,8 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         for i, val in enumerate(values):
             if math.isclose(val, max_val, rel_tol=rel_tol, abs_tol=abs_tol):
                 return i        
+            
+        raise ValueError("No maximum value found in the list.")
 
     @runtime_tracker
     def populate_adjacency_matrix(self, 

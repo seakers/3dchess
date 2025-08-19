@@ -345,6 +345,18 @@ class SpecificObservationTask:
             slew_angles=self.slew_angles,
             id=self.id
         )
+    
+    def get_location(self) -> List[tuple]:
+        """ Collects the location information of all parent tasks. """
+        return list({loc for task in self.parent_tasks for loc in task.location})
+    
+    def get_objectives(self) -> List[MissionObjective]:
+        """ Collects the objectives of all parent tasks. """
+        return list({task.objective for task in self.parent_tasks})
+    
+    def get_priority(self) -> float:
+        """ Collects the priority of all parent tasks. """
+        return sum(task.priority for task in self.parent_tasks) if self.parent_tasks else 0.0
 
     def can_combine(self, other_task : object, extend : bool = True) -> bool:
         """ Check if two tasks can be combined based on their time and slew angle. """
