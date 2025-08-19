@@ -65,93 +65,112 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             # check if agent has the payload to peform observation
             if task.instrument_name not in payload:
                 continue
+
+            # get previous and future observation actions' info
+            th_prev,t_prev,d_prev,th_next,t_next,d_next \
+                = self.get_previous_and_future_observation_info(state, task, observations, max_slew_rate)
             
             # set task observation angle
             th_img = np.average((task.slew_angles.left, task.slew_angles.right))
+
+            # calculate maneuver times
+            m_prev = abs(th_prev - th_img) / max_slew_rate if max_slew_rate else 0.0
+            m_next = abs(th_img - th_next) / max_slew_rate if max_slew_rate else 0.0
             
-            # find any previous scheduled observation
-            actions_prev = [observation for observation in observations
-                            if observation.t_start - 1e-6 <= task.accessibility.left]
-            
-            if actions_prev:
-                # sort by end time 
-                actions_prev.sort(key=lambda a : a.t_end)
-
-                action_prev : ObservationAction = actions_prev[-1]
-                
-                t_prev = action_prev.t_end
-                th_prev = action_prev.look_angle
-
-            else:
-                # no prior observation exists, compare with current state
-                t_prev = state.t
-                th_prev = state.attitude[0]
-
-            # set observation time to earliest possible time and shortest alloweable duration
-            # TODO Improve observation time and duration selection?
-            t_img = max(t_prev, task.accessibility.left)
+            # set task imaging time and duration
+            # TODO improve selection? Currently aims for earliest and shortest observation possible
+            t_img = max(t_prev + d_prev + m_prev, task.accessibility.left)
             d_img = task.duration_requirements.left
-
-            # check if there is a potential previous observation conflict
-            prev_action_feasible = self.is_observation_feasible(state,
-                                                                t_img,
-                                                                th_img,
-                                                                t_prev,
-                                                                th_prev,
-                                                                max_slew_rate,
-                                                                max_torque,
-                                                                cross_track_fovs[task.instrument_name]
-                                                                )
-
-            # find any future scheduled observation
-            actions_next = [observation for observation in observations
-                            if task.accessibility.right - 1e-6 <= observation.t_end]
-            if actions_next:
-                # sort by start times
-                actions_next.sort(key=lambda a : a.t_start)
-
-                action_next : ObservationAction = actions_next[0]
-                
-                t_next = action_next.t_start
-                th_next = action_next.look_angle
-            else:
-                # no future observation exists, compare with current state
-                t_next = task.accessibility.right
-                th_next = np.average((task.slew_angles.left, task.slew_angles.right))
-
-            # check if there is a potential future observation conflict
-            next_action_feasible = self.is_observation_feasible(state,
-                                                                t_next,
-                                                                th_next,
-                                                                t_img + d_img,
-                                                                th_img,
-                                                                max_slew_rate,
-                                                                max_torque,
-                                                                cross_track_fovs[task.instrument_name]
-                                                                )
             
+            if t_img + d_img not in task.accessibility:
+                continue
+
             # check if the observation is feasible
+            prev_action_feasible : bool = (t_prev + d_prev + m_prev <= t_img - 1e-6)
+            next_action_feasible : bool = (t_img + d_img + m_next   <= t_next - 1e-6)
             if prev_action_feasible and next_action_feasible:
-                targets = list({loc 
-                                for parent_task in task.parent_tasks
-                                for loc in parent_task.location})
-                objectives = list({parent_task.objective for parent_task in task.parent_tasks})
                 action = ObservationAction(task.instrument_name, 
-                                           targets, 
-                                           objectives,
+                                           task.get_location(), 
+                                           task.get_objectives(),
                                            th_img, 
-                                           task.accessibility.left, 
-                                           task.accessibility.span())
+                                           t_img, 
+                                           d_img)
                 observations.append(action)
+
+                # # DEBUG sort by start time
+                # observations_sorted = sorted(observations, key=lambda a : a.t_start)
+
+                # sorted_valid =  self.is_observation_path_valid(state, specs, observations_sorted)
+
+                # if not sorted_valid:
+                #     for j in range(len(observations_sorted)):
+                #         if not self.is_observation_path_valid(state, specs, observations_sorted[:j]):
+                #             x = self.is_observation_path_valid(state, specs, observations_sorted)
+                #             x = 1
         
-        # sort by start time
-        observations_sorted = sorted(observations, key=lambda a : a.t_start)
-
-        # assert self.no_redundant_observations(state, observations_sorted, orbitdata)
-        assert self.is_observation_path_valid(state, specs, observations_sorted)
-
-        return observations_sorted
+        # return sorted by start time
+        return sorted(observations, key=lambda a : a.t_start)
     
+    def get_previous_and_future_observation_info(self, 
+                                                 state : SimulationAgentState, 
+                                                 task : SpecificObservationTask, 
+                                                 observations : list, 
+                                                 max_slew_rate : float) -> tuple:
+        
+        # get latest previously scheduled observation
+        action_prev : ObservationAction = self.get_previous_observation_action(task, observations)
+
+        # get values from previous action
+        if action_prev:    
+            th_prev = action_prev.look_angle
+            t_prev = action_prev.t_end
+            d_prev = action_prev.t_end - t_prev
+            
+        else:
+            # no prior observation exists; compare with current state
+            th_prev = state.attitude[0]
+            t_prev = state.t
+            d_prev = 0.0
+        
+        # get next earliest scheduled observation
+        action_next : ObservationAction = self.get_next_observation_action(task, observations)
+
+        # get values from next action
+        if action_next:
+            th_next = action_next.look_angle
+            t_next = action_next.t_start
+            d_next = action_next.t_end - t_next
+        else:
+            # no future observation exists; compare with current task
+            th_next = np.average((task.slew_angles.left, task.slew_angles.right))
+            t_next = task.accessibility.right
+            d_next = 0.0
+
+        return th_prev, t_prev, d_prev, th_next, t_next, d_next
+
+    def get_previous_observation_action(self, task : SpecificObservationTask, observations : list) -> ObservationAction:
+        """ find any previously scheduled observation """
+        # set types
+        observations : list[ObservationAction] = observations
+
+        # filter for previous actions
+        actions_prev : list[ObservationAction] = [observation for observation in observations
+                                                 if observation.t_end - 1e-6 <= task.accessibility.right]
+
+        # return latest observation action
+        return max(actions_prev, key=lambda a: a.t_end) if actions_prev else None
+    
+    def get_next_observation_action(self, task : SpecificObservationTask, observations : list) -> ObservationAction:
+         # set types
+        observations : list[ObservationAction] = observations
+
+        # filter for next actions
+        actions_next = [observation for observation in observations
+                        if task.accessibility.left - 1e-6 <= observation.t_start]
+        
+        # return earliest observation action
+        return min(actions_next, key=lambda a: a.t_start) if actions_next else None
+
     @runtime_tracker
     def sort_tasks_by_heuristic(self, 
                                 state : SimulationAgentState, 
@@ -213,32 +232,6 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
 
         # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
         return -task_reward, -priority, -duration, t_start
-
-    def is_observation_feasible(self, 
-                                state : SimulationAgentState,
-                                t_img : float, 
-                                th_img : float, 
-                                t_prev : float, 
-                                th_prev : float, 
-                                max_slew_rate : float, 
-                                max_torque : float,
-                                fov : float
-                                ) -> bool:
-        """ compares previous observation """
-        
-        # calculate inteval between observations
-        dt_obs = t_img - t_prev
-
-        # calculate maneuver angle 
-        dth_img = abs(th_img - th_prev) 
-
-        # estimate maneuver time
-        dt_maneuver = dth_img / max_slew_rate
-
-        # check slew constraint
-        return dt_obs >= 0 and (dt_maneuver <= dt_obs or abs(dt_maneuver - dt_obs) <= 1e-6)
-    
-        #TODO check torque constraint
     
     def no_redundant_observations(self, 
                                  state : SimulationAgentState, 
