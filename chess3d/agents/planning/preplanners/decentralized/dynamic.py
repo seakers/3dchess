@@ -160,8 +160,8 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
 
                 # check if imaging time is valid
                 if not (t_img_j <= state.t + self.horizon                           # imaging start time within planning horizon
-                    and t_img_j + d_imgs[j] <= state.t + self.horizon               # imaging end time within planning horizon
                     and t_img_j in schedulable_tasks[j].accessibility               # imaging start time within task availability
+                    and t_img_j + d_imgs[j] <= state.t + self.horizon               # imaging end time within planning horizon
                     and t_img_j + d_imgs[j] in schedulable_tasks[j].accessibility): # imaging end time within task availability
                     continue
 
