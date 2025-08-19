@@ -1,3 +1,4 @@
+from typing import Any
 from dmas.utils import runtime_tracker
 
 from chess3d.agents.planning.preplanners.decentralized.heuristic import HeuristicInsertionPlanner
@@ -8,7 +9,7 @@ class EarliestAccessPlanner(HeuristicInsertionPlanner):
     @runtime_tracker
     def _calc_heuristic(self,
                         task : SpecificObservationTask, 
-                        *args
+                        *_ : Any
                         ) -> tuple:
         """ Heuristic function to sort tasks by their heuristic value. """
         # return to sort using: earliest start time >> longest duration

@@ -111,7 +111,7 @@ class AbstractPreplanner(AbstractPlanner):
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, specs, planning_horizon, orbitdata)
 
         # create schedulable tasks from known tasks and future access opportunities
-        schedulable_tasks : list[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs)
+        schedulable_tasks : list[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
         # schedule observation tasks
         observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, mission, observation_history)

@@ -71,13 +71,14 @@ class AbstractPlanner(ABC):
     def create_tasks_from_accesses(self, 
                                     available_tasks : list,
                                     access_times : list, 
-                                    cross_track_fovs : dict
+                                    cross_track_fovs : dict,
+                                    orbitdata : OrbitData
                                     ) -> list:
         """ Creates tasks from access times. """
 
         # generate schedulable tasks from access times
         schedulable_tasks : list[SpecificObservationTask] \
-            = self.single_tasks_from_accesses(available_tasks, access_times, cross_track_fovs)
+            = self.single_tasks_from_accesses(available_tasks, access_times, cross_track_fovs, orbitdata)
         
         # check if tasks are clusterable
         task_adjacency : Dict[str, set[SpecificObservationTask]] \
@@ -100,7 +101,8 @@ class AbstractPlanner(ABC):
     def single_tasks_from_accesses(self,
                                    available_tasks : list,
                                    access_times : list, 
-                                   cross_track_fovs : dict
+                                   cross_track_fovs : dict,
+                                   orbitdata : OrbitData
                                    ) -> list:
         """ Creates one specific task per each access opportunity for every available task """
 
@@ -118,7 +120,7 @@ class AbstractPlanner(ABC):
                 duration_req : MeasurementDurationRequirement = duration_reqs[0] if duration_reqs else None
             else:
                 duration_req = None
-            duration_requirements = Interval(min(duration_req.thresholds),np.Inf) if duration_req is not None else Interval(0, np.Inf)
+            duration_requirements = Interval(min(duration_req.thresholds),np.Inf) if duration_req is not None else Interval(orbitdata.time_step, np.Inf)
 
             # find access time for this task
             for *__,grid_index,gp_index in task.location:

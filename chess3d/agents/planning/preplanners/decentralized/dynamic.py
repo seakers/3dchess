@@ -156,8 +156,15 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                 m_ij = abs(th_imgs[i] - th_imgs[j]) / max_slew_rate if max_slew_rate else None
                 
                 # calculate earliest imaging time for task j assuming task i is done before
-                t_img_j = max(t_imgs[i] + d_imgs[i] + m_ij, t_imgs[j])  if max_slew_rate else t_imgs[j]
-                
+                t_img_j = max(t_imgs[i] + d_imgs[i] + m_ij, t_imgs[j]) if max_slew_rate else t_imgs[j]
+
+                # check if imaging time is valid
+                if not (t_img_j <= state.t + self.horizon                           # imaging start time within planning horizon
+                    and t_img_j + d_imgs[j] <= state.t + self.horizon               # imaging end time within planning horizon
+                    and t_img_j in schedulable_tasks[j].accessibility               # imaging start time within task availability
+                    and t_img_j + d_imgs[j] in schedulable_tasks[j].accessibility): # imaging end time within task availability
+                    continue
+
                 # estimate task value of task j if done after i
                 reward_j = self.estimate_task_value(schedulable_tasks[j], 
                                                     t_img_j, 

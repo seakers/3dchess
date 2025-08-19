@@ -868,8 +868,8 @@ class SimulatedAgent(AbstractAgent):
         plan_out = self.get_next_actions(state)
 
         # --- FOR DEBUGGING PURPOSES ONLY: ---
-        plan_out_dict = [action.to_dict() for action in plan_out]
-        self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
+        # plan_out_dict = [action.to_dict() for action in plan_out]
+        # self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
         x = 1 # breakpoint
         # -------------------------------------
         
