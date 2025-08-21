@@ -3,7 +3,6 @@ from chess3d.agents.planning.planner import *
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 
 import gurobipy as gp
-from gurobipy import GRB
 import numpy as np
 
 class SingleSatMILP(AbstractPreplanner):
@@ -17,8 +16,9 @@ class SingleSatMILP(AbstractPreplanner):
                 ):
         super().__init__(horizon, period, debug, logger)
 
-        assert os.path.isfile(licence_path), f"Provided Gurobi licence path `{licence_path}` is not a valid file."
-        os.environ['GRB_LICENSE_FILE'] = licence_path
+        if not debug:
+            assert os.path.isfile(licence_path), f"Provided Gurobi licence path `{licence_path}` is not a valid file."
+            os.environ['GRB_LICENSE_FILE'] = licence_path
 
         assert objective in ["reward", "duration"], "Objective must be either 'reward' or 'duration'."
 
@@ -39,9 +39,13 @@ class SingleSatMILP(AbstractPreplanner):
                                specs : object, 
                                _ : ClockConfig, 
                                orbitdata : OrbitData, 
-                               schedulable_tasks : list,
+                               schedulable_tasks : list, 
+                               mission : Mission, 
                                observation_history : ObservationHistory
                                ) -> list:
+        
+        schedulable_tasks : list[SpecificObservationTask] = schedulable_tasks
+        
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
         elif not isinstance(specs, Spacecraft):
@@ -73,14 +77,27 @@ class SingleSatMILP(AbstractPreplanner):
         task_indices = list(range(len(schedulable_tasks)))
 
         # Create decision variables
-        x = model.addVars(task_indices, vtype=GRB.BINARY, name="x")
-        z = model.addVars(task_indices, task_indices, vtype=GRB.BINARY, name="z")
-        tau = model.addVars(task_indices, vtype=GRB.CONTINUOUS, lb=0, name="tau")
-        delta = model.addVars(task_indices, vtype=GRB.CONTINUOUS, lb=0, name="delta")
+        x = model.addVars(task_indices, vtype=gp.GRB.BINARY, name="x")
+        z = model.addVars(task_indices, task_indices, vtype=gp.GRB.BINARY, name="z")
+        tau = model.addVars(task_indices, vtype=gp.GRB.CONTINUOUS, lb=0, name="tau")
         
         # Set constants
-        rewards = np.array([self.estimate_task_value(task, specs, cross_track_fovs, orbitdata, observation_history)
-                            for task in tqdm(schedulable_tasks,leave=False,desc='SATELLITE: Calculating task rewards')])
+        init_rewards = np.array([self.estimate_task_value(task, 
+                                                     task.accessibility.left, 
+                                                     task.duration_requirements.left, 
+                                                     specs, cross_track_fovs, orbitdata, 
+                                                     mission, 
+                                                     observation_history)
+                            for task in tqdm(schedulable_tasks,leave=False,desc='SATELLITE: Calculating task rewards')
+                            if isinstance(task,SpecificObservationTask)])
+        final_rewards = np.array([self.estimate_task_value(task, 
+                                                     task.accessibility.right-task.duration_requirements.left, 
+                                                     task.duration_requirements.left, 
+                                                     specs, cross_track_fovs, orbitdata, 
+                                                     mission, 
+                                                     observation_history)
+                            for task in tqdm(schedulable_tasks,leave=False,desc='SATELLITE: Calculating task rewards')
+                            if isinstance(task,SpecificObservationTask)])
         t_start = np.array([task.accessibility.left for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
         t_end   = np.array([task.accessibility.right for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
         d       = np.array([0 for _ in schedulable_tasks])  # Assuming no minimum measurement duration for simplicity
@@ -93,33 +110,23 @@ class SingleSatMILP(AbstractPreplanner):
 
         # Set objective
         if self.objective == "reward": 
-            model.setObjective(gp.quicksum(rewards[i] * x[i] for i in task_indices), GRB.MAXIMIZE)
-        elif self.objective == "duration":
-            model.setObjective(gp.quicksum(rewards[i] * delta[i] for i in task_indices), GRB.MAXIMIZE)
+            model.setObjective(gp.quicksum((final_rewards[j] - init_rewards[j]) / schedulable_tasks[j].accessibility.span() *  (tau[j] - schedulable_tasks[j].accessibility.left) + init_rewards[j]
+                                           for j in task_indices), gp.GRB.MAXIMIZE)
         
         # Add constraints
         for j in tqdm(x.keys(), desc=f"{state.agent_name}/PREPLANNER: Building optimization model", unit='tasks', leave=False):
             # Observation time constraint
             model.addConstr(t_start[j] * x[j] <= tau[j], 
                             name=f"observation_start_time_constraint_1_{j}")
-            model.addConstr(tau[j] <= t_end[j] * x[j], 
+            model.addConstr(tau[j] + d[j] <= t_end[j] * x[j], 
                             name=f"observation_start_time_constraint_2_{j}")
-            
-            model.addConstr(tau[j] + delta[j] <= t_end[j] * x[j], 
-                            name=f"observation_start_and_duration_constraint_{j}")
-            
-            # Observation duration constraints
-            model.addConstr(d[j] * x[j] <= delta[j], 
-                            name=f"min_duration_constraint_{j}")
-            model.addConstr(delta[j] <= x[j] * (t_end[j] - t_start[j]), 
-                            name=f"max_duration_constraint_{j}")
             
             # Slew time constraints
             for j_p in x.keys():
                 if j != j_p:
-                    model.addConstr(tau[j] + delta[j] + m[j, j_p] <= tau[j_p] + M * (1 - z[j, j_p]),
+                    model.addConstr(tau[j] + d[j] + m[j, j_p] <= tau[j_p] + M * (1 - z[j, j_p]),
                                     name=f"slew_time_constraint_1_{j}_{j_p}")
-                    model.addConstr(tau[j_p] + delta[j_p] + m[j_p, j] <= tau[j] + M * (1 - z[j, j_p]), 
+                    model.addConstr(tau[j_p] + d[j_p] + m[j_p, j] <= tau[j] + M * (1 - z[j, j_p]), 
                                     name=f"slew_time_constraint_2_{j}_{j_p}")
                     
                 else:
@@ -144,14 +151,14 @@ class SingleSatMILP(AbstractPreplanner):
         # Print results
         print("\nStatus code:", model.Status)
 
-        if model.Status == GRB.OPTIMAL:
+        if model.Status == gp.GRB.OPTIMAL:
             print("Optimal solution found.")
             # for i in task_indices:
             #     if x[i].X > 0.5:
             #         print(f"Task {i} is scheduled.")
             print(f"Obj: {model.ObjVal:g}")
         else:
-            if model.Status == GRB.INFEASIBLE:
+            if model.Status == gp.GRB.INFEASIBLE:
                 print("Model is infeasible.")
             
                 print("Computing IIS...")
@@ -160,10 +167,10 @@ class SingleSatMILP(AbstractPreplanner):
                 model.write("model.ilp.json")
                 print("IIS written to model.ilp")
 
-            elif model.Status == GRB.UNBOUNDED:
+            elif model.Status == gp.GRB.UNBOUNDED:
                 print("Model is unbounded.")
 
-            elif model.Status == GRB.INTERRUPTED:
+            elif model.Status == gp.GRB.INTERRUPTED:
                 print("Model was interrupted.")
             
             raise ValueError(f"Unexpected model status: {model.Status}")
