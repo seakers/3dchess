@@ -45,7 +45,9 @@ class SingleSatMILP(AbstractPreplanner):
                                ) -> list:
         
         schedulable_tasks : list[SpecificObservationTask] = schedulable_tasks
-        
+
+        assert all(task.duration_requirements.left > 0 for task in schedulable_tasks), "All tasks must have positive duration requirements."
+
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
         elif not isinstance(specs, Spacecraft):
@@ -100,8 +102,9 @@ class SingleSatMILP(AbstractPreplanner):
                             if isinstance(task,SpecificObservationTask)])
         t_start = np.array([task.accessibility.left for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
         t_end   = np.array([task.accessibility.right for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
-        d       = np.array([0 for _ in schedulable_tasks])  # Assuming no minimum measurement duration for simplicity
-        th_imgs = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
+        d       = np.array([task.duration_requirements.left for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
+        th_imgs = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) 
+                            for task in schedulable_tasks if isinstance(task, SpecificObservationTask)])
         m       = np.array([[abs(th_imgs[i]-th_imgs[j]) / max_slew_rate 
                             for j,_ in enumerate(schedulable_tasks)]
                             for i,__ in enumerate(schedulable_tasks)
@@ -120,14 +123,21 @@ class SingleSatMILP(AbstractPreplanner):
                             name=f"observation_start_time_constraint_1_{j}")
             model.addConstr(tau[j] + d[j] <= t_end[j] * x[j], 
                             name=f"observation_start_time_constraint_2_{j}")
-            
+            # # Lower bound on tau only when x[j]=1
+            # model.addConstr(tau[j] >= t_start[j] - (1 - x[j]) * M, name=f"tau_lb_{j}")
+
+            # # Upper bound on tau only when x[j]=1
+            # model.addConstr(tau[j] + d[j] <= t_end[j] + (1 - x[j]) * M, name=f"tau_ub_{j}")
+           
             # Slew time constraints
             for j_p in x.keys():
                 if j != j_p:
                     model.addConstr(tau[j] + d[j] + m[j, j_p] <= tau[j_p] + M * (1 - z[j, j_p]),
                                     name=f"slew_time_constraint_1_{j}_{j_p}")
-                    model.addConstr(tau[j_p] + d[j_p] + m[j_p, j] <= tau[j] + M * (1 - z[j, j_p]), 
+                    model.addConstr(tau[j_p] + d[j_p] + m[j_p, j] <= tau[j] + M * (1 - z[j_p, j]),
                                     name=f"slew_time_constraint_2_{j}_{j_p}")
+                    model.addConstr(z[j, j_p] + z[j_p, j] >= x[j] + x[j_p] - 1,
+                                    name=f"sequence_enforcement_{j}_{j_p}")
                     
                 else:
                     model.addConstr(z[j, j_p] == 0, 
@@ -135,10 +145,6 @@ class SingleSatMILP(AbstractPreplanner):
                     model.addConstr(z[j_p, j] == 0, 
                                     name=f"slew_binary_constraint_1_{j_p}_{j}_self")
                     
-                #TODO Add constraints for tasks with the same parent task
-                # if schedulable_tasks[j].parent == schedulable_tasks[j_p].parent:
-                #     model.addConstr(x[j] + x[j_p] <= 1, name=f"parent_task_sequence_{j}_{j_p}")
-
                 model.addConstr(z[j, j_p] + z[j_p, j] <= 1, name=f"sequence_direction_{j}_{j_p}")
                 model.addConstr(z[j, j_p] <= x[j], name=f"z_x_link1_{j}_{j_p}")
                 model.addConstr(z[j, j_p] <= x[j_p], name=f"z_x_link2_{j}_{j_p}")
@@ -153,9 +159,6 @@ class SingleSatMILP(AbstractPreplanner):
 
         if model.Status == gp.GRB.OPTIMAL:
             print("Optimal solution found.")
-            # for i in task_indices:
-            #     if x[i].X > 0.5:
-            #         print(f"Task {i} is scheduled.")
             print(f"Obj: {model.ObjVal:g}")
         else:
             if model.Status == gp.GRB.INFEASIBLE:
@@ -176,16 +179,24 @@ class SingleSatMILP(AbstractPreplanner):
             raise ValueError(f"Unexpected model status: {model.Status}")
 
         # Extract scheduled tasks
-        scheduled_task_indices = [i for i in task_indices if x[i].X > 0.5]
-        scheduled_tasks : list[SpecificObservationTask] = \
-            [schedulable_tasks[i] for i in scheduled_task_indices]
-        
-        # Create observation actions from scheduled tasks
-        observations = []
+        scheduled_task_indices : list[Tuple[SpecificObservationTask, int, float]] \
+            = [(j,tau[j].X,d[j],th_imgs[j],schedulable_tasks[j]) for j in task_indices if x[j].X > 0.5]
+        scheduled_task_indices.sort(key=lambda x: x[1])  # Sort by start time
 
-        # TODO Remove exception and return scheduled tasks
-        raise NotImplementedError("MILP scheduling is not yet fully implemented.")
-        return observations
+        # Create observation actions from scheduled tasks
+        observations = [
+            ObservationAction(task.instrument_name,
+                              task.get_location(),
+                              task.get_objectives(),
+                              th_img,
+                              t_img,
+                              d_img
+                              )
+            for _,t_img,d_img,th_img,task in scheduled_task_indices
+        ]
+
+        # Return scheduled tasks
+        return sorted(observations, key=lambda obs: obs.t_start)
 
     def _schedule_broadcasts(self, state, observations, orbitdata, t = None):
         # TODO 
