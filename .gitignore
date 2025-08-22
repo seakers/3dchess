@@ -173,4 +173,7 @@ cython_debug/
 *.tar.xz
 *.png
 .zip
+
+# Gurobi
 *.lic
+*.ilp*

@@ -325,9 +325,10 @@ class Plan(ABC):
 
             # check if there is no overlap between tasks
             if t_start_prev is not None and t_end_prev is not None:
-                if t_start_prev > t_start:
-                    continue 
-                elif t_end_prev > t_start:
+                if t_start < t_start_prev:
+                    continue
+                elif t_start < t_end_prev - 1e-6:
+                # elif t_start < t_end_prev:
                     raise ValueError(f"Plan contains action with start time prior to its previous action's end time.")
 
             # save current action start and endtimes for comparison with the following action

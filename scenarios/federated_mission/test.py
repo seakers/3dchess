@@ -357,6 +357,7 @@ class TestFederatedMission(unittest.TestCase):
         spacecraft['planner']['preplanner']['@type'] = 'milp'
         spacecraft['planner']['preplanner']['licensePath'] = './gurobi.lic'
         spacecraft['planner']['preplanner']['debug'] = 'False'
+        spacecraft['planner']['preplanner']['horizon'] =  500
 
         # Generate scenario
         scenario_specs = self.setup_scenario_specs(duration,
