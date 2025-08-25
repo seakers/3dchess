@@ -108,8 +108,23 @@ Where:
 
 
 
-Initially, one specific task is generated for each known generic task. Subsequently, additional specific tasks can be created by clustering existing specific tasks to capture opportunities for simultaneous observations, as described in Wu et al. (2013).
+Initially, one specific task is generated for each access opportunity of each known generic task. Subsequently, additional specific tasks can be created by clustering existing specific tasks to capture opportunities for simultaneous observations, as described in Wu et al. (2013).
 
+#### Dependencies 
+When scheduling specific tasks, there may exist dependencies between specific tasks that need to be considered. These could be mutually exclusive, dependent, or independent relations between two tasks. These relations can be captured in the dependency relation $ D: \Sigma \times \Sigma \rightarrow \{-1, 0, 1\}$, where the integer value represents a certain type of relation:
+
+$$
+D(\sigma, \sigma') = 
+    \begin{cases}
+        -1 & \text{if } isMutuallyExclusive(\sigma,\sigma')\\
+         1 & \text{if } isDependent(\sigma,\sigma') \\
+         0 & \text{otherwise}
+    \end{cases}
+$$
+
+Mutually exclusive relations allow for only one of the tasks to be scheduled at a time, whereas dependent relations require both tasks to be scheduled for either of them to be considered. Note how this relation may not be symmetric, allowing for complex dependencies to be modeled. 
+
+A common case where these dependencies may arrise during the scheduling process is when  merged and unmerged tasks which aim to satisfy the same parent task are being considered. If two tasks aim to satisfy the same parent task during the same accessibility time window, then they present a mutually exclusive dependency relation and only one of them may be scheduled. 
 
 <!-- ## Mission Objectives
 ### Default Mission Objectives

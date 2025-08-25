@@ -88,7 +88,7 @@ class AbstractPlanner(ABC):
         combined_tasks : list[SpecificObservationTask] = self.cluster_tasks(schedulable_tasks, task_adjacency)
 
         # add clustered tasks to the final list of tasks available for scheduling
-        schedulable_tasks.extend(combined_tasks)
+        schedulable_tasks.extend(combined_tasks) 
 
         assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] 
                     for task in schedulable_tasks]), \

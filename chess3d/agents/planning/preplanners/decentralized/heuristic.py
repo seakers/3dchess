@@ -56,7 +56,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
         # generate plan
-        observations : list[ObservationAction] = []
+        plan_sequence : list[tuple[SpecificObservationTask, ObservationAction]] = []
 
         for task in tqdm(schedulable_tasks,
                          desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 
@@ -68,7 +68,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
 
             # get previous and future observation actions' info
             th_prev,t_prev,d_prev,th_next,t_next,d_next \
-                = self.__get_previous_and_future_observation_info(state, task, observations, max_slew_rate)
+                = self.__get_previous_and_future_observation_info(state, task, plan_sequence, max_slew_rate)
             
             # set task observation angle
             th_img = np.average((task.slew_angles.left, task.slew_angles.right))
@@ -95,10 +95,10 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
                                            th_img, 
                                            t_img, 
                                            d_img)
-                observations.append(action)
-        
+                plan_sequence.append((task, action))
+
         # return sorted by start time
-        return sorted(observations, key=lambda a : a.t_start)
+        return sorted([action for _,action in plan_sequence], key=lambda a : a.t_start)
     
     def __get_previous_and_future_observation_info(self, 
                                                  state : SimulationAgentState, 

@@ -35,7 +35,7 @@ class Interval:
         self.right_open : bool = right_open if not np.isinf(right) else True
 
         if self.right < self.left:
-            raise Exception('The right side of interval must be later than the left side of the interval.')
+            raise ValueError('The right side of interval must be later than the left side of the interval.')
 
     def is_after(self, x : float) -> bool:
         """ checks if the interval starts after the value `x` """
@@ -59,6 +59,15 @@ class Interval:
                 or self.right in __other
                 or __other.left in self
                 or __other.right in self)
+
+    def is_subset(self, __other: object) -> bool:
+        """ checks if this interval is a subset of another """
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot check subset with object of type `{type(__other)}`.')
+
+        return (__other.left <= self.left and self.right <= __other.right
+                and (self.left_open or not __other.left_open)
+                and (self.right_open or not __other.right_open))
 
     def intersection(self, __other : object) -> object:
         """ returns the intersect of two intervals """

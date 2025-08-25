@@ -491,9 +491,30 @@ class TestGenericTasks(unittest.TestCase):
         task_6 = SpecificObservationTask(
             parent_task=parent_task,
             instrument_name="test_instrument_1",
-            accessibility=Interval(1000.0,3500.0),
+            accessibility=Interval(1000.0,3500.0), # accessibility encompasses with task_1
+            duration_requirements= Interval(100.0, 150.0), # reduced duration requirements
+            slew_angles=Interval(10.0, 35.0)
+        )
+        task_7 = SpecificObservationTask(
+            parent_task=parent_task,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(3500.0, 4500.0), # accessibility gap after task_1
+            duration_requirements= Interval(100.0, 150.0), 
+            slew_angles=Interval(10.0, 35.0)
+        )
+        task_8 = SpecificObservationTask(
+            parent_task=parent_task,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(1500.0, 1750.0), # accessibility gap before task_1
             duration_requirements= Interval(100.0, 150.0),
             slew_angles=Interval(10.0, 35.0)
+        )
+        task_9 = SpecificObservationTask(
+            parent_task=parent_task,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(1500.0, 1750.0), 
+            duration_requirements= Interval(100.0, 125.0), # reduced duration requirements
+            slew_angles=Interval(10.0, 35.0) 
         )
 
         self.assertRaises(ValueError, task_1.merge, other_task=parent_task)
@@ -501,19 +522,93 @@ class TestGenericTasks(unittest.TestCase):
         self.assertRaises(AssertionError, task_1.merge, other_task=task_3)
         self.assertRaises(AssertionError, task_1.merge, other_task=task_4)
         self.assertRaises(AssertionError, task_1.merge, other_task=task_5, extend=False)
-        
+
+        # merge with `task_6`
         merged_task : SpecificObservationTask = task_1.merge(other_task=task_6)
         self.assertIsInstance(merged_task, SpecificObservationTask)
         self.assertIn(parent_task, merged_task.parent_tasks)
         self.assertEqual(len(merged_task.parent_tasks), 1)
         self.assertEqual(merged_task.instrument_name, "test_instrument_1")
-        self.assertEqual(merged_task.accessibility.left, 1000.0)
-        self.assertEqual(merged_task.accessibility.right, 3500.0)
+        self.assertEqual(merged_task.accessibility.left, 2000.0)
+        self.assertEqual(merged_task.accessibility.right, 3000.0)
         self.assertEqual(merged_task.duration_requirements.left, 100.0)
         self.assertEqual(merged_task.duration_requirements.right, 150.0)
         self.assertEqual(merged_task.slew_angles.left, 20.0)
         self.assertEqual(merged_task.slew_angles.right, 35.0)
+
+        # merge with `task_7`
+        merged_task : SpecificObservationTask = merged_task.merge(other_task=task_7)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertIn(parent_task, merged_task.parent_tasks)
+        self.assertEqual(len(merged_task.parent_tasks), 1)
+        self.assertEqual(merged_task.instrument_name, "test_instrument_1")
+        self.assertEqual(merged_task.accessibility.left, 2900.0)
+        self.assertEqual(merged_task.accessibility.right, 3600.0)
+        self.assertEqual(merged_task.duration_requirements.left, 700.0)
+        self.assertEqual(merged_task.duration_requirements.right, 700.0)
+        self.assertEqual(merged_task.slew_angles.left, 20.0)
+        self.assertEqual(merged_task.slew_angles.right, 35.0)
+
+        # merge with `task_8`
+        merged_task : SpecificObservationTask = merged_task.merge(other_task=task_8)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertIn(parent_task, merged_task.parent_tasks)
+        self.assertEqual(len(merged_task.parent_tasks), 1)
+        self.assertEqual(merged_task.instrument_name, "test_instrument_1")
+        self.assertEqual(merged_task.accessibility.left, 1650.0)
+        self.assertEqual(merged_task.accessibility.right, 3600.0)
+        self.assertEqual(merged_task.duration_requirements.left, 1950.0)
+        self.assertEqual(merged_task.duration_requirements.right, 1950.0)
+        self.assertEqual(merged_task.slew_angles.left, 20.0)
+        self.assertEqual(merged_task.slew_angles.right, 35.0)
+
+        # merge with `task_9`
+        self.assertRaises(AssertionError, merged_task.merge, other_task=task_9)
+    def test_mutual_exclusivity(self):
+        # Create parent tasks
+        parent_task_1 = DefaultMissionTask(
+            parameter="test_parameter",
+            location=(45.0, 90.0, 1, 2),
+            mission_duration=3600.0,
+            id="parent_task_001"
+        )
+        parent_task_2 = DefaultMissionTask(
+            parameter="test_parameter",
+            location=(45.0, 45.0, 1, 1),
+            mission_duration=3600.0,
+            id="parent_task_002"
+        )
         
+        # Create specific observation tasks
+        task_1 = SpecificObservationTask(
+            parent_task=parent_task_1,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(2000.0,3000.0),
+            duration_requirements= Interval(0.0, 200.0),
+            slew_angles=Interval(20.0, 45.0)
+        )
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,                  
+            instrument_name="test_instrument_1",
+            accessibility=Interval(2000.0,3000.0),
+            duration_requirements= Interval(0.0, 200.0),
+            slew_angles=Interval(20.0, 45.0)
+        )
+        task_3 = SpecificObservationTask(
+            parent_task=parent_task_1,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(2000.0,3000.0),
+            duration_requirements= Interval(0.0, 200.0),
+            slew_angles=Interval(20.0, 45.0)
+        )
+        task_4 : SpecificObservationTask = task_1.merge(task_2)
+
+        # Check mutual exclusivity
+        self.assertFalse(task_1.is_mutually_exclusive(task_2))
+        self.assertTrue(task_1.is_mutually_exclusive(task_3))
+        self.assertFalse(task_2.is_mutually_exclusive(task_3))
+        self.assertTrue(task_1.is_mutually_exclusive(task_4))
+
 if __name__ == '__main__':
     # terminal welcome message
     print_welcome('Task Definitions Test')

@@ -4,7 +4,7 @@ import uuid
 
 from chess3d.mission.events import GeophysicalEvent
 from chess3d.mission.objectives import *
-from chess3d.utils import Interval
+from chess3d.utils import EmptyInterval, Interval
 
 
 class GenericObservationTask(ABC):
@@ -358,6 +358,11 @@ class SpecificObservationTask:
         """ Collects the priority of all parent tasks. """
         return sum(task.priority for task in self.parent_tasks) if self.parent_tasks else 0.0
 
+    def is_mutually_exclusive(self, other_task : 'SpecificObservationTask') -> bool:
+        """ Check if two tasks are mutually exclusive. """
+        common_parents : set = self.parent_tasks.intersection(other_task.parent_tasks)
+        return len(common_parents) > 0
+
     def can_combine(self, other_task : object, extend : bool = True) -> bool:
         """ Check if two tasks can be combined based on their time and slew angle. """
         
@@ -366,33 +371,99 @@ class SpecificObservationTask:
             raise ValueError("The other task must be an instance of Task.")
         
         # Check if the instrument names are the same
-        if self.instrument_name != other_task.instrument_name:
-            return False
-        
-        # Check if the availability time intervals overlap
-        accessibility_overlap : Interval = self.accessibility.union(other_task.accessibility, extend)
+        if self.instrument_name != other_task.instrument_name: return False
         
         # Check if the slew angles overlap
         slew_angle_overlap : Interval = self.slew_angles.intersection(other_task.slew_angles) 
 
+        # Check if there is an accessibility overlap
+        if other_task.accessibility.is_subset(self.accessibility):
+            # other task is fully contained within this task's accessibility
+            x = 1
+            pass
+        elif self.accessibility.is_subset(other_task.accessibility):
+            # this task is fully contained within the other task's accessibility
+            x = 1
+            pass
+        else:
+            # Calculate acessibility overlap
+            accessibility_overlap : Interval = self.accessibility.intersection(other_task.accessibility)
+
+            if accessibility_overlap.is_empty() and extend: # There is no overlap between the tasks' availability
+                
+                if other_task.accessibility < self.accessibility: # other task occurrs before current task 
+                    accessibility_start : float = other_task.accessibility.right - other_task.duration_requirements.left
+                    accessibility_end : float = self.accessibility.left + self.duration_requirements.left
+
+                elif self.accessibility < other_task.accessibility: # other task occurrs after current task
+                    accessibility_start : float = self.accessibility.right - self.duration_requirements.left
+                    accessibility_end : float = other_task.accessibility.left + other_task.duration_requirements.left
+
+                else: 
+                    raise ValueError
+                
+                accessibility_overlap : Interval = Interval(accessibility_start, accessibility_end) if accessibility_end > accessibility_start else EmptyInterval()
+        
+        # Calculate merged task duration
+        task_duration : float = accessibility_overlap.span()
+
+        # Collect minimum task duration requirements
+        min_duration_req = max(self.duration_requirements.left, other_task.duration_requirements.left)
+
         # If both overlaps are not empty and the accessibility overlap is within the duration requirements, the tasks can be combined
-        # max_duration = min(self.duration_requirements.right, other_task.duration_requirements.right)
-        min_duration = max(self.duration_requirements.left, other_task.duration_requirements.left)
         return (    not accessibility_overlap.is_empty() 
                 and not slew_angle_overlap.is_empty() 
-                and min_duration <= accessibility_overlap.span() # <= max_duration
+                and min_duration_req <= task_duration
                 )
 
     def merge(self, other_task : 'SpecificObservationTask', extend : bool = True) -> object:
         """ Merge two tasks into one. """
         # Validate that the tasks can be combined
+        if not self.can_combine(other_task, extend):
+            y = self.can_combine(other_task, extend)
+            x= 1
         assert self.can_combine(other_task, extend), "Tasks cannot be combined."
 
-        # Combine the time intervals and slew angles
-        combined_time_interval : Interval = self.accessibility.union(other_task.accessibility, extend=True)
-        combined_slew_angles : Interval  = self.slew_angles.intersection(other_task.slew_angles)
-        combined_duration_reqs : Interval = self.duration_requirements.intersection(other_task.duration_requirements)
-                
+        # # Combine the time intervals and slew angles
+        # combined_time_interval : Interval = self.accessibility.union(other_task.accessibility, extend=True)
+        # combined_slew_angles : Interval  = self.slew_angles.intersection(other_task.slew_angles)
+        # combined_duration_reqs : Interval = self.duration_requirements.intersection(other_task.duration_requirements)               
+
+        # Combine slew angles overlap
+        combined_slew_angles : Interval = self.slew_angles.intersection(other_task.slew_angles) 
+        
+        # Combine accessibility overlap
+        combined_time_interval : Interval = self.accessibility.intersection(other_task.accessibility)
+
+        # Check if overlap was found
+        if combined_time_interval.is_empty() and extend: 
+            # There is no overlap between the tasks' availability; extend the current task's availability
+
+            # Check which task occurrs before the other
+            if other_task.accessibility < self.accessibility:   # other task occurrs BEFORE current task 
+                accessibility_start : float = other_task.accessibility.right - other_task.duration_requirements.left
+                accessibility_end : float = self.accessibility.left + self.duration_requirements.left
+
+            elif other_task.accessibility > self.accessibility: # other task occurrs AFTER current task
+                accessibility_start : float = self.accessibility.right - self.duration_requirements.left
+                accessibility_end : float = other_task.accessibility.left + other_task.duration_requirements.left
+
+            else: # Tasks start at the same time; should've produced an overlap in previous checks
+                raise ValueError("Incompatible task accessibility intervals.")
+
+            # Extend the combined time interval to include the latest possible observation time of the earlier task 
+            # and the earliest possible observation time for the later task
+            combined_time_interval : Interval = Interval(accessibility_start, accessibility_end)
+        
+            # Merge maximum and minimum task duration requirements
+            min_duration_req : float = combined_time_interval.span()
+            max_duration_req : float = max(min(self.duration_requirements.right, other_task.duration_requirements.right), min_duration_req)
+            combined_duration_reqs : Interval = Interval(min_duration_req, max_duration_req)
+            
+        else:
+            # Merge maximum and minimum task duration requirements
+            combined_duration_reqs : Interval = self.duration_requirements.intersection(other_task.duration_requirements)
+
         # Update the task attributes
         parent_tasks = {task for task in self.parent_tasks}
         parent_tasks.update({task for task in other_task.parent_tasks})
@@ -408,4 +479,3 @@ class SpecificObservationTask:
     
     def __hash__(self):
         return hash(self.id)
-
