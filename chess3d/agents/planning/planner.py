@@ -229,7 +229,7 @@ class AbstractPlanner(ABC):
                     for i in range(len(candidates)):
                         for j in range(i + 1, len(candidates)):
                             t1, t2 = candidates[i], candidates[j]
-                            if t1.can_combine(t2):
+                            if t1.can_merge(t2):
                                 adj[t1.id].add(t2)
                                 adj[t2.id].add(t1)
                         pbar.update(1)
@@ -321,6 +321,8 @@ class AbstractPlanner(ABC):
                     n_p : list[SpecificObservationTask] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)               
 
                 for q in clique: 
+                    # TODO: look into ID being used. Ideally we would want a new ID for the combined task.
+
                     # merge all tasks in the clique into a single task p
                     p = p.merge(q)
 

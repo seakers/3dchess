@@ -39,12 +39,12 @@ class Interval:
 
     def is_after(self, x : float) -> bool:
         """ checks if the interval starts after the value `x` """
-        return (self.left < x or abs(self.left - x) < 1e-6) if self.left_open else x < self.left
+        return x < self.left if self.left_open else (x < self.left or abs(self.left - x) < 1e-6)
 
     def is_before(self, x : float) -> bool:
-        """ checks if the time ends before the value `x` """
-        return (self.right < x or abs(self.right - x) < 1e-6) if self.right_open else self.right < x
-    
+        """ checks if the interval ends before the value `x` """
+        return self.right < x if self.right_open else (self.right < x or abs(self.right - x) < 1e-6)
+
     def is_empty(self) -> bool:
         """ checks if the interval is empty """
         return (self.left == self.right and (self.left_open or self.right_open)) or (self.left > self.right)
