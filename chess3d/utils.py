@@ -47,8 +47,8 @@ class Interval:
 
     def is_empty(self) -> bool:
         """ checks if the interval is empty """
-        return (self.left == self.right and (self.left_open or self.right_open)) or (self.left > self.right)
-        
+        return (abs(self.left - self.right) < 1e-6 and (self.left_open or self.right_open)) or (self.left > self.right)
+
     def overlaps(self, __other : 'Interval') -> bool:
         """ checks if this interval has an overlap with another """
         

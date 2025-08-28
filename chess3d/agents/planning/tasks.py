@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import math
 from typing import Union
 import uuid
 
@@ -437,15 +438,15 @@ class SpecificObservationTask:
 
         # Check if merge can occur
         return (self.instrument_name == other_task.instrument_name  # same instrument
+                and min_duration_req <= max_duration                # duration requirements do not exceed maximum allowed duration
+                and not math.isnan(min_duration_req)                # joint minimum duration requirements is valid
+                and min_duration_req <= merged_accessibility.span() # accessibility window encompasses the duration requirements
                 and not merged_slew_angles.is_empty()               # slew angles overlap
                 and not merged_accessibility.is_empty()             # there exist a valid joint accessibility window 
-                and not np.isnan(min_duration_req)                  # joint minimum duration requirements is valid
-                and min_duration_req <= max_duration                # duration requirements do not exceed maximum allowed duration
-                and min_duration_req <= merged_accessibility.span() # accessibility window encompasses the duration requirements
-                # and not self.is_mutually_exclusive(other_task)      # tasks with common parent tasks cannot be merged
+                # and not self.is_mutually_exclusive(other_task)      # TODO tasks with common parent tasks cannot be merged
                 )           
         
-    def merge(self, other_task : 'SpecificObservationTask', must_overlap : bool = False, max_duration : float = 5*60) -> object:
+    def merge(self, other_task : 'SpecificObservationTask', must_overlap : bool = False, max_duration : float = 5*60) -> 'SpecificObservationTask':
         """ 
         Merge two tasks into one. 
                 
@@ -455,6 +456,9 @@ class SpecificObservationTask:
         - `max_duration`: The maximum allowed duration for the merged task in seconds [s].
         """
         try:
+            # Check other task's type
+            assert isinstance(other_task, SpecificObservationTask), "can only merge with tasks of type `SpecificObservationTask`."
+
             # Merge parent tasks
             merged_parent_tasks = {task for task in self.parent_tasks}
             merged_parent_tasks.update({task for task in other_task.parent_tasks})
@@ -465,9 +469,9 @@ class SpecificObservationTask:
             # Calculate accessibility overlap and duration requirements
             merged_accessibility, min_duration_req = self._calc_time_requirements(other_task, must_overlap)
             assert not merged_accessibility.is_empty(), "joint task availability is empty."
-            assert not np.isnan(min_duration_req) , "minimum duration requirement is invalid."
-            assert min_duration_req <= merged_accessibility.span(), "minimum duration requirements exceed accessibility span."
+            assert not math.isnan(min_duration_req) , "minimum duration requirement is invalid."
             assert min_duration_req <= max_duration, "minimum duration requirements exceed maximum allowed duration."
+            assert min_duration_req <= merged_accessibility.span(), "minimum duration requirements exceed accessibility span."
 
             # Calculate slew angles overlap
             merged_slew_angles : Interval = self.slew_angles.intersection(other_task.slew_angles) 

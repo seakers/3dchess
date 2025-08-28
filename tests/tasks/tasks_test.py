@@ -411,6 +411,12 @@ class TestGenericTasks(unittest.TestCase):
 
         # Cannot merge with parent task
         self.assertRaises(AssertionError, task_1.can_merge, other_task=parent_task)
+        # Cannot merge with invalid overlap toggle
+        self.assertRaises(AssertionError, task_1.can_merge, other_task=task_1, must_overlap='False')
+        # Cannot merge with invalid maximum duration requirements
+        self.assertRaises(AssertionError, task_1.can_merge, other_task=task_1, max_duration='10')
+        self.assertRaises(AssertionError, task_1.can_merge, other_task=task_1, max_duration=-10)
+        
         # Can merge with self
         self.assertTrue(task_1.can_merge(other_task=task_1)) 
 
@@ -478,214 +484,286 @@ class TestGenericTasks(unittest.TestCase):
         task_8 = SpecificObservationTask(
             parent_task=parent_task,
             instrument_name="test_instrument_1",
-            accessibility=Interval(2000.0,3000.0), # access window fully contains `task_1`
-            min_duration=1000.0, # minimum duration requirement of exceedes `task_1` maximum duration requirement
+            accessibility=Interval(2000.0,3000.0), # access window is the same as `task_1`
+            min_duration=1000.0, # minimum duration requirement of exceedes maximum duration requirement
             slew_angles=Interval(25.0, 50.0)
         )
-        self.assertFalse(task_1.can_merge(other_task=task_8))
+        self.assertFalse(task_1.can_merge(other_task=task_8,max_duration=100.0))
 
         # Can merge with encompassing tasks if duration requirements are met
         task_9 = SpecificObservationTask(
             parent_task=parent_task,
             instrument_name="test_instrument_1",
-            accessibility=Interval(1000.0,3000.0), # access window fully contains `task_1`
+            accessibility=Interval(1000.0,4000.0), # access window fully contains `task_1`
             min_duration=1000.0, # minimum duration requirement of exceedes `task_1` maximum duration requirement
             slew_angles=Interval(25.0, 50.0)
         )
-        self.assertFalse(task_1.can_merge(other_task=task_9))
+        self.assertTrue(task_1.can_merge(other_task=task_9,max_duration=1000.0))
 
 
-    # def test_specific_observation_task_merge(self):
-        # # Create a specific observation task
-        # parent_task = DefaultMissionTask(
-        #     parameter="test_parameter",
-        #     location=(45.0, 90.0, 1, 2),
-        #     mission_duration=3600.0,
-        #     id="parent_task_001"
-        # )
-        # task_1 = SpecificObservationTask(
-        #     parent_task=parent_task,
-        #     instrument_name="test_instrument_1",
-        #     accessibility=Interval(2000.0,3000.0),
-        #     duration_requirements= Interval(10.0, 200.0),
-        #     slew_angles=Interval(20.0, 45.0)
-        # )
-        # task_2 = SpecificObservationTask(
-        #     parent_task=parent_task,
-        #     instrument_name="test_instrument_2", # invalid instrument name
-        #     accessibility=Interval(2000.0,3000.0),
-        #     duration_requirements= Interval(10.0, 200.0),
-        #     slew_angles=Interval(20.0, 45.0)
-        # )
-        # task_3 = SpecificObservationTask(
-        #     parent_task=parent_task,
-        #     instrument_name="test_instrument_1",
-        #     accessibility=Interval(2000.0,3000.0), 
-        #     duration_requirements= Interval(10.0, 200.0), 
-        #     slew_angles=Interval(0.0, 10.0) # Non-overlapping slew angles
-        # )
-        # task_4 = SpecificObservationTask(
-        #     parent_task=parent_task,
-        #     instrument_name="test_instrument_1",
-        #     accessibility=Interval(1000.0,2500.0), # accessibility interval contained within `task_1`
-        #     duration_requirements= Interval(100.0, 1000.0), # Restrictive duration requirements
-        #     slew_angles=Interval(0.0, 10.0)
-        # )
-        # task_5 = SpecificObservationTask(
-        #     parent_task=parent_task,
-        #     instrument_name="test_instrument_1",
-        #     accessibility=Interval(0.0,1000.0), # Non-overlapping accessibility
-        #     duration_requirements= Interval(10.0, 200.0),
-        #     slew_angles=Interval(20.0, 45.0)
-        # )
-        # task_6 = SpecificObservationTask(
-        #     parent_task=parent_task,
-        #     instrument_name="test_instrument_1",
-        #     accessibility=Interval(2000.0,3000.0),
-        #     duration_requirements= Interval(10.0, 200.0),
-        #     slew_angles=Interval(25.0, 50.0) # overlapping slew angles
-        # )
-        # task_7 = SpecificObservationTask(
-        #     parent_task=parent_task,
-        #     instrument_name="test_instrument_1",
-        #     accessibility=Interval(2000.0,3000.0),
-        #     duration_requirements= Interval(10.0, 200.0),
-        #     slew_angles=Interval(20.0, 45.0)
-        # )
+    def test_specific_observation_task_merge(self):
+        # Create a specific observation task
+        parent_task_1 = DefaultMissionTask(
+            parameter="test_parameter",
+            location=(45.0, 90.0, 1, 2),
+            mission_duration=3600.0,
+            id="parent_task_001"
+        )
+        parent_task_2 = DefaultMissionTask(
+            parameter="test_parameter",
+            location=(45.0, 45.0, 1, 1),
+            mission_duration=3600.0,
+            id="parent_task_002"
+        )
 
-    #     task_6 = SpecificObservationTask(
-    #         parent_task=parent_task,
-    #         instrument_name="test_instrument_1",
-    #         accessibility=Interval(1000.0,3500.0), # accessibility encompasses with task_1
-    #         duration_requirements= Interval(100.0, 150.0), # reduced duration requirements
-    #         slew_angles=Interval(10.0, 35.0)
-    #     )
-    #     task_7 = SpecificObservationTask(
-    #         parent_task=parent_task,
-    #         instrument_name="test_instrument_1",
-    #         accessibility=Interval(3500.0, 4500.0), # accessibility gap after task_1
-    #         duration_requirements= Interval(100.0, 150.0), 
-    #         slew_angles=Interval(10.0, 35.0)
-    #     )
-    #     task_8 = SpecificObservationTask(
-    #         parent_task=parent_task,
-    #         instrument_name="test_instrument_1",
-    #         accessibility=Interval(1500.0, 1750.0), # accessibility gap before task_1
-    #         duration_requirements= Interval(100.0, 150.0),
-    #         slew_angles=Interval(10.0, 35.0)
-    #     )
-    #     task_9 = SpecificObservationTask(
-    #         parent_task=parent_task,
-    #         instrument_name="test_instrument_1",
-    #         accessibility=Interval(1500.0, 1750.0), 
-    #         duration_requirements= Interval(100.0, 125.0), # reduced duration requirements
-    #         slew_angles=Interval(10.0, 35.0) 
-    #     )
-
-        # self.assertRaises(ValueError, task_1.merge, other_task=parent_task)
-        # self.assertRaises(AssertionError, task_1.merge, other_task=task_2)
-        # self.assertRaises(AssertionError, task_1.merge, other_task=task_3)
-        # self.assertRaises(AssertionError, task_1.merge, other_task=task_4)
-        # self.assertRaises(AssertionError, task_1.merge, other_task=task_5, must_overlap=True)
-
-        # # merge with `task_6`
-        # merged_task : SpecificObservationTask = task_1.merge(other_task=task_6)
-        # self.assertIsInstance(merged_task, SpecificObservationTask)
-        # self.assertIn(parent_task, merged_task.parent_tasks)
-        # self.assertEqual(len(merged_task.parent_tasks), 1)
-        # self.assertEqual(merged_task.instrument_name, "test_instrument_1")
-        # self.assertEqual(merged_task.accessibility.left, 2000.0)
-        # self.assertEqual(merged_task.accessibility.right, 3000.0)
-        # self.assertEqual(merged_task.duration_requirements.left, 10.0)
-        # self.assertEqual(merged_task.duration_requirements.right, 200.0)
-        # self.assertEqual(merged_task.slew_angles.left, 25.0)
-        # self.assertEqual(merged_task.slew_angles.right, 45.0)
-
-        # # merge with `task_6`
-        # merged_task : SpecificObservationTask = task_1.merge(other_task=task_6)
-        # self.assertIsInstance(merged_task, SpecificObservationTask)
-        # self.assertIn(parent_task, merged_task.parent_tasks)
-        # self.assertEqual(len(merged_task.parent_tasks), 1)
-        # self.assertEqual(merged_task.instrument_name, "test_instrument_1")
-        # self.assertEqual(merged_task.accessibility.left, 2000.0)
-        # self.assertEqual(merged_task.accessibility.right, 3000.0)
-        # self.assertEqual(merged_task.duration_requirements.left, 100.0)
-        # self.assertEqual(merged_task.duration_requirements.right, 150.0)
-        # self.assertEqual(merged_task.slew_angles.left, 20.0)
-        # self.assertEqual(merged_task.slew_angles.right, 35.0)
-
-    #     # merge with `task_7`
-    #     merged_task : SpecificObservationTask = merged_task.merge(other_task=task_7)
-    #     self.assertIsInstance(merged_task, SpecificObservationTask)
-    #     self.assertIn(parent_task, merged_task.parent_tasks)
-    #     self.assertEqual(len(merged_task.parent_tasks), 1)
-    #     self.assertEqual(merged_task.instrument_name, "test_instrument_1")
-    #     self.assertEqual(merged_task.accessibility.left, 2900.0)
-    #     self.assertEqual(merged_task.accessibility.right, 3600.0)
-    #     self.assertEqual(merged_task.duration_requirements.left, 700.0)
-    #     self.assertEqual(merged_task.duration_requirements.right, 700.0)
-    #     self.assertEqual(merged_task.slew_angles.left, 20.0)
-    #     self.assertEqual(merged_task.slew_angles.right, 35.0)
-
-    #     # merge with `task_8`
-    #     merged_task : SpecificObservationTask = merged_task.merge(other_task=task_8)
-    #     self.assertIsInstance(merged_task, SpecificObservationTask)
-    #     self.assertIn(parent_task, merged_task.parent_tasks)
-    #     self.assertEqual(len(merged_task.parent_tasks), 1)
-    #     self.assertEqual(merged_task.instrument_name, "test_instrument_1")
-    #     self.assertEqual(merged_task.accessibility.left, 1650.0)
-    #     self.assertEqual(merged_task.accessibility.right, 3600.0)
-    #     self.assertEqual(merged_task.duration_requirements.left, 1950.0)
-    #     self.assertEqual(merged_task.duration_requirements.right, 1950.0)
-    #     self.assertEqual(merged_task.slew_angles.left, 20.0)
-    #     self.assertEqual(merged_task.slew_angles.right, 35.0)
-
-    #     # merge with `task_9`
-    #     self.assertRaises(AssertionError, merged_task.merge, other_task=task_9)
-    # def test_mutual_exclusivity(self):
-    #     # Create parent tasks
-    #     parent_task_1 = DefaultMissionTask(
-    #         parameter="test_parameter",
-    #         location=(45.0, 90.0, 1, 2),
-    #         mission_duration=3600.0,
-    #         id="parent_task_001"
-    #     )
-    #     parent_task_2 = DefaultMissionTask(
-    #         parameter="test_parameter",
-    #         location=(45.0, 45.0, 1, 1),
-    #         mission_duration=3600.0,
-    #         id="parent_task_002"
-    #     )
+        task_1 = SpecificObservationTask(
+            parent_task=parent_task_1,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(100.0,200.0),
+            min_duration=10.0,
+            slew_angles=Interval(20.0, 45.0)
+        )
+        # Cannot merge with parent task
+        self.assertRaises(AssertionError, task_1.merge,other_task=parent_task_1)
         
-    #     # Create specific observation tasks
-    #     task_1 = SpecificObservationTask(
-    #         parent_task=parent_task_1,
-    #         instrument_name="test_instrument_1",
-    #         accessibility=Interval(2000.0,3000.0),
-    #         duration_requirements= Interval(0.0, 200.0),
-    #         slew_angles=Interval(20.0, 45.0)
-    #     )
-    #     task_2 = SpecificObservationTask(
-    #         parent_task=parent_task_2,                  
-    #         instrument_name="test_instrument_1",
-    #         accessibility=Interval(2000.0,3000.0),
-    #         duration_requirements= Interval(0.0, 200.0),
-    #         slew_angles=Interval(20.0, 45.0)
-    #     )
-    #     task_3 = SpecificObservationTask(
-    #         parent_task=parent_task_1,
-    #         instrument_name="test_instrument_1",
-    #         accessibility=Interval(2000.0,3000.0),
-    #         duration_requirements= Interval(0.0, 200.0),
-    #         slew_angles=Interval(20.0, 45.0)
-    #     )
-    #     task_4 : SpecificObservationTask = task_1.merge(task_2)
+        # Can merge with self
+        merged_task = task_1.merge(other_task=task_1)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
 
-    #     # Check mutual exclusivity
-    #     self.assertFalse(task_1.is_mutually_exclusive(task_2))
-    #     self.assertTrue(task_1.is_mutually_exclusive(task_3))
-    #     self.assertFalse(task_2.is_mutually_exclusive(task_3))
-    #     self.assertTrue(task_1.is_mutually_exclusive(task_4))
+        # Cannot merge with a task with different instrument
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_1,
+            instrument_name="test_instrument_2", # invalid instrument name
+            accessibility=Interval(100.0,200.0),
+            min_duration=10.0,
+            slew_angles=Interval(20.0, 45.0)
+        )
+        self.assertRaises(AssertionError, task_1.merge, other_task=task_2)
+
+        # Cannot merge with a task with non-overlapping slew angles
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_1,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(100.0,200.0),
+            min_duration=10.0,
+            slew_angles=Interval(0.0, 10.0) # Non-overlapping slew angles
+        )
+        self.assertRaises(AssertionError, task_1.merge, other_task=task_2)
+
+        # Cannot merge with task with non-overlapping availability when required
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_1,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(300.0,400.0), # accessibility interval contained within `task_1`
+            min_duration=100.0, # Restrictive duration requirements
+            slew_angles=Interval(0.0, 10.0)
+        )
+        self.assertRaises(AssertionError, task_1.merge, other_task=task_2, must_overlap=True)
+
+        # Can merge with non-overlapping tasks when allowed
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(220.0,300.0), # Non-overlapping accessibility
+            min_duration=20.0,
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_1.accessibility.right-task_1.min_duration)
+        self.assertEqual(merged_task.accessibility.right, task_2.accessibility.left+task_2.min_duration)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_2.accessibility.left - task_1.accessibility.right + task_1.min_duration + task_2.min_duration)
+        
+        # Merge overlapping task with less restrictive duration requirements
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(150.0,300.0), # proceeding overlapping accessibility
+            min_duration=5.0, # shorter minimum duration
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_2.accessibility.left+task_2.min_duration-task_1.min_duration)
+        self.assertEqual(merged_task.accessibility.right, task_1.accessibility.right)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_1.min_duration)
+
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(50.0, 150.0), # preceding overlapping accessibility
+            min_duration=5.0, # shorter minimum duration
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_1.accessibility.left)
+        self.assertEqual(merged_task.accessibility.right, task_2.accessibility.right)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_1.min_duration)
+
+        # Merge overlapping task with more restrictive duration requirements
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(150.0,300.0), # proceeding overlapping accessibility
+            min_duration=20.0, # longer minimum duration
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_2.accessibility.left)
+        self.assertEqual(merged_task.accessibility.right, task_1.accessibility.right)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_2.min_duration)
+        
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(50.0, 150.0), # preceding overlapping accessibility
+            min_duration=20.0, # longer minimum duration
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_1.accessibility.left+task_1.min_duration-task_2.min_duration)
+        self.assertEqual(merged_task.accessibility.right, task_2.accessibility.right)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_2.min_duration)
+
+        # Merge encompassed task with less restrictive duration requirements
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(125.0, 175.0), # encompassed accessibility
+            min_duration=5.0, # shorter minimum duration
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_2.accessibility.left+task_2.min_duration-task_1.min_duration)
+        self.assertEqual(merged_task.accessibility.right, task_2.accessibility.right-task_2.min_duration+task_1.min_duration)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_1.min_duration)
+
+        # Merge encompassed task with more restrictive duration requirements
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(125.0, 175.0), # encompassed accessibility
+            min_duration=20.0, # longer minimum duration
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_2.accessibility.left)
+        self.assertEqual(merged_task.accessibility.right, task_2.accessibility.right)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_2.min_duration)
+
+        # Merge encompassing task with less restrictive duration requirements
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(75.0, 225.0), # encompassing accessibility
+            min_duration=5.0, # shorter minimum duration
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_1.accessibility.left)
+        self.assertEqual(merged_task.accessibility.right, task_1.accessibility.right)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_1.min_duration)
+
+        # Merge encompassing task with more restrictive duration requirements
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(75.0, 225.0), # encompassing accessibility
+            min_duration=20.0, # longer minimum duration
+            slew_angles=Interval(20.0, 45.0)
+        )
+        merged_task = task_1.merge(other_task=task_2)
+        self.assertIsInstance(merged_task, SpecificObservationTask)
+        self.assertTrue(parent_task_1 in merged_task.parent_tasks)
+        self.assertTrue(parent_task_2 in merged_task.parent_tasks)
+        self.assertTrue(merged_task.instrument_name == 'test_instrument_1')
+        self.assertEqual(merged_task.accessibility.left, task_1.accessibility.left+task_1.min_duration-task_2.min_duration)
+        self.assertEqual(merged_task.accessibility.right, task_1.accessibility.right-task_1.min_duration+task_2.min_duration)
+        self.assertEqual(merged_task.slew_angles, task_1.slew_angles.intersection(task_2.slew_angles))
+        self.assertEqual(merged_task.min_duration, task_2.min_duration)
+        
+    def test_mutual_exclusivity(self):
+        # Create parent tasks
+        parent_task_1 = DefaultMissionTask(
+            parameter="test_parameter",
+            location=(45.0, 90.0, 1, 2),
+            mission_duration=3600.0,
+            id="parent_task_001"
+        )
+        parent_task_2 = DefaultMissionTask(
+            parameter="test_parameter",
+            location=(45.0, 45.0, 1, 1),
+            mission_duration=3600.0,
+            id="parent_task_002"
+        )
+        
+        # Create specific observation tasks
+        task_1 = SpecificObservationTask(
+            parent_task=parent_task_1,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(2000.0,3000.0),
+            min_duration= 0.0,
+            slew_angles=Interval(20.0, 45.0)
+        )
+        task_2 = SpecificObservationTask(
+            parent_task=parent_task_2,                  
+            instrument_name="test_instrument_1",
+            accessibility=Interval(2000.0,3000.0),
+            min_duration= 0.0,
+            slew_angles=Interval(20.0, 45.0)
+        )
+        task_3 = SpecificObservationTask(
+            parent_task=parent_task_1,
+            instrument_name="test_instrument_1",
+            accessibility=Interval(2000.0,3000.0),
+            min_duration= 0.0,
+            slew_angles=Interval(20.0, 45.0)
+        )
+        task_4 : SpecificObservationTask = task_1.merge(task_2)
+
+        # Check mutual exclusivity
+        self.assertFalse(task_1.is_mutually_exclusive(task_2))
+        self.assertTrue(task_1.is_mutually_exclusive(task_3))
+        self.assertFalse(task_2.is_mutually_exclusive(task_3))
+        self.assertTrue(task_1.is_mutually_exclusive(task_4))
 
 if __name__ == '__main__':
     # terminal welcome message
