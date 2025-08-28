@@ -49,7 +49,7 @@ class Interval:
         """ checks if the interval is empty """
         return (self.left == self.right and (self.left_open or self.right_open)) or (self.left > self.right)
         
-    def overlaps(self, __other : object) -> bool:
+    def overlaps(self, __other : 'Interval') -> bool:
         """ checks if this interval has an overlap with another """
         
         if not isinstance(__other, Interval):
@@ -60,7 +60,7 @@ class Interval:
                 or __other.left in self
                 or __other.right in self)
 
-    def is_subset(self, __other: object) -> bool:
+    def is_subset(self, __other: 'Interval') -> bool:
         """ checks if this interval is a subset of another """
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot check subset with object of type `{type(__other)}`.')
@@ -69,15 +69,13 @@ class Interval:
                 and (self.left_open or not __other.left_open)
                 and (self.right_open or not __other.right_open))
 
-    def intersection(self, __other : object) -> object:
+    def intersection(self, __other : 'Interval') -> 'Interval':
         """ returns the intersect of two intervals """
 
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot merge with object of type `{type(__other)}`.')
 
-        if not self.overlaps(__other):
-            return EmptyInterval()
-            # raise ValueError("cannot merge intervals with no overlap")
+        if not self.overlaps(__other): return EmptyInterval()
 
         # find the left and right bounds of the intersection
         left = max(self.left, __other.left)
@@ -97,7 +95,7 @@ class Interval:
         # create a new interval object
         return Interval(left, right, left_open, right_open)
 
-    def union(self, __other : object, extend : bool = False) -> object:
+    def union(self, __other : 'Interval', extend : bool = False) -> 'Interval':
         """ merges intervals and returns their union """
 
         if not isinstance(__other, Interval):
@@ -158,7 +156,7 @@ class Interval:
         r = x < self.right if self.right_open else x < self.right or abs(self.right - x) < 1e-6        
         return l and r
 
-    def __eq__(self, __other: object) -> bool:
+    def __eq__(self, __other: 'Interval') -> bool:
 
         if not isinstance(__other, Interval):
             raise TypeError(f'Cannot compare with object of type `{type(__other)}`.')
@@ -168,41 +166,41 @@ class Interval:
                 and self.left_open == __other.left_open 
                 and self.right_open == __other.right_open)
 
-    def __gt__(self, __value: object) -> bool:
-        if not isinstance(__value, Interval):
-            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+    def __gt__(self, __other: 'Interval') -> bool:
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__other)}`.')
 
-        if abs(self.left - __value.left) < 1e-6:
-            return self.span() > __value.span()
+        if abs(self.left - __other.left) < 1e-6:
+            return self.span() > __other.span()
         
-        return self.left > __value.left
+        return self.left > __other.left
 
-    def __ge__(self, __value: object) -> bool:
-        if not isinstance(__value, Interval):
-            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+    def __ge__(self, __other: 'Interval') -> bool:
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__other)}`.')
 
-        if abs(self.left - __value.left) < 1e-6:
-            return self.span() >= __value.span()
+        if abs(self.left - __other.left) < 1e-6:
+            return self.span() >= __other.span()
         
-        return self.left >= __value.left
+        return self.left >= __other.left
     
-    def __lt__(self, __value: object) -> bool:
-        if not isinstance(__value, Interval):
-            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+    def __lt__(self, __other: 'Interval') -> bool:
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__other)}`.')
         
-        if abs(self.left - __value.left) < 1e-6:
-            return self.span() < __value.span()
+        if abs(self.left - __other.left) < 1e-6:
+            return self.span() < __other.span()
         
-        return self.left < __value.left
+        return self.left < __other.left
 
-    def __le__(self, __value: object) -> bool:
-        if not isinstance(__value, Interval):
-            raise TypeError(f'Cannot compare with object of type `{type(__value)}`.')
+    def __le__(self, __other: 'Interval') -> bool:
+        if not isinstance(__other, Interval):
+            raise TypeError(f'Cannot compare with object of type `{type(__other)}`.')
         
-        if abs(self.left - __value.left) < 1e-6:
-            return self.span() <= __value.span()
+        if abs(self.left - __other.left) < 1e-6:
+            return self.span() <= __other.span()
         
-        return self.left <= __value.left
+        return self.left <= __other.left
     
     def __repr__(self) -> str:
         l_bracket = '(' if self.left_open else '['
@@ -239,9 +237,7 @@ class EmptyInterval(Interval):
     """ Represents an empty interval """
 
     def __init__(self):
-        super().__init__(np.NAN, np.NAN)
-        self.left_open = True
-        self.right_open = True
+        super().__init__(np.NAN, np.NAN, True, True)
 
     def is_empty(self) -> bool:
         return True
@@ -251,7 +247,10 @@ class EmptyInterval(Interval):
 
     def __contains__(self, x: float) -> bool:
         return False
-    
+
+    def span(self) -> float:
+        """ Returns the span of the interval. """
+        return 0.0
 
 def setup_results_directory(scenario_path : str, scenario_name : str, agent_names : list, overwrite : bool = True) -> str:
     """
