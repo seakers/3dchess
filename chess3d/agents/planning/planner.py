@@ -72,9 +72,23 @@ class AbstractPlanner(ABC):
                                     available_tasks : list,
                                     access_times : list, 
                                     cross_track_fovs : dict,
-                                    orbitdata : OrbitData
+                                    orbitdata : OrbitData,
+                                    must_overlap : bool = True,
+                                    threshold : float = 5*60
                                     ) -> list:
-        """ Creates tasks from access times. """
+        """ 
+        Creates specific observation tasks from precalculated access times of known generic task targets. 
+
+        #### Arguments
+        - `available_tasks` : List of known and available generic observation tasks.
+        - `access_times` : List of access times for each generic observation task.
+        - `cross_track_fovs` : Dictionary of cross-track fields of view for each instrument.
+        - `orbitdata` : Precalculated orbit and coverage data for the mission.
+        - `must_overlap` : Whether tasks' availability must overlap in availability time to be considered for clustering. (default : True)
+        - `threshold` : The time threshold for clustering tasks in seconds [s] (default : 300 seconds = 5 minutes).
+        """
+
+        if not must_overlap: raise NotImplementedError('Clustering without overlap is not yet fully implemented.')
 
         # generate schedulable tasks from access times
         schedulable_tasks : list[SpecificObservationTask] \
@@ -82,10 +96,10 @@ class AbstractPlanner(ABC):
         
         # check if tasks are clusterable
         task_adjacency : Dict[str, set[SpecificObservationTask]] \
-            = self.check_task_clusterability(schedulable_tasks)
+            = self.check_task_clusterability(schedulable_tasks, must_overlap, threshold)
    
         # cluster tasks based on adjacency
-        combined_tasks : list[SpecificObservationTask] = self.cluster_tasks(schedulable_tasks, task_adjacency)
+        combined_tasks : list[SpecificObservationTask] = self.cluster_tasks(schedulable_tasks, task_adjacency, must_overlap, threshold)
 
         # add clustered tasks to the final list of tasks available for scheduling
         schedulable_tasks.extend(combined_tasks) 
@@ -102,7 +116,8 @@ class AbstractPlanner(ABC):
                                    available_tasks : list,
                                    access_times : list, 
                                    cross_track_fovs : dict,
-                                   orbitdata : OrbitData
+                                   orbitdata : OrbitData,
+                                   threshold : float = 1e-9
                                    ) -> list:
         """ Creates one specific task per each access opportunity for every available task """
 
@@ -120,9 +135,10 @@ class AbstractPlanner(ABC):
                 duration_req : MeasurementDurationRequirement = duration_reqs[0] if duration_reqs else None
             else:
                 duration_req = None
-            duration_requirements = Interval(min(duration_req.thresholds),np.Inf) if duration_req is not None else Interval(orbitdata.time_step, np.Inf)
+            min_duration_req : float = min(duration_req.thresholds) if duration_req is not None else orbitdata.time_step
+            assert isinstance(min_duration_req, (int,float)) and min_duration_req >= 0.0, "minimum duration requirement must be a positive number."
 
-            # find access time for this task
+            # find access time for each target location for this task
             for *__,grid_index,gp_index in task.location:
                 # ensure grid_index and gp_index are integers
                 grid_index,gp_index = int(grid_index), int(gp_index)
@@ -143,11 +159,12 @@ class AbstractPlanner(ABC):
                 for access_time in matching_access_times:
                     # unpack access time
                     instrument_name,accessibility,_,th = access_time
+                    accessibility : Interval
                     
                     if max(th) - min(th) > cross_track_fovs[instrument_name]:
                         # not all of the accessibility is observable with a single pass
                         continue
-                        # raise NotImplementedError('No support for tasks that require multiple passes yet.')
+                        # TODO raise NotImplementedError('No support for tasks that require multiple passes yet.')
                     else:
                         off_axis_angles = [Interval(off_axis_angle - cross_track_fovs[instrument_name]/2,
                                                     off_axis_angle + cross_track_fovs[instrument_name]/2)
@@ -164,13 +181,30 @@ class AbstractPlanner(ABC):
                     if not task.availability.overlaps(accessibility):
                         continue # skip if not
 
-                    # create and add schedulable task to list of schedulable tasks
-                    schedulable_tasks.append(SpecificObservationTask(task,
-                                                                    instrument_name,
-                                                                    accessibility,
-                                                                    duration_requirements,
-                                                                    slew_angles
-                                                                    ))
+                    # check if access time is enough to perform the task
+                    if min_duration_req > accessibility.span():
+                        # check if accessibility span is non-zero
+                        if accessibility.span() <= 0.0: continue # accessibility time is too short; skip
+    
+                        # check if available timespan longer than the minimum observation duration
+                        if accessibility.span() - min_duration_req >= threshold: continue # is over the threshold; skip 
+
+                        # create and add schedulable task to list of schedulable tasks with a different minimum observation requirement
+                        schedulable_tasks.append(SpecificObservationTask(task,
+                                                                        instrument_name,
+                                                                        accessibility,
+                                                                        accessibility.span(), # slightly shorter than `min_duration_req`
+                                                                        slew_angles
+                                                                        ))
+                    else:
+                        # create and add schedulable task to list of schedulable tasks
+                        schedulable_tasks.append(SpecificObservationTask(task,
+                                                                        instrument_name,
+                                                                        accessibility,
+                                                                        min_duration_req,
+                                                                        slew_angles
+                                                                        ))
+
         
         # return list of schedulable tasks
         return schedulable_tasks
@@ -195,7 +229,15 @@ class AbstractPlanner(ABC):
         return True
         
     @runtime_tracker
-    def check_task_clusterability(self, schedulable_tasks : list) -> dict:
+    def check_task_clusterability(self, schedulable_tasks : list, must_overlap : bool, threshold : float) -> dict:
+        """ 
+        Creates adjacency list for a given list of specific observation tasks.
+
+        #### Arguments
+        - `schedulable_tasks` : A list of specific observation tasks to create the adjacency list for.
+        - `must_overlap` : Whether tasks' availability must overlap in availability time to be considered for clustering.
+        - `threshold` : The time threshold for clustering tasks in seconds [s].
+        """
         schedulable_tasks : list[SpecificObservationTask] = schedulable_tasks
 
         # create adjacency list for tasks
@@ -208,9 +250,6 @@ class AbstractPlanner(ABC):
             # get min and max accessibility times
             t_min = schedulable_tasks[0].accessibility.left
 
-            # define bins
-            bin_size = 60  # clustering time threshold [s]
-
             # initialize bins
             bins = defaultdict(list)
             
@@ -218,7 +257,7 @@ class AbstractPlanner(ABC):
             for task in tqdm(schedulable_tasks, leave=False, desc="Grouping tasks into bins"):
                 task : SpecificObservationTask
                 center_time = (task.accessibility.left + task.accessibility.right) / 2 - t_min
-                bin_key = int(center_time // bin_size)
+                bin_key = int(center_time // threshold)
                 bins[bin_key].append(task)
 
             # populate adjacency list
@@ -229,7 +268,7 @@ class AbstractPlanner(ABC):
                     for i in range(len(candidates)):
                         for j in range(i + 1, len(candidates)):
                             t1, t2 = candidates[i], candidates[j]
-                            if t1.can_merge(t2):
+                            if t1.can_merge(t2, must_overlap=must_overlap, max_duration=threshold):
                                 adj[t1.id].add(t2)
                                 adj[t2.id].add(t1)
                         pbar.update(1)
@@ -243,7 +282,7 @@ class AbstractPlanner(ABC):
         return adj
 
     @runtime_tracker
-    def cluster_tasks(self, schedulable_tasks : list, adj : dict) -> list:
+    def cluster_tasks(self, schedulable_tasks : list, adj : dict, must_overlap : bool, threshold : float) -> list:
         """ 
         Clusters tasks based on adjacency. 
         
@@ -324,7 +363,7 @@ class AbstractPlanner(ABC):
                     # TODO: look into ID being used. Ideally we would want a new ID for the combined task.
 
                     # merge all tasks in the clique into a single task p
-                    p = p.merge(q)
+                    p = p.merge(q, must_overlap=must_overlap, max_duration=threshold)  # max duration of 5 minutes
 
                     # update progress bar
                     pbar.update(1)

@@ -80,7 +80,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             # set task imaging time and duration
             # TODO improve selection? Currently aims for earliest and shortest observation possible
             t_img = max(t_prev + d_prev + m_prev, task.accessibility.left)
-            d_img = task.duration_requirements.left
+            d_img = task.min_duration
             
             if t_img + d_img not in task.accessibility:
                 continue
@@ -103,11 +103,11 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
     def __get_previous_and_future_observation_info(self, 
                                                  state : SimulationAgentState, 
                                                  task : SpecificObservationTask, 
-                                                 observations : list, 
+                                                 plan_sequence : list, 
                                                  max_slew_rate : float) -> tuple:
         
         # get latest previously scheduled observation
-        action_prev : ObservationAction = self.__get_previous_observation_action(task, observations)
+        action_prev : ObservationAction = self.__get_previous_observation_action(task, plan_sequence)
 
         # get values from previous action
         if action_prev:    
@@ -122,7 +122,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             d_prev = 0.0
         
         # get next earliest scheduled observation
-        action_next : ObservationAction = self.__get_next_observation_action(task, observations)
+        action_next : ObservationAction = self.__get_next_observation_action(task, plan_sequence)
 
         # get values from next action
         if action_next:
@@ -137,10 +137,10 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
 
         return th_prev, t_prev, d_prev, th_next, t_next, d_next
 
-    def __get_previous_observation_action(self, task : SpecificObservationTask, observations : list) -> ObservationAction:
+    def __get_previous_observation_action(self, task : SpecificObservationTask, plan_sequence : list) -> ObservationAction:
         """ find any previously scheduled observation """
         # set types
-        observations : list[ObservationAction] = observations
+        observations : list[ObservationAction] = [observation for _,observation in plan_sequence]
 
         # filter for previous actions
         actions_prev : list[ObservationAction] = [observation for observation in observations
@@ -149,9 +149,9 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         # return latest observation action
         return max(actions_prev, key=lambda a: a.t_end) if actions_prev else None
     
-    def __get_next_observation_action(self, task : SpecificObservationTask, observations : list) -> ObservationAction:
+    def __get_next_observation_action(self, task : SpecificObservationTask, plan_sequence : list) -> ObservationAction:
          # set types
-        observations : list[ObservationAction] = observations
+        observations : list[ObservationAction] = [observation for _,observation in plan_sequence]
 
         # filter for next actions
         actions_next = [observation for observation in observations
@@ -214,7 +214,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         t_start = task.accessibility.left
 
         # choose shortest allowable task duration
-        duration = task.duration_requirements.left 
+        duration = task.min_duration 
 
         # calculate task reward
         task_reward = self.estimate_task_value(task, t_start, duration, specs, cross_track_fovs, orbitdata, mission, observation_history)

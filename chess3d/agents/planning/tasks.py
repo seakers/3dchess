@@ -446,14 +446,14 @@ class SpecificObservationTask:
                 # and not self.is_mutually_exclusive(other_task)      # TODO tasks with common parent tasks cannot be merged
                 )           
         
-    def merge(self, other_task : 'SpecificObservationTask', must_overlap : bool = False, max_duration : float = 5*60) -> 'SpecificObservationTask':
+    def merge(self, other_task : 'SpecificObservationTask', must_overlap : bool = False, max_duration : float = 2*60) -> 'SpecificObservationTask':
         """ 
         Merge two tasks into one. 
                 
         **Arguments:**
         - `other_task`: The other task to merge with.
         - `must_overlap`: If True, the tasks must overlap in accessibility to be merged.
-        - `max_duration`: The maximum allowed duration for the merged task in seconds [s].
+        - `max_duration`: The maximum allowed duration for the merged task in seconds [s] (default: 120 seconds = 2 minutes).
         """
         try:
             # Check other task's type
@@ -468,6 +468,8 @@ class SpecificObservationTask:
 
             # Calculate accessibility overlap and duration requirements
             merged_accessibility, min_duration_req = self._calc_time_requirements(other_task, must_overlap)
+            assert isinstance(merged_accessibility, Interval), "merged accessibility is not an Interval."
+            assert isinstance(min_duration_req, (float,int)), "minimum duration requirement is not a number."
             assert not merged_accessibility.is_empty(), "joint task availability is empty."
             assert not math.isnan(min_duration_req) , "minimum duration requirement is invalid."
             assert min_duration_req <= max_duration, "minimum duration requirements exceed maximum allowed duration."
@@ -476,7 +478,7 @@ class SpecificObservationTask:
             # Calculate slew angles overlap
             merged_slew_angles : Interval = self.slew_angles.intersection(other_task.slew_angles) 
             assert not merged_slew_angles.is_empty(), "slew angles do not overlap."
-
+        
             # Return merged task
             # TODO which id should we be using for new tasks? Ref task clustering in planners
             return SpecificObservationTask(merged_parent_tasks, self.instrument_name, merged_accessibility, min_duration_req, merged_slew_angles, self.id) 

@@ -1610,7 +1610,7 @@ class SimulationElementFactory:
                 license_path = preplanner_dict.get('licensePath', None)
                 
                 if license_path is None and not debug: 
-                    raise ValueError('license path for Gurobi MILP preplanner not specified.')        
+                    raise ValueError('license path for Gurobi MILP preplanner not specified. Set `debug` to true to run with limited functionality or specify a valid license path to `licensePath`.')        
 
                 preplanner = SingleSatMILP(obj, license_path, horizon, period, debug, logger)
 

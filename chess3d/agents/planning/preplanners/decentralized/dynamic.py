@@ -72,15 +72,14 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
 
         # add dummy task to represent initial state
         instrument_names = list(payload.keys())
-        dummy_task = SpecificObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), Interval(0,np.Inf), Interval(state.attitude[0],state.attitude[0]))
+        dummy_task = SpecificObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), 0.0, Interval(state.attitude[0],state.attitude[0]))
         schedulable_tasks.insert(0,dummy_task)
 
         # initiate results arrays
         t_imgs : list[Interval]             = [max(task.accessibility.left, state.t) for task in schedulable_tasks]
-        d_imgs : list[Interval]             = [task.duration_requirements.left for task in schedulable_tasks]
+        d_imgs : list[float]                = [task.min_duration for task in schedulable_tasks]
         th_imgs : list[float]               = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in schedulable_tasks]
-        rewards : list[float]               = [self.estimate_task_value(task, t_imgs[i], d_imgs[i], specs, cross_track_fovs, orbitdata, mission, observation_history)
-                                                for i,task in tqdm(enumerate(schedulable_tasks),leave=False,desc='SATELLITE: Calculating task rewards')]
+        rewards : list[float]               = [0.0 for _ in schedulable_tasks]
         cumulative_rewards : list[float]    = [0.0 for _ in schedulable_tasks]
         preceeding_observations : list[int] = [np.NAN for _ in schedulable_tasks]
 

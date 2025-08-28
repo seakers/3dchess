@@ -13,4 +13,4 @@ class EarliestAccessPlanner(HeuristicInsertionPlanner):
                         ) -> tuple:
         """ Heuristic function to sort tasks by their heuristic value. """
         # return to sort using: earliest start time >> longest duration
-        return task.accessibility.left, -task.duration_requirements.left 
+        return task.accessibility.left, -task.min_duration

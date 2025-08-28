@@ -21,10 +21,7 @@ class TestMissionLoading(unittest.TestCase):
         assert all(isinstance(mission, Mission) for mission in missions)
 
 class TestFederatedMission(unittest.TestCase):
-    def setUp(self) -> None:
-        # terminal welcome message
-        print_welcome('Simulation Loading Test')
-        
+    def setUp(self) -> None:        
         # load scenario json file
         self.spacecraft_template = {
                     "@id": "thermal_sat_0_0",
@@ -88,9 +85,10 @@ class TestFederatedMission(unittest.TestCase):
                     },
                     "planner" : {
                         "preplanner" : {
-                            "@type" : "dynamic",
+                            "@type" : "milp",
                             "period": 1000,
                             # "horizon": 500,
+                            'licensePath': './gurobi.lic'
                         },
                         # "replanner" : {
                         #     "@type" : "broadcaster",
@@ -199,39 +197,42 @@ class TestFederatedMission(unittest.TestCase):
             }
         return settings
 
-    # def test_toy_scenario(self):
+    def test_toy_scenario(self):
         # setup scenario parameters
-        # duration = 1.0 / 24.0
-        # grid_name = 'toy_points'
-        # scenario_name = 'toy_scenario'
-        # connectivity = 'FULL'
-        # event_name = 'toy_events'
-        # mission_name = 'toy_missions'
+        duration = 1.0 / 24.0
+        grid_name = 'toy_points'
+        scenario_name = 'toy_scenario'
+        connectivity = 'FULL'
+        event_name = 'toy_events'
+        mission_name = 'toy_missions'
 
-        # # Generate scenario
-        # scenario_specs = self.setup_scenario_specs(duration,
-        #                                            grid_name, 
-        #                                            scenario_name, 
-        #                                            connectivity,
-        #                                            event_name,
-        #                                            mission_name,
-        #                                            spacecraft=[self.spacecraft_template]
-        #                                            )
+        # terminal welcome message
+        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[self.spacecraft_template]
+                                                   )
 
 
-        # # initialize mission
-        # self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
-        # # check type of mission object
-        # self.assertTrue(isinstance(self.simulation, Simulation))
+        # check type of mission object
+        self.assertTrue(isinstance(self.simulation, Simulation))
 
-        # # execute mission
-        # self.simulation.execute()
+        # execute mission
+        self.simulation.execute()
 
-        # # print results
-        # self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
-        # print('DONE')
+        print('DONE')
 
     def test_single_sat_scenario_heuristic(self):
         # setup scenario parameters
@@ -244,6 +245,9 @@ class TestFederatedMission(unittest.TestCase):
 
         spacecraft = self.spacecraft_template.copy()
         spacecraft['planner']['preplanner']['@type'] = 'heuristic'
+
+        # terminal welcome message
+        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
 
         # Generate scenario
         scenario_specs = self.setup_scenario_specs(duration,
@@ -270,123 +274,131 @@ class TestFederatedMission(unittest.TestCase):
 
         print('DONE')
 
-    # def test_single_sat_scenario_earliest(self):
-    #     # setup scenario parameters
-    #     duration = 1.0 / 24.0
-    #     grid_name = 'lake_event_points'
-    #     scenario_name = 'single_sat_scenario-earliest'
-    #     connectivity = 'FULL'
-    #     event_name = 'lake_events_seed-1000'
-    #     mission_name = 'toy_missions'
+    def test_single_sat_scenario_earliest(self):
 
-    #     spacecraft = self.spacecraft_template.copy()
-    #     spacecraft['planner']['preplanner']['@type'] = 'earliest'
+        # setup scenario parameters
+        duration = 1.0 / 24.0
+        grid_name = 'lake_event_points'
+        scenario_name = 'single_sat_scenario-earliest'
+        connectivity = 'FULL'
+        event_name = 'lake_events_seed-1000'
+        mission_name = 'toy_missions'
 
-    #     # Generate scenario
-    #     scenario_specs = self.setup_scenario_specs(duration,
-    #                                                grid_name, 
-    #                                                scenario_name, 
-    #                                                connectivity,
-    #                                                event_name,
-    #                                                mission_name,
-    #                                                spacecraft=[spacecraft]
-    #                                                )
+        spacecraft = self.spacecraft_template.copy()
+        spacecraft['planner']['preplanner']['@type'] = 'earliest'
 
+        # terminal welcome message
+        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
 
-    #     # initialize mission
-    #     self.simulation : Simulation = Simulation.from_dict(scenario_specs)
-
-    #     # check type of mission object
-    #     self.assertTrue(isinstance(self.simulation, Simulation))
-
-    #     # execute mission
-    #     self.simulation.execute()
-
-    #     # print results
-    #     self.simulation.print_results()
-
-    #     print('DONE')
-
-    # def test_single_sat_scenario_dynamic(self):
-    #     # setup scenario parameters
-    #     duration = 1.0 / 24.0
-    #     grid_name = 'lake_event_points'
-    #     scenario_name = 'single_sat_scenario-dynamic'
-    #     connectivity = 'FULL'
-    #     event_name = 'lake_events_seed-1000'
-    #     mission_name = 'toy_missions'
-
-    #     spacecraft = self.spacecraft_template.copy()
-    #     spacecraft['planner']['preplanner']['@type'] = 'dynamic'
-
-    #     # Generate scenario
-    #     scenario_specs = self.setup_scenario_specs(duration,
-    #                                                grid_name, 
-    #                                                scenario_name, 
-    #                                                connectivity,
-    #                                                event_name,
-    #                                                mission_name,
-    #                                                spacecraft=[spacecraft]
-    #                                                )
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[spacecraft]
+                                                   )
 
 
-    #     # initialize mission
-    #     self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
-    #     # check type of mission object
-    #     self.assertTrue(isinstance(self.simulation, Simulation))
+        # check type of mission object
+        self.assertTrue(isinstance(self.simulation, Simulation))
 
-    #     # execute mission
-    #     self.simulation.execute()
+        # execute mission
+        self.simulation.execute()
 
-    #     # print results
-    #     self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
-    #     print('DONE')
+        print('DONE')
 
-    # def test_single_sat_scenario_milp(self):
-    #     # setup scenario parameters
-    #     duration = 1.0 / 24.0
-    #     grid_name = 'lake_event_points'
-    #     scenario_name = 'single_sat_scenario-milp'
-    #     connectivity = 'FULL'
-    #     event_name = 'lake_events_seed-1000'
-    #     mission_name = 'toy_missions'
+    def test_single_sat_scenario_dynamic(self):
+        # setup scenario parameters
+        duration = 1.0 / 24.0
+        grid_name = 'lake_event_points'
+        scenario_name = 'single_sat_scenario-dynamic'
+        connectivity = 'FULL'
+        event_name = 'lake_events_seed-1000'
+        mission_name = 'toy_missions'
 
-    #     spacecraft = self.spacecraft_template.copy()
-    #     spacecraft['planner']['preplanner']['@type'] = 'milp'
-    #     spacecraft['planner']['preplanner']['licensePath'] = './gurobi.lic'
-    #     spacecraft['planner']['preplanner']['debug'] = 'False'
-    #     spacecraft['planner']['preplanner']['horizon'] =  500
+        spacecraft = self.spacecraft_template.copy()
+        spacecraft['planner']['preplanner']['@type'] = 'dynamic'
 
-    #     # Generate scenario
-    #     scenario_specs = self.setup_scenario_specs(duration,
-    #                                                grid_name, 
-    #                                                scenario_name, 
-    #                                                connectivity,
-    #                                                event_name,
-    #                                                mission_name,
-    #                                                spacecraft=[spacecraft]
-    #                                                )
+        # terminal welcome message
+        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[spacecraft]
+                                                   )
 
 
-    #     # initialize mission
-    #     self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
-    #     # check type of mission object
-    #     self.assertTrue(isinstance(self.simulation, Simulation))
+        # check type of mission object
+        self.assertTrue(isinstance(self.simulation, Simulation))
 
-    #     # execute mission
-    #     self.simulation.execute()
+        # execute mission
+        self.simulation.execute()
 
-    #     # print results
-    #     self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
-    #     print('DONE')
+        print('DONE')
+
+    def test_single_sat_scenario_milp(self):
+        # setup scenario parameters
+        duration = 1.0 / 24.0
+        grid_name = 'lake_event_points'
+        scenario_name = 'single_sat_scenario-milp'
+        connectivity = 'FULL'
+        event_name = 'lake_events_seed-1000'
+        mission_name = 'toy_missions'
+
+        spacecraft = self.spacecraft_template.copy()
+        spacecraft['planner']['preplanner']['@type'] = 'milp'
+        spacecraft['planner']['preplanner']['licensePath'] = './gurobi.lic'
+        spacecraft['planner']['preplanner']['debug'] = 'False'
+        spacecraft['planner']['preplanner']['horizon'] =  500
+
+        # terminal welcome message
+        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[spacecraft]
+                                                   )
+
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # check type of mission object
+        self.assertTrue(isinstance(self.simulation, Simulation))
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print('DONE')
 
 if __name__ == '__main__':
-    # terminal welcome message
-    print_welcome('Federated Mission Scenario Test')
 
     # run tests
     unittest.main()
