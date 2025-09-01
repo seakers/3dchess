@@ -90,11 +90,10 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             next_action_feasible : bool = (t_img + d_img + m_next   <= t_next - 1e-6)
             if prev_action_feasible and next_action_feasible:
                 action = ObservationAction(task.instrument_name, 
-                                           task.get_location(), 
-                                           task.get_objectives(),
                                            th_img, 
                                            t_img, 
-                                           d_img)
+                                           d_img,
+                                           task)
                 plan_sequence.append((task, action))
 
         # return sorted by start time

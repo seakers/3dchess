@@ -845,6 +845,11 @@ class AbstractPlanner(ABC):
                                   ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
         try:
+            # Validate inputs
+            assert isinstance(observations, list), "Observations must be a list."
+            assert all(isinstance(obs, ObservationAction) for obs in observations), "All elements in observations must be of type ObservationAction."
+            observations : list[ObservationAction] = observations
+
             if isinstance(state, SatelliteAgentState) and isinstance(specs, Spacecraft):
 
                 # get pointing agility specifications
@@ -882,16 +887,28 @@ class AbstractPlanner(ABC):
 
                     observation_parameters.append((th_i, t_i, d_i, th_j, t_j, d_j, max_slew_rate))
 
-                # check if all observations are valid
-                return all([self.is_observation_pair_valid(*params) 
-                            for params in observation_parameters])
+                # check if observations sequence is valid
+                if not all([self.is_observation_pair_valid(*params) for params in observation_parameters]):
+                    return False
 
+                # ensure no mutually exclusive tasks are present
+                return all(
+                    not obs_i.task.is_mutually_exclusive(obs_j.task)
+                    for i, obs_i in enumerate(observations)
+                    for j, obs_j in enumerate(observations)
+                    if i < j
+                )
             else:
                 raise NotImplementedError(f'Observation path validity check for agents with state type {type(state)} not yet implemented.')
         finally:
             for th_i,t_i,d_i,th_j,t_j,d_j,max_slew_rate in observation_parameters:
                 if not self.is_observation_pair_valid(th_i, t_i, d_i, th_j, t_j, d_j, max_slew_rate):
                     x = 1
+
+            for i, obs_i in enumerate(observations):
+                for j, obs_j in enumerate(observations):
+                    if obs_i.task.is_mutually_exclusive(obs_j.task) and obs_i != obs_j:
+                        x = 1
 
     def is_observation_pair_valid(self, 
                                   th_i, t_i, d_i, 

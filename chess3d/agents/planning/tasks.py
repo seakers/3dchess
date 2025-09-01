@@ -362,6 +362,7 @@ class SpecificObservationTask:
 
     def is_mutually_exclusive(self, other_task : 'SpecificObservationTask') -> bool:
         """ Check if two tasks are mutually exclusive. """
+        if other_task == self: return False
         common_parents : set = self.parent_tasks.intersection(other_task.parent_tasks)
         return len(common_parents) > 0
 
@@ -491,3 +492,24 @@ class SpecificObservationTask:
     
     def __hash__(self):
         return hash(self.id)
+    
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "parent_tasks": [task.to_dict() for task in self.parent_tasks],
+            "instrument_name": self.instrument_name,
+            "accessibility": self.accessibility.to_dict(),
+            "min_duration": self.min_duration,
+            "slew_angles": self.slew_angles.to_dict()
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SpecificObservationTask":
+        return cls(
+            parent_task={GenericObservationTask.from_dict(task) for task in data["parent_tasks"]},
+            instrument_name=data["instrument_name"],
+            accessibility=Interval.from_dict(data["accessibility"]),
+            min_duration=data["min_duration"],
+            slew_angles=Interval.from_dict(data["slew_angles"]),
+            id=data["id"]
+        )

@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Union
 
 import numpy as np
+from chess3d.agents.planning.tasks import SpecificObservationTask
 from chess3d.mission.objectives import MissionObjective
 from chess3d.utils import CoordinateTypes
 from dmas.agents import AgentAction
@@ -224,19 +225,19 @@ class ObservationAction(AgentAction):
 
     ### Attributes:
         - instrument_name (`str`): name of the instrument_name that will perform this action
-        - target (`list`): coordinates for the intended observation target in (lat [deg], lon [deg], alt [km]) 
         - look_angle (`float`): look angle of the observation in [deg]
         - t_start (`float`): start time of the measurement of this action in [s] from the beginning of the simulation
-        - t_end (`float`): end time of the measurment of this action in [s] from the beginning of the simulation
+        - t_end (`float`): end time of the measurement of this action in [s] from the beginning of the simulation
+        - duration (`float`): duration of the measurement of this action in [s]
+        - task (`SpecificObservationTask`): the specific task associated with this action
         - id (`str`) : identifying number for this task in uuid format
     """  
     def __init__(   self,
                     instrument_name : str,
-                    targets : list, 
-                    objectives : list,
                     look_angle : float, 
                     t_start: Union[float, int], 
                     duration: Union[float, int] = 0.0, 
+                    task : SpecificObservationTask = None,
                     status: str = 'PENDING', 
                     id: str = None, 
                     **_) -> None:
@@ -244,41 +245,30 @@ class ObservationAction(AgentAction):
         Creates an instance of an Observation Action
         ### Arguments:
             - instrument_name (`str`): name of the instrument_name that will perform this action
-            - targets (`list`): list of coordinates for the intended observation target in (lat [deg], lon [deg], alt [km]) 
             - look_angle (`float`): look angle of the observation in [deg]
             - t_start (`float`): start time of the measurement of this action in [s] from the beginning of the simulation
-            - t_end (`float`): end time of the measurment of this action in [s] from the beginning of the simulation
+            - duration (`float`): duration of the measurement of this action in [s]
+            - task (`SpecificObservationTask`): the specific task associated with this action
             - id (`str`) : identifying number for this task in uuid format
         """
-        t_end = t_start + duration
-        super().__init__(ActionTypes.OBSERVE.value, t_start, t_end, status, id)
+        super().__init__(ActionTypes.OBSERVE.value, t_start, t_start + duration, status, id)
+        
+        # Concert task from dict if needed
+        task = SpecificObservationTask.from_dict(task) if isinstance(task, dict) else task
         
         # check parameters
-        if not isinstance(instrument_name,str): raise ValueError(f'`instrument_name` must be of type `str`. Is of type `{type(instrument_name)}`.')
-        if not isinstance(targets, list): raise ValueError(f'`targets` must be of type `list`. Is of type `{type(targets)}`.')
-        
-        if not all(isinstance(target, (list, tuple)) for target in targets): 
-            raise ValueError(f'`target` must be a `list` or `tuple` of numerical values of type `float`. Is of type `{type(targets)}`.')
-        if any([len(target) != 4 for target in targets]): raise ValueError(f'`target` must be a `list` of length 3 (lat, lon, alt). Is of length {len(targets)}.')
-        if not isinstance(look_angle,float) and not isinstance(look_angle,int): raise ValueError(f'`look_angle` must be a numerical value of type `float`. Is of type `{type(look_angle)}`')
-
-        if all([isinstance(objective, dict) for objective in objectives]):
-            objectives = [MissionObjective.from_dict(objective) for objective in objectives]
-        
-        # get unique targets and objectives
-        objectives = list(set(objectives))
-        targets = {tuple(target) for target in targets}
-        targets = [list(target) for target in targets]
+        assert isinstance(instrument_name,str), f'`instrument_name` must be of type `str`. Is of type `{type(instrument_name)}`.'
+        assert isinstance(look_angle,(int,float)), f'`look_angle` must be a numerical value of type `float` or `int`. Is of type `{type(look_angle)}`'
+        assert isinstance(task,SpecificObservationTask) or task is None, f'`task` must be of type `SpecificObservationTask` or None. Is of type `{type(task)}`.'
 
         # set parameters
         self.instrument_name = instrument_name
-        self.objectives : list[MissionObjective] = [objective.copy() for objective in objectives]
-        self.targets = [[coordinate for coordinate in target] for target in targets]
         self.look_angle = look_angle
+        self.task : SpecificObservationTask = task
 
     def to_dict(self):
         out = super().to_dict()
-        out['objectives'] = [ojective.to_dict() for ojective in self.objectives]
+        out['task'] = self.task.to_dict() if self.task else None
         return out
 
 class WaitForMessages(AgentAction):

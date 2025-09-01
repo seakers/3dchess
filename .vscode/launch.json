@@ -57,7 +57,7 @@
         //     "args": "visualizer_test"
         // },
         {
-            "name": "TEST EVENT GENERATION",
+            "name": "TEST: Event Generation",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/events/event_generator_test.py",
@@ -69,7 +69,7 @@
             }
         },
         {
-            "name": "TEST REQUIREMENT DEFINITION",
+            "name": "TEST: Requirement Definition",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/missions/requirement_test.py",
@@ -81,7 +81,7 @@
             }
         },
         {
-            "name": "TEST OBJECTIVE DEFINITION",
+            "name": "TEST: Objective Definition",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/missions/objective_test.py",
@@ -93,7 +93,7 @@
             }
         },
         {
-            "name": "TEST MISSION DEFINITION",
+            "name": "TEST: Mission Definition",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/missions/mission_test.py",
@@ -105,7 +105,7 @@
             }
         },
         {
-            "name": "TEST TASKS DEFINITION",
+            "name": "TEST: Tasks Definition",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/tasks/tasks_test.py",
@@ -117,10 +117,10 @@
             }
         },
         {
-            "name": "TEST HEURISTIC PREPLANNER",
+            "name": "TEST: Heuristic Preplanner",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/preplanners/heuristic/heuristic_planner_test.py",
+            "program": "${workspaceRoot}/tests/planners/earliest_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -129,10 +129,10 @@
             }
         },
         {
-            "name": "TEST EARLIEST ACCESS PREPLANNER",
+            "name": "TEST: Earliest Access Preplanner",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/preplanners/earliest/earliest_planner_test.py",
+            "program": "${workspaceRoot}/tests/planners/earliest_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -141,10 +141,10 @@
             }
         },
         {
-            "name": "TEST NADIR PREPLANNER",
+            "name": "TEST: Nadir Preplanner",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/preplanners/nadir/nadir_planner_test.py",
+            "program": "${workspaceRoot}/tests/planners/nadir_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -153,10 +153,10 @@
             }
         },
         {
-            "name": "TEST DYN PROG PREPLANNER",
+            "name": "TEST: Dynamic Programming Preplanner",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/preplanners/dynamic/dp_planner_test.py",
+            "program": "${workspaceRoot}/tests/planners/dp_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -165,10 +165,10 @@
             }
         },
         {
-            "name": "TEST ACBBA",
+            "name": "TEST: Single-Sat MILP Preplanner",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/replanners/acbba/acbba_replanner_test.py",
+            "program": "${workspaceRoot}/tests/planners/single_milp_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -176,8 +176,20 @@
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             }
         },
+        // {
+        //     "name": "TEST: ACBBA Replanner",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/tests/replanners/acbba/acbba_replanner_test.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
+        //     }
+        // },
         {
-            "name": "TEST REWARD GRID",
+            "name": "TEST: Reward Grid",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/rewards/reward_grid_test.py",
@@ -188,20 +200,20 @@
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             }
         },
-        {
-            "name": "TEST GROUND STATION AGENT",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/tests/gstat/ground_station_test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            }
-        },
         // {
-        //     "name": "ALGAL BLOOMS SCENARIO",
+        //     "name": "TEST: Ground Station Agent",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/tests/gstat/ground_station_test.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
+        //     }
+        // },
+        // {
+        //     "name": "SCENARIO: Algal Blooms",
         //     "type": "debugpy",
         //     "request": "launch",
         //     "program": "${workspaceRoot}/scenarios/algal_blooms/main.py",
@@ -213,7 +225,7 @@
         //     }
         // },
         // {
-        //     "name": "ALGAL BLOOMS STUDY",
+        //     "name": "STUDY: Algal Blooms",
         //     "type": "debugpy",
         //     "request": "launch",
         //     "program": "${workspaceRoot}/scenarios/algal_blooms_study/main.py",
@@ -224,26 +236,26 @@
         //         "PYTHONPATH": "${workspaceRoot}/chess3d"
         //     }
         // },
-        {
-            "name": "DEBUG REPLANNER STUDY",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/scenarios/replanner_study/main.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            },
-            "args": [
-                // "-d", "True",
-                "-s", "test_case_2_seed-1000",
-                "-l", "21",
-                "-u", "22",
-            ]
-        },
         // {
-        //     "name": "PREPLANNER STUDY",
+        //     "name": "TEST: Replanner Study",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/scenarios/replanner_study/main.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
+        //     },
+        //     "args": [
+        //         // "-d", "True",
+        //         "-s", "test_case_2_seed-1000",
+        //         "-l", "21",
+        //         "-u", "22",
+        //     ]
+        // },
+        // {
+        //     "name": "Preplanner Study",
         //     "type": "debugpy",
         //     "request": "launch",
         //     "program": "${workspaceRoot}/scenarios/preplanner_study/main.py",
@@ -254,18 +266,18 @@
         //         "PYTHONPATH": "${workspaceRoot}/chess3d"
         //     }
         // }
-        {
-            "name": "Federated Mission Case",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/scenarios/federated_mission/test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            }
-        },
+        // {
+        //     "name": "Federated Mission Case",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/scenarios/federated_mission/test.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
+        //     }
+        // },
         
     ],
     "compounds": [

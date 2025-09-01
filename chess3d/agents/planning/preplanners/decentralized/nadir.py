@@ -1,17 +1,13 @@
-from dmas.modules import ClockConfig
+from dmas.utils import runtime_tracker
 import numpy as np
-from chess3d.agents.actions import ObservationAction
-from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.preplanners.decentralized.earliest import EarliestAccessPlanner
-from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
-from chess3d.messages import ClockConfig
-
 from orbitpy.util import Spacecraft
 
-from dmas.utils import runtime_tracker
+from chess3d.agents.actions import ObservationAction
+from chess3d.agents.planning.preplanners.decentralized.earliest import EarliestAccessPlanner
+from chess3d.agents.states import SimulationAgentState, SatelliteAgentState
 
-class NadirPointingPlaner(EarliestAccessPlanner):
-    """ Only points agents to """
+class NadirPointingPlanner(EarliestAccessPlanner):
+    """ Only points agents in the downward direction """
 
     def is_observation_feasible(self, 
                                 state : SimulationAgentState,
@@ -28,25 +24,8 @@ class NadirPointingPlaner(EarliestAccessPlanner):
                 and t_img >= t_prev)                         # is valid if it is done after the previous observation
     
     @runtime_tracker
-    def _schedule_maneuvers(self, state: SimulationAgentState, specs: Spacecraft, observations: list, clock_config: ClockConfig, orbitdata: OrbitData = None) -> list:
-        # schedule all travel maneuvers
-        maneuvers = []
-
-        # compile instrument field of view specifications   
-        cross_track_fovs = self.collect_fov_specs(specs)
-
-        # get pointing agility specifications
-        adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
-        if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
-
-        max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
-        if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
-
-        # ensure no attitude manuvers are required in plan
-        assert self.is_maneuver_path_valid(state, specs, observations, maneuvers, max_slew_rate, cross_track_fovs)
-
-        # return travel manuvers
-        return maneuvers
+    def _schedule_maneuvers(self, *args) -> list:
+        return []
     
     @runtime_tracker
     def is_observation_path_valid(self, 
@@ -68,6 +47,9 @@ class NadirPointingPlaner(EarliestAccessPlanner):
             max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
             if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
             
+            # compile name of instruments onboard spacecraft
+            instruments = [instrument.name for instrument in specs.instrument]
+
             # compile instrument field of view specifications   
             cross_track_fovs : dict = self.collect_fov_specs(specs)
 
@@ -94,10 +76,10 @@ class NadirPointingPlaner(EarliestAccessPlanner):
 
                 
                 # check if desired instrument is contained within the satellite's specifications
-                if observation_j.instrument_name not in [instrument.name for instrument in specs.instrument]:
+                if observation_j.instrument_name not in instruments:
                     return False 
-                
-                assert th_j != np.NAN and th_i != np.NAN # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
+
+                assert not np.isnan(th_j) and not np.isnan(th_i) # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
 
                 # estimate maneuver time betweem states
                 dth_maneuver = abs(th_j - th_i)

@@ -117,6 +117,8 @@ class SingleSatMILP(AbstractPreplanner):
                                for j,_ in enumerate(schedulable_tasks)]
                                for j_p,__ in enumerate(schedulable_tasks)
                              ]) # conservative estimate of big M as a function of each task
+        exclusive = np.array([[int(task_i.is_mutually_exclusive(task_j)) for task_j in schedulable_tasks]
+                               for task_i in schedulable_tasks])
 
         # Validate constants to ensure convergence
         assert all([reward >= 0 for reward in init_rewards])
@@ -166,6 +168,9 @@ class SingleSatMILP(AbstractPreplanner):
                     # cannot form a sequence of observations between the same task; constrain z[j, j] == 0
                     model.addConstr(z[j, j] == 0)
 
+                if exclusive[j, j_p]:
+                    model.addConstr(x[j] + x[j_p] <= 1)
+
         # Optimize model
         model.optimize()
 
@@ -211,11 +216,10 @@ class SingleSatMILP(AbstractPreplanner):
         # Create observation actions from scheduled tasks
         observations = [
             ObservationAction(task.instrument_name,
-                              task.get_location(),
-                              task.get_objectives(),
                               th_img,
                               t_img+state.t,
-                              d_img
+                              d_img,
+                              task
                               )
             for _,t_img,d_img,th_img,task in sorted(scheduled_task_indices,key=lambda x: x[1]) # Sorted by start time
         ]

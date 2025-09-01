@@ -25,6 +25,7 @@ from dmas.clocks import *
 from chess3d.agents.agents import *
 from chess3d.agents.planning.preplanners.centralized.dealer import TestingDealer
 from chess3d.agents.planning.preplanners.decentralized.milp import SingleSatMILP
+from chess3d.agents.planning.preplanners.decentralized.nadir import NadirPointingPlanner
 from chess3d.agents.planning.replanners.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
 from chess3d.agents.planning.preplanners.centralized.worker import WorkerReplanner
 from chess3d.agents.science.processing import LookupProcessor
@@ -38,7 +39,6 @@ from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.planning.preplanners.decentralized.heuristic import HeuristicInsertionPlanner
 from chess3d.agents.planning.preplanners.decentralized.earliest import EarliestAccessPlanner
-from chess3d.agents.planning.preplanners.decentralized.nadir import NadirPointingPlaner
 from chess3d.agents.planning.preplanners.decentralized.dynamic import DynamicProgrammingPlanner
 from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.science.module import *
@@ -1512,7 +1512,7 @@ class SimulationElementFactory:
             science_dict : dict
 
             # load selected data processor
-            processor : DataProcessor = SimulationElementFactory.load_data_processor(science_dict, agent_name, event_mission)
+            processor : DataProcessor = SimulationElementFactory.load_data_processor(science_dict, agent_name, mission)
 
             if processor is None: return None
 
@@ -1583,7 +1583,7 @@ class SimulationElementFactory:
                 preplanner = EarliestAccessPlanner(horizon, period, debug, logger)
 
             elif preplanner_type.lower() == 'nadir':
-                preplanner = NadirPointingPlaner(horizon, period, debug, logger)
+                preplanner = NadirPointingPlanner(horizon, period, debug, logger)
 
             elif preplanner_type.lower() in ["dynamic", "dp"]:
                 period = preplanner_dict.get('period', 500)

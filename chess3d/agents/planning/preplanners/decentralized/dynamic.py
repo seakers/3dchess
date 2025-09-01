@@ -212,11 +212,10 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
 
         # get matching observation actions
         observations : list[ObservationAction] = [ObservationAction(schedulable_tasks[j].instrument_name,
-                                                                    schedulable_tasks[j].get_location(),
-                                                                    schedulable_tasks[j].get_objectives(),
                                                                     th_imgs[j],
                                                                     t_imgs[j],
-                                                                    d_imgs[j]
+                                                                    d_imgs[j],
+                                                                    schedulable_tasks[j]
                                                                     )
                                                   for j in observation_sequence]
 

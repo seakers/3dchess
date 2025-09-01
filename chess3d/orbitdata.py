@@ -125,14 +125,16 @@ class TimeIndexedData(AbstractData):
         # validata imputs
         assert t_start <= t_end, 'start time must be less than end time'
         assert t_start >= 0.0, 'start time must be greater than 0.0'
-        t_end = t_end if t_end < self.t[-1] else self.t[-1]
 
-        # get desired columns
-        columns = columns if columns is not None else self.columns
+        # Cap the end time at the last available time
+        t_end = min(t_end, self.t[-1]) if self.t.size > 0 else t_end
 
         # find the indices of the start and end times
         i_start = np.searchsorted(self.t, t_start, side='left')
         i_end = np.searchsorted(self.t, t_end, side='right')
+
+        # get desired columns
+        columns = columns if columns is not None else self.columns
 
         # get the data between the start and end times
         out : dict[np.array] = {col : self.data[col][i_start:i_end]
