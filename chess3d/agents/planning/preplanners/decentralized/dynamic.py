@@ -88,46 +88,45 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         latest_observation_actions : list[ObservationAction] = [None for _ in schedulable_tasks]
         
         # populate observation action list 
-        for i in tqdm(range(len(schedulable_tasks)), 
-                        desc=f'{state.agent_name}-PLANNER: Generating Observation Actions from Tasks',
-                        leave=False):
-            # get task i
-            task_i : SpecificObservationTask = schedulable_tasks[i]
-
+        for i, task_i in tqdm(enumerate(schedulable_tasks), 
+                                desc=f'{state.agent_name}-PLANNER: Generating Observation Actions from Tasks',
+                                leave=False):
+            
             # collect all targets and objectives
-            locations_i = task_i.get_location()
-            objectives = task_i.get_objectives()
             th_i = th_imgs[i]
             d_imgs_i = d_imgs[i]
 
             # estimate observation action for task i
             earliest_observation_i = ObservationAction(task_i.instrument_name,
-                                                        locations_i,
-                                                        objectives,
                                                         th_i,
                                                         task_i.accessibility.left,
                                                         d_imgs_i,
+                                                        task_i
                                                         )
             latest_observation_i = ObservationAction(task_i.instrument_name,
-                                                        locations_i,
-                                                        objectives,
                                                         th_i,
                                                         task_i.accessibility.right-d_imgs_i,
                                                         d_imgs_i,
+                                                        task_i
                                                         )
 
             # update observation action list
             earliest_observation_actions[i] = earliest_observation_i
             latest_observation_actions[i] = latest_observation_i
 
-        # initialize adjancency matrix     
-        adjacency = [ [False for _ in schedulable_tasks] for _ in schedulable_tasks]
+        # initialize adjacency matrix
+        adjacency = [[False for _ in schedulable_tasks] for _ in schedulable_tasks]
 
         # populate adjacency matrix 
         for i in tqdm(range(len(schedulable_tasks)), 
                         desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix',
                         leave=False):
             for j in range(i + 1, len(schedulable_tasks)):
+                # check mutual exclusivity
+                if schedulable_tasks[i].is_mutually_exclusive(schedulable_tasks[j]):
+                    # tasks i and j are mutually exclusive, cannot perform sequence i->j
+                    continue
+
                 # update adjacency matrix for sequence i->j
                 adjacency[i][j] = self.is_observation_path_valid(state, specs, [earliest_observation_actions[i], latest_observation_actions[j]])
 
@@ -149,8 +148,20 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             # get indeces of possible prior observations
             prev_indices : list[int] = [i for i in range(0,j) if adjacency[i][j]]
 
-            # update cummulative reward
+            # update cumulative reward
             for i in prev_indices:
+                # reconstruct path leading to i
+                path_i = []
+                k = i
+                while not np.isnan(preceeding_observations[k]):
+                    path_i.append(int(k))
+                    k = preceeding_observations[k]
+                path_i.append(int(k))  # include the final element i
+
+                # check if new task j conflicts with any in path
+                if any(schedulable_tasks[j].is_mutually_exclusive(schedulable_tasks[k]) for k in path_i):
+                    continue  # skip this candidate extension
+
                 # calculate maneuver time between tasks i and j
                 m_ij = abs(th_imgs[i] - th_imgs[j]) / max_slew_rate if max_slew_rate else None
                 

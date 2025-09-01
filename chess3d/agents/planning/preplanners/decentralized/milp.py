@@ -132,8 +132,6 @@ class SingleSatMILP(AbstractPreplanner):
 
         # Set objective
         if self.objective == "reward": 
-            # model.setObjective(gp.quicksum((final_rewards[j] - init_rewards[j]) / schedulable_tasks[j].accessibility.span() *  (tau[j] - schedulable_tasks[j].accessibility.left) + init_rewards[j] * x[j]
-            #                                for j in task_indices), gp.GRB.MAXIMIZE)
             model.setObjective(gp.quicksum( init_rewards[j] * x[j]
                                            for j in task_indices), gp.GRB.MAXIMIZE)
         
@@ -168,8 +166,8 @@ class SingleSatMILP(AbstractPreplanner):
                     # cannot form a sequence of observations between the same task; constrain z[j, j] == 0
                     model.addConstr(z[j, j] == 0)
 
-                if exclusive[j, j_p]:
-                    model.addConstr(x[j] + x[j_p] <= 1)
+                # enforce exclusivity
+                if exclusive[j, j_p]: model.addConstr(x[j] + x[j_p] <= 1)
 
         # Optimize model
         model.optimize()
