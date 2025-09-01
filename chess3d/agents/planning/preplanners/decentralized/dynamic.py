@@ -158,7 +158,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                     k = preceeding_observations[k]
                 path_i.append(int(k))  # include the final element i
 
-                # check if new task j conflicts with any in path
+                # check if new task j conflicts with any in path leading to i
                 if any(schedulable_tasks[j].is_mutually_exclusive(schedulable_tasks[k]) for k in path_i):
                     continue  # skip this candidate extension
 
