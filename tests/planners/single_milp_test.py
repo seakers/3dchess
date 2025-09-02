@@ -12,14 +12,12 @@ class TestSingleSatMILP(TestPlanners, unittest.TestCase):
                 "@type": "milp",
                 "licensePath": "./gurobi.lic",
                 "debug": "False",
-                "horizon": 500,
-                "period" : 500,
+                # "horizon": 500,
+                "period" : 250,
+                "maxTasks": 15,
             }
         }
     
-
-
 if __name__ == '__main__':
-
     # run tests
     unittest.main()

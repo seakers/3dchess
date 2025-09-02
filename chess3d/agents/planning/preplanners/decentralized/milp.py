@@ -11,18 +11,26 @@ class SingleSatMILP(AbstractPreplanner):
                  licence_path : str, 
                  horizon = np.Inf, 
                  period = np.Inf, 
+                 max_tasks = np.Inf,
                  debug = False, 
                  logger = None
                 ):
         super().__init__(horizon, period, debug, logger)
 
         if not debug:
+            # Check for Gurobi license
             assert os.path.isfile(licence_path), f"Provided Gurobi licence path `{licence_path}` is not a valid file."
+
+            # Set Gurobi license environment variable
             os.environ['GRB_LICENSE_FILE'] = licence_path
 
+        # Validate inputs
         assert objective in ["reward", "duration"], "Objective must be either 'reward' or 'duration'."
+        assert (isinstance(max_tasks, int) and max_tasks > 0) or max_tasks == np.Inf, "Max tasks must be a positive integer."
 
+        # Set attributes
         self.objective = objective
+        self.max_tasks = max_tasks
 
     @runtime_tracker
     def _schedule_observations(self, 
@@ -34,11 +42,11 @@ class SingleSatMILP(AbstractPreplanner):
                                mission : Mission, 
                                observation_history : ObservationHistory
                                ) -> list:
-        # Set type for `schedulable_tasks`
-        schedulable_tasks : list[SpecificObservationTask] = schedulable_tasks
+        # Check if there are no tasks to schedule
         if not schedulable_tasks: return []
-
-        self.__class__.__name__
+        
+        # Set type for `schedulable_tasks` and sort in ascending start time access
+        schedulable_tasks : list[SpecificObservationTask] = sorted(schedulable_tasks, key=lambda x: x.accessibility.left)
         
         # validate Inputs
         assert all(isinstance(task, SpecificObservationTask) for task in schedulable_tasks), "All tasks must be of type `SpecificObservationTask`."
@@ -63,6 +71,59 @@ class SingleSatMILP(AbstractPreplanner):
 
         max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
+
+        # Decide how to split tasks into chunks according to `max_tasks`
+        if self.max_tasks < np.Inf:
+            task_chunks = [
+                schedulable_tasks[i:i + self.max_tasks] 
+                for i in range(0, len(schedulable_tasks), self.max_tasks)
+            ]
+        else:
+            task_chunks = [schedulable_tasks]
+
+        # Run optimization on each chunk and flatten results
+        observations : list[ObservationAction] = []
+        curr_state : SimulationAgentState = state.copy()
+        for tasks in task_chunks:
+            # Update state
+            if observations:
+                last_action : ObservationAction = observations[-1]
+                curr_state = curr_state.propagate(last_action.t_end)
+                curr_state.attitude[0] = last_action.look_angle
+
+            # Filter tasks based on current state
+            reduced_tasks = [task for task in tasks
+                     if task.accessibility.right - max(task.accessibility.left, curr_state.t) >= task.min_duration
+                     and all(not task.is_mutually_exclusive(obs.task) for obs in observations)]
+                     
+            for task in reduced_tasks:
+                if curr_state.t in task.accessibility:
+                    task.accessibility = Interval(curr_state.t, task.accessibility.right)
+
+            observations.extend(self.__optimize_observations_schedule(curr_state, 
+                                                                        specs,
+                                                                        cross_track_fovs,
+                                                                        max_slew_rate, 
+                                                                        max_torque, 
+                                                                        orbitdata,
+                                                                        reduced_tasks, 
+                                                                        mission, 
+                                                                        observation_history
+                                                                    ))
+        return observations
+    
+    def __optimize_observations_schedule(self, 
+                                         state : SimulationAgentState, 
+                                         specs : object, 
+                                         cross_track_fovs : dict, 
+                                         max_slew_rate : float, 
+                                         max_torque : float,
+                                         orbitdata : OrbitData, 
+                                         schedulable_tasks : list, 
+                                         mission : Mission, 
+                                         observation_history : ObservationHistory) -> list:
+        # Check if there are no tasks to schedule
+        if not schedulable_tasks: return []
         
         # Add dummy task to represent initial state
         dummy_task = SpecificObservationTask(set([]), 
@@ -76,7 +137,7 @@ class SingleSatMILP(AbstractPreplanner):
         model = gp.Model("single-sat_milp_planner")
 
         # Set parameter to suppress output
-        model.setParam('OutputFlag', int(self._debug))
+        # model.setParam('OutputFlag', int(self._debug))
 
         # List tasks by their index
         indexed_tasks = list(enumerate(schedulable_tasks))

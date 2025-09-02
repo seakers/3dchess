@@ -1608,11 +1608,12 @@ class SimulationElementFactory:
             elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
                 obj = preplanner_dict.get('objective', 'reward').lower()
                 license_path = preplanner_dict.get('licensePath', None)
-                
+                max_tasks = preplanner_dict.get('maxTasks', np.Inf)
+
                 if license_path is None and not debug: 
                     raise ValueError('license path for Gurobi MILP preplanner not specified. Set `debug` to true to run with limited functionality or specify a valid license path to `licensePath`.')        
 
-                preplanner = SingleSatMILP(obj, license_path, horizon, period, debug, logger)
+                preplanner = SingleSatMILP(obj, license_path, horizon, period, max_tasks, debug, logger)
 
             # elif... # add more preplanners here
             
