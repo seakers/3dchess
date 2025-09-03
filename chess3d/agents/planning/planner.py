@@ -374,12 +374,13 @@ class AbstractPlanner(ABC):
                 # ------------------
 
                 # add merged task to the list of combined tasks
-                combined_tasks.append(p)
+                combined_tasks.append(p) 
 
                 # sort remaining schedulable tasks by degree of adjacency 
                 v : list[SpecificObservationTask] = self.sort_tasks_by_degree(v, adj)
         
-        return combined_tasks
+        # return only tasks that have multiple parents (avoid generating duplicate tasks)
+        return [task for task in combined_tasks if len(task.parent_tasks) > 1] 
 
     @runtime_tracker
     def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:

@@ -14,10 +14,11 @@ class TestSingleSatMILP(TestPlanners, unittest.TestCase):
                 "debug": "False",
                 # "horizon": 500,
                 "period" : 250,
-                "maxTasks": 15,
+                "maxTasks": 250,
             }
         }
     
 if __name__ == '__main__':
     # run tests
     unittest.main()
+    

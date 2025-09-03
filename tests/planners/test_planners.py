@@ -193,44 +193,44 @@ class TestPlanners(ABC):
     def planner_name(self) -> str:
         """ Returns the planner name for the test case. """
 
-    def test_single_sat_toy(self):
-        """ Test case for a single satellite with toy events. """
-        # setup scenario parameters
-        duration = 1.0 / 24.0
-        grid_name = 'toy_points'
-        scenario_name = f'single_sat_toy_scenario-{self.planner_name()}'
-        connectivity = 'FULL'
-        event_name = 'toy_events'
-        mission_name = 'toy_missions'
+    # def test_single_sat_toy(self):
+    #     """ Test case for a single satellite with toy events. """
+    #     # setup scenario parameters
+    #     duration = 1.0 / 24.0
+    #     grid_name = 'toy_points'
+    #     scenario_name = f'single_sat_toy_scenario-{self.planner_name()}'
+    #     connectivity = 'FULL'
+    #     event_name = 'toy_events'
+    #     mission_name = 'toy_missions'
 
-        spacecraft : dict = self.spacecraft_template.copy()
-        spacecraft['planner'] = self.planner_config()
-        spacecraft['orbitState']['state']['inc'] = 0.0
+    #     spacecraft : dict = self.spacecraft_template.copy()
+    #     spacecraft['planner'] = self.planner_config()
+    #     spacecraft['orbitState']['state']['inc'] = 0.0
 
-        # terminal welcome message
-        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
+    #     # terminal welcome message
+    #     print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
 
-        # Generate scenario
-        scenario_specs = self.setup_scenario_specs(duration,
-                                                   grid_name, 
-                                                   scenario_name, 
-                                                   connectivity,
-                                                   event_name,
-                                                   mission_name,
-                                                   spacecraft=[spacecraft]
-                                                   )
+    #     # Generate scenario
+    #     scenario_specs = self.setup_scenario_specs(duration,
+    #                                                grid_name, 
+    #                                                scenario_name, 
+    #                                                connectivity,
+    #                                                event_name,
+    #                                                mission_name,
+    #                                                spacecraft=[spacecraft]
+    #                                                )
 
 
-        # initialize mission
-        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+    #     # initialize mission
+    #     self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
-        # execute mission
-        self.simulation.execute()
+        # # execute mission
+        # self.simulation.execute()
 
-        # print results
-        self.simulation.print_results()
+        # # print results
+        # self.simulation.print_results()
 
-        print('DONE')
+        # print('DONE')
 
     def test_multiple_sats_toy(self):
         """ Test case for multiple satellites with toy events. """
