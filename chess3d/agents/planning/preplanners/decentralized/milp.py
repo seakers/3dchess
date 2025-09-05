@@ -442,11 +442,7 @@ class SingleSatMILP(AbstractPreplanner):
 
             else: # only j->j' sequence is valid
                 # x[j] and x[j_p] are mutually exclusive unless z[j,j_p] is assigned
-                model.addConstr(x[j] + x[j_p] <= 1 + z[j, j_p])                
-
-            # # enforce upper bound for z[j, j_p]; x[j] and x[j_p] must be assigned if z[j, j_p] is to be assigned
-            # model.addConstr(z[j, j_p] <= x[j])
-            # model.addConstr(z[j, j_p] <= x[j_p])
+                model.addConstr(x[j] + x[j_p] <= 1 + z[j, j_p])        
 
         # Optimize model
         model.optimize()
@@ -526,10 +522,7 @@ class SingleSatMILP(AbstractPreplanner):
         # Reduce decision space to only include reachable tasks
         ## Precalculate preemptive pruning
         succs = defaultdict(list)
-        preds = defaultdict(list)
-        for i, j in Z:
-            succs[i].append(j)
-            preds[j].append(i)
+        for j, j_p in Z: succs[j].append(j_p)
 
         ## Determine which tasks are reachable
         reachable_task_indeces = set([0])
@@ -539,22 +532,21 @@ class SingleSatMILP(AbstractPreplanner):
             u = dq.popleft()
 
             # get possible successor tasks
-            for v in succs.get(u, []):
-                if v not in reachable_task_indeces:
-                    reachable_task_indeces.add(v)
-                    dq.append(v)
+            unvisited = list({v for v in succs.get(u, []) if v not in reachable_task_indeces})
+            
+            # add unvisited successors to reachable set and queue
+            reachable_task_indeces.update(unvisited)
+            dq.extend(unvisited)
 
         ## Convert set of reachable tasks to list
-        reachable_task_indeces = list(reachable_task_indeces)
+        # reachable_task_indeces = list(reachable_task_indeces)
+        reachable_task_indeces = [j for j in task_indices if (0,j) in Z or j == 0] # Ensure all tasks directly reachable from initial task are included
+        # reachable_task_indeces = [j for j in task_indices] # Do not change reachable tasks for now
 
         ## If nothing except dummy reachable, return empty plan
         if len(reachable_task_indeces) <= 1:
             # no feasible tasks
             return None, np.array([], dtype=int), np.array([], dtype=int), np.array([], dtype=float), np.NAN
-
-        # ## Map original indeces->new indices for all reachable tasks
-        # old_to_new = {old_idx: new_idx for new_idx,old_idx in enumerate(reachable_task_indeces)}
-        # new_to_old = [old_idx for old_idx in reachable_task_indeces]
 
         ## Build constants for the kept tasks
         tasks_reachable : list[SpecificObservationTask] = [tasks[old] for old in reachable_task_indeces]
@@ -569,9 +561,9 @@ class SingleSatMILP(AbstractPreplanner):
         ## create successor and predecessor mappings for reachable tasks
         succs_comp = defaultdict(list)
         preds_comp = defaultdict(list)
-        for i, j in Z_reachable:
-            succs_comp[i].append(j)
-            preds_comp[j].append(i)
+        for j, j_p in Z_reachable:
+            succs_comp[j].append(j_p)
+            preds_comp[j_p].append(j)
 
         ## Calculate exclusivity
         E_reachable = [(reachable_task_indeces[j],reachable_task_indeces[j_p]) 
@@ -584,24 +576,6 @@ class SingleSatMILP(AbstractPreplanner):
                         ))                                          # sequence j->j' and j'->j are not feasible
                         and reachable_task_indeces[j] < reachable_task_indeces[j_p]         # ensure distinct tasks and non-repeating pairs
         ]
-
-        ## Build clique cover for exclusivity (greedy) to reduce constraints (inside a clique all pairs are mutually exclusive).
-        exclusivity_sets = defaultdict(set)
-        for j,j_p in E_reachable:
-            exclusivity_sets[j].add(j_p)
-            exclusivity_sets[j_p].add(j)
-
-        cliques : list[list[int]] = []
-        for node in reachable_task_indeces:
-            placed = False
-            for clique in cliques:
-                # check if node is exclusive to all members in clique (i.e., node cannot coexist with members)
-                if all((member in exclusivity_sets[node]) for member in clique):
-                    clique.append(node)
-                    placed = True
-                    break
-            if not placed and node in exclusivity_sets and exclusivity_sets[node]:
-                cliques.append([node])
 
         # Create decision variables
         x : gp.tupledict = model.addVars(reachable_task_indeces, vtype=gp.GRB.BINARY, name="x")
@@ -628,6 +602,7 @@ class SingleSatMILP(AbstractPreplanner):
         # Set objective
         if self.objective == "reward": 
             model.setObjective(gp.quicksum( rewards[j] * x[j] for j in reachable_task_indeces), gp.GRB.MAXIMIZE)
+        # TODO else: add alternative objectives
   
         # Add constraints
         ## Always assign first observation
@@ -650,13 +625,13 @@ class SingleSatMILP(AbstractPreplanner):
         for j,j_p in tqdm(z.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding slewing constraints", unit='task pairs', leave=False):
            
             # If z[j, j_p] == 1, enforce slew constraint for task sequence j->j'
-            model.addGenConstrIndicator(z[j,j_p], 1, tau[j] + d[j] + slew_time[j,j_p] <= tau[j_p])  
+            model.addGenConstrIndicator(z[j,j_p], 1, tau[j] + d[j] + slew_time[j,j_p] <= tau[j_p])
 
             # enforce lower bound for z[j, j_p]
             if (j_p, j) in z.keys(): # j->j' and j'->j sequences are both valid
                 if (min(j, j_p),max(j, j_p)) not in pairs_considered:
                     # at least one of z[j, j_p] or z[j_p, j] must be 1 if x[j] and x[j_p] are assigned
-                    model.addConstr(x[j] + x[j_p] - 1 <= z[j, j_p] + z[j_p, j])
+                    model.addConstr(x[j_p] + x[j] - 1 <= z[j, j_p] + z[j_p, j])
                     
                     # enforce mutual exclusivity if (j, j_p) and (j_p, j) are both in z
                     model.addConstr(z[j, j_p] + z[j_p, j] <= 1) 
@@ -671,6 +646,24 @@ class SingleSatMILP(AbstractPreplanner):
             # # enforce upper bound for z[j, j_p]; x[j] and x[j_p] must be assigned if z[j, j_p] is to be assigned
             # model.addConstr(z[j, j_p] <= x[j])
             # model.addConstr(z[j, j_p] <= x[j_p])
+
+        ## Build clique cover for exclusivity (greedy) to reduce constraints (inside a clique all pairs are mutually exclusive).
+        # exclusivity_sets = defaultdict(set)
+        # for j,j_p in E_reachable:
+        #     exclusivity_sets[j].add(j_p)
+        #     exclusivity_sets[j_p].add(j)
+
+        # cliques : list[list[int]] = []
+        # for node in reachable_task_indeces:
+        #     placed = False
+        #     for clique in cliques:
+        #         # check if node is exclusive to all members in clique (i.e., node cannot coexist with members)
+        #         if all((member in exclusivity_sets[node]) for member in clique):
+        #             clique.append(node)
+        #             placed = True
+        #             break
+        #     if not placed and node in exclusivity_sets and exclusivity_sets[node]:
+        #         cliques.append([node])
 
         # ## Observation time and accessibility constraints
         # for j in x.keys():
@@ -742,294 +735,7 @@ class SingleSatMILP(AbstractPreplanner):
            
         # Return solved model
         return model, x_array, z_array, tau_array, model.getObjective().getValue()
-
         
-        # """
-        # Refactored MILP: sparse arcs, pruning, flow constraints, indicators, clique exclusivity.
-        # Returns: model, x_array, z_array, tau_array, objective_value
-        # x_array / z_array / tau_array correspond to tasks excluding the dummy (i.e., original schedulable_tasks order).
-        # """
-
-        # # --- quick guards
-        # if not schedulable_tasks:
-        #     return None, np.array([]), np.array([]), np.array([]), np.NAN
-
-        # # --- build tasks list with dummy task at index 0
-        # dummy_task = SpecificObservationTask(set([]),
-        #                                     schedulable_tasks[0].instrument_name,
-        #                                     Interval(state.t, state.t),
-        #                                     0.0,
-        #                                     Interval(state.attitude[0], state.attitude[0]))
-        # tasks = [dummy_task] + list(schedulable_tasks)  # index 0 = dummy
-
-        # n_total = len(tasks)
-        # orig_indices = list(range(n_total))  # mapping for later (identity now)
-
-        # # --- Build arrays aligned with tasks indices (0..n_total-1)
-        # rewards = np.array([self.estimate_task_value(task,
-        #                                             task.accessibility.left,
-        #                                             task.min_duration,
-        #                                             specs, cross_track_fovs, orbitdata,
-        #                                             mission, observation_history)
-        #                     for task in tasks], dtype=float)
-
-        # # times relative to state.t
-        # t_start = np.array([task.accessibility.left - state.t for task in tasks], dtype=float)
-        # t_end   = np.array([task.accessibility.right - state.t for task in tasks], dtype=float)
-        # d       = np.array([task.min_duration for task in tasks], dtype=float)
-        # th_imgs = np.array([0.5 * (task.slew_angles.left + task.slew_angles.right) for task in tasks], dtype=float)
-
-        # # slew_time[i,j] = time required to slew from i to j
-        # # careful with division by zero max_slew_rate
-        # if max_slew_rate is None or max_slew_rate <= 0:
-        #     raise ValueError("max_slew_rate must be > 0")
-        # slew_time = np.abs(th_imgs.reshape(-1, 1) - th_imgs.reshape(1, -1)) / float(max_slew_rate)
-
-        # # --- Candidate forward arcs Z (sparse): only j->j' where it is possible in time and j != j'
-        # # enforce forward time ordering to reduce symmetry: require t_start[j] <= t_start[j_p]
-        # Z = []
-        # for j in range(n_total):
-        #     for jp in range(n_total):
-        #         if j == jp: 
-        #             continue
-        #         # require finishing earliest at j plus slew can be <= latest feasible start of jp
-        #         # i.e., there exists tau_j in [t_start[j], t_end[j]-d[j]] and tau_jp in [t_start[jp], t_end[jp]-d[jp]]
-        #         # A sufficient fast check: earliest_finish_j + slew <= latest_start_jp
-        #         earliest_finish_j = t_start[j] + d[j]
-        #         latest_start_jp   = t_end[jp] - d[jp]
-        #         if earliest_finish_j + slew_time[j, jp] <= latest_start_jp and t_start[j] <= t_start[jp]:
-        #             Z.append((j, jp))
-
-        # # --- Build exclusivity pair list (unordered pairs j<jp) E_pairs
-        # exclusivity_matrix = [[tasks[i].is_mutually_exclusive(tasks[jp]) for jp in range(n_total)] for i in range(n_total)]
-        # E_pairs = []
-        # for i in range(n_total):
-        #     for j in range(i+1, n_total):
-        #         if exclusivity_matrix[i][j]:
-        #             E_pairs.append((i, j))
-
-        # # --- Build directed adjacency (succs/preds) from Z
-        # succs = defaultdict(list)
-        # preds = defaultdict(list)
-        # for i, j in Z:
-        #     succs[i].append(j)
-        #     preds[j].append(i)
-
-        # # --- Reachability prune: nodes not reachable from dummy(0) cannot be scheduled
-        # reachable = set([0])
-        # dq = deque([0])
-        # while dq:
-        #     u = dq.popleft()
-        #     for v in succs.get(u, []):
-        #         if v not in reachable:
-        #             reachable.add(v)
-        #             dq.append(v)
-
-        # # If some tasks (excluding dummy) unreachable, prune them from consideration.
-        # # We'll build a keep_mask and remap indices to a compact new indexing.
-        # keep_mask = [i in reachable for i in range(n_total)]
-        # # Always keep dummy
-        # keep_mask[0] = True
-
-        # # If nothing except dummy reachable, return trivial plan (no tasks)
-        # if sum(keep_mask) <= 1:
-        #     # no feasible tasks
-        #     return None, np.array([], dtype=int), np.array([], dtype=int), np.array([], dtype=float), 0.0
-
-        # # Remap old->new indices
-        # old_to_new = {}
-        # new_to_old = []
-        # for old_idx, keep in enumerate(keep_mask):
-        #     if keep:
-        #         old_to_new[old_idx] = len(new_to_old)
-        #         new_to_old.append(old_idx)
-        # n = len(new_to_old)  # new number of tasks after pruning
-
-        # # Build compact arrays for the kept tasks
-        # tasks_comp = [tasks[old] for old in new_to_old]
-        # rewards_comp = np.array([rewards[old] for old in new_to_old], dtype=float)
-        # t_start_comp = np.array([t_start[old] for old in new_to_old], dtype=float)
-        # t_end_comp   = np.array([t_end[old] for old in new_to_old], dtype=float)
-        # d_comp       = np.array([d[old] for old in new_to_old], dtype=float)
-        # th_comp      = np.array([th_imgs[old] for old in new_to_old], dtype=float)
-
-        # # recompute slew_time_comp and Z_comp, preds/succs_comp
-        # slew_time_comp = np.abs(th_comp.reshape(-1,1) - th_comp.reshape(1,-1)) / float(max_slew_rate)
-        # Z_comp = []
-        # for i_new, i_old in enumerate(new_to_old):
-        #     for j_new, j_old in enumerate(new_to_old):
-        #         if i_new == j_new:
-        #             continue
-        #         earliest_finish_i = t_start_comp[i_new] + d_comp[i_new]
-        #         latest_start_j = t_end_comp[j_new] - d_comp[j_new]
-        #         if earliest_finish_i + slew_time_comp[i_new, j_new] <= latest_start_j and t_start_comp[i_new] <= t_start_comp[j_new]:
-        #             Z_comp.append((i_new, j_new))
-
-        # succs_comp = defaultdict(list)
-        # preds_comp = defaultdict(list)
-        # for i, j in Z_comp:
-        #     succs_comp[i].append(j)
-        #     preds_comp[j].append(i)
-
-        # # exclusivity pairs mapped to compact indices (unordered i<j)
-        # E_pairs_comp = []
-        # for (i_old, j_old) in E_pairs:
-        #     if i_old in old_to_new and j_old in old_to_new:
-        #         i_new, j_new = old_to_new[i_old], old_to_new[j_old]
-        #         if i_new < j_new:
-        #             E_pairs_comp.append((i_new, j_new))
-        #         else:
-        #             E_pairs_comp.append((j_new, i_new))
-
-        # # --- Build clique cover for exclusivity (greedy) to reduce constraints
-        # # We build cliques such that inside a clique all pairs are mutually exclusive.
-        # # Simple greedy: iterate nodes, add node to first clique where it's exclusive with all members; else start new clique.
-        # exclusivity_sets = defaultdict(set)
-        # for a,b in E_pairs_comp:
-        #     exclusivity_sets[a].add(b)
-        #     exclusivity_sets[b].add(a)
-
-        # cliques : list[list[int]] = []
-        # for node in range(n):
-        #     placed = False
-        #     for clique in cliques:
-        #         # check if node is exclusive to all members in clique (i.e., node cannot coexist with members)
-        #         if all((member in exclusivity_sets[node]) for member in clique):
-        #             clique.append(node)
-        #             placed = True
-        #             break
-        #     if not placed and node in exclusivity_sets and exclusivity_sets[node]:
-        #         cliques.append([node])
-
-        # # Note: cliques currently are small; to be safe, also add single-edge exclusivity if still unmatched
-        # # We'll keep E_pairs_comp too for completeness if cliques empty
-
-        # # --- Build Gurobi model (compact)
-        # model = gp.Model("single-sat_milp_planner_compact")
-        # # model.setParam('OutputFlag', int(self._debug))
-
-        # idxs = list(range(n))  # compact indices 0..n-1
-        # x = model.addVars(idxs, vtype=gp.GRB.BINARY, name="x")
-        # z = model.addVars(Z_comp, vtype=gp.GRB.BINARY, name="z")
-        # tau = model.addVars(idxs, vtype=gp.GRB.CONTINUOUS, lb=0.0, ub=float(self.horizon), name="tau")
-
-        # # --- Warm start mapping if provided (x_init assumed for original schedulable_tasks; we must map)
-        # if x_init is not None:
-        #     # x_init is expected to have length len(schedulable_tasks) (no dummy)
-        #     # Construct original length vector including dummy at start:
-        #     x_init_full = np.insert(np.asarray(x_init, dtype=float), 0, 1.0)
-        #     # Map to compact indices
-        #     x_init_comp = np.array([x_init_full[old_idx] for old_idx in new_to_old], dtype=float)
-        # else:
-        #     x_init_comp = None
-
-        # # objective
-        # model.setObjective(gp.quicksum(rewards_comp[j] * x[j] for j in idxs), gp.GRB.MAXIMIZE)
-
-        # # Always assign dummy start
-        # model.addConstr(x[0] == 1, name="assign_dummy")
-        # model.addConstr(tau[0] == 0.0, name="tau_dummy_zero")
-
-        # # tau bounds and tie tau when x==0
-        # for j in idxs:
-        #     lb = float(t_start_comp[j])
-        #     ub = float(t_end_comp[j] - d_comp[j])
-        #     if ub < lb:
-        #         # this task cannot be scheduled; force off
-        #         model.addConstr(x[j] == 0, name=f"unsched_{j}")
-        #         model.addConstr(tau[j] == lb, name=f"tau_fix_{j}")
-        #         continue
-        #     tau[j].LB = lb
-        #     tau[j].UB = ub
-        #     # if x[j] == 0, force tau to lb to avoid free floats
-        #     model.addGenConstrIndicator(x[j], 0, tau[j] == lb)
-
-        # # flow / degree constraints
-        # # For source (dummy index 0), require exactly one outgoing arc from source (one path start)
-        # source_outgoing = [ (i,j) for (i,j) in Z_comp if i==0 ]
-        # if source_outgoing:
-        #     model.addConstr(gp.quicksum(z[i,j] for (i,j) in source_outgoing) == 1, name="source_out_deg")
-        # else:
-        #     # No outgoing from source -> nothing schedulable
-        #     for j in idxs:
-        #         if j > 0: model.addConstr(x[j] == 0)
-        # # For all non-source nodes, incoming == x and outgoing == x
-        # for j in idxs:
-        #     if j == 0:
-        #         continue
-        #     incoming = [ (i,j) for i in preds_comp.get(j, []) ]
-        #     outgoing = [ (j,k) for k in succs_comp.get(j, []) ]
-        #     # equality constraints: sum incoming == x[j] and sum outgoing == x[j]
-        #     model.addConstr(gp.quicksum(z[i,j] for (i,j) in incoming) == x[j], name=f"in_deg_{j}")
-        #     model.addConstr(gp.quicksum(z[j,k] for (j,k) in outgoing) == x[j], name=f"out_deg_{j}")
-
-        # # indicator arc timing constraints and linking z->x (redundant with degrees, but keep for clarity)
-        # for (i, j) in Z_comp:
-        #     model.addGenConstrIndicator(z[i,j], 1, tau[i] + d_comp[i] + float(slew_time_comp[i,j]) <= tau[j], name=f"prec_{i}_{j}")
-        #     # linking (redundant if degrees used): z <= x[i], z <= x[j]
-        #     model.addConstr(z[i,j] <= x[i], name=f"z_le_x_i_{i}_{j}")
-        #     model.addConstr(z[i,j] <= x[j], name=f"z_le_x_j_{i}_{j}")
-
-        # # exclusivity via clique constraints (if cliques found) else fallback to pairwise
-        # if cliques:
-        #     for idx, clique in enumerate(cliques):
-        #         if len(clique) > 1:
-        #             model.addConstr(gp.quicksum(x[j] for j in clique) <= 1, name=f"excl_clique_{idx}")
-        #     # also include any remaining pairwise exclusivity not covered by cliques
-        #     covered = set()
-        #     for c in cliques:
-        #         for v in c:
-        #             covered.add(v)
-        #     # fallback add pairwise for any exclusivity not covered
-        #     for (i,j) in E_pairs_comp:
-        #         if not (i in covered and j in covered):
-        #             model.addConstr(x[i] + x[j] <= 1, name=f"excl_pair_{i}_{j}")
-        # else:
-        #     # no cliques computed; just add pairwise constraints
-        #     for (i,j) in E_pairs_comp:
-        #         model.addConstr(x[i] + x[j] <= 1, name=f"excl_pair_{i}_{j}")
-
-        # # set warm start if available (assign starts only for compact indices)
-        # if x_init_comp is not None:
-        #     for j in idxs:
-        #         x[j].Start = float(x_init_comp[j])
-        #         tau[j].Start = float(max(tau[j].LB, min(tau[j].UB, t_start_comp[j])))  # earliest feasible
-        #     # z start: for each arc, if both endpoints selected in start, set order by tau
-        #     for (i,j) in Z_comp:
-        #         if x_init_comp[i] > 0.5 and x_init_comp[j] > 0.5:
-        #             # choose ordering consistent with initial tau assumptions
-        #             z[i,j].Start = 1 if (t_start_comp[i] + d_comp[i] + slew_time_comp[i,j] <= t_start_comp[j]) else 0
-
-        # # optimize
-        # model.optimize()
-
-        # # Post-solve handling
-        # self.__print_model_results(model)
-
-        # # Extract solution mapped back to original task indices (exclude dummy)
-        # # x_comp is for compact indices; we want boolean per original schedulable_tasks (without dummy)
-        # x_comp_vals = np.array([int(round(x[j].X)) for j in idxs])
-        # tau_comp_vals = np.array([float(tau[j].X) for j in idxs])
-        # z_comp_list = [(i, j, int(round(z[i,j].X))) for (i,j) in Z_comp]
-
-        # # Map back to original tasks excluding dummy: new_to_old[1:] corresponds to original tasks indices
-        # # Build arrays for original-schedulable_tasks order (exclude dummy)
-        # x_array = np.array([x_comp_vals[old_to_new[old_idx]] for old_idx in range(1, n_total) if old_idx in old_to_new], dtype=int)
-        # tau_array = np.array([tau_comp_vals[old_to_new[old_idx]] + state.t for old_idx in range(1, n_total) if old_idx in old_to_new], dtype=float)
-        # # build z array as list of tuples for scheduled arcs where both endpoints are >0 original (exclude dummy arcs)
-        # z_array = []
-        # for (i_new, j_new, val) in z_comp_list:
-        #     if val == 1:
-        #         old_i = new_to_old[i_new]
-        #         old_j = new_to_old[j_new]
-        #         # only include arcs between real tasks (exclude arcs to/from dummy if desired)
-        #         if old_i > 0 and old_j > 0:
-        #             # map to original-task indices (1..)
-        #             z_array.append((old_i-1, old_j-1, val))
-        # obj_val = model.ObjVal if model.SolCount > 0 else float('nan')
-
-        # return model, x_array, np.array(z_array), tau_array, obj_val
-
     def __print_model_results(self, model : gp.Model) -> None:
         """ Prints model results to console and outputs error logs in case of infeasibility """
 

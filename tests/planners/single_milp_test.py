@@ -12,11 +12,10 @@ class TestSingleSatMILP(TestPlanners, unittest.TestCase):
                 "@type": "milp",
                 "model": "earliest",
                 "licensePath": "./gurobi.lic",
-                "debug": "False",
                 # "horizon": 500,
                 "period" : 250,
                 "maxTasks": 100,
-                "debug" : "False"
+                "debug" : "True"
             }
         }
     
