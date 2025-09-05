@@ -1,3 +1,6 @@
+import logging
+import os
+from typing import Dict
 import numpy as np
 from abc import abstractmethod
 
@@ -20,7 +23,7 @@ class DealerPreplanner(AbstractPreplanner):
     """
     A preplanner that generates plans for other agents.
     """
-    def __init__(self, clients : dict, horizon = np.Inf, period = np.Inf, debug = False, logger = None):
+    def __init__(self, clients : Dict[str, OrbitData], horizon = np.Inf, period = np.Inf, debug = False, logger = None):
         super().__init__(horizon, period, debug, logger)
 
         # check parameters
@@ -31,7 +34,7 @@ class DealerPreplanner(AbstractPreplanner):
             "All clients must be instances of OrbitData."
 
         # store clients
-        self.clients : list[OrbitData] = {client.lower(): clients[client] for client in clients}
+        self.clients : Dict[str, OrbitData] = {client.lower(): clients[client] for client in clients}
 
     def _schedule_observations(self, state, specs, clock_config, orbitdata, schedulable_tasks, observation_history):
         """ Boilerplate method for scheduling observations."""
@@ -66,7 +69,14 @@ class DealerPreplanner(AbstractPreplanner):
         return self.plan.copy()
     
     @abstractmethod
-    def _generate_client_plans(self, state, specs, clock_config, orbitdata, mission, tasks, observation_history):
+    def _generate_client_plans(self, 
+                               state : SimulationAgentState, 
+                               specs : object, 
+                               clock_config : ClockConfig, 
+                               orbitdata : OrbitData, 
+                               mission : Mission, 
+                               tasks : list, 
+                               observation_history : ObservationHistory):
         """
         Generates plans for each agent based on the provided parameters.
         """
@@ -127,11 +137,10 @@ class TestingDealer(DealerPreplanner):
         Generates plans for each agent based on the provided parameters.
         """
         # For testing purposes, just return an generic observation action for each client
-        return {client: [ObservationAction('TIR',
-                                           [[0,0,0]],
-                                           [],
+        return {client: [ObservationAction('VNIR hyper',
                                            0.0,
                                            state.t+500,
-                                           0.0
+                                           0.0,
                                            )] 
                 for client in self.clients.keys()}
+    

@@ -105,6 +105,18 @@
             }
         },
         {
+            "name": "TEST: Reward Grid",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/rewards/reward_grid_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
+        {
             "name": "TEST: Tasks Definition",
             "type": "debugpy",
             "request": "launch",
@@ -176,6 +188,18 @@
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             }
         },
+        {
+            "name": "TEST: Dealer-Worker Preplanner",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/planners/dealer_worker_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
         // {
         //     "name": "TEST: ACBBA Replanner",
         //     "type": "debugpy",
@@ -188,18 +212,6 @@
         //         "PYTHONPATH": "${workspaceRoot}/chess3d"
         //     }
         // },
-        {
-            "name": "TEST: Reward Grid",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/tests/rewards/reward_grid_test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            }
-        },
         // {
         //     "name": "TEST: Ground Station Agent",
         //     "type": "debugpy",

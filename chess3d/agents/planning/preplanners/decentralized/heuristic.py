@@ -82,18 +82,24 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
             t_img = max(t_prev + d_prev + m_prev, task.accessibility.left)
             d_img = task.min_duration
             
-            if t_img + d_img not in task.accessibility:
-                continue
+            # check if the observation fits within the task's accessibility window
+            if t_img + d_img not in task.accessibility: continue
 
             # check if the observation is feasible
             prev_action_feasible : bool = (t_prev + d_prev + m_prev <= t_img - 1e-6)
             next_action_feasible : bool = (t_img + d_img + m_next   <= t_next - 1e-6)
             if prev_action_feasible and next_action_feasible:
+                # check if task is mutually exclusive with any already scheduled tasks
+                if any(task.is_mutually_exclusive(task_j) for task_j,_ in plan_sequence): continue
+                
+                # create observation action
                 action = ObservationAction(task.instrument_name, 
                                            th_img, 
                                            t_img, 
                                            d_img,
                                            task)
+
+                # add to plan sequence
                 plan_sequence.append((task, action))
 
         # return sorted by start time

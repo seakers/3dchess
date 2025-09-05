@@ -1,3 +1,4 @@
+from collections import defaultdict
 import logging
 import numpy as np
 from tqdm import tqdm
@@ -108,7 +109,7 @@ class AbstractPreplanner(AbstractPlanner):
         available_tasks : list[GenericObservationTask] = self.get_available_tasks(tasks, planning_horizon)
         
         # calculate coverage opportunities for tasks
-        access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, specs, planning_horizon, orbitdata)
+        access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 
         # create schedulable tasks from known tasks and future access opportunities
         schedulable_tasks : list[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
@@ -153,7 +154,6 @@ class AbstractPreplanner(AbstractPlanner):
     @runtime_tracker
     def calculate_access_opportunities(self, 
                                        state : SimulationAgentState, 
-                                       specs : Spacecraft,
                                        planning_horizon : Interval,
                                        orbitdata : OrbitData
                                     ) -> dict:
@@ -179,8 +179,7 @@ class AbstractPreplanner(AbstractPlanner):
                 access_opportunities[grid_index] = {}
                 
             if gp_index not in access_opportunities[grid_index]:
-                access_opportunities[grid_index][gp_index] = {instr.name : [] 
-                                                        for instr in specs.instrument}
+                access_opportunities[grid_index][gp_index] = defaultdict(list)
 
             # compile time interval information 
             found = False

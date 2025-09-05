@@ -15,7 +15,7 @@ class TestSingleSatMILP(TestPlanners, unittest.TestCase):
                 # "horizon": 500,
                 "period" : 250,
                 "maxTasks": 100,
-                "debug" : "True"
+                "debug" : "False"
             }
         }
     

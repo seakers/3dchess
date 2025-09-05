@@ -24,6 +24,7 @@ from dmas.clocks import *
 
 from chess3d.agents.agents import *
 from chess3d.agents.planning.preplanners.centralized.dealer import TestingDealer
+from chess3d.agents.planning.preplanners.centralized.milp import DealerMILPPreplanner
 from chess3d.agents.planning.preplanners.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.preplanners.decentralized.nadir import NadirPointingPlanner
 from chess3d.agents.planning.replanners.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
@@ -1594,18 +1595,27 @@ class SimulationElementFactory:
                 preplanner = DynamicProgrammingPlanner(horizon, period, debug, logger)
             
             elif preplanner_type.lower() == 'dealer':
-                mode = preplanner_dict.get('mode', 'test').lower()
-                
-                # load client orbit data 
-                clients : dict = OrbitData.from_directory(orbitdata_dir)
-                
+                # unpack preplanner parameters
+                mode = preplanner_dict.get('@mode', 'test').lower()
+
+                # load client orbit data
+                clients: dict = OrbitData.from_directory(orbitdata_dir)
+
                 # remove self from clients
                 clients.pop(agent_name, None) 
 
                 if mode == 'test':                   
                     preplanner = TestingDealer(clients, horizon, period)
+                elif mode in ['milp', 'mixed-integer-linear-programming']:
+                    obj = preplanner_dict.get('objective', 'reward').lower()
+                    model = preplanner_dict.get('model', 'earliest').lower()
+                    license_path = preplanner_dict.get('licensePath', None)
+                    max_tasks = preplanner_dict.get('maxTasks', np.Inf)
+
+                    preplanner = DealerMILPPreplanner(clients, obj, model, license_path, horizon, period, max_tasks, debug, logger)
 
             elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
+                # unpack preplanner parameters
                 obj = preplanner_dict.get('objective', 'reward').lower()
                 model = preplanner_dict.get('model', 'earliest').lower()
                 license_path = preplanner_dict.get('licensePath', None)

@@ -230,7 +230,8 @@ class OrbitData:
 
     TODO: add support to load ground station agents' data
     """
-    def __init__(self, agent_name : str, 
+    def __init__(self, 
+                 agent_name : str, 
                  time_data : pd.DataFrame, 
                  eclipse_data : pd.DataFrame, 
                  position_data : pd.DataFrame, 
