@@ -55,6 +55,23 @@ class DealerPreplanner(AbstractPreplanner):
         # generate plans for all agents
         client_plans : dict = self._generate_client_plans(state, specs, clock_config, orbitdata, mission, tasks, observation_history)
 
+        for client,actions in client_plans.items():
+            # validate client name
+            assert client in self.clients, f"Generated plan for unknown client agent '{client}'."
+
+            # validate actions
+            assert all(isinstance(action, AgentAction) for action in actions), \
+                f"All actions in the generated plan for client '{client}' must be instances of AgentAction."
+
+            # validate observation paths
+            observations : list = [action for action in actions if isinstance(action, ObservationAction)]
+
+            raise NotImplementedError("Observation path validation is not implemented yet.")
+            # TODO create method that does not use `specs` and instead uses estimated FOVs etc.
+            assert self.is_observation_path_valid(state, specs, observations), \
+                f'Generated observation path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
+
+
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, client_plans, orbitdata)
         
