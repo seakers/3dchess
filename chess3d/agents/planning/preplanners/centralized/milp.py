@@ -1,10 +1,13 @@
+from collections import defaultdict
 import logging
 import os
 import numpy as np
 
 from dmas.utils import runtime_tracker
 from dmas.modules import ClockConfig
-from pyparsing import Dict
+from typing import Dict
+
+import pandas as pd
 
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.planning.preplanners.centralized.dealer import DealerPreplanner
@@ -24,7 +27,7 @@ class DealerMILPPreplanner(DealerPreplanner):
     BEST = 'best'
 
     def __init__(self, 
-                 clients, 
+                 clients : Dict[str, OrbitData],
                  objective : str, 
                  model : str, 
                  licence_path : str = None, 
@@ -51,8 +54,30 @@ class DealerMILPPreplanner(DealerPreplanner):
         self.objective = objective
         self.model = model
         self.max_tasks = max_tasks
-        self.cross_track_fovs = {client : np.deg2rad(orbitdata.instruments[0].fieldOfViewGeometry['angleWidth']) for client, orbitdata in self.clients.items()}
+        self.cross_track_fovs : Dict[str, Dict[str, float]] = self.__estimate_cross_track_fovs(clients)
 
+    def __estimate_cross_track_fovs(self, clients : Dict[str, OrbitData]):
+        cross_track_fovs : Dict[str, Dict[str, float]] = {client: defaultdict(float) for client in clients}
+        for client, client_orbitdata in clients.items():
+            # convert access data to dataframe
+            data = {column : datum 
+                    for column,datum in client_orbitdata.gp_access_data.data.items()}
+            data['t'] = client_orbitdata.gp_access_data.t
+            df = pd.DataFrame(data)
+
+            # group observations by instrument name and time
+            for group,grouped_data in df.groupby(['instrument', 't']):
+                instrument = group[0]
+
+                # estimate fov span as max - min look angle at a given time
+                # NOTE this is a simplification and may not be accurate for all instruments
+                fov_span = grouped_data['look angle [deg]'].max() - grouped_data['look angle [deg]'].min()
+
+                # update cross-track fov if larger than previous estimate
+                if instrument not in cross_track_fovs[client] or fov_span > cross_track_fovs[client][instrument]:
+                    cross_track_fovs[client][instrument] = fov_span
+
+        return cross_track_fovs
 
     @runtime_tracker
     def _generate_client_plans(self, 

@@ -49,7 +49,7 @@ class TimeIndexedData(AbstractData):
                  name : str,
                  columns : list,
                  t : list,
-                 data : dict):
+                 data : Dict[str, np.ndarray]):
         assert len(columns) == len(data), 'number of columns and data do not match'
         assert all([len(data[col]) == len(t) for col in columns]), 'number of time steps and data do not match'
         
