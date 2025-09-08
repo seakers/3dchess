@@ -100,7 +100,10 @@ class AbstractPreplanner(AbstractPlanner):
                     ) -> Plan:
         
         # compile instrument field of view specifications   
-        cross_track_fovs : dict = self.collect_fov_specs(specs)
+        cross_track_fovs : dict = self._collect_fov_specs(specs)
+
+        # compile agility specifications
+        max_slew_rate, max_torque = self._collect_agility_specs(specs)
 
         # Outline planning horizon interval
         planning_horizon = Interval(state.t, state.t + self.horizon)
@@ -119,7 +122,7 @@ class AbstractPreplanner(AbstractPlanner):
 
         assert isinstance(observations, list) and all([isinstance(obs, ObservationAction) for obs in observations]), \
             f'Observation actions not generated correctly. Is of type `{type(observations)}` with elements of type `{type(observations[0])}`.'
-        assert self.is_observation_path_valid(state, specs, observations), \
+        assert self.is_observation_path_valid(state, observations, max_slew_rate, max_torque, specs), \
             f'Generated observation path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
 
         # schedule broadcasts to be perfomed

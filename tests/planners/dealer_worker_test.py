@@ -75,7 +75,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
         worker_spacecraft['orbitState']['state']['inc'] = 0.0
 
         # terminal welcome message
-        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
+        print_welcome(f'Planner Test: `{scenario_name}`')
 
         # Generate scenario
         scenario_specs = self.setup_scenario_specs(duration,

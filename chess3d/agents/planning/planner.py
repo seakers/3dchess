@@ -657,7 +657,7 @@ class AbstractPlanner(ABC):
                                 state : SimulationAgentState, 
                                 specs : object,
                                 observations : list,
-                                clock_config : ClockConfig,
+                                _ : ClockConfig,
                                 orbitdata : OrbitData = None
                             ) -> list:
         """
@@ -681,7 +681,7 @@ class AbstractPlanner(ABC):
             raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
 
         # compile instrument field of view specifications   
-        cross_track_fovs = self.collect_fov_specs(specs)
+        cross_track_fovs = self._collect_fov_specs(specs)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -799,7 +799,11 @@ class AbstractPlanner(ABC):
         # all maneuvers passed checks; path is valid        
         return True
     
-    def collect_fov_specs(self, specs : Spacecraft) -> dict:
+    def _collect_fov_specs(self, specs : Spacecraft) -> dict:
+        """ get instrument field of view specifications from agent specs object """
+        # validate inputs
+        assert isinstance(specs, Spacecraft), f'`specs` needs to be of type `Spacecraft`. Is of type `{type(specs)}`.'
+
         # compile instrument field of view specifications   
         cross_track_fovs = {instrument.name: np.NAN for instrument in specs.instrument}
         for instrument in specs.instrument:
@@ -825,24 +829,31 @@ class AbstractPlanner(ABC):
 
         return cross_track_fovs
 
-    def collect_agility_specs(self, specs : Spacecraft) -> tuple:
+    def _collect_agility_specs(self, specs : Spacecraft) -> Tuple[float, float]:
+        """ get pointing agility specifications from agent specs object """
+
+        # validate inputs
+        if not isinstance(specs, Spacecraft):
+            raise ValueError(f'`specs` needs to be of type `Spacecraft`. Is of type `{type(specs)}`.')
+
+        # get attitude determination and control specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
         if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
 
+        # get pointing agility specifications
         max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
-        if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
-
         max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
-        if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
 
+        # return pointing agility specifications
         return max_slew_rate, max_torque
-        
+
     @runtime_tracker
     def is_observation_path_valid(self, 
                                   state : SimulationAgentState, 
-                                  specs : object,
                                   observations : list,
-                                  **kwargs
+                                  max_slew_rate : float = None,
+                                  max_torque : float = None,
+                                  specs : object = None,
                                   ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
         try:
@@ -851,17 +862,18 @@ class AbstractPlanner(ABC):
             assert all(isinstance(obs, ObservationAction) for obs in observations), "All elements in observations must be of type ObservationAction."
             observations : list[ObservationAction] = observations
 
-            if isinstance(state, SatelliteAgentState) and isinstance(specs, Spacecraft):
+            if isinstance(state, SatelliteAgentState) :
+                # get pointing agility specifications                
+                if max_slew_rate is None or max_torque is None:
+                    if specs is None: raise ValueError('Either `specs` or both `max_slew_rate` and `max_torque` must be provided.')
 
-                # get pointing agility specifications
-                adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
-                if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
+                    max_slew_rate, max_torque = self._collect_agility_specs(specs)
 
-                max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
+                # validate agility specifications
                 if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
-
-                max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
                 if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
+                assert max_slew_rate > 0.0
+                # assert max_torque > 0.0
 
                 # construct observation sequence parameter list
                 observation_parameters = []
@@ -892,7 +904,7 @@ class AbstractPlanner(ABC):
                 if not all([self.is_observation_pair_valid(*params) for params in observation_parameters]):
                     return False
 
-                # ensure no mutually exclusive tasks are present
+                # ensure no mutually exclusive tasks are present in observation sequence
                 return all(
                     not obs_i.task.is_mutually_exclusive(obs_j.task)
                     for i, obs_i in enumerate(observations)
@@ -902,14 +914,16 @@ class AbstractPlanner(ABC):
             else:
                 raise NotImplementedError(f'Observation path validity check for agents with state type {type(state)} not yet implemented.')
         finally:
-            for th_i,t_i,d_i,th_j,t_j,d_j,max_slew_rate in observation_parameters:
-                if not self.is_observation_pair_valid(th_i, t_i, d_i, th_j, t_j, d_j, max_slew_rate):
-                    x = 1
+            # DEBUG SECTION
+            pass
+            # for th_i,t_i,d_i,th_j,t_j,d_j,max_slew_rate in observation_parameters:
+            #     if not self.is_observation_pair_valid(th_i, t_i, d_i, th_j, t_j, d_j, max_slew_rate):
+            #         x = 1
 
-            for i, obs_i in enumerate(observations):
-                for j, obs_j in enumerate(observations):
-                    if obs_i.task.is_mutually_exclusive(obs_j.task) and obs_i != obs_j:
-                        x = 1
+            # for i, obs_i in enumerate(observations):
+            #     for j, obs_j in enumerate(observations):
+            #         if obs_i.task.is_mutually_exclusive(obs_j.task) and obs_i != obs_j:
+            #             x = 1
 
     def is_observation_pair_valid(self, 
                                   th_i, t_i, d_i, 

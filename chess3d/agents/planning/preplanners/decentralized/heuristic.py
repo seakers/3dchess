@@ -40,7 +40,7 @@ class HeuristicInsertionPlanner(AbstractPreplanner):
         payload : dict = {instrument.name: instrument for instrument in specs.instrument}
         
         # compile instrument field of view specifications   
-        cross_track_fovs : dict = self.collect_fov_specs(specs)
+        cross_track_fovs : dict = self._collect_fov_specs(specs)
         
         # sort tasks by heuristic
         schedulable_tasks : list[SpecificObservationTask] = self.__sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)

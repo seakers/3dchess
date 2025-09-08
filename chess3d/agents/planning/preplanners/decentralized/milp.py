@@ -20,6 +20,20 @@ class SingleSatMILP(AbstractPreplanner):
                  debug = False, 
                  logger = None
                 ):
+        """ 
+        ## Decentralized Single-Satellite MILP Planner
+        Periodic preplanner that generates an observation plan for a single satellite using MILP optimization models.
+        
+        #### Arguments:
+        - `objective`: str - Objective function for the MILP model. Either "reward" or "duration".
+        - `model`: str - MILP model to used to schedule observation start times. Either "earliest" or "best".
+        - `licence_path`: str - Path to Gurobi licence file. Required if `debug` is False.
+        - `horizon`: float - Planning horizon in seconds. Default is infinite.
+        - `period`: float - Planning period in seconds. Default is infinite.
+        - `max_tasks`: int - Maximum number of tasks to consider in each optimization run. Default is infinite.
+        - `debug`: bool - If True, runs in debug mode and does not use optimization. Default is False.
+        - `logger`: logging.Logger - Logger for logging messages. Default is None.
+        """
         super().__init__(horizon, period, debug, logger)
 
         if not debug or licence_path is not None:
@@ -67,7 +81,7 @@ class SingleSatMILP(AbstractPreplanner):
             raise ValueError(f'`specs` needs to be of type `{Spacecraft}` for agents with states of type `{SatelliteAgentState}`')
                 
         # compile instrument field of view specifications   
-        cross_track_fovs : dict = self.collect_fov_specs(specs)
+        cross_track_fovs : dict = self._collect_fov_specs(specs)
         
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -193,9 +207,11 @@ class SingleSatMILP(AbstractPreplanner):
                 obs_1 = self.__extract_observation_sequence(reduced_tasks, curr_state, x_1, tau_1, d, th_imgs)
                 obs_2 = self.__extract_observation_sequence(reduced_tasks, curr_state, x_2, tau_2, d, th_imgs)
                 
-                valid_0 : bool = self.is_observation_path_valid(state, specs, obs_0)
-                valid_1 : bool = self.is_observation_path_valid(state, specs, obs_1)
-                valid_2 : bool = self.is_observation_path_valid(state, specs, obs_2)
+                max_slew_rate, max_torque = self._collect_agility_specs(specs)
+
+                valid_0 : bool = self.is_observation_path_valid(state, obs_0, max_slew_rate, max_torque)
+                valid_1 : bool = self.is_observation_path_valid(state, obs_1, max_slew_rate, max_torque)
+                valid_2 : bool = self.is_observation_path_valid(state, obs_2, max_slew_rate, max_torque)
                 y = 1
             
         return observations

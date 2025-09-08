@@ -1599,20 +1599,28 @@ class SimulationElementFactory:
                 mode = preplanner_dict.get('@mode', 'test').lower()
 
                 # load client orbit data
-                clients: dict = OrbitData.from_directory(orbitdata_dir)
+                client_orbitdata: dict = OrbitData.from_directory(orbitdata_dir)
 
-                # remove self from clients
-                clients.pop(agent_name, None) 
+                # load client specs 
+                clients_path = os.path.join(orbitdata_dir, 'MissionSpecs.json')
+                with open(clients_path, 'r') as clients_file:
+                    mission_specs : dict = json.load(clients_file)
+                client_specs : Dict[str, Spacecraft] = {d['name']: Spacecraft.from_dict(d) 
+                                                        for d in mission_specs.get('spacecraft', [])}
 
+                # remove self from clients information
+                client_orbitdata.pop(agent_name, None) 
+                client_specs.pop(agent_name, None)
+                
                 if mode == 'test':                   
-                    preplanner = TestingDealer(clients, horizon, period)
+                    preplanner = TestingDealer(client_orbitdata, client_specs, horizon, period)
                 elif mode in ['milp', 'mixed-integer-linear-programming']:
                     obj = preplanner_dict.get('objective', 'reward').lower()
                     model = preplanner_dict.get('model', 'earliest').lower()
                     license_path = preplanner_dict.get('licensePath', None)
                     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
 
-                    preplanner = DealerMILPPreplanner(clients, obj, model, license_path, horizon, period, max_tasks, debug, logger)
+                    preplanner = DealerMILPPreplanner(client_orbitdata, client_specs, obj, model, license_path, horizon, period, max_tasks, debug, logger)
 
             elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
                 # unpack preplanner parameters

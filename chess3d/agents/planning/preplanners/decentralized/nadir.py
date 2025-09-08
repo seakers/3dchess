@@ -30,28 +30,34 @@ class NadirPointingPlanner(EarliestAccessPlanner):
     @runtime_tracker
     def is_observation_path_valid(self, 
                                   state : SimulationAgentState, 
-                                  specs : object,
-                                  observations : list
-                                  ) -> bool:
+                                  observations : list,
+                                  max_slew_rate : float = None,
+                                  max_torque : float = None,
+                                  specs : object = None,
+                                ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
         # return True
-        if isinstance(state, SatelliteAgentState) and isinstance(specs, Spacecraft):
-
-            # get pointing agility specifications
-            adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
-            if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
-
-            max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
-            if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
-
-            max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
-            if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
+        if isinstance(state, SatelliteAgentState):
+            # validate inputs
+            assert isinstance(specs, Spacecraft), 'Agent specs must be provided as a `Spacecraft` object from `orbitpy` package.'
             
+            # get pointing agility specifications                
+            if max_slew_rate is None or max_torque is None:
+                if specs is None: raise ValueError('Either `specs` or both `max_slew_rate` and `max_torque` must be provided.')
+
+                max_slew_rate, max_torque = self._collect_agility_specs(specs)
+
+            # validate agility specifications
+            if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
+            if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
+            assert max_slew_rate > 0.0
+            # assert max_torque > 0.0
+
             # compile name of instruments onboard spacecraft
             instruments = [instrument.name for instrument in specs.instrument]
 
             # compile instrument field of view specifications   
-            cross_track_fovs : dict = self.collect_fov_specs(specs)
+            cross_track_fovs : dict = self._collect_fov_specs(specs)
 
             # check if every observation can be reached from the prior measurement
             for j in range(len(observations)):

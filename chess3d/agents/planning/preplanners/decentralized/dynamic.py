@@ -55,16 +55,11 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         payload : dict = {instrument.name: instrument for instrument in specs.instrument}
         
         # compile instrument field of view specifications   
-        cross_track_fovs : dict = self.collect_fov_specs(specs)
+        cross_track_fovs : dict = self._collect_fov_specs(specs)
         
         # get pointing agility specifications
-        adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
-        assert adcs_specs, 'ADCS component specifications missing from agent specs object.'
-
-        max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
+        max_slew_rate, max_torque = self._collect_agility_specs(specs)
         assert max_slew_rate, 'ADCS `maxRate` specification missing from agent specs object.'
-
-        max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
         # sort tasks by start time
@@ -82,6 +77,10 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
         rewards : list[float]               = [0.0 for _ in schedulable_tasks]
         cumulative_rewards : list[float]    = [0.0 for _ in schedulable_tasks]
         preceeding_observations : list[int] = [np.NAN for _ in schedulable_tasks]
+        slew_times : list[float]            = [[abs(th_imgs[i] - th_imgs[j]) / max_slew_rate if max_slew_rate else np.Inf
+                                                for j,_ in enumerate(schedulable_tasks)]
+                                               for i,_ in enumerate(schedulable_tasks)
+                                               ]
 
         # initialize observation actions list
         earliest_observation_actions : list[ObservationAction] = [None for _ in schedulable_tasks]
@@ -128,7 +127,7 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                     continue
 
                 # update adjacency matrix for sequence i->j
-                adjacency[i][j] = self.is_observation_path_valid(state, specs, [earliest_observation_actions[i], latest_observation_actions[j]])
+                adjacency[i][j] = self.is_observation_path_valid(state, [earliest_observation_actions[i], latest_observation_actions[j]], max_slew_rate, max_torque)
 
                 if adjacency[i][j]:
                     # if sequence i->j is valid; enforce acyclical behavior and skip j->i
@@ -139,11 +138,11 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                     continue
                 
                 # update adjacency matrix for sequence j->i
-                adjacency[j][i] = self.is_observation_path_valid(state, specs, [earliest_observation_actions[j], latest_observation_actions[i]])
+                adjacency[j][i] = self.is_observation_path_valid(state, [earliest_observation_actions[j], latest_observation_actions[i]], max_slew_rate, max_torque)
 
         # calculate optimal path and update results
         for j in tqdm(range(len(schedulable_tasks)), 
-                      desc=f'{state.agent_name}-PLANNER: Calculating Optimal Path',
+                      desc=f'{state.agent_name}-PLANNER: Evaluating Path Reward',
                       leave=False):
             # get indeces of possible prior observations
             prev_indices : list[int] = [i for i in range(0,j) if adjacency[i][j]]
@@ -161,12 +160,9 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                 # check if new task j conflicts with any in path leading to i
                 if any(schedulable_tasks[j].is_mutually_exclusive(schedulable_tasks[k]) for k in path_i):
                     continue  # skip this candidate extension
-
-                # calculate maneuver time between tasks i and j
-                m_ij = abs(th_imgs[i] - th_imgs[j]) / max_slew_rate if max_slew_rate else None
                 
                 # calculate earliest imaging time for task j assuming task i is done before
-                t_img_j = max(t_imgs[i] + d_imgs[i] + m_ij, t_imgs[j]) if max_slew_rate else t_imgs[j]
+                t_img_j = max(t_imgs[i] + d_imgs[i] + slew_times[i][j], t_imgs[j]) 
 
                 # check if imaging time is valid
                 if not (t_img_j <= state.t + self.horizon                           # imaging start time within planning horizon
@@ -180,7 +176,10 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
                                                     t_img_j, 
                                                     d_imgs[j], 
                                                     specs, 
-                                                    cross_track_fovs, orbitdata, mission, observation_history)
+                                                    cross_track_fovs, 
+                                                    orbitdata, 
+                                                    mission, 
+                                                    observation_history)
 
                 # compare cumulative rewards
                 if cumulative_rewards[i] + reward_j > cumulative_rewards[j]:
@@ -249,59 +248,66 @@ class DynamicProgrammingPlanner(AbstractPreplanner):
             
         raise ValueError("No maximum value found in the list.")
 
-    @runtime_tracker
-    def populate_adjacency_matrix(self, 
-                                  state : SimulationAgentState, 
-                                  specs : object,
-                                  access_opportunities : list, 
-                                  ground_points : dict,
-                                  adjacency : list,
-                                  j : int
-                                  ):
+    # @runtime_tracker
+    # def populate_adjacency_matrix(self, 
+    #                               state : SimulationAgentState, 
+    #                               specs : object,
+    #                               access_opportunities : list, 
+    #                               ground_points : dict,
+    #                               adjacency : list,
+    #                               j : int
+    #                               ):
                
-        # get current observation
-        curr_opportunity : tuple = access_opportunities[j]
-        lat_curr,lon_curr = ground_points[curr_opportunity[0]][curr_opportunity[1]]
-        curr_target = [lat_curr,lon_curr,0.0]
+    #     # get satellite agility specifications
+    #     max_slew_rate, max_torque = self._collect_agility_specs(specs)
+    #     assert max_slew_rate, 'ADCS `maxRate` specification missing from agent specs object.'
+    #     assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
-        # get any possibly prior observation
-        prev_opportunities : list[tuple] = [prev_opportunity 
-                                            for prev_opportunity in access_opportunities[:j]
-                                            if prev_opportunity[3].start <= curr_opportunity[3].end
-                                            and prev_opportunity != curr_opportunity
-                                            ]
+    #     # get current observation
+    #     curr_opportunity : tuple = access_opportunities[j]
+    #     lat_curr,lon_curr = ground_points[curr_opportunity[0]][curr_opportunity[1]]
+    #     curr_target = [lat_curr,lon_curr,0.0]
+
+    #     # get any possibly prior observation
+    #     prev_opportunities : list[tuple] = [prev_opportunity 
+    #                                         for prev_opportunity in access_opportunities[:j]
+    #                                         if prev_opportunity[3].start <= curr_opportunity[3].end
+    #                                         and prev_opportunity != curr_opportunity
+    #                                         ]
         
-        prev_opportunities_opt : list[tuple] = [prev_opportunity 
-                                            for prev_opportunity in access_opportunities[:j]
-                                            ]
+    #     prev_opportunities_opt : list[tuple] = [prev_opportunity 
+    #                                         for prev_opportunity in access_opportunities[:j]
+    #                                         ]
         
-        assert len(prev_opportunities_opt) == len(prev_opportunities) and all([opp in prev_opportunities for opp in prev_opportunities_opt])
+    #     assert len(prev_opportunities_opt) == len(prev_opportunities) and all([opp in prev_opportunities for opp in prev_opportunities_opt])
  
+    #     # construct adjacency matrix
+    #     for prev_opportunity in prev_opportunities:
+    #         prev_opportunity : tuple
 
-        # construct adjacency matrix
-        for prev_opportunity in prev_opportunities:
-            prev_opportunity : tuple
+    #         # get previous observation opportunity's target 
+    #         lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
+    #         prev_target = [lat_prev,lon_prev,0.0]
 
-            # get previous observation opportunity's target 
-            lat_prev,lon_prev = ground_points[prev_opportunity[0]][prev_opportunity[1]]
-            prev_target = [lat_prev,lon_prev,0.0]
-
-            # assume earliest observation time from previous observation
-            earliest_prev_observation = ObservationAction(prev_opportunity[2], 
-                                                        prev_target, 
-                                                        prev_opportunity[5][0], 
-                                                        prev_opportunity[4][0])
+    #         # assume earliest observation time from previous observation
+    #         earliest_prev_observation = ObservationAction(prev_opportunity[2], 
+    #                                                     prev_target, 
+    #                                                     prev_opportunity[5][0], 
+    #                                                     prev_opportunity[4][0])
             
-            # check if observation can be reached from THE previous observation
-            adjacent = self.is_observation_path_valid(state, specs, 
-                                                          [earliest_prev_observation,
-                                                          ObservationAction(curr_opportunity[2], 
-                                                                            curr_target, 
-                                                                            curr_opportunity[5][-1], 
-                                                                            curr_opportunity[4][-1])])     
+    #         # check if observation can be reached from THE previous observation
+    #         adjacent = self.is_observation_path_valid(state,  
+    #                                                       [earliest_prev_observation,
+    #                                                       ObservationAction(curr_opportunity[2], 
+    #                                                                         curr_target, 
+    #                                                                         curr_opportunity[5][-1], 
+    #                                                                         curr_opportunity[4][-1])],
+    #                                                     max_slew_rate,
+    #                                                     max_torque)     
+    #         mutually_exclusive = prev_opportunity[2].is_mutually_exclusive(curr_opportunity[2])
 
-            # update adjacency matrix
-            adjacency[access_opportunities.index(prev_opportunity)][j] = adjacent
+    #         # update adjacency matrix
+    #         adjacency[access_opportunities.index(prev_opportunity)][j] = adjacent and not mutually_exclusive
 
     @runtime_tracker
     def _schedule_broadcasts(self, state: SimulationAgentState, observations: list, orbitdata: OrbitData) -> list:

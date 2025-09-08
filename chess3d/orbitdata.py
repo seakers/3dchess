@@ -9,7 +9,7 @@ from typing import Dict
 import pandas as pd
 import numpy as np
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from orbitpy.mission import Mission
 
 from chess3d.utils import Interval
@@ -230,6 +230,8 @@ class OrbitData:
 
     TODO: add support to load ground station agents' data
     """
+    JDUT1 = 'JDUT1'
+
     def __init__(self, 
                  agent_name : str, 
                  time_data : pd.DataFrame, 
@@ -245,8 +247,8 @@ class OrbitData:
 
         # propagation time specifications
         self.time_step = time_data['time step']
-        self.epoc_type = time_data['epoc type']
-        self.epoc = time_data['epoc']
+        self.epoch_type = time_data['epoch type']
+        self.epoch = time_data['epoch']
         self.duration = time_data['duration']
 
         # agent position and eclipse information
@@ -266,6 +268,30 @@ class OrbitData:
         # grid information
         self.grid_data : list[pd.DataFrame] = grid_data
     
+    def get_epoc_in_datetime(self, delta_ut1=0.0) -> datetime:
+        """
+        Converts epoc to a datetime in UTC.
+        
+        Parameters
+        ----------
+        delta_ut1 : float, optional
+            UT1-UTC offset in seconds (default 0.0, but usually provided by IERS).
+        
+        Returns
+        -------
+        datetime
+            Corresponding UTC datetime.
+        """
+        # check epoc type 
+        if self.epoc_type == self.JDUT1: # convert JDUT1 to datetime
+            JD_UNIX_EPOCH = 2440587.5  # JD of 1970-01-01 00:00:00 UTC
+            days_since_unix = self.epoc - JD_UNIX_EPOCH
+            seconds_since_unix = days_since_unix * 86400.0 - delta_ut1  # adjust to UTC
+            return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=seconds_since_unix)
+
+        else:
+            raise NotImplementedError(f"Unsupported epoc type: {self.epoc_type}. Only 'JDUT1' is supported.")
+
     def copy(self) -> object:
         return OrbitData(self.agent_name, 
                          {'time step': self.time_step, 'epoc type' : self.epoc_type, 'epoc' : self.epoc},
@@ -449,16 +475,16 @@ class OrbitData:
 
             # load propagation time data
             time_data =  pd.read_csv(position_file, nrows=3)
-            _, epoc_type, _, epoc = time_data.at[0,time_data.axes[1][0]].split(' ')
-            epoc_type = epoc_type[1 : -1]
-            epoc = float(epoc)
+            _, epoch_type, _, epoch = time_data.at[0,time_data.axes[1][0]].split(' ')
+            epoch_type = epoch_type[1 : -1]
+            epoch = float(epoch)
             _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
             time_step = float(time_step)
             _, _, _, _, duration = time_data.at[2,time_data.axes[1][0]].split(' ')
             duration = float(duration)
 
-            time_data = { "epoc": epoc, 
-                        "epoc type": epoc_type, 
+            time_data = { "epoch": epoch, 
+                        "epoch type": epoch_type, 
                         "time step": time_step,
                         "duration" : duration }
 
@@ -652,16 +678,16 @@ class OrbitData:
             # # load propagation time data
 
             # time_data =  pd.read_csv(position_file, nrows=3)
-            # _, epoc_type, _, epoc = time_data.at[0,time_data.axes[1][0]].split(' ')
-            # epoc_type = epoc_type[1 : -1]
-            # epoc = float(epoc)
+            # _, epoch_type, _, epoch = time_data.at[0,time_data.axes[1][0]].split(' ')
+            # epoch_type = epoch_type[1 : -1]
+            # epoch = float(epoch)
             # _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
             # time_step = float(time_step)
             # _, _, _, _, duration = time_data.at[2,time_data.axes[1][0]].split(' ')
             # duration = float(duration)
 
-            # time_data = { "epoc": epoc, 
-            #             "epoc type": epoc_type, 
+            # time_data = { "epoch": epoch, 
+            #             "epoch type": epoch_type, 
             #             "time step": time_step,
             #             "duration" : duration }
 
