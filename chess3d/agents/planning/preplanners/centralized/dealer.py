@@ -15,7 +15,7 @@ from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
 
 from chess3d.agents import states
-from chess3d.agents.actions import BroadcastMessageAction, ObservationAction
+from chess3d.agents.actions import BroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
@@ -34,6 +34,7 @@ class DealerPreplanner(AbstractPreplanner):
     def __init__(self, 
                  client_orbitdata : Dict[str, OrbitData], 
                  client_specs : Dict[str, object],
+                 client_missions : Dict[str, Mission],
                  horizon = np.Inf, 
                  period = np.Inf, 
                  debug = False, 
@@ -48,17 +49,28 @@ class DealerPreplanner(AbstractPreplanner):
             "All clients must be instances of OrbitData."
         assert all(isinstance(client, str) for client in client_specs.keys()), \
             "All keys in clients must be strings representing agent names."
+        assert all(isinstance(specs, Spacecraft) for specs in client_specs.values()), \
+            "All client specs must be instances of Spacecraft."
+        assert all(isinstance(client, str) for client in client_missions.keys()), \
+            "All keys in clients must be strings representing agent names."
+        assert all(isinstance(mission, Mission) for mission in client_missions.values()), \
+            "All client missions must be instances of Mission."
         assert len(client_orbitdata) == len(client_specs), \
             "Clients and client_specs must have the same number of entries."
+        assert len(client_orbitdata) == len(client_missions), \
+            "Clients and client_missions must have the same number of entries."
         assert all(client in client_specs for client in client_orbitdata), \
             "Clients and client_specs must have the same keys."
+        assert all(client in client_missions for client in client_orbitdata), \
+            "Clients and client_missions must have the same keys."
 
         # store client information
         self.client_orbitdata : Dict[str, OrbitData] = {client.lower(): client_orbitdata[client] for client in client_orbitdata}
         self.client_specs : Dict[str, object] = {client.lower(): client_specs[client] for client in client_specs}
+        self.client_missions : Dict[str, Mission] = {client.lower(): client_missions[client] for client in client_missions}
         self.cross_track_fovs : Dict[str, Dict[str, float]] = self._collect_client_cross_track_fovs(client_specs)
         self.client_states : Dict[str, SatelliteAgentState] = self.__initiate_client_states(client_orbitdata, client_specs)
-        self.plans : Dict[str, Preplan] = {client : Preplan([], t=0.0, horizon=self.horizon, t_next=np.Inf) 
+        self.client_plans : Dict[str, Preplan] = {client : Preplan([], t=0.0, horizon=self.horizon, t_next=np.Inf) 
                                            for client in self.client_orbitdata}
 
     def _collect_client_cross_track_fovs(self, client_specs : Dict[str, Spacecraft]) -> Dict[str, Dict[str, float]]:
@@ -101,8 +113,23 @@ class DealerPreplanner(AbstractPreplanner):
         super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
 
         # TODO check if any client broadcasted their state or plan
+        if misc_messages: # update the stored state 
+            raise NotImplementedError('Updating of internal knowledge of agent states based on state update messages not yet implemented.')
         
-        # TODO if so, update the stored state 
+        else: # else, estimate states
+            # propagate position and velocity
+            self.client_states : Dict[str, SatelliteAgentState] = {client : client_state.propagate(state.t) 
+                                                                    for client,client_state in self.client_states.items()}
+            
+            # check latest action in their plan
+            last_actions : Dict[str, list[AgentAction]] = {client : plan.get_next_actions(state.t)
+                                                            for client,plan in self.client_plans.items()}
+
+            # update attitude based on latest scheduled action
+            if any([len([action for action in actions if not isinstance(action, WaitForMessages)]) > 0 
+                    for actions in last_actions.values()]):
+                raise NotImplementedError('Estimation of agent\'s actions based on previously scheduled tasks not yet implemented.')
+
 
     @runtime_tracker
     def generate_plan(  self, 
@@ -115,9 +142,9 @@ class DealerPreplanner(AbstractPreplanner):
                         observation_history : ObservationHistory,
                     ) -> Plan:
 
-        # TODO update client states
+        # TODO update client agent states
 
-        # generate plans for all agents
+        # generate plans for all client agents
         client_plans : dict = self._generate_client_plans(state, specs, clock_config, orbitdata, mission, tasks, observation_history)
 
         # schedule broadcasts to be perfomed
@@ -148,44 +175,58 @@ class DealerPreplanner(AbstractPreplanner):
         planning_horizon = Interval(state.t, state.t + self.horizon)
 
         # get only available tasks
-        available_tasks : list[GenericObservationTask] = self.get_available_tasks(tasks, planning_horizon)
+        available_tasks : list[GenericObservationTask] = \
+            self.get_available_tasks(tasks, planning_horizon)
         
         # calculate coverage opportunities for tasks
-        access_opportunities : Dict[str, int, int, str, tuple] = {client : self.calculate_access_opportunities(state, planning_horizon, client_orbitdata)
-                                                                    for client, client_orbitdata in self.client_orbitdata.items()
-                                                                }
+        access_opportunities : Dict[str, List[ List[ Dict[str, tuple]]]] = \
+              self._calculate_client_access_opportunities(planning_horizon)
 
         # create schedulable tasks from known tasks and future access opportunities
-        schedulable_tasks : Dict[str, list[SpecificObservationTask]] = {client : self.create_tasks_from_accesses(available_tasks, client_access_opportunities, self.cross_track_fovs[client], orbitdata)
-                                                                        for client, client_access_opportunities in access_opportunities.items()
-                                                                        }
+        schedulable_tasks : Dict[str, list[SpecificObservationTask]] = \
+              self._collect_schedulable_client_tasks(available_tasks, access_opportunities)
         
         # schedule observations for each client
-        client_observations : Dict[str, List[ObservationAction]] = self._schedule_client_observations()
+        client_observations : Dict[str, List[ObservationAction]] = \
+              self._schedule_client_observations(state, schedulable_tasks, observation_history)
         
         # validate observation paths for each client
         for client,observations in client_observations.items():
+            assert all(isinstance(obs, ObservationAction) for obs in observations), \
+                f'All scheduled observations for client {client} must be instances of `ObservationAction`.'
             max_slew_rate, max_torque = self._collect_agility_specs(self.client_specs[client])
             assert self.is_observation_path_valid(self.client_states[client], observations, max_slew_rate, max_torque, self.client_specs[client]), \
                 f'Generated observation path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
             
         # schedule maneuvers for each client
-        client_maneuvers : Dict[str, List[AgentAction]] = {client: self._schedule_maneuvers(self.client_states[client], 
-                                                                                            self.client_specs[client], 
-                                                                                            client_observations[client],
-                                                                                            clock_config,
-                                                                                            self.client_orbitdata[client])
-                                                          for client in self.client_orbitdata
-                                                        }
+        client_maneuvers : Dict[str, List[ManeuverAction]] = self._schedule_client_maneuvers(client_observations, clock_config)
+        
+        # validate maneuver paths for each client
+        for client,maneuvers in client_maneuvers.items():
+            assert all(isinstance(maneuver, ManeuverAction) for maneuver in maneuvers), \
+                f'All scheduled maneuvers for client {client} must be instances of `ManeuverAction`.'
+            max_slew_rate, max_torque = self._collect_agility_specs(self.client_specs[client])
+            assert self.is_maneuver_path_valid(self.client_states[client],
+                                               self.client_specs[client],
+                                               client_observations[client],
+                                               maneuvers,
+                                               max_slew_rate,
+                                               self.cross_track_fovs[client]), \
+                f'Generated maneuver path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
 
         # schedule broadcasts for each client
-        # TODO implement client broadcast scheduling if needed
-        client_broadcasts : Dict[str, List[BroadcastMessageAction]] = {client: []
-                                                                      for client in self.client_orbitdata
-                                                                    }
+        client_broadcasts : Dict[str, List[BroadcastMessageAction]] = self._schedule_client_broadcasts()
+
+        # validate broadcast paths for each client
+        for client,broadcasts in client_broadcasts.items():
+            assert all(isinstance(broadcast, BroadcastMessageAction) for broadcast in broadcasts), \
+                f'All scheduled broadcasts for client {client} must be instances of `BroadcastMessageAction`.'
+            # TODO validate broadcast times if needed
 
         # combine scheduled actions to create plans for each client
-        client_plans : Dict[str, List[AgentAction]] = {client: Preplan(client_observations[client], client_maneuvers[client], client_broadcasts[client], 
+        client_plans : Dict[str, List[AgentAction]] = {client: Preplan(client_observations[client], 
+                                                                       client_maneuvers[client], 
+                                                                       client_broadcasts[client], 
                                                                        t=state.t, horizon=self.horizon, t_next=state.t+self.horizon).actions
                                                           for client in self.client_orbitdata
                                                         }
@@ -193,10 +234,37 @@ class DealerPreplanner(AbstractPreplanner):
         # return plans
         return client_plans
 
+    def _calculate_client_access_opportunities(self, planning_horizon : Interval) -> Dict[str, List[ List[ Dict[str, tuple]]]]:
+        """ calculates future access opportunities for all clients within the planning horizon """
+        return {client : self.calculate_access_opportunities(self.client_states[client], 
+                                                             planning_horizon, 
+                                                             client_orbitdata)
+                for client, client_orbitdata in self.client_orbitdata.items()}
+    
+    def _collect_schedulable_client_tasks(self, available_tasks : List[GenericObservationTask], access_opportunities : dict) -> Dict:
+        return {client : self.create_tasks_from_accesses(available_tasks, 
+                                                         client_access_opportunities, 
+                                                         self.cross_track_fovs[client], 
+                                                         self.client_orbitdata[client])
+                for client, client_access_opportunities in access_opportunities.items()}
+
     @abstractmethod
-    def _schedule_client_observations(self, *args) -> Dict[str, List[ObservationAction]]:
+    def _schedule_client_observations(self, state : SimulationAgentState, schedulable_tasks: Dict[str, List[ObservationAction]], observation_history : ObservationHistory) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """
     
+    @runtime_tracker
+    def _schedule_client_maneuvers(self, client_observations : Dict[str, List[ObservationAction]], clock_config : ClockConfig) -> Dict[str, List[ManeuverAction]]:
+        return {client: self._schedule_maneuvers(self.client_states[client], 
+                                                self.client_specs[client], 
+                                                client_observations[client],
+                                                clock_config,
+                                                self.client_orbitdata[client])
+                for client in self.client_orbitdata }
+
+    def _schedule_client_broadcasts(self, *_) -> Dict[str, List[BroadcastMessageAction]]:
+        """ schedules broadcasts for all clients """
+        return {client: [] for client in self.client_orbitdata} # TODO implement client broadcast scheduling if needed
+
     def _schedule_broadcasts(self, state : SimulationAgentState, client_plans : dict, orbitdata : OrbitData):
         """
         Schedules broadcasts to be performed based on the generated plans for each agent.

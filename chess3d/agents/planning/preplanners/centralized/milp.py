@@ -30,6 +30,7 @@ class DealerMILPPreplanner(DealerPreplanner):
     def __init__(self, 
                  client_orbitdata : Dict[str, OrbitData],
                  client_specs : Dict[str, object],
+                 client_missions : Dict[str, Mission],
                  objective : str, 
                  model : str, 
                  licence_path : str = None, 
@@ -38,7 +39,7 @@ class DealerMILPPreplanner(DealerPreplanner):
                  max_tasks : float = np.Inf,
                  debug : bool = False,
                  logger : logging.Logger = None):
-        super().__init__(client_orbitdata, client_specs, horizon, period, debug, logger)
+        super().__init__(client_orbitdata, client_specs, client_missions, horizon, period, debug, logger)
 
         if not debug or licence_path is not None:
             # Check for Gurobi license
@@ -58,7 +59,13 @@ class DealerMILPPreplanner(DealerPreplanner):
         self.max_tasks = max_tasks
 
     @runtime_tracker
-    def _schedule_client_observations(self, *args) -> Dict[str, List[ObservationAction]]:
+    def _schedule_client_observations(self, 
+                                      state : SimulationAgentState,
+                                      schedulable_tasks: Dict[str, List[ObservationAction]], 
+                                      observation_history : ObservationHistory
+                                    ) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """
+        
+
         return {client: [] for client in self.client_orbitdata} # temporarily disable MILP planner
         raise NotImplementedError("Client observation scheduling not yet implemented.")

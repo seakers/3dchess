@@ -1272,7 +1272,7 @@ class SimulationElementFactory:
                                                     time_step=dt) 
                 
                 preplanner, replanner = \
-                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, logger)
+                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, missions, logger)
                 
                 return SatelliteAgent(agent_name, 
                                       results_path,
@@ -1553,7 +1553,7 @@ class SimulationElementFactory:
         # return nothing
         return None  
 
-    def load_planners(agent_name : str, planner_dict : dict, orbitdata_dir : str, logger : logging.Logger) -> tuple:
+    def load_planners(agent_name : str, planner_dict : dict, orbitdata_dir : str, missions : Dict[str,Mission], logger : logging.Logger) -> tuple:
         # check if planner dictionary is empty
         if planner_dict is None: return None, None
 
@@ -1608,9 +1608,14 @@ class SimulationElementFactory:
                 client_specs : Dict[str, Spacecraft] = {d['name']: Spacecraft.from_dict(d) 
                                                         for d in mission_specs.get('spacecraft', [])}
 
+                # load client missions
+                client_missions : Dict[str, Mission] = {d['name'] : missions[d['mission'].lower()] 
+                                                        for d in mission_specs.get('spacecraft', [])}
+
                 # remove self from clients information
                 client_orbitdata.pop(agent_name, None) 
                 client_specs.pop(agent_name, None)
+                client_missions.pop(agent_name, None)
                 
                 if mode == 'test':                   
                     preplanner = TestingDealer(client_orbitdata, client_specs, horizon, period)
@@ -1620,7 +1625,7 @@ class SimulationElementFactory:
                     license_path = preplanner_dict.get('licensePath', None)
                     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
 
-                    preplanner = DealerMILPPreplanner(client_orbitdata, client_specs, obj, model, license_path, horizon, period, max_tasks, debug, logger)
+                    preplanner = DealerMILPPreplanner(client_orbitdata, client_specs, client_missions, obj, model, license_path, horizon, period, max_tasks, debug, logger)
 
             elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
                 # unpack preplanner parameters
@@ -1701,9 +1706,11 @@ class SimulationElementFactory:
                             level : int,
                             logger : logging.Logger
                             ) -> PlanningModule:
-        
-        preplanner, replanner = SimulationElementFactory.load_planners(planner_dict, logger)
-        
+
+        raise NotImplementedError('`load_planner_module` requires missions argument.')
+
+        preplanner, replanner = SimulationElementFactory.load_planners(planner_dict, orbitdata_dir, missions, logger)
+
         # create planning module
         return PlanningModule(results_path, 
                               agent_specs,
