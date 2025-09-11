@@ -86,44 +86,7 @@ class DealerMILPPreplanner(DealerPreplanner):
                                                 0.0,                                                # zero duration
                                                 Interval(self.client_states[client].attitude[0],
                                                          self.client_states[client].attitude[0]))   # set slew angle to current angle
-            client_tasks.insert(0, dummy_task)
-
-        # Create a new model
-        model = gp.Model("multi-mission_milp_planner")
-
-        # Set parameter to suppress output
-        model.setParam('OutputFlag', int(self._debug))
-
-        # Initialize constants
-        t_start   = {client : np.array([task.accessibility.left-state.t 
-                              for task in tasks if isinstance(task, SpecificObservationTask)
-                              ])
-                              for client,tasks in schedulable_tasks.items()
-                            }
-        t_end     = {client : np.array([task.accessibility.right-state.t for task in tasks if isinstance(task, SpecificObservationTask)])
-                     for client,tasks in schedulable_tasks.items()
-                    }
-        d         = {client : np.array([task.min_duration for task in tasks if isinstance(task, SpecificObservationTask)])
-                     for client,tasks in schedulable_tasks.items()
-                    }
-        th_imgs   = {client : np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in tasks if isinstance(task, SpecificObservationTask)])
-                     for client,tasks in schedulable_tasks.items()
-                    }
-        slew_times= {client :  np.array([[abs(th_imgs[client][j_p]-th_imgs[client][j]) / max_slew_rates[client] 
-                                           for j,_ in enumerate(tasks)]
-                                         for j_p,_ in enumerate(tasks)]
-                                        )
-                     for client,tasks in schedulable_tasks.items()
-                    }
-        
-        Z = {client : [(j, j_p) 
-                        for j,_    in enumerate(tasks) 
-                        for j_p,_  in enumerate(tasks)
-                        if t_start[client][j] + d[client][j] + slew_times[client][j, j_p] <= t_end[client][j_p] - d[client][j_p] # sequence j->j' is feasible
-                        and j != j_p                                                                                            # ensure distinct tasks
-                    ]
-             for client,tasks in schedulable_tasks.items()
-             } 
+            client_tasks.insert(0, dummy_task)      
         
         # index tasks and clients
         indexed_clients = list(schedulable_tasks.keys())
@@ -133,15 +96,56 @@ class DealerMILPPreplanner(DealerPreplanner):
         mission_indices = {mission : idx for idx,mission in enumerate(indexed_missions)}
 
         # indexed_parent_tasks = [pt for pt in range(sum(len(available_tasks[mission]) for mission in indexed_missions))]
-        indexed_parent_tasks = []
-        parent_task_indices = {pt : idx for idx,pt in enumerate(indexed_parent_tasks)}
-        
-        indexed_tasks = [list(range(len(schedulable_tasks[client]))) 
+        indexed_parent_tasks = [[task for task in available_tasks[mission]]
+                                for mission in indexed_missions]
+        parent_task_indices = [(mission, ptask)
+                                for mission,ptasks in enumerate(indexed_parent_tasks)
+                                for ptask,_ in enumerate(ptasks)
+                            ]
+
+        indexed_tasks = [ [task for task in schedulable_tasks[client]]
                         for client in indexed_clients]
         task_indices = [(client,task_index) 
                         for client,tasks in enumerate(indexed_tasks)
-                        for task_index in tasks
+                        for task_index,_ in enumerate(tasks)
                         ]
+        
+        # TODO map parent tasks to specific tasks
+        M = np.array([[]
+                      for mission_index,ptask_index in parent_task_indices])
+
+        # Create a new model
+        model = gp.Model("multi-mission_milp_planner")
+
+        # Set parameter to suppress output
+        model.setParam('OutputFlag', int(self._debug))
+
+        # Initialize constants
+        t_start   = np.array([[task.accessibility.left-state.t 
+                              for task in indexed_tasks[client_index] if isinstance(task, SpecificObservationTask)]
+                              for client_index,_ in enumerate(indexed_clients)])
+        t_end     = np.array([[task.accessibility.right-state.t 
+                              for task in indexed_tasks[client_index] if isinstance(task, SpecificObservationTask)]
+                              for client_index,_ in enumerate(indexed_clients)])
+        d         = np.array([[task.min_duration 
+                               for task in indexed_tasks[client_index] if isinstance(task, SpecificObservationTask)]
+                               for client_index,_ in enumerate(indexed_clients)])
+        th_imgs   = np.array([[np.average((task.slew_angles.left, task.slew_angles.right)) 
+                               for task in indexed_tasks[client_index] if isinstance(task, SpecificObservationTask)]
+                               for client_index,_ in enumerate(indexed_clients)])
+        slew_times= np.array([[[abs(th_imgs[client_index][j_p]-th_imgs[client_index][j]) / max_slew_rates[indexed_clients[client_index]]
+                                 for j_p,_ in enumerate(indexed_tasks[client_index]) if isinstance(indexed_tasks [client_index][j_p], SpecificObservationTask)]
+                                for j,_ in enumerate(indexed_tasks[client_index]) if isinstance(indexed_tasks [client_index][j], SpecificObservationTask)]
+                                for client_index,_ in enumerate(indexed_clients)])
+        
+        Z = [(j, j_p) 
+             for client_index,_ in enumerate(indexed_clients)
+             for j,_ in enumerate(indexed_tasks[client_index]) if isinstance(indexed_tasks [client_index][j], SpecificObservationTask)
+             for j_p,_ in enumerate(indexed_tasks[client_index]) if isinstance(indexed_tasks [client_index][j_p], SpecificObservationTask)
+             if t_start[client_index,j] + d[client_index,j] + slew_times[client_index,j, j_p] \
+                <= t_end[client_index,j_p] - d[client_index,j_p]    # sequence j->j' is feasible
+             and j != j_p                                           # ensure distinct tasks          
+        ] 
 
         # Create decision variables
         x : gp.tupledict = model.addVars(task_indices, vtype=gp.GRB.BINARY, name="x")
