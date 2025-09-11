@@ -1,3 +1,4 @@
+from collections import defaultdict
 import logging
 import os
 from typing import Dict, List
@@ -13,16 +14,19 @@ from orbitpy.util import Spacecraft
 from dmas.modules import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
+import pandas as pd
 
 from chess3d.agents import states
 from chess3d.agents.actions import BroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
-from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.messages import  PlanMessage
 from chess3d.mission.mission import Mission
+from chess3d.mission.objectives import DefaultMissionObjective
+from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
 from chess3d.orbitdata import IntervalData, OrbitData
 from chess3d.utils import Interval
 
@@ -72,6 +76,7 @@ class DealerPreplanner(AbstractPreplanner):
         self.client_states : Dict[str, SatelliteAgentState] = self.__initiate_client_states(client_orbitdata, client_specs)
         self.client_plans : Dict[str, Preplan] = {client : Preplan([], t=0.0, horizon=self.horizon, t_next=np.Inf) 
                                            for client in self.client_orbitdata}
+        self.client_tasks : Dict[Mission, List[GenericObservationTask]] = self.get_client_tasks(client_missions, client_orbitdata)
 
     def _collect_client_cross_track_fovs(self, client_specs : Dict[str, Spacecraft]) -> Dict[str, Dict[str, float]]:
         """ get instrument field of view specifications from agent specs object """
@@ -175,8 +180,8 @@ class DealerPreplanner(AbstractPreplanner):
         planning_horizon = Interval(state.t, state.t + self.horizon)
 
         # get only available tasks
-        available_tasks : list[GenericObservationTask] = \
-            self.get_available_tasks(tasks, planning_horizon)
+        available_tasks : Dict[Mission, GenericObservationTask] = \
+            self._get_available_client_tasks(planning_horizon)
         
         # calculate coverage opportunities for tasks
         access_opportunities : Dict[str, List[ List[ Dict[str, tuple]]]] = \
@@ -188,7 +193,7 @@ class DealerPreplanner(AbstractPreplanner):
         
         # schedule observations for each client
         client_observations : Dict[str, List[ObservationAction]] = \
-              self._schedule_client_observations(state, schedulable_tasks, observation_history)
+              self._schedule_client_observations(state, available_tasks, schedulable_tasks, observation_history)
         
         # validate observation paths for each client
         for client,observations in client_observations.items():
@@ -234,23 +239,121 @@ class DealerPreplanner(AbstractPreplanner):
         # return plans
         return client_plans
 
+    def get_client_tasks(self, client_missions : Dict[str, Mission], client_orbitdata : Dict[str, OrbitData]) -> List[GenericObservationTask]:
+        """ get all known and active tasks for a specific client """
+
+        # map missions to clients
+        mission_clients : Dict[Mission, list[str]] = {mission : list({client 
+                                                                      for client, m in client_missions.items() 
+                                                                      if m == mission}) 
+                                                     for mission in client_missions.values()}
+
+        # collect coverage grids for each client
+        client_coverage_grids : Dict[str, list[pd.DataFrame]] = {client : orbitdata.grid_data 
+                                                                 for client,orbitdata in client_orbitdata.items()}
+        
+        # validate that all clients with the same mission have the same coverage grids in their orbitdata
+        for mission, clients in mission_clients.items():
+            if len(clients) > 0:
+                # check same number of grids
+                assert all([len(client_coverage_grids[clients[0]]) == len(client_coverage_grids[client]) for client in clients]), \
+                    f"All clients with the same mission must have the same number of coverage grids in their orbitdata."
+
+                # check same grid values
+                for i,grid_i in enumerate(client_coverage_grids[clients[0]]):
+                    assert all([grid_i.equals(client_coverage_grids[client][i]) for client in clients]), \
+                        f"All clients with the same mission must have the same coverage grids in their orbitdata. Clients {clients} do not."
+                    
+                # check same mission duration for clients with the same mission
+                assert all([client_orbitdata[clients[0]].duration == client_orbitdata[client].duration for client in clients]), \
+                    f"All clients with the same mission must have the same mission duration. Clients {clients} do not."
+
+        # map mission durations
+        mission_durations : Dict[Mission, float] = {mission : client_orbitdata[clients[0]].duration 
+                                                    for mission,clients in mission_clients.items()}
+
+        # map missions to grids
+        mission_grids : Dict[Mission, list[pd.DataFrame]] = {mission : client_coverage_grids[clients[0]] if len(clients) > 0 else []
+                                                             for mission,clients in mission_clients.items()}
+
+        # initialize list of tasks
+        tasks : Dict[Mission, List[GenericObservationTask]] = defaultdict(list)
+
+        # for each mission and targets, generate tasks
+        for mission,grids in mission_grids.items():
+            # gather targets for default mission tasks
+            objective_targets = { objective : [] for objective in mission
+                                 # ignore non-default objectives
+                                 if not isinstance(objective, DefaultMissionObjective)
+                                 }
+            for objective in objective_targets:         
+                for req in objective:
+                    # ignore non-spatial requirements
+                    if not isinstance(req, SpatialRequirement): continue
+                    
+                    elif isinstance(req, PointTargetSpatialRequirement):
+                        raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                    
+                    elif isinstance(req, TargetListSpatialRequirement):
+                        raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
+                    
+                    elif isinstance(req, GridTargetSpatialRequirement):
+                        req_targets = [
+                            (lat, lon, grid_index, gp_index)
+                            for grid in grids
+                            for lat,lon,grid_index,gp_index in grid.values
+                            if grid_index == req.grid_index and gp_index < req.grid_size
+                        ]
+                        
+                    else: 
+                        raise TypeError(f"Unknown spatial requirement type: {type(req)}")
+                        
+                # create monitoring tasks from each location in this mission objective
+                mission_tasks = [DefaultMissionTask(objective.parameter,
+                                            location=(lat, lon, grid_index, gp_index),
+                                            mission_duration=mission_durations[mission]*24*3600,
+                                            objective=objective,
+                                            )
+                            for lat,lon,grid_index,gp_index in req_targets
+                        ]
+                
+                # add to list of known tasks
+                tasks[mission] = mission_tasks
+
+        return tasks
+
+    def _get_available_client_tasks(self, planning_horizon : Interval) -> Dict[Mission, List[GenericObservationTask]]:
+        """ get all known and active tasks for all clients within the planning horizon """
+        return {mission: [task for task in tasks
+                          if isinstance(task, GenericObservationTask)
+                          and task.availability.overlaps(planning_horizon)]
+                for mission, tasks in self.client_tasks.items()}
+
     def _calculate_client_access_opportunities(self, planning_horizon : Interval) -> Dict[str, List[ List[ Dict[str, tuple]]]]:
         """ calculates future access opportunities for all clients within the planning horizon """
         return {client : self.calculate_access_opportunities(self.client_states[client], 
                                                              planning_horizon, 
                                                              client_orbitdata)
                 for client, client_orbitdata in self.client_orbitdata.items()}
-    
-    def _collect_schedulable_client_tasks(self, available_tasks : List[GenericObservationTask], access_opportunities : dict) -> Dict:
-        return {client : self.create_tasks_from_accesses(available_tasks, 
+
+    def _collect_schedulable_client_tasks(self, 
+                                          available_tasks : Dict[Mission, List[GenericObservationTask]], 
+                                          access_opportunities : dict
+                                        ) -> Dict:
+        return {client : self.create_tasks_from_accesses(available_tasks[self.client_missions[client]], 
                                                          client_access_opportunities, 
                                                          self.cross_track_fovs[client], 
                                                          self.client_orbitdata[client])
                 for client, client_access_opportunities in access_opportunities.items()}
 
     @abstractmethod
-    def _schedule_client_observations(self, state : SimulationAgentState, schedulable_tasks: Dict[str, List[ObservationAction]], observation_history : ObservationHistory) -> Dict[str, List[ObservationAction]]:
-        """ schedules observations for all clients """
+    def _schedule_client_observations(self, 
+                                      state : SimulationAgentState, 
+                                      available_tasks : Dict[Mission, List[GenericObservationTask]],
+                                      schedulable_tasks: Dict[str, List[ObservationAction]], 
+                                      observation_history : ObservationHistory
+                                    ) -> Dict[str, List[ObservationAction]]:
+        """ schedules observations for all clients """        
     
     @runtime_tracker
     def _schedule_client_maneuvers(self, client_observations : Dict[str, List[ObservationAction]], clock_config : ClockConfig) -> Dict[str, List[ManeuverAction]]:

@@ -704,35 +704,6 @@ class SimulatedAgent(AbstractAgent):
         self.tasks : list[GenericObservationTask] = []
         self.observation_history : ObservationHistory = None
 
-    def update_tasks(self, incoming_reqs : list = [], available_only : bool = False) -> None:
-        """
-        Updates the list of tasks based on incoming requests and task availability.
-        """
-        # get tasks from incoming requests
-        event_tasks = [req.to_tasks()
-                       for req in incoming_reqs
-                       if isinstance(req, TaskRequest)]
-        
-        # flatten list of tasks
-        event_tasks_flat = list(chain.from_iterable(event_tasks))
-
-        # # filter tasks that can be performed by agent
-        # valid_event_tasks = []
-        # payload_instrument_names = {instrument_name.lower() for instrument_name in self.payload.keys()}
-        # for event_task in event_tasks_flat:
-        #     if any([instrument in event_task.objective.valid_instruments 
-        #             for instrument in payload_instrument_names]):
-        #         valid_event_tasks.append(event_task)
-
-        # add tasks to task list
-        self.tasks.extend(event_tasks_flat)
-        
-        # filter tasks to only include active tasks
-        if available_only: 
-            self.tasks = [task for task in self.tasks 
-                          if task.is_available(self.get_current_time())]
-
-
     @runtime_tracker
     async def think(self, senses : list):
 
@@ -971,7 +942,40 @@ class SimulatedAgent(AbstractAgent):
         else:
             # no processor assigned; return empty list
             return []
+    
+    def update_tasks(self, incoming_reqs : list = [], available_only : bool = False) -> None:
+        """
+        Updates the list of tasks based on incoming requests and task availability.
+        """
+        # get tasks from incoming requests
+        event_tasks = [req.to_tasks()
+                       for req in incoming_reqs
+                       if isinstance(req, TaskRequest)]
         
+        # flatten list of tasks
+        event_tasks_flat = list(chain.from_iterable(event_tasks))
+
+        # # filter tasks that can be performed by agent
+        # valid_event_tasks = []
+        # payload_instrument_names = {instrument_name.lower() for instrument_name in self.payload.keys()}
+        # for event_task in event_tasks_flat:
+        #     if any([instrument in event_task.objective.valid_instruments 
+        #             for instrument in payload_instrument_names]):
+        #         valid_event_tasks.append(event_task)
+
+        # add tasks to task list
+        self.tasks.extend(event_tasks_flat)
+        
+        # filter tasks to only include active tasks
+        if available_only: # only consider tasks that are active and available
+            # self.tasks = [task for task in self.tasks 
+            #               if task.is_available(self.get_current_time())]
+        # else: # consider all tasks that have not expired yet
+            self.tasks = [task for task in self.tasks 
+                          if not task.is_expired(self.get_current_time())]
+
+
+
     @runtime_tracker
     def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
         """

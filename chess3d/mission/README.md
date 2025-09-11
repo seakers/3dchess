@@ -1,6 +1,6 @@
 # Mission Specification: Automating science operational decisions
 
-Each agent has a **mission** $M=\{O_1, \text{...} ,O_m\}$ defined a s a set of objectives. 
+Each agent has a **mission** $M=\{O_1, \text{...} ,O_m\}$ defined as a set of objectives. 
 An **objective** is defined as a tuple $O=⟨w,param,R⟩$ where $w$ is the relative weight of that objective to the agent’s mission; $param$ is the primary geophysical parameter/data product (e.g., chlorophyll-Aconcentration); and $R=\{MR_1,...,MR_n\}$ is a set of measurement requirements. 
 
 ## Mission Requirements for Attribute Representation

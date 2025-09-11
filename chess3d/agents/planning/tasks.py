@@ -75,6 +75,11 @@ class GenericObservationTask(ABC):
         assert time >= 0, "Time must be non-negative."
         return time in self.availability    
     
+    def is_expired(self, time : float) -> bool:
+        """ Check if the task is expired at a given time. """
+        assert time >= 0, "Time must be non-negative."
+        return self.availability.is_before(time)
+    
     def to_dict(self) -> dict:
         """ Convert the task to a dictionary. """
         return {

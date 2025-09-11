@@ -9,6 +9,8 @@ import numpy as np
 class SingleSatMILP(AbstractPreplanner):
     EARLIEST = 'earliest'
     BEST = 'best'
+    REOBSERVATION = 'reobservation'
+    VALID_MODELS = [EARLIEST, BEST, REOBSERVATION]
 
     def __init__(self, 
                  objective : str, 
@@ -45,7 +47,7 @@ class SingleSatMILP(AbstractPreplanner):
 
         # Validate inputs
         assert objective in ["reward", "duration"], "Objective must be either 'reward' or 'duration'."
-        assert model in [self.EARLIEST, self.BEST], f"Model must be either '{self.EARLIEST}' or '{self.BEST}'."
+        assert model in self.VALID_MODELS, f"Model must be either '{self.EARLIEST}', '{self.BEST}' or '{self.REOBSERVATION}'."
         assert (isinstance(max_tasks, int) and max_tasks > 0) or max_tasks == np.Inf, "Max tasks must be a positive integer."
 
         # Set attributes
@@ -134,7 +136,7 @@ class SingleSatMILP(AbstractPreplanner):
                                                                             mission, 
                                                                             observation_history
                                                                         )
-                else: # self.time_selection == self.BEST
+                elif self.model == self.BEST:
                     _,x,__,tau,___ = self.__optimize_observations_schedule(curr_state, 
                                                                                 specs,
                                                                                 cross_track_fovs,
@@ -146,6 +148,21 @@ class SingleSatMILP(AbstractPreplanner):
                                                                                 observation_history
                                                                             )
                                 
+                elif self.model == self.REOBSERVATION:
+                    _,x,__,tau,___ = self.__optimize_observations_schedule_temp(curr_state, 
+                                                                                specs,
+                                                                                cross_track_fovs,
+                                                                                max_slew_rate, 
+                                                                                max_torque, 
+                                                                                orbitdata,
+                                                                                reduced_tasks, 
+                                                                                mission, 
+                                                                                observation_history,
+                                                                                # x_init
+                                                                            )
+                else:
+                    raise ValueError(f'Model `{self.model}` not recognized. Valid models are: {self.VALID_MODELS}')
+
                 # Extract observation sequence
                 d = [task.min_duration for task in reduced_tasks if isinstance(task, SpecificObservationTask)]
                 th_imgs = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in reduced_tasks if isinstance(task, SpecificObservationTask)]
@@ -487,181 +504,182 @@ class SingleSatMILP(AbstractPreplanner):
                                      observation_history : ObservationHistory,
                                      x_init : np.ndarray = None
                                      ) -> tuple:
-        
-        # Check if there are no tasks to schedule
-        if not schedulable_tasks: return None, [], [], [], np.NAN
+        raise NotImplementedError("This method is not implemented yet.")
 
-        # Add dummy task to represent initial state
-        dummy_task = SpecificObservationTask(set([]),
-                                             schedulable_tasks[0].instrument_name,
-                                             Interval(state.t,state.t), 
-                                             0.0, 
-                                             Interval(state.attitude[0],state.attitude[0]))
-        tasks : list[SpecificObservationTask] = [dummy_task]
-        tasks.extend(schedulable_tasks)
+        # # Check if there are no tasks to schedule
+        # if not schedulable_tasks: return None, [], [], [], np.NAN
 
-        # Create a new model
-        model = gp.Model("single-sat_milp_planner")
+        # # Add dummy task to represent initial state
+        # dummy_task = SpecificObservationTask(set([]),
+        #                                      schedulable_tasks[0].instrument_name,
+        #                                      Interval(state.t,state.t), 
+        #                                      0.0, 
+        #                                      Interval(state.attitude[0],state.attitude[0]))
+        # tasks : list[SpecificObservationTask] = [dummy_task]
+        # tasks.extend(schedulable_tasks)
 
-        # Set parameter to suppress output
-        model.setParam('OutputFlag', int(self._debug))
+        # # Create a new model
+        # model = gp.Model("single-sat_milp_planner")
 
-        # List tasks by their index
-        indexed_tasks = list(enumerate(tasks))
-        task_indices = [j for j,_ in indexed_tasks]
+        # # Set parameter to suppress output
+        # model.setParam('OutputFlag', int(self._debug))
 
-        # Define constants
-        rewards = np.array([self.estimate_task_value(task, 
-                                                     task.accessibility.left, 
-                                                     task.min_duration, 
-                                                     specs, cross_track_fovs, orbitdata, 
-                                                     mission, 
-                                                     observation_history)
-                            for task in tqdm(tasks,leave=False,desc='SATELLITE: Calculating task rewards')
-                            if isinstance(task,SpecificObservationTask)])
-        t_start   = np.array([task.accessibility.left-state.t for task in tasks if isinstance(task, SpecificObservationTask)])
-        t_end     = np.array([task.accessibility.right-state.t for task in tasks if isinstance(task, SpecificObservationTask)])
-        d         = np.array([task.min_duration for task in tasks if isinstance(task, SpecificObservationTask)])
-        th_imgs   = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in tasks if isinstance(task, SpecificObservationTask)])
-        slew_time = np.array([[abs(th_imgs[j_p]-th_imgs[j]) / max_slew_rate 
-                               for j in task_indices]
-                               for j_p in task_indices
-                             ])        
-        # Determine reachable transition pairs
-        Z = [(j, j_p) 
-             for j      in task_indices 
-             for j_p    in task_indices
-             if t_start[j] + d[j] + slew_time[j, j_p] <= t_end[j_p] - d[j_p] # sequence j->j' is feasible
-             and j != j_p                                                    # ensure distinct tasks
-             ] 
+        # # List tasks by their index
+        # indexed_tasks = list(enumerate(tasks))
+        # task_indices = [j for j,_ in indexed_tasks]
+
+        # # Define constants
+        # rewards = np.array([self.estimate_task_value(task, 
+        #                                              task.accessibility.left, 
+        #                                              task.min_duration, 
+        #                                              specs, cross_track_fovs, orbitdata, 
+        #                                              mission, 
+        #                                              observation_history)
+        #                     for task in tqdm(tasks,leave=False,desc='SATELLITE: Calculating task rewards')
+        #                     if isinstance(task,SpecificObservationTask)])
+        # t_start   = np.array([task.accessibility.left-state.t for task in tasks if isinstance(task, SpecificObservationTask)])
+        # t_end     = np.array([task.accessibility.right-state.t for task in tasks if isinstance(task, SpecificObservationTask)])
+        # d         = np.array([task.min_duration for task in tasks if isinstance(task, SpecificObservationTask)])
+        # th_imgs   = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in tasks if isinstance(task, SpecificObservationTask)])
+        # slew_time = np.array([[abs(th_imgs[j_p]-th_imgs[j]) / max_slew_rate 
+        #                        for j in task_indices]
+        #                        for j_p in task_indices
+        #                      ])        
+        # # Determine reachable transition pairs
+        # Z = [(j, j_p) 
+        #      for j      in task_indices 
+        #      for j_p    in task_indices
+        #      if t_start[j] + d[j] + slew_time[j, j_p] <= t_end[j_p] - d[j_p] # sequence j->j' is feasible
+        #      and j != j_p                                                    # ensure distinct tasks
+        #      ] 
                 
-        # Reduce decision space to only include reachable tasks
-        ## Precalculate preemptive pruning
-        succs = defaultdict(list)
-        for j, j_p in Z: succs[j].append(j_p)
+        # # Reduce decision space to only include reachable tasks
+        # ## Precalculate preemptive pruning
+        # succs = defaultdict(list)
+        # for j, j_p in Z: succs[j].append(j_p)
 
-        ## Determine which tasks are reachable
-        reachable_task_indeces = set([0])
-        dq = deque([0])
-        while dq:
-            # get source tasks
-            u = dq.popleft()
+        # ## Determine which tasks are reachable
+        # reachable_task_indeces = set([0])
+        # dq = deque([0])
+        # while dq:
+        #     # get source tasks
+        #     u = dq.popleft()
 
-            # get possible successor tasks
-            unvisited = list({v for v in succs.get(u, []) if v not in reachable_task_indeces})
+        #     # get possible successor tasks
+        #     unvisited = list({v for v in succs.get(u, []) if v not in reachable_task_indeces})
             
-            # add unvisited successors to reachable set and queue
-            reachable_task_indeces.update(unvisited)
-            dq.extend(unvisited)
+        #     # add unvisited successors to reachable set and queue
+        #     reachable_task_indeces.update(unvisited)
+        #     dq.extend(unvisited)
 
-        ## Convert set of reachable tasks to list
-        # reachable_task_indeces = list(reachable_task_indeces)
-        reachable_task_indeces = [j for j in task_indices if (0,j) in Z or j == 0] # Ensure all tasks directly reachable from initial task are included
-        # reachable_task_indeces = [j for j in task_indices] # Do not change reachable tasks for now
+        # ## Convert set of reachable tasks to list
+        # # reachable_task_indeces = list(reachable_task_indeces)
+        # reachable_task_indeces = [j for j in task_indices if (0,j) in Z or j == 0] # Ensure all tasks directly reachable from initial task are included
+        # # reachable_task_indeces = [j for j in task_indices] # Do not change reachable tasks for now
 
-        ## If nothing except dummy reachable, return empty plan
-        if len(reachable_task_indeces) <= 1:
-            # no feasible tasks
-            return None, np.array([], dtype=int), np.array([], dtype=int), np.array([], dtype=float), np.NAN
+        # ## If nothing except dummy reachable, return empty plan
+        # if len(reachable_task_indeces) <= 1:
+        #     # no feasible tasks
+        #     return None, np.array([], dtype=int), np.array([], dtype=int), np.array([], dtype=float), np.NAN
 
-        ## Build constants for the kept tasks
-        tasks_reachable : list[SpecificObservationTask] = [tasks[old] for old in reachable_task_indeces]
+        # ## Build constants for the kept tasks
+        # tasks_reachable : list[SpecificObservationTask] = [tasks[old] for old in reachable_task_indeces]
 
-        ## Remove unreachable tasks from Z
-        Z_reachable = [(i_old,j_old) 
-                       for i_old,j_old in Z 
-                       if i_old in reachable_task_indeces 
-                       and j_old in reachable_task_indeces
-                    ]
+        # ## Remove unreachable tasks from Z
+        # Z_reachable = [(i_old,j_old) 
+        #                for i_old,j_old in Z 
+        #                if i_old in reachable_task_indeces 
+        #                and j_old in reachable_task_indeces
+        #             ]
 
-        ## create successor and predecessor mappings for reachable tasks
-        succs_comp = defaultdict(list)
-        preds_comp = defaultdict(list)
-        for j, j_p in Z_reachable:
-            succs_comp[j].append(j_p)
-            preds_comp[j_p].append(j)
+        # ## create successor and predecessor mappings for reachable tasks
+        # succs_comp = defaultdict(list)
+        # preds_comp = defaultdict(list)
+        # for j, j_p in Z_reachable:
+        #     succs_comp[j].append(j_p)
+        #     preds_comp[j_p].append(j)
 
-        ## Calculate exclusivity
-        E_reachable = [(reachable_task_indeces[j],reachable_task_indeces[j_p]) 
-                        for j,task_j       in enumerate(tasks_reachable) 
-                        for j_p,task_j_p   in enumerate(tasks_reachable)
-                        if (task_j.is_mutually_exclusive(task_j_p)  # mutual exclusivity constraint
-                            or (
-                                t_start[j] + d[j] + slew_time[j, j_p] > t_end[j_p] - d[j_p]
-                            and  t_start[j_p] + d[j_p] + slew_time[j_p, j] > t_end[j] - d[j]
-                        ))                                          # sequence j->j' and j'->j are not feasible
-                        and reachable_task_indeces[j] < reachable_task_indeces[j_p]         # ensure distinct tasks and non-repeating pairs
-        ]
+        # ## Calculate exclusivity
+        # E_reachable = [(reachable_task_indeces[j],reachable_task_indeces[j_p]) 
+        #                 for j,task_j       in enumerate(tasks_reachable) 
+        #                 for j_p,task_j_p   in enumerate(tasks_reachable)
+        #                 if (task_j.is_mutually_exclusive(task_j_p)  # mutual exclusivity constraint
+        #                     or (
+        #                         t_start[j] + d[j] + slew_time[j, j_p] > t_end[j_p] - d[j_p]
+        #                     and  t_start[j_p] + d[j_p] + slew_time[j_p, j] > t_end[j] - d[j]
+        #                 ))                                          # sequence j->j' and j'->j are not feasible
+        #                 and reachable_task_indeces[j] < reachable_task_indeces[j_p]         # ensure distinct tasks and non-repeating pairs
+        # ]
 
-        # Create decision variables
-        x : gp.tupledict = model.addVars(reachable_task_indeces, vtype=gp.GRB.BINARY, name="x")
-        z : gp.tupledict = model.addVars(Z_reachable, vtype=gp.GRB.BINARY, name="z")
-        tau : gp.tupledict = model.addVars(reachable_task_indeces, vtype=gp.GRB.CONTINUOUS, name="tau")
-        assert all([j in x.keys() and j_p in x.keys() for j,j_p in Z_reachable])
-        assert all([j in x.keys() and j_p in x.keys() for j,j_p in E_reachable])
+        # # Create decision variables
+        # x : gp.tupledict = model.addVars(reachable_task_indeces, vtype=gp.GRB.BINARY, name="x")
+        # z : gp.tupledict = model.addVars(Z_reachable, vtype=gp.GRB.BINARY, name="z")
+        # tau : gp.tupledict = model.addVars(reachable_task_indeces, vtype=gp.GRB.CONTINUOUS, name="tau")
+        # assert all([j in x.keys() and j_p in x.keys() for j,j_p in Z_reachable])
+        # assert all([j in x.keys() and j_p in x.keys() for j,j_p in E_reachable])
 
-        ## if initial solution is provided, use it
-        if x_init is not None:
-            x_init = np.insert(x_init, 0, 1) # compensate for missing initial task
-            assert len(x_init) == len(x), "Initial solution length does not match number of tasks."
+        # ## if initial solution is provided, use it
+        # if x_init is not None:
+        #     x_init = np.insert(x_init, 0, 1) # compensate for missing initial task
+        #     assert len(x_init) == len(x), "Initial solution length does not match number of tasks."
 
-            # initialize values of `x` and `tau`
-            for j in x.keys():
-                x[j].Start = x_init[j]
-                tau[j].Start = float(t_start[j])
+        #     # initialize values of `x` and `tau`
+        #     for j in x.keys():
+        #         x[j].Start = x_init[j]
+        #         tau[j].Start = float(t_start[j])
 
-            # initialize values of `z`
-            for j,j_p in Z_reachable:
-                if x_init[j] > 0.5 and x_init[j_p] > 0.5 and j != j_p:
-                    z[j, j_p].Start = int(t_start[j] + d[j] + slew_time[j, j_p] <= t_start[j_p])
+        #     # initialize values of `z`
+        #     for j,j_p in Z_reachable:
+        #         if x_init[j] > 0.5 and x_init[j_p] > 0.5 and j != j_p:
+        #             z[j, j_p].Start = int(t_start[j] + d[j] + slew_time[j, j_p] <= t_start[j_p])
         
-        # Set objective
-        if self.objective == "reward": 
-            model.setObjective(gp.quicksum( rewards[j] * x[j] for j in reachable_task_indeces), gp.GRB.MAXIMIZE)
-        # TODO else: add alternative objectives
+        # # Set objective
+        # if self.objective == "reward": 
+        #     model.setObjective(gp.quicksum( rewards[j] * x[j] for j in reachable_task_indeces), gp.GRB.MAXIMIZE)
+        # # TODO else: add alternative objectives
   
-        # Add constraints
-        ## Always assign first observation
-        model.addConstr(x[0] == 1)
-        model.addConstr(tau[0] == 0.0)
+        # # Add constraints
+        # ## Always assign first observation
+        # model.addConstr(x[0] == 1)
+        # model.addConstr(tau[0] == 0.0)
         
-        ## Observation time and accessibility constraints
-        for j in tqdm(x.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding observation time constraints", unit='tasks', leave=False):
-            tau[j].LB = t_start[j]
-            tau[j].UB = t_end[j] - d[j]
-            # If x[j] == 0, force tau to LB (or any fixed value in the feasible interval)
-            model.addGenConstrIndicator(x[j], 0, tau[j] == float(t_start[j]))
+        # ## Observation time and accessibility constraints
+        # for j in tqdm(x.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding observation time constraints", unit='tasks', leave=False):
+        #     tau[j].LB = t_start[j]
+        #     tau[j].UB = t_end[j] - d[j]
+        #     # If x[j] == 0, force tau to LB (or any fixed value in the feasible interval)
+        #     model.addGenConstrIndicator(x[j], 0, tau[j] == float(t_start[j]))
 
-        ## Enforce exclusivity
-        for j,j_p in tqdm(E_reachable, desc=f"{state.agent_name}/PREPLANNER: Adding exclusivity constraints", unit='task pairs', leave=False):
-            model.addConstr(x[j] + x[j_p] <= 1)
+        # ## Enforce exclusivity
+        # for j,j_p in tqdm(E_reachable, desc=f"{state.agent_name}/PREPLANNER: Adding exclusivity constraints", unit='task pairs', leave=False):
+        #     model.addConstr(x[j] + x[j_p] <= 1)
 
-        ## Slew time constraints for observation task sequence j->j'
-        pairs_considered : set = set()
-        for j,j_p in tqdm(z.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding slewing constraints", unit='task pairs', leave=False):
+        # ## Slew time constraints for observation task sequence j->j'
+        # pairs_considered : set = set()
+        # for j,j_p in tqdm(z.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding slewing constraints", unit='task pairs', leave=False):
            
-            # If z[j, j_p] == 1, enforce slew constraint for task sequence j->j'
-            model.addGenConstrIndicator(z[j,j_p], 1, tau[j] + d[j] + slew_time[j,j_p] <= tau[j_p])
+        #     # If z[j, j_p] == 1, enforce slew constraint for task sequence j->j'
+        #     model.addGenConstrIndicator(z[j,j_p], 1, tau[j] + d[j] + slew_time[j,j_p] <= tau[j_p])
 
-            # enforce lower bound for z[j, j_p]
-            if (j_p, j) in z.keys(): # j->j' and j'->j sequences are both valid
-                if (min(j, j_p),max(j, j_p)) not in pairs_considered:
-                    # at least one of z[j, j_p] or z[j_p, j] must be 1 if x[j] and x[j_p] are assigned
-                    model.addConstr(x[j_p] + x[j] - 1 <= z[j, j_p] + z[j_p, j])
+        #     # enforce lower bound for z[j, j_p]
+        #     if (j_p, j) in z.keys(): # j->j' and j'->j sequences are both valid
+        #         if (min(j, j_p),max(j, j_p)) not in pairs_considered:
+        #             # at least one of z[j, j_p] or z[j_p, j] must be 1 if x[j] and x[j_p] are assigned
+        #             model.addConstr(x[j_p] + x[j] - 1 <= z[j, j_p] + z[j_p, j])
                     
-                    # enforce mutual exclusivity if (j, j_p) and (j_p, j) are both in z
-                    model.addConstr(z[j, j_p] + z[j_p, j] <= 1) 
+        #             # enforce mutual exclusivity if (j, j_p) and (j_p, j) are both in z
+        #             model.addConstr(z[j, j_p] + z[j_p, j] <= 1) 
 
-                    # add pair to considered pairs
-                    pairs_considered.add((min(j, j_p),max(j, j_p)))
+        #             # add pair to considered pairs
+        #             pairs_considered.add((min(j, j_p),max(j, j_p)))
 
-            else: # only j->j' sequence is valid
-                # x[j] and x[j_p] are mutually exclusive unless z[j,j_p] is assigned
-                model.addConstr(x[j] + x[j_p] <= 1 + z[j, j_p])                
+        #     else: # only j->j' sequence is valid
+        #         # x[j] and x[j_p] are mutually exclusive unless z[j,j_p] is assigned
+        #         model.addConstr(x[j] + x[j_p] <= 1 + z[j, j_p])                
 
-            # # enforce upper bound for z[j, j_p]; x[j] and x[j_p] must be assigned if z[j, j_p] is to be assigned
-            # model.addConstr(z[j, j_p] <= x[j])
-            # model.addConstr(z[j, j_p] <= x[j_p])
+        #     # # enforce upper bound for z[j, j_p]; x[j] and x[j_p] must be assigned if z[j, j_p] is to be assigned
+        #     # model.addConstr(z[j, j_p] <= x[j])
+        #     # model.addConstr(z[j, j_p] <= x[j_p])
 
         ## Build clique cover for exclusivity (greedy) to reduce constraints (inside a clique all pairs are mutually exclusive).
         # exclusivity_sets = defaultdict(set)
