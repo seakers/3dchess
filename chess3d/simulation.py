@@ -91,6 +91,10 @@ class Simulation:
         if uav_dict:        agent_names.extend([uav['name'] for uav in uav_dict])
         if gstation_dict:   agent_names.extend([gstation['name'] for gstation in gstation_dict])
 
+        # validate agent names
+        unique_names = set(agent_names)
+        assert len(unique_names) == len(agent_names), "All agent names must be unique."
+
         # ------------------------------------
         # get scenario name
         scenario_name = scenario_dict.get('name', 'test')
@@ -1624,8 +1628,9 @@ class SimulationElementFactory:
                     model = preplanner_dict.get('model', 'earliest').lower()
                     license_path = preplanner_dict.get('licensePath', None)
                     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
+                    max_observations = preplanner_dict.get('maxObservations', 10)
 
-                    preplanner = DealerMILPPreplanner(client_orbitdata, client_specs, client_missions, obj, model, license_path, horizon, period, max_tasks, debug, logger)
+                    preplanner = DealerMILPPreplanner(client_orbitdata, client_specs, client_missions, obj, model, license_path, horizon, period, max_tasks, max_observations, debug, logger)
 
             elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
                 # unpack preplanner parameters

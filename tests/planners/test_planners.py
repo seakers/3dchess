@@ -90,6 +90,97 @@ class TestPlanners(ABC):
         # set outdir
         orbitdata_dir = os.path.join('./tests/planners', 'orbit_data')
         if not os.path.isdir(orbitdata_dir): os.mkdir(orbitdata_dir)
+
+        # define known list of instruments
+        self.instruments = {
+                            "VNIR hyp" : {
+                                "name": "VNIR hyper",
+                                "@id" : "vnir_hyp_imager",
+                                "@type" : "VNIR",
+                                "detectorWidth": 6.6e-6,
+                                "focalLength": 3.6,  
+                                "orientation": {
+                                    "referenceFrame": "NADIR_POINTING",
+                                    "convention": "REF_FRAME_ALIGNED"
+                                },
+                                "fieldOfViewGeometry": { 
+                                    "shape": "RECTANGULAR", 
+                                    "angleHeight": 2.5, 
+                                    "angleWidth": 45.0
+                                },
+                                "maneuver" : {
+                                    "maneuverType":"SINGLE_ROLL_ONLY",
+                                    "A_rollMin": -50,
+                                    "A_rollMax": 50
+                                },
+                                "spectral_resolution" : "Hyperspectral"
+                            },
+                            "VNIR multi" : {
+                                "name": "VNIR multi",
+                                "@id" : "vnir_multi_imager",
+                                "@type" : "VNIR",
+                                "detectorWidth": 6.6e-6,
+                                "focalLength": 3.6,  
+                                "orientation": {
+                                    "referenceFrame": "NADIR_POINTING",
+                                    "convention": "REF_FRAME_ALIGNED"
+                                },
+                                "fieldOfViewGeometry": { 
+                                    "shape": "RECTANGULAR", 
+                                    "angleHeight": 2.5, 
+                                    "angleWidth": 45.0
+                                },
+                                "maneuver" : {
+                                    "maneuverType":"SINGLE_ROLL_ONLY",
+                                    "A_rollMin": -50,
+                                    "A_rollMax": 50
+                                },
+                                "spectral_resolution" : "Multispectral"
+                            },
+                            "TIR": {
+                                "name": "TIR",
+                                "@id" : "tir_imager",
+                                "@type" : "VNIR",
+                                "detectorWidth": 6.6e-6,
+                                "focalLength": 3.6,  
+                                "orientation": {
+                                    "referenceFrame": "NADIR_POINTING",
+                                    "convention": "REF_FRAME_ALIGNED"
+                                },
+                                "fieldOfViewGeometry": { 
+                                    "shape": "RECTANGULAR", 
+                                    "angleHeight": 2.5, 
+                                    "angleWidth": 45.0
+                                },
+                                "maneuver" : {
+                                    "maneuverType":"SINGLE_ROLL_ONLY",
+                                    "A_rollMin": -50,
+                                    "A_rollMax": 50
+                                },
+                                "spectral_resolution" : "Multispectral"
+                            },
+                            "Altimeter": {
+                                "name": "Altimeter",
+                                "@id" : "altimeter",
+                                "@type" : "Altimeter",
+                                "chirpBandwidth": 150e6,
+                                "pulseWidth": 50e-6,  
+                                "orientation": {
+                                    "referenceFrame": "NADIR_POINTING",
+                                    "convention": "REF_FRAME_ALIGNED"
+                                },
+                                "fieldOfViewGeometry": { 
+                                    "shape": "RECTANGULAR", 
+                                    "angleHeight": 2.5, 
+                                    "angleWidth": 45.0
+                                },
+                                "maneuver" : {
+                                    "maneuverType":"SINGLE_ROLL_ONLY",
+                                    "A_rollMin": -50,
+                                    "A_rollMax": 50
+                                }
+                            }
+                        }
         
     def setup_scenario_specs(self, 
                              duration : float, 

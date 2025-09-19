@@ -37,6 +37,7 @@ class DealerMILPPreplanner(DealerPreplanner):
                  horizon : float = np.Inf,
                  period : float = np.Inf,
                  max_tasks : float = np.Inf,
+                 max_observations : int = 10, 
                  debug : bool = False,
                  logger : logging.Logger = None):
         super().__init__(client_orbitdata, client_specs, client_missions, horizon, period, debug, logger)
@@ -57,6 +58,7 @@ class DealerMILPPreplanner(DealerPreplanner):
         self.objective = objective
         self.model = model
         self.max_tasks = max_tasks
+        self.max_observations = max_observations
 
     @runtime_tracker
     def _schedule_client_observations(self, 
@@ -66,7 +68,10 @@ class DealerMILPPreplanner(DealerPreplanner):
                                       observation_history : ObservationHistory
                                     ) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """
-
+        # short-circuit if no tasks to schedule
+        if all([len(tasks) == 0 for tasks in schedulable_tasks.values()]) or len(available_tasks) == 0:
+                return {client: [] for client in self.client_orbitdata} # no tasks to schedule
+        
         # collect max slew rates for each client
         max_slew_rates : Dict[str, float] = {client : self._collect_agility_specs(specs)[0] 
                                              for client,specs in self.client_specs.items()}
@@ -88,32 +93,31 @@ class DealerMILPPreplanner(DealerPreplanner):
                                                          self.client_states[client].attitude[0]))   # set slew angle to current angle
             client_tasks.insert(0, dummy_task)      
         
-        # index tasks and clients
-        indexed_clients = list(schedulable_tasks.keys())
-        client_indices = {client : idx for idx,client in enumerate(indexed_clients)}
+        # index task and client info 
+        instruments : list[str] = list({instrument.name 
+                                        for client_name,specs in self.client_specs.items() 
+                                        for instrument in specs.instrument})
 
-        indexed_missions = list(available_tasks.keys())
-        mission_indices = {mission : idx for idx,mission in enumerate(indexed_missions)}
+        parent_tasks : list[GenericObservationTask] = list({ptask for mission_ptasks in available_tasks.values() for ptask in mission_ptasks})
+        parent_task_indices : list[int] = [(task_idx,istr_idx) 
+                                           for task_idx,_ in enumerate(parent_tasks)
+                                           for istr_idx,_ in enumerate(instruments)]
 
-        # indexed_parent_tasks = [pt for pt in range(sum(len(available_tasks[mission]) for mission in indexed_missions))]
-        indexed_parent_tasks = [[task for task in available_tasks[mission]]
-                                for mission in indexed_missions]
-        parent_task_indices = [(mission, ptask)
-                                for mission,ptasks in enumerate(indexed_parent_tasks)
-                                for ptask,_ in enumerate(ptasks)
-                            ]
+        reobservation_indices : list[tuple[int,int]] = [(task_idx,istr_ids,obs_idx) 
+                                                        for task_idx,_ in enumerate(parent_tasks) 
+                                                        for istr_ids,_ in enumerate(instruments)
+                                                        for obs_idx in range(self.max_observations)]
 
-        indexed_tasks = [ [task for task in schedulable_tasks[client]]
-                        for client in indexed_clients]
-        task_indices = [(client,task_index) 
-                        for client,tasks in enumerate(indexed_tasks)
-                        for task_index,_ in enumerate(tasks)
-                        ]
+        indexed_clients : list[str] = list(schedulable_tasks.keys())
+        client_indices : Dict[str, int] = {client : idx for idx,client in enumerate(indexed_clients)}
+
+        indexed_missions : list[Mission] = list(available_tasks.keys())
+        mission_indices : Dict[Mission, int] = {mission : idx for idx,mission in enumerate(indexed_missions)}
+
+        task_indices : list[tuple[int,int]] = [(client_index,task_index) 
+                                                for client_index,client in enumerate(indexed_clients)
+                                                for task_index,_ in enumerate(schedulable_tasks[client])]
         
-        # TODO map parent tasks to specific tasks
-        M = np.array([[]
-                      for mission_index,ptask_index in parent_task_indices])
-
         # Create a new model
         model = gp.Model("multi-mission_milp_planner")
 
@@ -122,35 +126,40 @@ class DealerMILPPreplanner(DealerPreplanner):
 
         # Initialize constants
         t_start   = np.array([[task.accessibility.left-state.t 
-                              for task in indexed_tasks[client_index] if isinstance(task, SpecificObservationTask)]
-                              for client_index,_ in enumerate(indexed_clients)])
+                              for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for client in indexed_clients])
         t_end     = np.array([[task.accessibility.right-state.t 
-                              for task in indexed_tasks[client_index] if isinstance(task, SpecificObservationTask)]
-                              for client_index,_ in enumerate(indexed_clients)])
+                              for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for client in indexed_clients])
         d         = np.array([[task.min_duration 
-                               for task in indexed_tasks[client_index] if isinstance(task, SpecificObservationTask)]
-                               for client_index,_ in enumerate(indexed_clients)])
+                              for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for client in indexed_clients])
         th_imgs   = np.array([[np.average((task.slew_angles.left, task.slew_angles.right)) 
-                               for task in indexed_tasks[client_index] if isinstance(task, SpecificObservationTask)]
-                               for client_index,_ in enumerate(indexed_clients)])
+                              for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for client in indexed_clients])
         slew_times= np.array([[[abs(th_imgs[client_index][j_p]-th_imgs[client_index][j]) / max_slew_rates[indexed_clients[client_index]]
-                                 for j_p,_ in enumerate(indexed_tasks[client_index]) if isinstance(indexed_tasks [client_index][j_p], SpecificObservationTask)]
-                                for j,_ in enumerate(indexed_tasks[client_index]) if isinstance(indexed_tasks [client_index][j], SpecificObservationTask)]
-                                for client_index,_ in enumerate(indexed_clients)])
+                                for j_p,task_j_p in enumerate(schedulable_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)]
+                                for j,task_j in enumerate(schedulable_tasks[client]) if isinstance(task_j, SpecificObservationTask)]
+                                for client_index, client in enumerate(indexed_clients)])
         
-        Z = [(j, j_p) 
-             for client_index,_ in enumerate(indexed_clients)
-             for j,_ in enumerate(indexed_tasks[client_index]) if isinstance(indexed_tasks [client_index][j], SpecificObservationTask)
-             for j_p,_ in enumerate(indexed_tasks[client_index]) if isinstance(indexed_tasks [client_index][j_p], SpecificObservationTask)
-             if t_start[client_index,j] + d[client_index,j] + slew_times[client_index,j, j_p] \
-                <= t_end[client_index,j_p] - d[client_index,j_p]    # sequence j->j' is feasible
-             and j != j_p                                           # ensure distinct tasks          
-        ] 
+        # TODO Calculate incremental rewards for each task based on parent tasks and reobservation number 
+
+        # Map sparce arch matrix of feasible task sequences
+        A = [(s,j,j_p)
+             for s,client in enumerate(indexed_clients)
+             for j,task_j in enumerate(schedulable_tasks[client]) if isinstance(task_j, SpecificObservationTask)
+             for j_p,task_j_p in enumerate(schedulable_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)
+             if t_start[s,j] + d[s,j] + slew_times[s,j,j_p]
+                <= t_end[s,j_p] - d[s,j_p]    # sequence j->j' is feasible
+                and j != j_p                   # ensure distinct tasks
+            ]
 
         # Create decision variables
-        x : gp.tupledict = model.addVars(task_indices, vtype=gp.GRB.BINARY, name="x")
-        z : gp.tupledict = model.addVars(Z, vtype=gp.GRB.BINARY, name="z")
+        y : gp.tupledict = model.addVars(task_indices, vtype=gp.GRB.BINARY, name="y")
         tau : gp.tupledict = model.addVars(task_indices, vtype=gp.GRB.CONTINUOUS, name="tau")
+        z : gp.tupledict = model.addVars(A, vtype=gp.GRB.BINARY, name="z")
+        n : gp.tupledict = model.addVars(parent_task_indices, vtype=gp.GRB.CONTINUOUS, name="n", ub=self.max_observations)
+        r : gp.tupledict = model.addVars(reobservation_indices, vtype=gp.GRB.BINARY, name="r")
 
         # return {client: [] for client in self.client_orbitdata} # temporarily disable MILP planner
         raise NotImplementedError("Client observation scheduling not yet implemented.")

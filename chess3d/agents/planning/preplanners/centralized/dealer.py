@@ -76,7 +76,7 @@ class DealerPreplanner(AbstractPreplanner):
         self.client_states : Dict[str, SatelliteAgentState] = self.__initiate_client_states(client_orbitdata, client_specs)
         self.client_plans : Dict[str, Preplan] = {client : Preplan([], t=0.0, horizon=self.horizon, t_next=np.Inf) 
                                            for client in self.client_orbitdata}
-        self.client_tasks : Dict[Mission, List[GenericObservationTask]] = self.get_client_tasks(client_missions, client_orbitdata)
+        self.client_tasks : Dict[Mission, List[GenericObservationTask]] = self.__generate_default_client_tasks(client_missions, client_orbitdata)
 
     def _collect_client_cross_track_fovs(self, client_specs : Dict[str, Spacecraft]) -> Dict[str, Dict[str, float]]:
         """ get instrument field of view specifications from agent specs object """
@@ -239,8 +239,8 @@ class DealerPreplanner(AbstractPreplanner):
         # return plans
         return client_plans
 
-    def get_client_tasks(self, client_missions : Dict[str, Mission], client_orbitdata : Dict[str, OrbitData]) -> List[GenericObservationTask]:
-        """ get all known and active tasks for a specific client """
+    def __generate_default_client_tasks(self, client_missions : Dict[str, Mission], client_orbitdata : Dict[str, OrbitData]) -> List[GenericObservationTask]:
+        """ generate default tasks for all clients based on their missions and orbitdata """
 
         # map missions to clients
         mission_clients : Dict[Mission, list[str]] = {mission : list({client 
@@ -279,12 +279,12 @@ class DealerPreplanner(AbstractPreplanner):
         # initialize list of tasks
         tasks : Dict[Mission, List[GenericObservationTask]] = defaultdict(list)
 
-        # for each mission and targets, generate tasks
+        # for each mission and targets, generate default tasks
         for mission,grids in mission_grids.items():
             # gather targets for default mission tasks
-            objective_targets = { objective : [] for objective in mission
+            objective_targets = { objective for objective in mission
                                  # ignore non-default objectives
-                                 if not isinstance(objective, DefaultMissionObjective)
+                                 if isinstance(objective, DefaultMissionObjective)
                                  }
             for objective in objective_targets:         
                 for req in objective:

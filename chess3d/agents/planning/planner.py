@@ -171,7 +171,8 @@ class AbstractPlanner(ABC):
                                                     for off_axis_angle in th]
                         slew_angles : Interval = reduce(lambda a, b: a.intersection(b), off_axis_angles)
 
-                    if slew_angles.is_empty(): continue  # skip if no valid slew angles
+                    if slew_angles.is_empty(): 
+                        continue  # skip if no valid slew angles
 
                     # check if instrument can perform the task                    
                     if not self.can_perform_task(task, instrument_name): 
@@ -184,10 +185,12 @@ class AbstractPlanner(ABC):
                     # check if access time is enough to perform the task
                     if min_duration_req > accessibility.span():
                         # check if accessibility span is non-zero
-                        if accessibility.span() <= 0.0: continue # accessibility time is too short; skip
+                        if accessibility.span() <= 0.0: 
+                            continue # accessibility time is too short; skip
     
                         # check if available timespan longer than the minimum observation duration
-                        if accessibility.span() - min_duration_req >= threshold: continue # is over the threshold; skip 
+                        if accessibility.span() - min_duration_req >= threshold: 
+                            continue # is over the threshold; skip
 
                         # create and add schedulable task to list of schedulable tasks with a different minimum observation requirement
                         schedulable_tasks.append(SpecificObservationTask(task,

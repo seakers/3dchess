@@ -45,35 +45,25 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
         dealer_spacecraft['@id'] = 'dealer-sat_0'
         dealer_spacecraft['planner'] = self.planner_config()
         dealer_spacecraft['orbitState']['state']['inc'] = 0.0
-        dealer_spacecraft['instrument'] = {
-                                            "name": "Altimeter",
-                                            "@id" : "altimeter",
-                                            "@type" : "Altimeter",
-                                            "chirpBandwidth": 150e6,
-                                            "pulseWidth": 50e-6,  
-                                            "orientation": {
-                                                "referenceFrame": "NADIR_POINTING",
-                                                "convention": "REF_FRAME_ALIGNED"
-                                            },
-                                            "fieldOfViewGeometry": { 
-                                                "shape": "RECTANGULAR", 
-                                                "angleHeight": 2.5, 
-                                                "angleWidth": 45.0
-                                            },
-                                            "maneuver" : {
-                                                "maneuverType":"SINGLE_ROLL_ONLY",
-                                                "A_rollMin": -50,
-                                                "A_rollMax": 50
-                                            }
-                                        }
+        dealer_spacecraft['instrument'] = []
 
-        worker_spacecraft : dict = self.spacecraft_template.copy()
-        worker_spacecraft['name'] = 'worker_sat_0'
-        worker_spacecraft['@id'] = 'worker-sat_0'
-        worker_spacecraft['planner'] = {}
-        worker_spacecraft['planner']['replanner'] = {"@type": "worker"}
-        worker_spacecraft['orbitState']['state']['inc'] = 0.0
-
+        worker_spacecraft_1 : dict = self.spacecraft_template.copy()
+        worker_spacecraft_1['name'] = 'worker_sat_1'
+        worker_spacecraft_1['@id'] = 'worker-sat_1'
+        worker_spacecraft_1['planner'] = {}
+        worker_spacecraft_1['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_1['orbitState']['state']['inc'] = 0.0         # equatorial
+        worker_spacecraft_1['instrument'] = self.instruments['TIR']  # thermal infrared instrument
+        
+        worker_spacecraft_2 : dict = self.spacecraft_template.copy()
+        worker_spacecraft_2['name'] = 'worker_sat_2'
+        worker_spacecraft_2['@id'] = 'worker-sat_2'
+        worker_spacecraft_2['planner'] = {}
+        worker_spacecraft_2['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_2['orbitState']['state']['inc'] = 0.0     # equatorial
+        worker_spacecraft_2['orbitState']['state']['ta'] = 90.0     # 5 deg before worker 1
+        worker_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # hyperspectral imager instrument
+        
         # terminal welcome message
         print_welcome(f'Planner Test: `{scenario_name}`')
 
@@ -84,7 +74,9 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
                                                    connectivity,
                                                    event_name,
                                                    mission_name,
-                                                   spacecraft=[dealer_spacecraft, worker_spacecraft]
+                                                   spacecraft=[dealer_spacecraft, 
+                                                               worker_spacecraft_1,
+                                                               worker_spacecraft_2]
                                                    )
 
 
