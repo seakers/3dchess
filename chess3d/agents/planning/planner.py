@@ -424,12 +424,13 @@ class AbstractPlanner(ABC):
                             orbitdata : OrbitData,
                             mission : Mission,
                             observation_history : ObservationHistory,
-                            n_obs : int = None
+                            n_obs : int = 0,
+                            t_prev : float = None
                             ) -> float:
         """ Estimates task value based on predicted observation performance. """
 
         # estimate measurement performance metrics
-        measurement_performance_metrics : dict = self.estimate_observation_performance_metrics(task, t_img, d_img, specs, cross_track_fovs, orbitdata, observation_history, n_obs)
+        measurement_performance_metrics : dict = self.estimate_observation_performance_metrics(task, t_img, d_img, specs, cross_track_fovs, orbitdata, observation_history, n_obs, t_prev)
 
         # check if measurement performance is valid
         if measurement_performance_metrics is None: return 0.0
@@ -446,7 +447,8 @@ class AbstractPlanner(ABC):
                                          cross_track_fovs : dict,
                                          orbitdata : OrbitData,
                                          observation_history : ObservationHistory,
-                                         n_obs : int = None
+                                         n_obs : int = 0,
+                                         t_prev : float = None   
                                         ) -> dict:
 
         # get available access metrics
@@ -471,6 +473,8 @@ class AbstractPlanner(ABC):
         # get previous observation information
         prev_obs : list[ObservationTracker] = [observation_history.get_observation_history(grid_index, gp_index)
                     for *_,grid_index,gp_index in observed_locations]
+        prev_t_imgs = [obs.t_last for obs in prev_obs]
+        if t_prev is not None: prev_t_imgs.append(t_prev)
 
         # get current observation information 
         observation_performance_metrics = {col.lower() : observation_performances[col][-1] 
@@ -480,8 +484,8 @@ class AbstractPlanner(ABC):
                 "t_start" : t_img,
                 "t_end" : t_img + d_img,
                 "duration" : d_img,
-                "n_obs" : sum(obs.n_obs for obs in prev_obs) if n_obs is None else n_obs,
-                "revisit_time" : min(t_img - obs.t_last for obs in prev_obs),
+                "n_obs" : sum(obs.n_obs for obs in prev_obs) + n_obs,
+                "revisit_time" : min(t_img - t_prev for t_prev in prev_t_imgs),
                 "horizontal_spatial_resolution" : observation_performance_metrics['ground pixel cross-track resolution [m]'],
             })
 
