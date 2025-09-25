@@ -2,7 +2,6 @@ import os
 from chess3d.agents.planning.planner import *
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 
-from collections import defaultdict, deque
 import gurobipy as gp
 import numpy as np
 

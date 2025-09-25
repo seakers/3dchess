@@ -423,12 +423,13 @@ class AbstractPlanner(ABC):
                             cross_track_fovs : dict,
                             orbitdata : OrbitData,
                             mission : Mission,
-                            observation_history : ObservationHistory
+                            observation_history : ObservationHistory,
+                            n_obs : int = None
                             ) -> float:
         """ Estimates task value based on predicted observation performance. """
 
         # estimate measurement performance metrics
-        measurement_performance_metrics : dict = self.estimate_observation_performance_metrics(task, t_img, d_img, specs, cross_track_fovs, orbitdata, observation_history)
+        measurement_performance_metrics : dict = self.estimate_observation_performance_metrics(task, t_img, d_img, specs, cross_track_fovs, orbitdata, observation_history, n_obs)
 
         # check if measurement performance is valid
         if measurement_performance_metrics is None: return 0.0
@@ -444,7 +445,8 @@ class AbstractPlanner(ABC):
                                          specs : Spacecraft, 
                                          cross_track_fovs : dict,
                                          orbitdata : OrbitData,
-                                         observation_history : ObservationHistory
+                                         observation_history : ObservationHistory,
+                                         n_obs : int = None
                                         ) -> dict:
 
         # get available access metrics
@@ -453,8 +455,8 @@ class AbstractPlanner(ABC):
                                     observation_performances['lon [deg]'][i],
                                     observation_performances['grid index'][i], 
                                     observation_performances['GP index'][i]) 
-                                     for i in range(len(observation_performances['time [s]']))
-                                     })
+                                    for i in range(len(observation_performances['time [s]']))
+                                })
 
         # check if there are no valid observations for this task
         if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
@@ -478,7 +480,7 @@ class AbstractPlanner(ABC):
                 "t_start" : t_img,
                 "t_end" : t_img + d_img,
                 "duration" : d_img,
-                "n_obs" : sum(obs.n_obs for obs in prev_obs),
+                "n_obs" : sum(obs.n_obs for obs in prev_obs) if n_obs is None else n_obs,
                 "revisit_time" : min(t_img - obs.t_last for obs in prev_obs),
                 "horizontal_spatial_resolution" : observation_performance_metrics['ground pixel cross-track resolution [m]'],
             })
