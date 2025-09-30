@@ -14,7 +14,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
             "preplanner": {
                 "@type": "dealer",
                 "@mode": "milp",
-                "model": "static",
+                "model": "linear",
                 "licensePath": "./gurobi.lic",
                 # "horizon": 500,
                 "period" : 250,
