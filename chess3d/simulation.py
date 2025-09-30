@@ -1624,13 +1624,12 @@ class SimulationElementFactory:
                 if mode == 'test':                   
                     preplanner = TestingDealer(client_orbitdata, client_specs, horizon, period)
                 elif mode in ['milp', 'mixed-integer-linear-programming']:
-                    obj = preplanner_dict.get('objective', 'reward').lower()
-                    model = preplanner_dict.get('model', 'earliest').lower()
+                    model = preplanner_dict.get('model', DealerMILPPreplanner.STATIC).lower()
                     license_path = preplanner_dict.get('licensePath', None)
                     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
                     max_observations = preplanner_dict.get('maxObservations', 10)
 
-                    preplanner = DealerMILPPreplanner(client_orbitdata, client_specs, client_missions, obj, model, license_path, horizon, period, max_tasks, max_observations, debug, logger)
+                    preplanner = DealerMILPPreplanner(client_orbitdata, client_specs, client_missions, model, license_path, horizon, period, max_tasks, max_observations, debug, logger)
 
             elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
                 # unpack preplanner parameters

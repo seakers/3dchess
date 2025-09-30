@@ -350,7 +350,7 @@ class DealerPreplanner(AbstractPreplanner):
     def _schedule_client_observations(self, 
                                       state : SimulationAgentState, 
                                       available_tasks : Dict[Mission, List[GenericObservationTask]],
-                                      schedulable_tasks: Dict[str, List[ObservationAction]], 
+                                      schedulable_tasks: Dict[str, List[SpecificObservationTask]], 
                                       observation_history : ObservationHistory
                                     ) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """        

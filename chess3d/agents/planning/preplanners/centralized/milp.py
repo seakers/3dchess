@@ -1,7 +1,7 @@
 import inspect
 import logging
 import os
-from typing import Dict
+from typing import Dict, Tuple
 
 from dmas.utils import runtime_tracker
 
@@ -24,15 +24,26 @@ from chess3d.utils import Interval
 class DealerMILPPreplanner(DealerPreplanner):
     """
     A preplanner that generates plans for other agents using MILP models.
+
+    ### Models Available
+    | Model Name  | Time Assignment          | Reward Function                       | Reobs / Revisit Handling        | Notes                                      |
+    |-------------|--------------------------|---------------------------------------|---------------------------------|--------------------------------------------|
+    | Static      | Fixed at start of window | Static, precomputed per task          | None                            | Simplest, fastest; ignores dynamics        |
+    | Linear      | Any time in window       | Linear variation across access window | None                            | Captures time-dependence, no reobs         |
+    | Reobs       | Any time in window       | Depends on # of reobservations        | Reobs only                      | Tracks constellation-wide redundancy       |
+    | Revisit     | Any time in window       | Depends on reobs + revisit intervals  | Reobs + Revisit timing          | Richest model; most realistic, most costly |
+
     """
-    EARLIEST = 'earliest'
-    BEST = 'best'
+    STATIC = 'static'
+    LINEAR = 'linear'
+    REOBS = 'reobs'
+    REVISIT = 'revisit'
+    MODELS = [STATIC, LINEAR, REOBS, REVISIT]
 
     def __init__(self, 
                  client_orbitdata : Dict[str, OrbitData],
                  client_specs : Dict[str, object],
                  client_missions : Dict[str, Mission],
-                 objective : str, 
                  model : str, 
                  licence_path : str = None, 
                  horizon : float = np.Inf,
@@ -51,12 +62,10 @@ class DealerMILPPreplanner(DealerPreplanner):
             os.environ['GRB_LICENSE_FILE'] = licence_path
 
         # Validate inputs
-        assert objective in ["reward", "duration"], "Objective must be either 'reward' or 'duration'."
-        assert model in [self.EARLIEST, self.BEST], f"Model must be either '{self.EARLIEST}' or '{self.BEST}'."
+        assert model in self.MODELS, f"Model must be one of {self.MODELS}."
         assert (isinstance(max_tasks, int) and max_tasks > 0) or max_tasks == np.Inf, "Max tasks must be a positive integer."
 
         # Set attributes
-        self.objective = objective
         self.model = model
         self.max_tasks = max_tasks
         self.max_observations = max_observations
@@ -65,10 +74,11 @@ class DealerMILPPreplanner(DealerPreplanner):
     def _schedule_client_observations(self, 
                                       state : SimulationAgentState,
                                       available_tasks : Dict[Mission, List[GenericObservationTask]],
-                                      schedulable_tasks: Dict[str, List[ObservationAction]], 
+                                      schedulable_tasks: Dict[str, List[SpecificObservationTask]], 
                                       observation_history : ObservationHistory
                                     ) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """
+        
         # short-circuit if no tasks to schedule
         if all([len(tasks) == 0 for tasks in schedulable_tasks.values()]) or len(available_tasks) == 0:
                 return {client: [] for client in self.client_orbitdata} # no tasks to schedule
@@ -129,12 +139,6 @@ class DealerMILPPreplanner(DealerPreplanner):
                                                 for client_idx,client in enumerate(indexed_clients)
                                                 for task_idx,_ in enumerate(schedulable_tasks[client])]
         
-        # Create a new model
-        model = gp.Model("multi-mission_milp_planner")
-
-        # Set parameter to suppress output
-        model.setParam('OutputFlag', int(self._debug))
-
         # Initialize constants
         t_start   = np.array([[task.accessibility.left-state.t 
                               for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
@@ -153,9 +157,6 @@ class DealerMILPPreplanner(DealerPreplanner):
                                 for j,task_j in enumerate(schedulable_tasks[client]) if isinstance(task_j, SpecificObservationTask)]
                                 for client_index, client in enumerate(indexed_clients)])
         
-        # Calculate incremental rewards for each task based on parent tasks and reobservation number 
-        del_rewards : np.ndarray = self.__estimate_task_rewards(available_tasks, schedulable_tasks, parent_tasks, instruments, indexed_clients, K, observation_history)
-
         # Map sparce arch matrix of feasible task sequences
         A : list = [(s,j,j_p)
                         for s,client in enumerate(indexed_clients)
@@ -177,6 +178,198 @@ class DealerMILPPreplanner(DealerPreplanner):
                         )
                     ) and j < j_p   # avoid duplicates
                 ]
+
+        # Run optimization on each chunk and flatten results
+        if self.model == self.STATIC:
+            y,t = self.__static_milp_planner(state, schedulable_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, t_end, d, slew_times)
+        # elif self.model == self.LINEAR:
+        #     y,t = self.__linear_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
+        # elif self.model == self.REOBS:
+        #     y,t = self.__reobs_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
+        # elif self.model == self.REVISIT:
+        #     y,t = self.__revisit_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
+        else: # should never happen due to checks in `__init__`
+            raise ValueError(f"Unknown model type `{self.model}`.")
+
+        # remove dummy tasks to each client's task list
+        for client,client_tasks in schedulable_tasks.items(): client_tasks.pop(0)
+
+        # Extract and return observation sequence
+        observations = self.__extract_observation_sequence(state, schedulable_tasks, observation_history, indexed_clients, task_indices, d, th_imgs, y, t)
+
+        return observations
+
+    def __static_milp_planner(self,
+                              state : SimulationAgentState,
+                              schedulable_tasks: Dict[str, List[ObservationAction]], 
+                              observation_history : ObservationHistory,
+                              indexed_clients : List[str],
+                              task_indices : List[Tuple[int,int]],
+                              A : List[Tuple[int,int,int]],
+                              E : List[Tuple[int,int,int]],
+                              t_start : np.ndarray,
+                              t_end : np.ndarray,
+                              d : np.ndarray,
+                              slew_times : np.ndarray
+                            ) -> Tuple:
+        """ Implements a MILP planner with static time assignment and static rewards """
+
+        # Compute Rewards at start of access window
+        rewards : np.ndarray = self.__estimate_static_task_rewards(indexed_clients, schedulable_tasks, observation_history)
+
+        # Create a new model
+        model = gp.Model("multi-mission_milp_planner")
+
+        # Set parameter to suppress output
+        # model.setParam('OutputFlag', int(self._debug))
+
+        # Create decision variables
+        y : gp.tupledict = model.addVars(task_indices, vtype=gp.GRB.BINARY, name="y")
+        t : gp.tupledict = model.addVars(task_indices, vtype=gp.GRB.CONTINUOUS, name="t")
+        z : gp.tupledict = model.addVars(A, vtype=gp.GRB.BINARY, name="z")
+
+        # Set objective
+        model.setObjective(gp.quicksum( rewards[s,j] * y[s,j] for s,j in task_indices), gp.GRB.MAXIMIZE)
+
+        # Add constraints
+        ## Always assign first observation
+        for s,_ in enumerate(indexed_clients): model.addConstr(y[s,0] == 1, name=f"assign_initial_dummy_task_client{s}")
+
+        ## set unreachable tasks to y=0
+        for s,j in tqdm(y.keys(), desc=f"{state.agent_name}/PREPLANNER: Avoiding unreachable tasks", unit='tasks', leave=False):
+            if j == 0: continue # skip dummy task
+            j_p_predecessors = [j_p for a,j_p,b in A if a == s and b == j]
+            if not j_p_predecessors: model.addConstr(y[s,j] == 0, name=f"unreachable_task_client{s}_task{j}")
+
+        ## Enforce exclusivity
+        for s,j,j_p in tqdm(E, desc=f"{state.agent_name}/PREPLANNER: Adding mutual exclusivity constraints", unit='task pairs', leave=False):
+            model.addConstr(y[s,j] + y[s,j_p] <= 1)
+
+        ## Observation time and accessibility constraints
+        for s,j in tqdm(y.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding observation time constraints", unit='tasks', leave=False):
+            # Enforce task scheduling within visibility window
+            t[s,j].LB = t_start[s,j]
+            t[s,j].UB = t_end[s,j] - d[s,j]
+            
+            # force task scheduling at start of visibility window
+            model.addConstr(t[s,j] == t_start[s,j], name=f"static_time_assignment_client{s}_task{j}")
+
+        ## Task sequencing constraints
+        for s,j,j_p in tqdm(z.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding sequencing time constraints", unit='sequences', leave=False):
+             # If z[s, j, j_p] == 1, enforce slew constraint for task sequence j->j' for client s
+            model.addGenConstrIndicator(z[s,j,j_p], 1, t[s,j] + d[s,j] + slew_times[s,j,j_p] <= t[s,j_p])  
+
+        for s,j in tqdm(y.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding task sequencing constraints", unit='tasks', leave=False):
+            # Ensure that each task can have at most one successor
+            j_p_successors = [j_p for a,b,j_p in A if a == s and b == j]
+            if j == 0: # dummy task must have at least one successor
+                model.addConstr(gp.quicksum(z[s,j,j_p] for j_p in j_p_successors) <= 1,
+                                name=f"min_one_successor_client{s}_task{j}")
+            else: # 
+                model.addConstr(gp.quicksum(z[s,j,j_p] for j_p in j_p_successors) <= y[s,j],
+                                name=f"max_one_successor_client{s}_task{j}")
+
+            # Ensure that each task must have only one predecessor
+            if j > 0: # dummy task cannot have a predecessor
+                j_p_predecessors = [j_p for a,j_p,b in A if a == s and b == j]
+                model.addConstr(gp.quicksum(z[s,j_p,j] for j_p in j_p_predecessors) == y[s,j],
+                                name=f"max_one_predecessor_client{s}_task{j}")
+        
+        # Optimize model
+        model.optimize()
+
+        # Print results
+        self.__print_model_results(model)
+    
+        # Convert decision variables to arrays
+        y_array = np.array([[int(y[s,j].X) 
+                             for j,_ in enumerate(schedulable_tasks[client]) if j > 0] 
+                            for s,client in enumerate(indexed_clients)])
+        t_array = np.array([[float(t[s,j].X)+state.t 
+                             for j,_ in enumerate(schedulable_tasks[client]) if j > 0] 
+                            for s,client in enumerate(indexed_clients)])
+
+        # Return solved model
+        return y_array, t_array
+
+    def __estimate_static_task_rewards(self, 
+                                       indexed_clients: List[str], 
+                                       schedulable_tasks: Dict[str, List[ObservationAction]], 
+                                       observation_history: ObservationHistory) -> np.ndarray:
+        """ Estimate static task rewards for each client and task based on parent tasks """
+        
+        return np.array([[self.estimate_task_value(task, 
+                                                      task.accessibility.left, 
+                                                      task.min_duration, 
+                                                      self.client_specs[client], 
+                                                      self.cross_track_fovs[client], 
+                                                      self.client_orbitdata[client], 
+                                                      self.client_missions[client], 
+                                                     observation_history)
+                            for task in tqdm(schedulable_tasks[client],leave=False,desc=f'SATELLITE: Calculating task rewards for client agent `{client}`')
+                            if isinstance(task,SpecificObservationTask)]
+                            for client in indexed_clients])
+
+    def __linear_milp_planner(self,
+                              state : SimulationAgentState,
+                              available_tasks : Dict[Mission, List[GenericObservationTask]],
+                              schedulable_tasks: Dict[str, List[ObservationAction]], 
+                              observation_history : ObservationHistory
+                            ) -> Tuple:
+        """ Implements a MILP planner with linear time assignment and linear rewards """
+
+        raise NotImplementedError("MILP preplanner not yet implemented. Working on it...")
+    def __reobs_milp_planner(self,
+                              state : SimulationAgentState,
+                              available_tasks : Dict[Mission, List[GenericObservationTask]],
+                              schedulable_tasks: Dict[str, List[ObservationAction]], 
+                              observation_history : ObservationHistory
+                            ) -> Tuple:
+        """ Implements a MILP planner with static time assignment and reobservation-dependent rewards """
+        
+        raise NotImplementedError("MILP preplanner not yet implemented. Working on it...")
+    
+    def __revisit_milp_planner(self,
+                              state : SimulationAgentState,
+                              available_tasks : Dict[Mission, List[GenericObservationTask]],
+                              schedulable_tasks: Dict[str, List[ObservationAction]], 
+                              observation_history : ObservationHistory
+                            ) -> Tuple:
+        """ Implements a MILP planner with static time assignment and reobservation + revisit-dependent rewards """ 
+        raise NotImplementedError("MILP preplanner not yet implemented. Working on it...")
+
+
+    def __extract_observation_sequence(self,
+                              state : SimulationAgentState,
+                              schedulable_tasks: Dict[str, List[ObservationAction]], 
+                              observation_history : ObservationHistory,
+                              indexed_clients : List[str],
+                              task_indices : List[Tuple[int,int]],
+                              d : np.ndarray,
+                              th_imgs : np.ndarray,
+                              y : np.ndarray,
+                              t : np.ndarray
+                              ) -> Dict[str, List[ObservationAction]]:
+        """ Extracts the observation sequence from the solved MILP model """
+
+        return {client : [ObservationAction(task.instrument_name,
+                                    th_imgs[s,j],
+                                    t[s,j],
+                                    d[s,j],
+                                    task
+                                    ) 
+                                 for j,task in enumerate(schedulable_tasks[client]) if y[s,j] > 0.5]
+                        for s,client in enumerate(indexed_clients)}
+        
+        # Create a new model
+        model = gp.Model("multi-mission_milp_planner")
+
+        # Set parameter to suppress output
+        model.setParam('OutputFlag', int(self._debug))
+
+        
+        # Calculate incremental rewards for each task based on parent tasks and reobservation number 
+        del_rewards : np.ndarray = self.__estimate_task_rewards(available_tasks, schedulable_tasks, parent_tasks, instruments, indexed_clients, K, observation_history)
 
         # Create decision variables
         y : gp.tupledict = model.addVars(task_indices, vtype=gp.GRB.BINARY, name="y")
@@ -304,64 +497,61 @@ class DealerMILPPreplanner(DealerPreplanner):
                 print("Model was interrupted.")
 
             raise ValueError(f"Unexpected model status: {model.Status}")
-        
-        return
+            
+    # def __estimate_task_rewards(self,
+    #                             available_tasks : Dict[Mission, List[GenericObservationTask]],
+    #                             schedulable_tasks : Dict[str, List[ObservationAction]],
+    #                             parent_tasks : List[GenericObservationTask],
+    #                             instruments : List[str],
+    #                             indexed_clients : List[str],
+    #                             K : List[int],
+    #                             observation_history : ObservationHistory
+    #                         ) -> np.ndarray:
+    #     """ Estimate task rewards for each client and task based on parent tasks and reobservation number """
+    #     # Initialize rewards array
+    #     rewards = np.array([[0 for _ in range(K[ptask_idx])] for ptask_idx,_ in enumerate(parent_tasks)])
 
-    
-    def __estimate_task_rewards(self,
-                                available_tasks : Dict[Mission, List[GenericObservationTask]],
-                                schedulable_tasks : Dict[str, List[ObservationAction]],
-                                parent_tasks : List[GenericObservationTask],
-                                instruments : List[str],
-                                indexed_clients : List[str],
-                                K : List[int],
-                                observation_history : ObservationHistory
-                            ) -> np.ndarray:
-        """ Estimate task rewards for each client and task based on parent tasks and reobservation number """
-        # Initialize rewards array
-        rewards = np.array([[0 for _ in range(K[ptask_idx])] for ptask_idx,_ in enumerate(parent_tasks)])
+    #     # Calculate rewards for each observation
+    #     for ptask_idx, ptask in enumerate(parent_tasks):
+    #         # gather
+    #         relevant_specfic_tasks : list[tuple[str,SpecificObservationTask]] \
+    #             = sorted([(client,task)
+    #                         for client,tasks in schedulable_tasks.items() 
+    #                         for task in tasks
+    #                         if ptask in task.parent_tasks], 
+    #                     key=lambda x: x[1].accessibility.left)
 
-        # Calculate rewards for each observation
-        for ptask_idx, ptask in enumerate(parent_tasks):
-            # gather
-            relevant_specfic_tasks : list[tuple[str,SpecificObservationTask]] \
-                = sorted([(client,task)
-                            for client,tasks in schedulable_tasks.items() 
-                            for task in tasks
-                            if ptask in task.parent_tasks], 
-                        key=lambda x: x[1].accessibility.left)
-
-            for reobs_idx,(client,task) in enumerate(relevant_specfic_tasks):
-                task : SpecificObservationTask = task  # type casting for clarity
-                rewards[ptask_idx,reobs_idx] = self.estimate_task_value(task, 
-                                                                        task.accessibility.left, 
-                                                                        task.min_duration, 
-                                                                        self.client_specs[client], 
-                                                                        self.cross_track_fovs[client], 
-                                                                        self.client_orbitdata[client], 
-                                                                        self.client_missions[client], 
-                                                                        observation_history,
-                                                                        reobs_idx)
+    #         for reobs_idx,(client,task) in enumerate(relevant_specfic_tasks):
+    #             task : SpecificObservationTask = task  # type casting for clarity
+    #             rewards[ptask_idx,reobs_idx] = self.estimate_task_value(task, 
+    #                                                                     task.accessibility.left, 
+    #                                                                     task.min_duration, 
+    #                                                                     self.client_specs[client], 
+    #                                                                     self.cross_track_fovs[client], 
+    #                                                                     self.client_orbitdata[client], 
+    #                                                                     self.client_missions[client], 
+    #                                                                     observation_history,
+    #                                                                     reobs_idx)
                 
-            x = 1
+    #         x = 1
 
-        # Populate rewards array
-        # for s,client in enumerate(indexed_clients):
-        #     for j,task_j in enumerate(schedulable_tasks[client]):
-        #         if not isinstance(task_j, SpecificObservationTask): continue
-        #         for (m,mission),mission_tasks in available_tasks.items():
-        #             if task_j not in mission_tasks: continue
-        #             for p,ptask in enumerate(parent_tasks):
-        #                 if ptask not in mission_tasks: continue
-        #                 if not task_j.is_reobservation_of(ptask): continue
-        #                 for i,instr in enumerate(instruments):
-        #                     if instr != task_j.instrument_name: continue
-        #                     for o in range(self.max_observations):
-        #                         if o == 0:
-        #                             rewards[s,j,p,i,o] = task_j.base_reward
-        #                         else:
-        #                             # Example: exponential decay of reward for reobservations
-        #                             rewards[s,j,p,i,o] = task_j.base_reward * (0.5 ** o)
-        # return rewards
+    #     # Populate rewards array
+    #     # for s,client in enumerate(indexed_clients):
+    #     #     for j,task_j in enumerate(schedulable_tasks[client]):
+    #     #         if not isinstance(task_j, SpecificObservationTask): continue
+    #     #         for (m,mission),mission_tasks in available_tasks.items():
+    #     #             if task_j not in mission_tasks: continue
+    #     #             for p,ptask in enumerate(parent_tasks):
+    #     #                 if ptask not in mission_tasks: continue
+    #     #                 if not task_j.is_reobservation_of(ptask): continue
+    #     #                 for i,instr in enumerate(instruments):
+    #     #                     if instr != task_j.instrument_name: continue
+    #     #                     for o in range(self.max_observations):
+    #     #                         if o == 0:
+    #     #                             rewards[s,j,p,i,o] = task_j.base_reward
+    #     #                         else:
+    #     #                             # Example: exponential decay of reward for reobservations
+    #     #                             rewards[s,j,p,i,o] = task_j.base_reward * (0.5 ** o)
+    #     # return rewards
 
-        raise NotImplementedError("Task reward estimation not yet implemented. Working on it...")
+    #     raise NotImplementedError("Task reward estimation not yet implemented. Working on it...")
