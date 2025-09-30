@@ -7,7 +7,7 @@ class TestHeuristic(TestPlanners, unittest.TestCase):
     def planner_name(self) -> str:
         return "heuristic"
 
-    def planner_config(self) -> dict:
+    def toy_planner_config(self) -> dict:
         return {
             "preplanner": {
                 "@type": "heuristic",

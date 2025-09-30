@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import os
-import unittest
+import copy
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
@@ -277,7 +277,7 @@ class TestPlanners(ABC):
         return settings
 
     @abstractmethod
-    def planner_config(self) -> dict:
+    def toy_planner_config(self) -> dict:
         """ Returns the planner configuration for the test case. """
     
     @abstractmethod
@@ -294,8 +294,8 @@ class TestPlanners(ABC):
         event_name = 'toy_events'
         mission_name = 'toy_missions'
 
-        spacecraft : dict = self.spacecraft_template.copy()
-        spacecraft['planner'] = self.planner_config()
+        spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        spacecraft['planner'] = self.toy_planner_config()
         spacecraft['orbitState']['state']['inc'] = 0.0
 
         # terminal welcome message
@@ -337,8 +337,8 @@ class TestPlanners(ABC):
         event_name = 'lake_events_seed-1000'
         mission_name = 'lake_missions'
 
-        spacecraft : dict = self.spacecraft_template.copy()
-        spacecraft['planner'] = self.planner_config()
+        spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        spacecraft['planner'] = self.toy_planner_config()
 
         # terminal welcome message
         print_welcome(f'Planner Test: `{scenario_name}`')

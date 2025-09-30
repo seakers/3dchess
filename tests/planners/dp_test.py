@@ -6,7 +6,7 @@ class TestDynamicProgramming(TestPlanners, unittest.TestCase):
     def planner_name(self) -> str:
         return "dynamic-programming"
 
-    def planner_config(self) -> dict:
+    def toy_planner_config(self) -> dict:
         return {
             "preplanner": {
                 "@type": "dynamic",

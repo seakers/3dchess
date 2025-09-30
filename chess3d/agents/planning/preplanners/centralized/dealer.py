@@ -199,8 +199,7 @@ class DealerPreplanner(AbstractPreplanner):
         for client,observations in client_observations.items():
             assert all(isinstance(obs, ObservationAction) for obs in observations), \
                 f'All scheduled observations for client {client} must be instances of `ObservationAction`.'
-            max_slew_rate, max_torque = self._collect_agility_specs(self.client_specs[client])
-            assert self.is_observation_path_valid(self.client_states[client], observations, max_slew_rate, max_torque, self.client_specs[client]), \
+            assert self.is_observation_path_valid(self.client_states[client], observations, None, None, self.client_specs[client]), \
                 f'Generated observation path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
             
         # schedule maneuvers for each client

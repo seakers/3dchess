@@ -6,7 +6,7 @@ class TestSingleSatMILP(TestPlanners, unittest.TestCase):
     def planner_name(self) -> str:
         return "single-sat-milp"
 
-    def planner_config(self) -> dict:
+    def toy_planner_config(self) -> dict:
         return {
             "preplanner": {
                 "@type": "milp",

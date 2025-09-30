@@ -875,7 +875,6 @@ class AbstractPlanner(ABC):
                 # get pointing agility specifications                
                 if max_slew_rate is None or max_torque is None:
                     if specs is None: raise ValueError('Either `specs` or both `max_slew_rate` and `max_torque` must be provided.')
-
                     max_slew_rate, max_torque = self._collect_agility_specs(specs)
 
                 # validate agility specifications
@@ -907,7 +906,7 @@ class AbstractPlanner(ABC):
                         t_i = state.t
                         d_i = 0.0
 
-                    observation_parameters.append((th_i, t_i, d_i, th_j, t_j, d_j, max_slew_rate))
+                    observation_parameters.append((t_i, d_i, th_i, t_j, d_j, th_j, max_slew_rate))
 
                 # check if observations sequence is valid
                 if not all([self.is_observation_pair_valid(*params) for params in observation_parameters]):
@@ -924,19 +923,19 @@ class AbstractPlanner(ABC):
                 raise NotImplementedError(f'Observation path validity check for agents with state type {type(state)} not yet implemented.')
         finally:
             # DEBUG SECTION
-            pass
-            # for th_i,t_i,d_i,th_j,t_j,d_j,max_slew_rate in observation_parameters:
-            #     if not self.is_observation_pair_valid(th_i, t_i, d_i, th_j, t_j, d_j, max_slew_rate):
-            #         x = 1
+            # pass
+            for pair_idx,(t_i,d_i,th_i,t_j,d_j,th_j,max_slew_rate) in enumerate(observation_parameters):
+                if not self.is_observation_pair_valid(t_i, d_i, th_i, t_j, d_j, th_j, max_slew_rate):
+                    x = 1
 
-            # for i, obs_i in enumerate(observations):
-            #     for j, obs_j in enumerate(observations):
-            #         if obs_i.task.is_mutually_exclusive(obs_j.task) and obs_i != obs_j:
-            #             x = 1
+            for i, obs_i in enumerate(observations):
+                for j, obs_j in enumerate(observations):
+                    if obs_i.task.is_mutually_exclusive(obs_j.task) and obs_i != obs_j:
+                        x = 1
 
     def is_observation_pair_valid(self, 
-                                  th_i, t_i, d_i, 
-                                  th_j, t_j, d_j, 
+                                  t_i, d_i, th_i, 
+                                  t_j, d_j, th_j,
                                   max_slew_rate):
         # check inputs
         assert not np.isnan(th_j) and not np.isnan(th_i) # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
@@ -946,6 +945,11 @@ class AbstractPlanner(ABC):
         
         # calculate time between measuremnets
         dt_measurements = t_j - (t_i + d_i)
+
+        if (dt_measurements < dt_maneuver):
+            x = 1
+        if dt_measurements < -1e-6:
+            x = 1
 
         return ((dt_measurements > dt_maneuver 
                 or abs(dt_measurements - dt_maneuver) < 1e-6)   # there is enough time to maneuver

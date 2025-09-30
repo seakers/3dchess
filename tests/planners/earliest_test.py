@@ -7,7 +7,7 @@ class TestEarliest(TestPlanners, unittest.TestCase):
     def planner_name(self) -> str:
         return "earliest"
 
-    def planner_config(self) -> dict:
+    def toy_planner_config(self) -> dict:
         return {
             "preplanner": {
                 "@type": "earliest",
