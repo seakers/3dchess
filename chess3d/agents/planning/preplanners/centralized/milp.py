@@ -185,9 +185,9 @@ class DealerMILPPreplanner(DealerPreplanner):
         elif self.model == self.LINEAR:
             y,t,z,obj = self.__linear_milp_planner(state, schedulable_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, t_end, d, slew_times)
         elif self.model == self.REOBS:
-            y,t = self.__reobs_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
+            y,t,z,obj = self.__reobs_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
         elif self.model == self.REVISIT:
-            y,t = self.__revisit_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
+            y,t,z,obj = self.__revisit_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
 
         # DEBUGGING ----------------------------------------------
         # # validate MILP outputs
@@ -436,20 +436,14 @@ class DealerMILPPreplanner(DealerPreplanner):
                             for client in indexed_clients]
     
     def __reobs_milp_planner(self,
-                              state : SimulationAgentState,
-                              available_tasks : Dict[Mission, List[GenericObservationTask]],
-                              schedulable_tasks: Dict[str, List[ObservationAction]], 
-                              observation_history : ObservationHistory
+                              *args
                             ) -> Tuple:
         """ Implements a MILP planner with static time assignment and reobservation-dependent rewards """
         # TODO
         raise NotImplementedError("MILP preplanner not yet implemented. Working on it...")
     
     def __revisit_milp_planner(self,
-                              state : SimulationAgentState,
-                              available_tasks : Dict[Mission, List[GenericObservationTask]],
-                              schedulable_tasks: Dict[str, List[ObservationAction]], 
-                              observation_history : ObservationHistory
+                              *args
                             ) -> Tuple:
         """ Implements a MILP planner with static time assignment and reobservation + revisit-dependent rewards """ 
         # TODO

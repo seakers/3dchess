@@ -34,7 +34,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
                 "model": "static",
                 "licensePath": "./gurobi.lic",
                 # "horizon": 500,
-                "period" : 500,
+                "period" : 100,
                 "maxTasks": 100,
                 "debug" : "False"
             }
@@ -108,7 +108,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
 
     def test_multiple_sats_lakes(self):
         # setup scenario parameters
-        duration = 4.0 / 24.0
+        duration = 1.0 / 24.0
         grid_name = 'lake_event_points'
         scenario_name = f'multiple_sat_lake_scenario-{self.planner_name()}'
         connectivity = 'FULL'

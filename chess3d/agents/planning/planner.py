@@ -923,15 +923,15 @@ class AbstractPlanner(ABC):
                 raise NotImplementedError(f'Observation path validity check for agents with state type {type(state)} not yet implemented.')
         finally:
             # DEBUG SECTION
-            # pass
-            for pair_idx,(t_i,d_i,th_i,t_j,d_j,th_j,max_slew_rate) in enumerate(observation_parameters):
-                if not self.is_observation_pair_valid(t_i, d_i, th_i, t_j, d_j, th_j, max_slew_rate):
-                    x = 1
+            pass
+            # for pair_idx,(t_i,d_i,th_i,t_j,d_j,th_j,max_slew_rate) in enumerate(observation_parameters):
+            #     if not self.is_observation_pair_valid(t_i, d_i, th_i, t_j, d_j, th_j, max_slew_rate):
+            #         x = 1
 
-            for i, obs_i in enumerate(observations):
-                for j, obs_j in enumerate(observations):
-                    if obs_i.task.is_mutually_exclusive(obs_j.task) and obs_i != obs_j:
-                        x = 1
+            # for i, obs_i in enumerate(observations):
+            #     for j, obs_j in enumerate(observations):
+            #         if obs_i.task.is_mutually_exclusive(obs_j.task) and obs_i != obs_j:
+            #             x = 1
 
     def is_observation_pair_valid(self, 
                                   t_i, d_i, th_i, 

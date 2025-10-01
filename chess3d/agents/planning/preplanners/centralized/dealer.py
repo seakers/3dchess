@@ -17,13 +17,13 @@ from dmas.agents import AgentAction
 import pandas as pd
 
 from chess3d.agents import states
-from chess3d.agents.actions import BroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
+from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, Preplan
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
-from chess3d.messages import  PlanMessage
+from chess3d.messages import  AgentStateMessage, PlanMessage
 from chess3d.mission.mission import Mission
 from chess3d.mission.objectives import DefaultMissionObjective
 from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
@@ -117,11 +117,19 @@ class DealerPreplanner(AbstractPreplanner):
                         pending_actions):
         super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
 
-        # TODO check if any client broadcasted their state or plan
-        if misc_messages: # update the stored state 
-            raise NotImplementedError('Updating of internal knowledge of agent states based on state update messages not yet implemented.')
+        # check if any client broadcasted their state or plan
+        agent_state_messages : list[AgentStateMessage] = [msg for msg in misc_messages 
+                                                          if isinstance(msg, AgentStateMessage)
+                                                          and msg.src in self.client_states]
         
-        else: # else, estimate states
+        # NOTE consider plan messages from clients?
+
+        # update the stored state 
+        for agent_state_msg in agent_state_messages:
+            self.client_states[agent_state_msg.src] = SimulationAgentState.from_dict(agent_state_msg.state) 
+
+        # if no updates were received, estimate states    
+        if not agent_state_messages: 
             # propagate position and velocity
             self.client_states : Dict[str, SatelliteAgentState] = {client : client_state.propagate(state.t) 
                                                                     for client,client_state in self.client_states.items()}
@@ -221,12 +229,12 @@ class DealerPreplanner(AbstractPreplanner):
                 f'Generated maneuver path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
 
         # schedule broadcasts for each client
-        client_broadcasts : Dict[str, List[BroadcastMessageAction]] = self._schedule_client_broadcasts()
+        client_broadcasts : Dict[str, List[BroadcastMessageAction]] = self._schedule_client_broadcasts(state, orbitdata)
 
         # validate broadcast paths for each client
         for client,broadcasts in client_broadcasts.items():
-            assert all(isinstance(broadcast, BroadcastMessageAction) for broadcast in broadcasts), \
-                f'All scheduled broadcasts for client {client} must be instances of `BroadcastMessageAction`.'
+            assert all(isinstance(broadcast, (BroadcastMessageAction, FutureBroadcastMessageAction)) for broadcast in broadcasts), \
+                f'All scheduled broadcasts for client {client} must be instances of `BroadcastMessageAction` or `FutureBroadcastMessageAction`.'
             # TODO validate broadcast times if needed
 
         # combine scheduled actions to create plans for each client
@@ -365,9 +373,34 @@ class DealerPreplanner(AbstractPreplanner):
                                                 self.client_orbitdata[client])
                 for client in self.client_orbitdata }
 
-    def _schedule_client_broadcasts(self, *_) -> Dict[str, List[BroadcastMessageAction]]:
-        """ schedules broadcasts for all clients """
-        return {client: [] for client in self.client_orbitdata} # TODO implement client broadcast scheduling if needed
+    def _schedule_client_broadcasts(self, state : SimulationAgentState, orbitdata : OrbitData) -> Dict[str, List[BroadcastMessageAction]]:
+        """ 
+        Schedules broadcasts for all clients
+        
+        Instructs them to share their state with the dealer at the next possible accesses before the next planning period. 
+        """
+        # initialize dictionary to hold broadcasts for each client
+        client_broadcasts = {client: [] for client in self.client_orbitdata}
+
+        # create future state broadcast action for each client
+        for client in self.client_orbitdata:
+            # get access intervals with the client agent within the planning horizon         
+            access_intervals : list[Interval] = self._calculate_broadcast_opportunities(client, orbitdata, state.t, state.t + self.period)
+
+            # if no access opportunities in this planning horizon, skip scheduling
+            if not access_intervals: continue
+
+            # get last access interval and calculate broadcast time
+            next_access : Interval = access_intervals[-1]
+            t_broadcast : float = min(next_access.right, state.t+self.period-1e-3) # ensure broadcast happens before the end of the planning period
+
+            # generate plan message to share state
+            state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
+
+            # add to client broadcast list
+            client_broadcasts[client].append(state_msg)
+
+        return client_broadcasts
 
     def _schedule_broadcasts(self, state : SimulationAgentState, client_plans : Dict[str, Preplan], orbitdata : OrbitData):
         """

@@ -841,7 +841,7 @@ class SimulatedAgent(AbstractAgent):
         # --- FOR DEBUGGING PURPOSES ONLY: ---
         # plan_out_dict = [action.to_dict() for action in plan_out]
         # self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
-        x = 1 # breakpoint
+        # x = 1 # breakpoint
         # -------------------------------------
         
         return plan_out
@@ -998,32 +998,58 @@ class SimulatedAgent(AbstractAgent):
         self.observation_history.update(observations)
 
     @runtime_tracker
-    def get_next_actions(self, state) -> list:
+    def get_next_actions(self, state : SimulationAgentState) -> list:
         plan_out : list[AgentAction] = self.plan.get_next_actions(state.t)
 
         future_broadcasts = [action for action in plan_out
                              if isinstance(action, FutureBroadcastMessageAction)]
-        if future_broadcasts:
-            if isinstance(self.replanner, BroadcasterReplanner):
-                for action in future_broadcasts:
-                    # get index of current future broadcast message action in output plan
-                    i_action = plan_out.index(action)
-                    # get contents of future broadcast message action
-                    broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.observation_history)
-                    # replace future message action with broadcast action
-                    plan_out[i_action] = broadcast
-                    # remove future message action from current plan
-                    self.plan.remove(action, state.t)
-                    # add broadcast message action from current plan
-                    self.plan.add(broadcast, state.t)
-                
-                # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
-                x = 1 # breakpoint
-                # -------------------------------------
+        
+        for future_broadcast in future_broadcasts:
+            if future_broadcast.broadcast_type == FutureBroadcastMessageAction.STATE:
+                # create state broadcast message 
+                msg = AgentStateMessage(state.agent_name, state.agent_name, state.to_dict()) 
+
+                # create state broadcast message action
+                broadcast = BroadcastMessageAction(msg.to_dict(), future_broadcast.t_start)
+
             else:
-                # ignore unknown plan types
-                for action in future_broadcasts: plan_out.remove(action)
+                raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
+
+            # remove future message action from current plan
+            self.plan.remove(future_broadcast, state.t)
+
+            # add broadcast message action from current plan
+            self.plan.add(broadcast, state.t)
+            
+            # get index of current future broadcast message action in output plan
+            i_action = plan_out.index(future_broadcast)
+            
+            # replace future message action with broadcast action in out plan
+            plan_out[i_action] = broadcast
+
+            # if isinstance(self.replanner, BroadcasterReplanner):
+            #     for action in future_broadcasts:
+                    # # get index of current future broadcast message action in output plan
+                    # i_action = plan_out.index(action)
+                    
+            #         # get contents of future broadcast message action
+            #         broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.observation_history)
+                    
+                    # # replace future message action with broadcast action
+                    # plan_out[i_action] = broadcast
+
+                    # # remove future message action from current plan
+                    # self.plan.remove(action, state.t)
+                    # # add broadcast message action from current plan
+                    # self.plan.add(broadcast, state.t)
+                
+            #     # --- FOR DEBUGGING PURPOSES ONLY: ---
+            #     # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
+            #     x = 1 # breakpoint
+            #     # -------------------------------------
+            # else:
+            #     # ignore unknown plan types
+            #     for action in future_broadcasts: plan_out.remove(action)
 
         return plan_out
 

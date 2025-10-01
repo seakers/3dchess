@@ -8,7 +8,7 @@ from dmas.modules import ClockConfig
 from chess3d.agents.planning.replanners.replanner import AbstractReplanner
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
-from chess3d.messages import BusMessage, MeasurementRequestMessage, ObservationResultsMessage
+from chess3d.messages import AgentStateMessage, BusMessage, MeasurementRequestMessage, ObservationResultsMessage
 from chess3d.orbitdata import IntervalData, OrbitData
 from chess3d.agents.planning.plan import *
 from chess3d.agents.states import SimulationAgentState
@@ -41,11 +41,8 @@ class BroadcasterReplanner(AbstractReplanner):
                                **kwargs
                                ) -> BroadcastMessageAction:
         """  Generates a broadcast message to be sent to other agents """
-        # raise NotImplementedError('Broadcast contents generation not yet implemented for this planner.')
 
-        if broadcast_action.broadcast_type == FutureBroadcastTypes.REWARD:
-            # raise NotImplementedError('Reward broadcast not yet implemented.')
-
+        if broadcast_action.broadcast_type == FutureBroadcastMessageAction.REWARD:
             # compile latest observations from the observation history
             latest_observations : list[ObservationAction] = self.get_latest_observations(state, observation_history)
 
@@ -68,13 +65,16 @@ class BroadcasterReplanner(AbstractReplanner):
                                               )
                     for instrument, observations in indexed_observations.items()]
             
-        elif broadcast_action.broadcast_type == FutureBroadcastTypes.REQUESTS:
-
+        elif broadcast_action.broadcast_type == FutureBroadcastMessageAction.REQUESTS:
             msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
                     for req in self.known_reqs
                     if isinstance(req, TaskRequest)
                     and req.event.t_start <= state.t <= req.event.t_end
                     and req.requester == state.agent_name]
+            
+        elif broadcast_action.broadcast_type == FutureBroadcastMessageAction.STATE:
+            msgs = [AgentStateMessage(state.agent_name, state.agent_name, state.to_dict())]
+
         else:
             raise ValueError(f'`{broadcast_action.broadcast_type}` broadcast type not supported.')
 
@@ -129,8 +129,8 @@ class PeriodicBroadcasterReplanner(BroadcasterReplanner):
         self.t_next += self.period if state.t >= self.t_next else 0
 
         # add future broadcast messages to the plan
-        broadcasts = [FutureBroadcastMessageAction(FutureBroadcastTypes.REWARD,self.t_next),
-                        FutureBroadcastMessageAction(FutureBroadcastTypes.REQUESTS,self.t_next)]
+        broadcasts = [FutureBroadcastMessageAction(FutureBroadcastMessageAction.REWARD,self.t_next),
+                        FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS,self.t_next)]
         
         # return modified plan
         return Replan.from_preplan(current_plan, broadcasts, t=state.t)
@@ -199,16 +199,16 @@ class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
 
                 if np.isinf(self.period):
                     # create a future broadcast message for the next access opportunity
-                    broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REWARD, interval.left))
-                    broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REQUESTS, interval.left))
+                    broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastMessageAction.REWARD, interval.left))
+                    broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, interval.left))
                 else:
                     # create a future broadcast message for every period within the access opportunity
                     n_broadcasts = int(np.ceil((interval.right - interval.left) / self.period))
                     broadcast_times = [interval.left + i * self.period for i in range(n_broadcasts)]
                     
                     for t in broadcast_times:
-                        broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REWARD, t))
-                        broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastTypes.REQUESTS, t))
+                        broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastMessageAction.REWARD, t))
+                        broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t))
         
         # return modified plan
         return Replan.from_preplan(current_plan, broadcasts, t=state.t)

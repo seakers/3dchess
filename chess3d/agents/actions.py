@@ -16,13 +16,6 @@ class ActionTypes(Enum):
     OBSERVE = 'OBSERVE'
     REPLAN = 'REPLAN'
 
-class FutureBroadcastTypes(Enum):
-    PLAN = 'PLAN'                   # broadcast latest planner information
-    BIDS = 'BIDS'                   # broadcast latest bids for a task
-    REQUESTS = 'REQUESTS'           # broadcast latest known active measurement requests 
-    OBSERVATIONS = 'OBSERVATIONS'   # broadcast latest observation info
-    REWARD = 'REWARD'               # broadcast latest reward grid information
-
 def action_from_dict(action_type : str, **kwargs) -> AgentAction:
     if action_type == ActionTypes.IDLE.value:
         return IdleAction(**kwargs)
@@ -31,7 +24,10 @@ def action_from_dict(action_type : str, **kwargs) -> AgentAction:
     elif action_type == ActionTypes.MANEUVER.value:
         return ManeuverAction(**kwargs)
     elif action_type == ActionTypes.BROADCAST.value:
-        return BroadcastMessageAction(**kwargs)
+        if 'broadcast_type' in kwargs:
+            return FutureBroadcastMessageAction(**kwargs)
+        else:
+            return BroadcastMessageAction(**kwargs)
     elif action_type == ActionTypes.WAIT.value:
         return WaitForMessages(**kwargs)
     elif action_type == ActionTypes.OBSERVE.value:
@@ -200,13 +196,21 @@ class FutureBroadcastMessageAction(BroadcastMessageAction):
         - status (`str`): completion status of the task
         - id (`str`) : identifying number for this task in uuid format
     """
+    PLAN = 'PLAN'                   # broadcast latest planner information
+    BIDS = 'BIDS'                   # broadcast latest bids for a task
+    REQUESTS = 'REQUESTS'           # broadcast latest known active measurement requests 
+    OBSERVATIONS = 'OBSERVATIONS'   # broadcast latest observation info
+    REWARD = 'REWARD'               # broadcast latest reward grid information
+    STATE = 'STATE'                 # broadcast latest agent state information
+    FUTURE_BROADCAST_TYPES = [PLAN, BIDS, REQUESTS, OBSERVATIONS, REWARD, STATE]
         
     def __init__(self, 
                 broadcast_type : str,
                 t_start : Union[float, int],
                 status : str = 'PENDING',
                 id: str = None, 
-                **_) -> None:
+                **_
+                ) -> None:
         """
         Creates an instance of a Future Broadcast Message Action
 
@@ -216,7 +220,13 @@ class FutureBroadcastMessageAction(BroadcastMessageAction):
             - status (`str`): completion status of the task
             - id (`str`) : identifying number for this task in uuid format
         """
-        super().__init__(dict(), t_start, status, id, **_)
+        # initialize parent class
+        super().__init__(dict(), t_start, status, id)
+
+        # validate inputs
+        assert broadcast_type in self.FUTURE_BROADCAST_TYPES, f'`broadcast_type` must be one of {self.FUTURE_BROADCAST_TYPES}. Is `{broadcast_type}`.'
+    
+        # set parameters
         self.broadcast_type = broadcast_type
 
 class ObservationAction(AgentAction):
