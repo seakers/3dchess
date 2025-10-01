@@ -1,6 +1,8 @@
 import unittest
 import copy
 
+import numpy as np
+
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 from test_planners import TestPlanners
@@ -32,7 +34,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
                 "model": "static",
                 "licensePath": "./gurobi.lic",
                 # "horizon": 500,
-                "period" : 100,
+                "period" : 500,
                 "maxTasks": 100,
                 "debug" : "False"
             }
@@ -118,6 +120,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
         dealer_spacecraft['@id'] = 'dealer-sat_0'
         dealer_spacecraft['planner'] = self.lake_planner_config()
         dealer_spacecraft['instrument'] = []
+        dealer_spacecraft['orbitState']['state']['ta'] = np.average([95,93])  # between both workers
 
         worker_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         worker_spacecraft_1['name'] = 'worker_sat_1'

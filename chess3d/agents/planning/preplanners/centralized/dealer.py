@@ -150,7 +150,7 @@ class DealerPreplanner(AbstractPreplanner):
         # TODO update client agent states
 
         # generate plans for all client agents
-        client_plans : dict = self._generate_client_plans(state, specs, clock_config, orbitdata, mission, tasks, observation_history)
+        client_plans : Dict[str, Preplan] = self._generate_client_plans(state, specs, clock_config, orbitdata, mission, tasks, observation_history)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, client_plans, orbitdata)
@@ -199,6 +199,8 @@ class DealerPreplanner(AbstractPreplanner):
         for client,observations in client_observations.items():
             assert all(isinstance(obs, ObservationAction) for obs in observations), \
                 f'All scheduled observations for client {client} must be instances of `ObservationAction`.'
+            assert all(obs.task.parent_tasks for obs in observations), \
+                f'All scheduled observations for client {client} must have a parent task.'
             assert self.is_observation_path_valid(self.client_states[client], observations, None, None, self.client_specs[client]), \
                 f'Generated observation path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
             
@@ -228,12 +230,12 @@ class DealerPreplanner(AbstractPreplanner):
             # TODO validate broadcast times if needed
 
         # combine scheduled actions to create plans for each client
-        client_plans : Dict[str, List[AgentAction]] = {client: Preplan(client_observations[client], 
-                                                                       client_maneuvers[client], 
-                                                                       client_broadcasts[client], 
-                                                                       t=state.t, horizon=self.horizon, t_next=state.t+self.horizon).actions
-                                                          for client in self.client_orbitdata
-                                                        }
+        client_plans : Dict[str, Preplan] = {client: Preplan(client_observations[client], 
+                                                            client_maneuvers[client], 
+                                                            client_broadcasts[client], 
+                                                            t=state.t, horizon=self.horizon, t_next=state.t+self.horizon)
+                                                for client in self.client_orbitdata
+                                            }
 
         # return plans
         return client_plans
@@ -367,12 +369,12 @@ class DealerPreplanner(AbstractPreplanner):
         """ schedules broadcasts for all clients """
         return {client: [] for client in self.client_orbitdata} # TODO implement client broadcast scheduling if needed
 
-    def _schedule_broadcasts(self, state : SimulationAgentState, client_plans : dict, orbitdata : OrbitData):
+    def _schedule_broadcasts(self, state : SimulationAgentState, client_plans : Dict[str, Preplan], orbitdata : OrbitData):
         """
         Schedules broadcasts to be performed based on the generated plans for each agent.
         """
         broadcasts : list[BroadcastMessageAction] = []
-        for client in client_plans:
+        for client,client_plan in client_plans.items():
             # get access intervals with the client agent within the planning horizon         
             access_intervals : list[Interval] = self._calculate_broadcast_opportunities(client, orbitdata, state.t, state.t + self.period)
             
@@ -384,8 +386,7 @@ class DealerPreplanner(AbstractPreplanner):
             t_broadcast : float = max(next_access.left, state.t)
 
             # schedule broadcasts for the client
-            client_plan : list[AgentAction]= client_plans[client]
-            plan_msg = PlanMessage(state.agent_name, client, [action.to_dict() for action in client_plan], state.t)
+            plan_msg = PlanMessage(state.agent_name, client, [action.to_dict() for action in client_plan.actions], state.t)
 
             # create broadcast action
             plan_broadcast = BroadcastMessageAction(plan_msg.to_dict(), t_broadcast)

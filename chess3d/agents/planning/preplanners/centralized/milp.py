@@ -91,8 +91,8 @@ class DealerMILPPreplanner(DealerPreplanner):
 
         # add dummy tasks to each client's task list
         for client,client_tasks in schedulable_tasks.items():
-            # Check if there are no tasks to schedule
-            if not client_tasks: raise NotImplementedError("Client observation scheduling not yet implemented.")
+            # # Check if there are no tasks to schedule
+            # if not client_tasks: raise NotImplementedError("Client observation scheduling not yet implemented.")
 
             # Add dummy task to represent initial state of each client
             dummy_task = SpecificObservationTask(set(),                                             # empty set of parent tasks
@@ -181,18 +181,24 @@ class DealerMILPPreplanner(DealerPreplanner):
 
         # Run optimization on each chunk and flatten results
         if self.model == self.STATIC:
-            y,t = self.__static_milp_planner(state, schedulable_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, d, slew_times)
-        # elif self.model == self.LINEAR:
-        #     y,t = self.__linear_milp_planner(state, schedulable_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, t_end, d, slew_times)
-        # elif self.model == self.REOBS:
-        #     y,t = self.__reobs_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
-        # elif self.model == self.REVISIT:
-        #     y,t = self.__revisit_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
-        else: # should never happen due to checks in `__init__`
-            raise ValueError(f"Unknown model type `{self.model}`.")
+            y,t,z,obj = self.__static_milp_planner(state, schedulable_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, d, slew_times)
+        elif self.model == self.LINEAR:
+            y,t,z,obj = self.__linear_milp_planner(state, schedulable_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, t_end, d, slew_times)
+        elif self.model == self.REOBS:
+            y,t = self.__reobs_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
+        elif self.model == self.REVISIT:
+            y,t = self.__revisit_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
 
-        # remove dummy tasks to each client's task list
-        for client,client_tasks in schedulable_tasks.items(): client_tasks.pop(0)
+        # DEBUGGING ----------------------------------------------
+        # # validate MILP outputs
+        # y_active = {(s,j): y[s][j] for s,tasks in enumerate(y) for j,_ in enumerate(tasks) if y[s][j] > 0}
+        # t_active = {(s,j): t[s][j] for s,tasks in enumerate(y) for j,_ in enumerate(tasks) if y[s][j] > 0}
+        # slew_times_active = {(s,j,j_p): slew_times[s][j][j_p] for s,tasks in enumerate(z) for j,tasks_p in enumerate(tasks) for j_p,tasks_p in enumerate(tasks_p) if z[s][j][j_p] > 0}
+        # z_active = {(s,j,j_p): z[s][j][j_p] for s,j,j_p in slew_times_active.keys() if z[s][j][j_p] > 0}
+
+        # # validate start times
+        # assert all([t_active[s,j] + d[s][j] + slew_times_active[(s,j,j_p)] <= t_active[s,j_p] for (s,j,j_p) in slew_times_active])
+        # --------------------------------------------------------
 
         # Extract and return observation sequence
         observations : Dict[str, list[ObservationAction]] = \
@@ -250,47 +256,20 @@ class DealerMILPPreplanner(DealerPreplanner):
             model.addConstr(t[s,j] == t_start[s][j], name=f"static_time_assignment_client{s}_task{j}")
 
         ## Task sequencing constraints
-        # for s,j,j_p in tqdm(z.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding sequencing time constraints", unit='sequences', leave=False):
-        #      # If z[s, j, j_p] == 1, enforce slew constraint for task sequence j->j' for client s
-        #     model.addGenConstrIndicator(z[s,j,j_p], 1, t[s,j] + d[s,j] + slew_times[s,j,j_p] <= t[s,j_p])  
-
-        # for s,j in tqdm(y.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding task sequencing constraints", unit='tasks', leave=False):
-        #     # Ensure that each task can have at most one successor
-        #     j_p_successors = [j_p for a,b,j_p in A if a == s and b == j]
-        #     model.addConstr(gp.quicksum(z[s,j,j_p] for j_p in j_p_successors) <= y[s,j],
-        #                     name=f"max_one_successor_client{s}_task{j}")
-
-        #     # Ensure that each task must have only one predecessor
-        #     if j > 0: # dummy task cannot have a predecessor
-        #         j_p_predecessors = [j_p for a,j_p,b in A if a == s and b == j]
-        #         model.addConstr(gp.quicksum(z[s,j_p,j] for j_p in j_p_predecessors) == y[s,j],
-        #                         name=f"max_one_predecessor_client{s}_task{j}")
-
-        ## Slew time constraints for observation task sequence j->j'
-        pairs_considered : set = set()
-        for s,j,j_p in tqdm(z.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding slewing constraints", unit='task pairs', leave=False):
-           # If z[j, j_p] == 1, enforce slew constraint for task sequence j->j'
+        for s,j,j_p in tqdm(z.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding sequencing time constraints", unit='sequences', leave=False):
+             # If z[s, j, j_p] == 1, enforce slew constraint for task sequence j->j' for client s
             model.addGenConstrIndicator(z[s,j,j_p], 1, t[s,j] + d[s][j] + slew_times[s][j][j_p] <= t[s,j_p])  
 
-            # enforce lower bound for z[j, j_p]
-            if (s,j_p, j) in z.keys(): # j->j' and j'->j sequences are both valid
-                # create unique pair for considered pairs
-                unique_pair : tuple = (s,min(j, j_p),max(j, j_p))
+        for s,j in tqdm(y.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding task sequencing constraints", unit='tasks', leave=False):
+            # Ensure that each task can have at most one successor
+            j_p_successors = [j_p for a,b,j_p in A if a == s and b == j]
+            model.addConstr(gp.quicksum(z[s,j,j_p] for j_p in j_p_successors) <= y[s,j],
+                            name=f"max_one_successor_client{s}_task{j}")
 
-                # check if unique pair has been considered already
-                if unique_pair not in pairs_considered:
-                    # at least one of z[j, j_p] or z[j_p, j] must be 1 if y[s,j] and y[s,j_p] are assigned
-                    model.addConstr(y[s,j] + y[s,j_p] - 1 <= z[s,j,j_p] + z[s,j_p,j])
-                    
-                    # enforce mutual exclusivity if (s,j, j_p) and (s,j_p, j) are both in z
-                    model.addConstr(z[s,j,j_p] + z[s,j_p,j] <= 1)
-
-                    # add pair to considered pairs
-                    pairs_considered.add(unique_pair)
-
-            else: # only j->j' sequence is valid
-                # y[s,j] and y[s,j_p] are mutually exclusive unless z[s,j,j_p] is assigned
-                model.addConstr(y[s,j] + y[s,j_p] <= 1 + z[s,j,j_p])   
+            # Ensure that each task must have only one predecessor except the initial dummy task
+            j_p_predecessors = [j_p for a,j_p,b in A if a == s and b == j]
+            model.addConstr(gp.quicksum(z[s,j_p,j] for j_p in j_p_predecessors) == y[s,j] * int(j > 0),
+                            name=f"max_one_predecessor_client{s}_task{j}")  
 
         # Optimize model
         model.optimize()
@@ -300,18 +279,19 @@ class DealerMILPPreplanner(DealerPreplanner):
     
         # Convert decision variables to arrays and ignore dummy tasks
         y_array = [[int(y[s,j].X) 
-                             for j,_ in enumerate(schedulable_tasks[client]) if j > 0] 
+                             for j,_ in enumerate(schedulable_tasks[client])] 
                             for s,client in enumerate(indexed_clients)]
         t_array = [[float(t[s,j].X)+state.t 
-                             for j,_ in enumerate(schedulable_tasks[client]) if j > 0] 
+                             for j,_ in enumerate(schedulable_tasks[client])] 
                             for s,client in enumerate(indexed_clients)]
-        
-        # DEBUG
-        # TODO: there seem to be issues scheduling a sequence of tasks with a single predecesor and at most a single successor in the sequence
-        z_array = {(s,j,j_p): int(z[s,j,j_p].X) for s,j,j_p in z.keys()}
+
+        z_array = [[[int(z[s,j,j_p].X) if (s,j,j_p) in z.keys() else 0
+                              for j_p,_ in enumerate(schedulable_tasks[client])]
+                             for j,_ in enumerate(schedulable_tasks[client])]
+                            for s,client in enumerate(indexed_clients)]
 
         # Return solved model
-        return y_array, t_array
+        return y_array, t_array, z_array, model.getObjective().getValue()
 
     def __estimate_static_task_rewards(self, 
                                        indexed_clients: List[str], 
@@ -346,17 +326,15 @@ class DealerMILPPreplanner(DealerPreplanner):
                             ) -> Tuple:
         """ Implements a MILP planner with linear time assignment and linear rewards """
         
-        raise NotImplementedError("Linear MILP planner not yet implemented.")
-
         # Compute rewards at start and end of access window
-        rewards : np.ndarray = self.__estimate_linear_task_rewards(indexed_clients, schedulable_tasks, observation_history)
+        rewards : List[List[List[float]]] = self.__estimate_linear_task_rewards(indexed_clients, schedulable_tasks, observation_history)
 
         # Compute slope of linear reward function during the access windows
-        slopes : np.ndarray = np.array([[ (rewards[s,j,1]-rewards[s,j,0]) / (t_end[s,j]-t_start[s,j]) 
-                                          if t_end[s,j] > t_start[s,j] else 0.0
-                                          for j in range(rewards.shape[1])]
-                                         for s in range(rewards.shape[0])])
-        
+        slopes : List[List[List[float]]] = [[ (rewards[s][j][1]-rewards[s][j][0]) / (t_end[s][j]-t_start[s][j]) 
+                                          if t_end[s][j] > t_start[s][j] else 0.0
+                                          for j in range(len(rewards[s]))]
+                                         for s in range(len(rewards))]
+
         # Create a new model
         model = gp.Model(f"multi-mission_milp_planner_{self.model.upper()}")
 
@@ -369,7 +347,7 @@ class DealerMILPPreplanner(DealerPreplanner):
         z : gp.tupledict = model.addVars(A, vtype=gp.GRB.BINARY, name="z")
 
         # Set objective
-        model.setObjective(gp.quicksum( rewards[s,j,0] * y[s,j] + slopes[s,j] * (t[s,j] - t_start[s,j]) for s,j in task_indices), gp.GRB.MAXIMIZE)
+        model.setObjective(gp.quicksum( rewards[s][j][0] * y[s,j] + slopes[s][j] * (t[s,j] - t_start[s][j]) for s,j in task_indices), gp.GRB.MAXIMIZE)
 
         # Add constraints
         ## Always assign first observation
@@ -388,16 +366,16 @@ class DealerMILPPreplanner(DealerPreplanner):
         ## Observation time and accessibility constraints
         for s,j in tqdm(y.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding observation time constraints", unit='tasks', leave=False):
             # Enforce task scheduling within visibility window
-            t[s,j].LB = t_start[s,j]
-            t[s,j].UB = t_end[s,j] - d[s,j]
-            
+            t[s,j].LB = t_start[s][j]
+            t[s,j].UB = t_end[s][j] - d[s][j]
+
             # If task is not assigned (y[s,j] == 0), force tau to LB (or any fixed value in the feasible interval)
-            model.addGenConstrIndicator(y[s,j], 0, t[s,j] == float(t_start[s,j]))
+            model.addGenConstrIndicator(y[s,j], 0, t[s,j] == float(t_start[s][j]))
 
         ## Task sequencing constraints
         for s,j,j_p in tqdm(z.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding sequencing time constraints", unit='sequences', leave=False):
              # If z[s, j, j_p] == 1, enforce slew constraint for task sequence j->j' for client s
-            model.addGenConstrIndicator(z[s,j,j_p], 1, t[s,j] + d[s,j] + slew_times[s,j,j_p] <= t[s,j_p])  
+            model.addGenConstrIndicator(z[s,j,j_p], 1, t[s,j] + d[s][j] + slew_times[s][j][j_p] <= t[s,j_p])  
 
         for s,j in tqdm(y.keys(), desc=f"{state.agent_name}/PREPLANNER: Adding task sequencing constraints", unit='tasks', leave=False):
             # Ensure that each task can have at most one successor
@@ -405,11 +383,10 @@ class DealerMILPPreplanner(DealerPreplanner):
             model.addConstr(gp.quicksum(z[s,j,j_p] for j_p in j_p_successors) <= y[s,j],
                             name=f"max_one_successor_client{s}_task{j}")
 
-            # Ensure that each task must have only one predecessor
-            if j > 0: # dummy task cannot have a predecessor
-                j_p_predecessors = [j_p for a,j_p,b in A if a == s and b == j]
-                model.addConstr(gp.quicksum(z[s,j_p,j] for j_p in j_p_predecessors) == y[s,j],
-                                name=f"max_one_predecessor_client{s}_task{j}")
+            # Ensure that each task must have only one predecessor except the initial dummy task
+            j_p_predecessors = [j_p for a,j_p,b in A if a == s and b == j]
+            model.addConstr(gp.quicksum(z[s,j_p,j] for j_p in j_p_predecessors) == y[s,j] * int(j > 0),
+                            name=f"max_one_predecessor_client{s}_task{j}")  
         
         # Optimize model
         model.optimize()
@@ -418,23 +395,27 @@ class DealerMILPPreplanner(DealerPreplanner):
         self.__print_model_results(model)
     
         # Convert decision variables to arrays
-        y_array = np.array([[int(y[s,j].X) 
-                             for j,_ in enumerate(schedulable_tasks[client]) if j > 0] 
-                            for s,client in enumerate(indexed_clients)])
-        t_array = np.array([[float(t[s,j].X)+state.t 
-                             for j,_ in enumerate(schedulable_tasks[client]) if j > 0] 
-                            for s,client in enumerate(indexed_clients)])
+        y_array = [[int(y[s,j].X) 
+                        for j,_ in enumerate(schedulable_tasks[client])] 
+                    for s,client in enumerate(indexed_clients)]
+        t_array = [[float(t[s,j].X)+state.t 
+                        for j,_ in enumerate(schedulable_tasks[client])] 
+                    for s,client in enumerate(indexed_clients)]
+        z_array = [[[int(z[s,j,j_p].X) if (s,j,j_p) in z.keys() else 0
+                        for j_p,_ in enumerate(schedulable_tasks[client])]
+                      for j,_ in enumerate(schedulable_tasks[client])]
+                    for s,client in enumerate(indexed_clients)]
 
         # Return solved model
-        return y_array, t_array
+        return y_array, t_array, z_array, model.getObjective().getValue()
 
     def __estimate_linear_task_rewards(self, 
                                        indexed_clients: List[str], 
                                        schedulable_tasks: Dict[str, List[ObservationAction]], 
-                                       observation_history: ObservationHistory) -> np.ndarray:
+                                       observation_history: ObservationHistory) -> List[List[List[float]]]:
         """ Estimate linear task rewards for each client and task based on parent tasks """
 
-        return np.array([[[self.estimate_task_value(task, 
+        return [[[self.estimate_task_value(task, 
                                                       task.accessibility.left, 
                                                       task.min_duration, 
                                                       self.client_specs[client], 
@@ -452,7 +433,7 @@ class DealerMILPPreplanner(DealerPreplanner):
                                                      observation_history)]
                             for task in tqdm(schedulable_tasks[client],leave=False,desc=f'SATELLITE: Calculating task rewards for client agent `{client}`')
                             if isinstance(task,SpecificObservationTask)]
-                            for client in indexed_clients])
+                            for client in indexed_clients]
     
     def __reobs_milp_planner(self,
                               state : SimulationAgentState,
@@ -461,7 +442,7 @@ class DealerMILPPreplanner(DealerPreplanner):
                               observation_history : ObservationHistory
                             ) -> Tuple:
         """ Implements a MILP planner with static time assignment and reobservation-dependent rewards """
-        
+        # TODO
         raise NotImplementedError("MILP preplanner not yet implemented. Working on it...")
     
     def __revisit_milp_planner(self,
@@ -471,8 +452,8 @@ class DealerMILPPreplanner(DealerPreplanner):
                               observation_history : ObservationHistory
                             ) -> Tuple:
         """ Implements a MILP planner with static time assignment and reobservation + revisit-dependent rewards """ 
+        # TODO
         raise NotImplementedError("MILP preplanner not yet implemented. Working on it...")
-
 
     def __extract_observation_sequence(self,
                               state : SimulationAgentState,
@@ -493,7 +474,7 @@ class DealerMILPPreplanner(DealerPreplanner):
                                     task
                                     ) 
                                  for j,task in enumerate(schedulable_tasks[client]) 
-                                 if y[s][j] > 0.5
+                                 if y[s][j] > 0.5 and j > 0 # only include assigned tasks and ignore dummy tasks
                             ], key=lambda action: action.t_start)
                         for s,client in enumerate(indexed_clients)}
         

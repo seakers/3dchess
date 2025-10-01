@@ -174,7 +174,7 @@ class DefaultMissionTask(GenericObservationTask):
 
         return cls(
             parameter=task_dict['parameter'],
-            location=task_dict['location'][0],
+            location=tuple(task_dict['location'][0]),
             mission_duration=task_dict['availability']['right'],
             priority=task_dict.get('priority', 1.0),
             objective=objective,

@@ -37,6 +37,10 @@ class WorkerReplanner(AbstractReplanner):
         return current_plan.t < self.plan_message.t_plan if self.plan_message else False
 
     def generate_plan(self, state, *_):
+        # DEBUG break
+        if self.plan_message is not None:
+            x = 1  # breakpoint
+
         # get actions from latest plan message
         actions : list[AgentAction] = [action_from_dict(**action) 
                                        for action in self.plan_message.plan]
@@ -46,6 +50,9 @@ class WorkerReplanner(AbstractReplanner):
 
         # create a plan from plan message actions
         self.plan = Replan(actions, t=self.plan_message.t_plan)
+
+        # remove the plan message after processing
+        self.plan_message = None
 
         # return the generated plan
         return self.plan.copy()
