@@ -124,6 +124,8 @@ class DealerPreplanner(AbstractPreplanner):
         
         # NOTE consider plan messages from clients?
 
+        # TODO update observation history if needed
+
         # update the stored state 
         for agent_state_msg in agent_state_messages:
             self.client_states[agent_state_msg.src] = SimulationAgentState.from_dict(agent_state_msg.state) 
@@ -154,9 +156,6 @@ class DealerPreplanner(AbstractPreplanner):
                         tasks : list,
                         observation_history : ObservationHistory,
                     ) -> Plan:
-
-        # TODO update client agent states
-
         # generate plans for all client agents
         client_plans : Dict[str, Preplan] = self._generate_client_plans(state, specs, clock_config, orbitdata, mission, tasks, observation_history)
 
@@ -396,6 +395,8 @@ class DealerPreplanner(AbstractPreplanner):
 
             # generate plan message to share state
             state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
+
+            # TODO generate plan message to share completed observations
 
             # add to client broadcast list
             client_broadcasts[client].append(state_msg)
