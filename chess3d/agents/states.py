@@ -453,7 +453,7 @@ class SatelliteAgentState(SimulationAgentState):
                 # estimate completion time 
                 else:
                     dt = (action.final_attitude[i] - self.attitude[i]) / self.attitude_rates[i]
-                    assert dt >= 0.0
+                    assert dt >= 0.0, f"negative time-step of {dt} [s] estimated for attitude axis {i}."
 
                     dts.append(dt)                
 

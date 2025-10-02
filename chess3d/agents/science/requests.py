@@ -46,7 +46,7 @@ class TaskRequest:
         
         # initialize attributes
         self.requester : str = requester
-        self.event : GeophysicalEvent= event
+        self.event : GeophysicalEvent = event
         self.mission_name : str = mission_name
         self.objectives : list[EventDrivenObjective] = [objective for objective in objectives]
         self.t_req : float = t_req

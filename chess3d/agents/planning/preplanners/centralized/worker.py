@@ -22,7 +22,7 @@ class WorkerReplanner(AbstractReplanner):
         if misc_messages or relay_messages:
             x = 1 # breakpoint
 
-        # get the plan messages for this agent
+        # check if there are any plan messages for this agent
         plan_messages = {msg for msg in misc_messages 
                          if isinstance(msg, PlanMessage)
                          and msg.agent_name == state.agent_name}
@@ -36,11 +36,7 @@ class WorkerReplanner(AbstractReplanner):
         # only replans if there is a plan message
         return current_plan.t < self.plan_message.t_plan if self.plan_message else False
 
-    def generate_plan(self, state, *_):
-        # DEBUG break
-        if self.plan_message is not None:
-            x = 1  # breakpoint
-
+    def generate_plan(self, *_):
         # get actions from latest plan message
         actions : list[AgentAction] = [action_from_dict(**action) 
                                        for action in self.plan_message.plan]
@@ -51,13 +47,13 @@ class WorkerReplanner(AbstractReplanner):
         # create a plan from plan message actions
         self.plan = Replan(actions, t=self.plan_message.t_plan)
 
-        # remove the plan message after processing
-        self.plan_message = None
+        # # remove the plan message after processing
+        # self.plan_message = None
 
         # return the generated plan
         return self.plan.copy()
 
-    def _schedule_observations(self, state, specs, clock_config, orbitdata, schedulable_tasks, observation_history):
+    def _schedule_observations(self, *_):
         """ Boilerplate method for scheduling observations."""
         # does not schedule observations for parent agent
         return []

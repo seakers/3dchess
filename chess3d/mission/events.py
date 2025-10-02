@@ -68,6 +68,10 @@ class GeophysicalEvent:
     def is_future(self, t: float) -> bool:
         """Check if the event is in the future at time t."""
         return t < self.t_start
+    
+    def is_available(self, t: float) -> bool:
+        """Check if the event is available for observation at time t."""
+        return self.is_active(t) or self.is_future(t)
 
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the event to a dictionary."""

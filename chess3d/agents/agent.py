@@ -1,6 +1,7 @@
 from itertools import chain
 import logging
 import os
+from typing import List
 from dmas.messages import SimulationMessage
 import numpy as np
 import pandas as pd
@@ -702,6 +703,7 @@ class SimulatedAgent(AbstractAgent):
         self.orbitdata = None
         self.plan_history = []
         self.tasks : list[GenericObservationTask] = []
+        self.known_reqs : set[TaskRequest] = set() # TODO do we need this or is the task list enough?
         self.observation_history : ObservationHistory = None
 
     @runtime_tracker
@@ -711,14 +713,19 @@ class SimulatedAgent(AbstractAgent):
         relay_messages, incoming_reqs, observations, \
             states, action_statuses, misc_messages = self._read_incoming_messages(senses)
         incoming_reqs : list[TaskRequest]
-        states : list[SimulationAgentState]
+        states : list[AgentStateMessage]
 
         # check action completion
         completed_actions, aborted_actions, pending_actions \
             = self._check_action_completion(action_statuses)
 
         # extract latest state from senses
+        states = [a for a in states if a.state['agent_name'] == self.get_element_name()]
         states.sort(key = lambda a : a.state['t'])
+
+        if len(states) > 1:
+            x = 1 # breakpoint
+
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
         # update plan completion
@@ -742,6 +749,9 @@ class SimulatedAgent(AbstractAgent):
 
         # update tasks from incoming requests
         self.update_tasks(incoming_reqs=incoming_reqs)
+
+        # update known requests
+        self.update_reqs(incoming_reqs=incoming_reqs)
 
         # --- Create plan ---
         if self.preplanner is not None:
@@ -974,7 +984,16 @@ class SimulatedAgent(AbstractAgent):
             self.tasks = [task for task in self.tasks 
                           if not task.is_expired(self.get_current_time())]
 
+    def update_reqs(self, incoming_reqs : list = [], available_only : bool = True) -> None:
+        """ Updates the known requests based on incoming requests and request availability. """
+        
+        # update known requests
+        self.known_reqs.update(incoming_reqs)
 
+        # check for request availability
+        if available_only:
+            self.known_reqs = {req for req in self.known_reqs 
+                               if req.event.is_available(self.get_current_time())}
 
     @runtime_tracker
     def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
@@ -998,60 +1017,104 @@ class SimulatedAgent(AbstractAgent):
         self.observation_history.update(observations)
 
     @runtime_tracker
-    def get_next_actions(self, state : SimulationAgentState) -> list:
-        plan_out : list[AgentAction] = self.plan.get_next_actions(state.t)
+    def get_next_actions(self, state : SimulationAgentState) -> List[AgentAction]:
+        # get list of next actions from plan
+        plan_out : List[AgentAction] = self.plan.get_next_actions(state.t)
 
+        # check for future broadcast message actions in plan
         future_broadcasts = [action for action in plan_out
                              if isinstance(action, FutureBroadcastMessageAction)]
         
+        # no future broadcasts; return plan as is
+        if not future_broadcasts: return plan_out
+
+        # compile broadcast messages
+        msgs : list[SimulationMessage] = []
         for future_broadcast in future_broadcasts:
+            
+            # create appropriate broadcast message
             if future_broadcast.broadcast_type == FutureBroadcastMessageAction.STATE:
-                # create state broadcast message 
-                msg = AgentStateMessage(state.agent_name, state.agent_name, state.to_dict()) 
+                msgs.append(AgentStateMessage(state.agent_name, state.agent_name, state.to_dict()))
+                
+            elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.OBSERVATIONS:
+                # compile latest observations from the observation history
+                latest_observations : List[ObservationAction] = self.get_latest_observations(state)
 
-                # create state broadcast message action
-                broadcast = BroadcastMessageAction(msg.to_dict(), future_broadcast.t_start)
+                # index by instrument name
+                instruments_used : set = {latest_observation['instrument'].lower() 
+                                        for latest_observation in latest_observations}
+                indexed_observations = {instrument_used: [latest_observation for latest_observation in latest_observations
+                                                        if latest_observation['instrument'].lower() == instrument_used]
+                                        for instrument_used in instruments_used}
 
-            else:
+                # create ObservationResultsMessage for each instrument
+                msgs.extend([ObservationResultsMessage(state.agent_name, 
+                                                state.agent_name, 
+                                                state.to_dict(), 
+                                                {}, 
+                                                instrument,
+                                                state.t,
+                                                state.t,
+                                                observations
+                                                )
+                        for instrument, observations in indexed_observations.items()])
+                
+                # msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+
+            elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.REQUESTS:
+                msgs.extend([MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+                        for req in self.known_reqs
+                        if req.event.is_available(state.t)     # only active or future events
+                        and req.requester == state.agent_name   # only requests created by myself
+                        ])
+
+            else: # unsupported broadcast type
                 raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
+        
+        # create bus message if there are messages to broadcast
+        msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
 
-            # remove future message action from current plan
+        # create state broadcast message action
+        broadcast = BroadcastMessageAction(msg.to_dict(), future_broadcast.t_start)
+
+        # remove future message action from current plan
+        for future_broadcast in future_broadcasts: 
             self.plan.remove(future_broadcast, state.t)
 
-            # add broadcast message action from current plan
-            self.plan.add(broadcast, state.t)
-            
-            # get index of current future broadcast message action in output plan
-            i_action = plan_out.index(future_broadcast)
-            
-            # replace future message action with broadcast action in out plan
-            plan_out[i_action] = broadcast
+        # add broadcast message action from current plan
+        self.plan.add(broadcast, state.t)
 
-            # if isinstance(self.replanner, BroadcasterReplanner):
-            #     for action in future_broadcasts:
-                    # # get index of current future broadcast message action in output plan
-                    # i_action = plan_out.index(action)
-                    
-            #         # get contents of future broadcast message action
-            #         broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.observation_history)
-                    
-                    # # replace future message action with broadcast action
-                    # plan_out[i_action] = broadcast
+        # get indices of future broadcast message actions in output plan
+        future_broadcast_indices = [i for i, action in enumerate(plan_out) if action in future_broadcasts]
 
-                    # # remove future message action from current plan
-                    # self.plan.remove(action, state.t)
-                    # # add broadcast message action from current plan
-                    # self.plan.add(broadcast, state.t)
-                
-            #     # --- FOR DEBUGGING PURPOSES ONLY: ---
-            #     # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
-            #     x = 1 # breakpoint
-            #     # -------------------------------------
-            # else:
-            #     # ignore unknown plan types
-            #     for action in future_broadcasts: plan_out.remove(action)
+        # remove future message actions from output plan
+        for i in sorted(future_broadcast_indices, reverse=True): plan_out.pop(i)
+        
+        # replace future message action with broadcast action in out plan
+        plan_out.insert(min(future_broadcast_indices), broadcast)    
+
+        # --- FOR DEBUGGING PURPOSES ONLY: ---
+        # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
+        x = 1 # breakpoint
+        # -------------------------------------
 
         return plan_out
+    
+    def get_latest_observations(self, 
+                                state : SimulationAgentState,
+                                latest_plan_only : bool = True
+                                ) -> List[dict]:
+        return [observation_tracker.latest_observation
+                 for _,grid in self.observation_history.history.items()
+                for _, observation_tracker in grid.items()
+                if isinstance(observation_tracker, ObservationTracker)
+                # check if there is a latest observation
+                and observation_tracker.latest_observation is not None
+                # only include observations performed by myself 
+                and observation_tracker.latest_observation['agent name'] == state.agent_name
+                # only include observations performed for the current plan
+                and self.plan.t * int(latest_plan_only) <= observation_tracker.latest_observation['t_end'] <= state.t
+            ]
 
     def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
         try:

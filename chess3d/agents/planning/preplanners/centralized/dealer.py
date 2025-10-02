@@ -93,15 +93,14 @@ class DealerPreplanner(AbstractPreplanner):
                                                                                     client_orbitdata[client_name].time_step)
                                                    for client_name in client_orbitdata
                                                 }
-        # check for cases in which the orbitstate does not match the simulation epoch
+        # TODO adjust/propagate states to simulation start time if the simulation epoch is different than the orbitdata/specs epoch
+        # TEMP SOLUTION check for cases in which the orbitstate does not match the simulation epoch
         for client_name,state in states.items():
             assert client_orbitdata[client_name].epoch == state.orbit_state['date']['jd'], \
                 f"Epoch mismatch between client '{client_name}' orbitdata ({client_orbitdata[client_name].epoch}) and specs ({state.orbit_state['date']['jd']})."
-            # TODO assert that both epoch times are in the same format
-            # assert client_orbitdata[client_name].epoch_type == state.orbit_state['date']['@type'], \
+            # TODO check for epoch type mismatch if needed
+            # assert client_orbitdata[client_name].epoch_type.lower() == state.orbit_state['date']['@type'].lower(), \
             #     f"Epoch type mismatch between client '{client_name}' orbitdata ({client_orbitdata[client_name].epoch_type}) and specs ({state.orbit_state['date']['@type']})."
-
-        #TODO adjust/propagate states to simulation start time if needed
 
         # return states
         return states
@@ -234,7 +233,6 @@ class DealerPreplanner(AbstractPreplanner):
         for client,broadcasts in client_broadcasts.items():
             assert all(isinstance(broadcast, (BroadcastMessageAction, FutureBroadcastMessageAction)) for broadcast in broadcasts), \
                 f'All scheduled broadcasts for client {client} must be instances of `BroadcastMessageAction` or `FutureBroadcastMessageAction`.'
-            # TODO validate broadcast times if needed
 
         # combine scheduled actions to create plans for each client
         client_plans : Dict[str, Preplan] = {client: Preplan(client_observations[client], 
@@ -396,10 +394,14 @@ class DealerPreplanner(AbstractPreplanner):
             # generate plan message to share state
             state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
 
-            # TODO generate plan message to share completed observations
+            # generate plan message to share completed observations
+            observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+
+            # generate plan message to share any task requests generated
+            task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
 
             # add to client broadcast list
-            client_broadcasts[client].append(state_msg)
+            client_broadcasts[client].extend([state_msg, observations_msg, task_requests_msg])
 
         return client_broadcasts
 
@@ -441,8 +443,8 @@ class DealerPreplanner(AbstractPreplanner):
         # compile and sort access intervals for the desired planning horizon
         intervals : list[Interval] = sorted([Interval(max(t_start, t_access_start),min(t_end, t_access_end))
                                                     for t_access_start,t_access_end,_ in data.data
-                                                    if (t_start <= t_access_start <= t_end
-                                                         or t_start <= t_access_end <= t_end)])
+                                                    if (t_access_start <= t_end
+                                                         and t_start <= t_access_end)])
 
         # return access intervals
         return intervals if intervals else []

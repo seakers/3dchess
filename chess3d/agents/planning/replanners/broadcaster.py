@@ -33,63 +33,6 @@ class BroadcasterReplanner(AbstractReplanner):
                                 completed_actions, 
                                 aborted_actions, 
                                 pending_actions)
-        
-    def get_broadcast_contents(self,
-                               broadcast_action : FutureBroadcastMessageAction,
-                               state : SimulationAgentState,
-                               observation_history : ObservationHistory,
-                               **kwargs
-                               ) -> BroadcastMessageAction:
-        """  Generates a broadcast message to be sent to other agents """
-
-        if broadcast_action.broadcast_type == FutureBroadcastMessageAction.REWARD:
-            # compile latest observations from the observation history
-            latest_observations : list[ObservationAction] = self.get_latest_observations(state, observation_history)
-
-            # index by instrument name
-            instruments_used : set = {latest_observation['instrument'].lower() 
-                                      for latest_observation in latest_observations}
-            indexed_observations = {instrument_used: [latest_observation for latest_observation in latest_observations
-                                                      if latest_observation['instrument'].lower() == instrument_used]
-                                    for instrument_used in instruments_used}
-
-            # create ObservationResultsMessage for each instrument
-            msgs = [ObservationResultsMessage(state.agent_name, 
-                                              state.agent_name, 
-                                              state.to_dict(), 
-                                              {}, 
-                                              instrument,
-                                              state.t,
-                                              state.t,
-                                              observations
-                                              )
-                    for instrument, observations in indexed_observations.items()]
-            
-        elif broadcast_action.broadcast_type == FutureBroadcastMessageAction.REQUESTS:
-            msgs = [MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
-                    for req in self.known_reqs
-                    if isinstance(req, TaskRequest)
-                    and req.event.t_start <= state.t <= req.event.t_end
-                    and req.requester == state.agent_name]
-            
-        elif broadcast_action.broadcast_type == FutureBroadcastMessageAction.STATE:
-            msgs = [AgentStateMessage(state.agent_name, state.agent_name, state.to_dict())]
-
-        else:
-            raise ValueError(f'`{broadcast_action.broadcast_type}` broadcast type not supported.')
-
-        # construct bus message
-        bus_msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
-
-        # return bus message broadcast (if not empty)
-        return BroadcastMessageAction(bus_msg.to_dict(), broadcast_action.t_start)
-
-    @abstractmethod
-    def get_latest_observations(self, 
-                                    state : SimulationAgentState,
-                                    observation_history : ObservationHistory
-                                    ) -> list:
-        """ Returns the latest observations from the observation history """
 
 class PeriodicBroadcasterReplanner(BroadcasterReplanner):
     def __init__(self, period : float = np.Inf, debug = False, logger = None):
@@ -134,22 +77,7 @@ class PeriodicBroadcasterReplanner(BroadcasterReplanner):
         
         # return modified plan
         return Replan.from_preplan(current_plan, broadcasts, t=state.t)
-    
-    def get_latest_observations(self, 
-                                    state : SimulationAgentState,
-                                    observation_history : ObservationHistory
-                                    ) -> list:
-
-        return [observation_tracker.latest_observation
-                for _,grid in observation_history.history.items()
-                for _, observation_tracker in grid.items()
-                if isinstance(observation_tracker, ObservationTracker)
-                and observation_tracker.latest_observation is not None
-                and observation_tracker.latest_observation['t_end'] <= state.t
-                # ONLY include observations that are within the period of the broadcast
-                and state.t - self.period <= observation_tracker.latest_observation['t_end']
-                ]
-        
+ 
 
 class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
     def __init__(self, period: float = np.Inf, debug = False, logger = None):
@@ -244,18 +172,3 @@ class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
                 overlap.merge(interval)
 
         return [interval.start for interval in merged_intervals]
-
-    def get_latest_observations(self, 
-                                state : SimulationAgentState,
-                                observation_history : ObservationHistory
-                                ) -> list:
-
-        return [observation_tracker.latest_observation
-                for _,grid in observation_history.history.items()
-                for _, observation_tracker in grid.items()
-                if isinstance(observation_tracker, ObservationTracker)
-                and observation_tracker.latest_observation is not None
-                and observation_tracker.latest_observation['t_end'] <= state.t
-                # ONLY include observations performed after the lastest broadcast
-                and self.t_prev <= observation_tracker.latest_observation['t_end']
-                ]
