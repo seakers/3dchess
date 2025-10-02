@@ -722,10 +722,6 @@ class SimulatedAgent(AbstractAgent):
         # extract latest state from senses
         states = [a for a in states if a.state['agent_name'] == self.get_element_name()]
         states.sort(key = lambda a : a.state['t'])
-
-        if len(states) > 1:
-            x = 1 # breakpoint
-
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
         # update plan completion

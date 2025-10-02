@@ -435,8 +435,8 @@ class SatelliteAgentState(SimulationAgentState):
             return action.ABORTED, 0.0
 
         else:
-            # chose new angular velocity
-            self.attitude_rates = action.attitude_rates
+            # update attitude angular rates
+            self.attitude_rates = [rate for rate in action.attitude_rates]
 
             # estimate remaining time for completion
             dts = []
@@ -453,7 +453,8 @@ class SatelliteAgentState(SimulationAgentState):
                 # estimate completion time 
                 else:
                     dt = (action.final_attitude[i] - self.attitude[i]) / self.attitude_rates[i]
-                    assert dt >= 0.0, f"negative time-step of {dt} [s] estimated for attitude axis {i}."
+                    assert dt >= 0.0, \
+                        f"negative time-step of {dt} [s] estimated for attitude axis {i}."
 
                     dts.append(dt)                
 
