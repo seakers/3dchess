@@ -134,20 +134,34 @@ class ManeuverAction(AgentAction):
         - final_attitude (`float`): desired off-nadir angle parallel to velocity vector
     """
     def __init__(self,
-                final_attitude : list, 
-                attitude_rates : list,
-                t_start : Union[float, int],
-                t_end : Union[float, int] = np.Inf,
-                status : str = 'PENDING',
-                id: str = None, 
-                **_) -> None:
+                 initial_attitude : list,
+                 final_attitude : list, 
+                 attitude_rates : list,
+                 t_start : Union[float, int],
+                 t_end : Union[float, int] = np.Inf,
+                 status : str = 'PENDING',
+                 id: str = None, 
+                 **_) -> None:
         super().__init__(ActionTypes.MANEUVER.value, t_start, t_end, status=status, id=id)
         
-        # check values
-        if not isinstance(final_attitude, list): raise ValueError(f'`final_attitude` must be of type `list`. Is of type {type(final_attitude)}.')
-        if len(final_attitude) != 3: raise ValueError(f'`final_attitude` must be of type `list` of length 3. Is of length {len(final_attitude)}.')
+        # validate inputs
+        assert isinstance(initial_attitude, list), f'`initial_attitude` must be of type `list`. Is of type {type(initial_attitude)}.'
+        assert len(initial_attitude) == 3, f'`initial_attitude` must be of type `list` of length 3. Is of length {len(initial_attitude)}.'
+        assert isinstance(final_attitude, list), f'`final_attitude` must be of type `list`. Is of type {type(final_attitude)}.'
+        assert len(final_attitude) == 3, f'`final_attitude` must be of type `list` of length 3. Is of length {len(final_attitude)}.'
+        assert isinstance(attitude_rates, list), f'`attitude_rates` must be of type `list`. Is of type {type(attitude_rates)}.'
+        assert len(attitude_rates) == 3, f'`attitude_rates` must be of type `list` of length 3. Is of length {len(attitude_rates)}.'
+
+        assert all(isinstance(th, (float, int)) for th in initial_attitude), f'all values in `initial_attitude` must be numerical values of type `float` or `int`.'
+        assert all(isinstance(th, (float, int)) for th in final_attitude), f'all values in `final_attitude` must be numerical values of type `float` or `int`.'
+        assert all(isinstance(dth, (float, int)) for dth in attitude_rates), f'all values in `attitude_rates` must be numerical values of type `float` or `int`.'
+
+        for i in range(3):
+            dth_req = (final_attitude[i] - initial_attitude[i]) / (t_end - t_start) if t_end > t_start else np.Inf
+            assert abs(dth_req - attitude_rates[i]) <= 1e-3, f'Required attitude rate for axis {i} is {dth_req:.3f} deg/s which exceeds the maximum allowed rate of {attitude_rates[i]:.3f} deg/s.'
 
         # set parameters
+        self.initial_attitude = [th for th in initial_attitude]
         self.final_attitude = [th for th in final_attitude]
         self.attitude_rates = [dth for dth in attitude_rates]
 

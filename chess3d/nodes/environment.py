@@ -15,6 +15,7 @@ from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
 from instrupy.util import SphericalGeometry, ViewGeometry
 
 from chess3d.agents.science.requests import *
+from chess3d.mission.events import GeophysicalEvent
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.states import SimulationAgentState

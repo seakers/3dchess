@@ -62,28 +62,32 @@ class DataProcessor(ABC):
                 if event in self.known_events: continue
 
                 # get event objetives from mission
-                objectives = [objective for objective in self.parent_mission.objectives
-                              if objective.event_type == event.event_type]
-                objectives : list[EventDrivenObjective] 
+                objectives  : list[EventDrivenObjective] = [objective for objective in self.parent_mission.objectives
+                                                            if isinstance(objective, EventDrivenObjective)
+                                                            and objective.event_type == event.event_type]
 
-                # generate task request 
-                task_request = TaskRequest(self.parent_name,
-                                           event,
-                                           self.parent_mission.name,
-                                           objectives,
-                                           obs['t_end'])
-                
+                for objective in objectives:
+                    objective : EventDrivenObjective
+                    # create task
+                    task = EventObservationTask(objective.parameter, event=event, objective=objective)
+
+                    # generate task request 
+                    task_request = TaskRequest(task,
+                                            requester = self.parent_name,
+                                            mission_name = self.parent_mission.name,
+                                            t_req = obs['t_end'])
+                    
+                    # update list of generated requests 
+                    self.known_reqs.add(task_request)
+                    self.generated_reqs.add(task_request)
+                    requests.append(task_request)
+                    
                 # update list of known and detected requests
                 self.known_events.add(event)
-                self.known_reqs.add(task_request)
-
                 self.detected_events.add(event)
-                self.generated_reqs.add(task_request)
 
-                self.event_requesters[event] = self.parent_name
-
-                # update list of generated requests 
-                requests.append(task_request)
+                # update list of event requesters
+                self.event_requesters[event] = self.parent_name               
 
         # return list of generated requests
         return requests    
@@ -110,14 +114,15 @@ class LookupProcessor(DataProcessor):
         self.events_lookup : list[GeophysicalEvent] = self.load_events(events_path)
 
         # extract event-driven objectives from parent mission
-        event_driven_objectives : list[EventDrivenObjective] \
-                                = [objective for objective in self.parent_mission.objectives
-                                   if isinstance(objective, EventDrivenObjective)]
+        self.event_driven_objectives : Dict[str, set[EventDrivenObjective]] = defaultdict(set)
+        for objective in self.parent_mission.objectives:
+            if isinstance(objective, EventDrivenObjective):
+                self.event_driven_objectives[objective.event_type].add(objective)
 
-        # extract detectable event types from mission objectives
-        self.detectable_event_types = defaultdict(set)
-        for objective in event_driven_objectives:
-            self.detectable_event_types[objective.event_type].update(objective.valid_instruments)
+        # # extract detectable event types from mission objectives
+        # self.detectable_event_types = defaultdict(set)
+        # for objective in event_driven_objectives:
+        #     self.detectable_event_types[objective.event_type].update(objective.valid_instruments)
 
         # # extract detectable event types from mission objectives
         # self.detectable_event_types = {objective.event_type : set()
@@ -173,24 +178,17 @@ class LookupProcessor(DataProcessor):
                             if abs(lat - event.location[0]) <= 1e-3
                             and abs(lon - event.location[1]) <= 1e-3
                             # availability during the time of observation
-                            and (event.t_start <= t_img_start <= event.t_end
-                                 or event.t_start <= t_img_end <= event.t_end)
+                            and (event.t_start <= t_img_start <= event.t_start + event.d_exp
+                                 or event.t_start <= t_img_end <= event.t_start + event.d_exp)
                             # event has not been detected before
-                            and (event.location[0],event.location[1],event.t_start,event.t_end-event.t_start,event.severity,event.event_type) not in self.detected_events 
+                            and (event.location[0],event.location[1],event.t_start,event.d_exp,event.severity,event.event_type) not in self.detected_events 
                             # event type is detectable by mission
-                            and event.event_type in self.detectable_event_types
-                            and instrument.lower() in self.detectable_event_types[event.event_type]
+                            and event.event_type in self.event_driven_objectives
+                            # and instrument.lower() in self.detectable_event_types[event.event_type]
                             ]
-
         
-        # return highest-severity event at that given target
         if observed_events:
-            # sort by severity  
-            observed_events.sort(key= lambda a: a.severity)
-            
-            # get next highest severity event
-            event = observed_events[-1]
-            
-            return event
-
-        return None
+            x = 1 # DEBUG BREAKPOINT
+        
+        # return highest severity event            
+        return max(observed_events, key=lambda a: a.severity) if observed_events else None

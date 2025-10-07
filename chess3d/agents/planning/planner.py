@@ -2,6 +2,7 @@
 from collections import defaultdict
 from functools import reduce
 import queue
+from typing import Dict, Tuple
 
 from instrupy.base import BasicSensorModel
 from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
@@ -10,6 +11,7 @@ from orbitpy.util import Spacecraft
 
 from dmas.modules import *
 from dmas.utils import runtime_tracker
+from pyparsing import List
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan
@@ -18,6 +20,8 @@ from chess3d.agents.planning.tracker import ObservationHistory, ObservationTrack
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
+from chess3d.mission.mission import Mission
+from chess3d.mission.requirements import CapabilityRequirement, MeasurementDurationRequirement
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
@@ -665,7 +669,7 @@ class AbstractPlanner(ABC):
     def _schedule_maneuvers(    self, 
                                 state : SimulationAgentState, 
                                 specs : object,
-                                observations : list,
+                                observations : List[ObservationAction],
                                 _ : ClockConfig,
                                 orbitdata : OrbitData = None
                             ) -> list:
@@ -693,23 +697,14 @@ class AbstractPlanner(ABC):
         cross_track_fovs = self._collect_fov_specs(specs)
 
         # get pointing agility specifications
-        adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
-        if adcs_specs is None: raise ValueError('ADCS component specifications missing from agent specs object.')
-
-        max_slew_rate = float(adcs_specs['maxRate']) if adcs_specs.get('maxRate', None) is not None else None
-        if max_slew_rate is None: raise ValueError('ADCS `maxRate` specification missing from agent specs object.')
-
-        max_torque = float(adcs_specs['maxTorque']) if adcs_specs.get('maxTorque', None) is not None else None
-        if max_torque is None: raise ValueError('ADCS `maxTorque` specification missing from agent specs object.')
-
+        max_slew_rate,_ = self._collect_agility_specs(specs)
+        
         # initialize maneuver list
         maneuvers : list[ManeuverAction] = []
 
-        for i in tqdm(range(len(observations)), 
+        for i,curr_observation in tqdm(enumerate(observations), 
                       desc=f'{state.agent_name}-PLANNER: Scheduling Maneuvers', 
                       leave=False):
-
-            curr_observation : ObservationAction = observations[i]
 
             # estimate previous state
             if i == 0:
@@ -737,9 +732,10 @@ class AbstractPlanner(ABC):
                 if abs(dth_req) <= 1e-3: continue # already pointing in the same direction; ignore maneuver
 
                 # calculate attitude duration    
+                th_0 = prev_state.attitude[0]
                 th_f = curr_observation.look_angle
-                slew_rate = (curr_observation.look_angle - prev_state.attitude[0]) / dth_req * max_slew_rate
-                dt = abs(th_f - prev_state.attitude[0]) / max_slew_rate
+                slew_rate = (th_f - th_0) / dth_req * max_slew_rate
+                dt = abs(th_f - th_0) / max_slew_rate
 
                 # calculate maneuver time
                 t_maneuver_start = curr_observation.t_start - dt
@@ -748,7 +744,8 @@ class AbstractPlanner(ABC):
                 # check if mnaeuver time is non-zero
                 if abs(t_maneuver_start - t_maneuver_end) >= 1e-3:
                     # maneuver has non-zero duration; perform maneuver
-                    maneuvers.append(ManeuverAction([th_f, 0, 0], 
+                    maneuvers.append(ManeuverAction([th_0, 0, 0],
+                                                    [th_f, 0, 0], 
                                                     [slew_rate, 0, 0],
                                                     t_maneuver_start, 
                                                     t_maneuver_end)) 
@@ -784,18 +781,14 @@ class AbstractPlanner(ABC):
                 latest_maneuver : ManeuverAction = prev_maneuvers.pop()
 
                 # check status of completion of this maneuver
-                if latest_maneuver.t_end < observation.t_start: # maneuver ended before observation started
-                    # compare to final state after meneuver
-                    dth = abs(observation.look_angle - latest_maneuver.final_attitude[0])
+                t_0 = latest_maneuver.t_start 
+                t_f = min(latest_maneuver.t_end, observation.t_start)
+                slew_rate = latest_maneuver.attitude_rates[0]
+                th_0 = latest_maneuver.initial_attitude[0]
+                th_f = th_0 + slew_rate * (t_f - t_0)
 
-                else: # maneuver was being performed during meneuver
-                    if prev_maneuvers:
-                        prev_maneuver : ManeuverAction = prev_maneuvers.pop()
-                        th_0 = prev_maneuver.final_attitude[0]
-                    else:
-                        th_0 = state.attitude[0]
-
-                    dth = abs(observation.look_angle - th_0) - max_slew_rate * (observation.t_start - latest_maneuver.t_start) 
+                # compare resulting attitude to intended look angle
+                dth = abs(observation.look_angle - th_f) 
 
             else: # there were no maneuvers performed before this observation
                 # compare to initial state

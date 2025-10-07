@@ -16,6 +16,7 @@ from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
 from chess3d.agents.states import SimulationAgentState
+from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
 from chess3d.messages import *
 from chess3d.utils import Interval

@@ -121,10 +121,10 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
         dealer_spacecraft['planner'] = self.lake_planner_config()
         dealer_spacecraft['instrument'] = []
         dealer_spacecraft['orbitState']['state']['ta'] = np.average([95,93])  # between both workers
-        dealer_spacecraft['science'] = {
-                        "@type": "lookup", 
-                        "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
-                    }
+        # dealer_spacecraft['science'] = {
+        #                 "@type": "lookup", 
+        #                 "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
+        #             }
 
         worker_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         worker_spacecraft_1['name'] = 'worker_sat_1'

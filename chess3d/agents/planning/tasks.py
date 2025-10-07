@@ -33,6 +33,10 @@ class GenericObservationTask(ABC):
         - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
         """
 
+        if isinstance(location, tuple) and len(location) == 4 and all([isinstance(coordinate, (float,int)) for coordinate in location]):
+            # single location provided; convert to list
+            location = [location]
+
         # validate inputs
         assert isinstance(task_type, str), "Task type must be a string."
         assert task_type in [self.DEFAULT, self.EVENT], "Task type must be either 'default_mission_task' or 'event_driven_task'."

@@ -443,7 +443,7 @@ class SatelliteAgentState(SimulationAgentState):
             for i in range(len(self.attitude)):
                 # check if final attitude has been reached
                 if abs(action.final_attitude[i] - self.attitude[i]) < 1e-3:
-                    self.attitude_rates[i] = 0.0
+                    # self.attitude_rates[i] = 0.0
                     dts.append(0.0)
 
                 # check if attitude is being changed
@@ -452,14 +452,12 @@ class SatelliteAgentState(SimulationAgentState):
 
                 # estimate completion time 
                 else:
-                    dt = (action.final_attitude[i] - self.attitude[i]) / self.attitude_rates[i]
-                    assert dt >= 0.0, \
-                        f"negative time-step of {dt} [s] estimated for attitude axis {i}."
+                    dts.append((action.final_attitude[i] - self.attitude[i]) / self.attitude_rates[i])
 
-                    dts.append(dt)                
+            dt = min(max(dts), action.t_end - t)
 
-            # get completion time
-            dt = max(dts) if max(dts) < action.t_end - t else action.t_end - t
+            assert dt >= 0.0, \
+                f"negative time-step of {dt} [s] for attitude maneuver."
 
             # return status
             return action.PENDING, dt
