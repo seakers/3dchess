@@ -167,8 +167,8 @@ class DefaultMissionTask(GenericObservationTask):
         assert 'availability' in task_dict, "Task availability must be specified in the dictionary."
 
         if 'objective' in task_dict:
-            assert isinstance(task_dict['objective'], dict), "Objective must be a dictionary."
-            objective = MissionObjective.from_dict(task_dict['objective'])
+            assert isinstance(task_dict['objective'], dict) or task_dict['objective'] is None, "Objective must be a dictionary."
+            objective = MissionObjective.from_dict(task_dict['objective']) if task_dict['objective'] is not None else None
         else:
             objective = None
 
@@ -205,12 +205,15 @@ class EventObservationTask(GenericObservationTask):
 
         # Validate Inputs
         assert isinstance(event, GeophysicalEvent) or event is None, "If specified, event must be a `GeophysicalEvent`."
-        assert isinstance(objective, MissionObjective) or objective is None, "If specified, objective must be a `MissionObjective`."
+        assert isinstance(objective, EventDrivenObjective) or objective is None, "If specified, objective must be a `EventDrivenObjective`."
 
         if event is None and objective is None:
             assert location is not None, "If no event or objective is specified, locations must be provided."
             assert availability is not None, "If no event or objective is specified, availability must be provided."
             assert priority is not None, "If no event or objective is specified, priority must be provided."
+
+        if event is not None and objective is not None:
+            assert event.event_type == objective.event_type, "If both event and objective are specified, their event types must match."
 
         # Extract event or objective attributes if given
         if event is not None: 
@@ -221,6 +224,7 @@ class EventObservationTask(GenericObservationTask):
 
         elif objective is not None:
             # Objective specified; use objective attributes
+            assert objective.parameter == parameter, "If objective is specified, target parameter must match the objective's parameter."
 
             ## Extract spatial measurement requirements
             spatial_req = [req for req in objective.requirements

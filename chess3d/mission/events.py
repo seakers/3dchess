@@ -82,6 +82,10 @@ class GeophysicalEvent:
         """Create an event from a dictionary."""
         return cls(**event_dict)
     
+    def to_dict(self) -> Dict[str, Union[str, float]]:
+        """Convert the event to a dictionary."""
+        return self.__dict__
+    
     def __repr__(self) -> str:
         """String representation of the event."""
         return f"GeophysicalEvent({self.event_type}, severity={self.severity}, t_detect={self.t_detect}, d_exp={self.d_exp}, t_start={self.t_start}, id={self.id})"
@@ -99,13 +103,3 @@ class GeophysicalEvent:
     def __hash__(self) -> int:
         """Hash the event for use in sets and dictionaries."""
         return hash((self.event_type, self.severity, self.t_detect, self.d_exp, self.t_start, self.id))
-    
-    # def to_dict(self) -> Dict[str, Union[str, float]]:
-    #     """Convert the event to a dictionary."""
-    #     return {
-    #         "event_type": self.event_type,
-    #         "severity": self.severity,
-    #         "location": self.location,
-    #         "t_start": self.t_start,
-    #         "id": self.id
-    #     }

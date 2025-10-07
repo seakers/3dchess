@@ -2,16 +2,15 @@ from typing import Union
 import numpy as np
 import uuid
 
-from chess3d.agents.planning.tasks import EventObservationTask
-from chess3d.mission.events import GeophysicalEvent
-from chess3d.mission.mission import *
+from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask
+from chess3d.utils import Interval
+
     
 class TaskRequest:
     def __init__(self,
+                 task : Union[GenericObservationTask, dict],
                  requester : str,
-                 event : Union[GeophysicalEvent, dict],
                  mission_name : str,
-                 objectives : list,
                  t_req : Union[float, int],
                  id : str = None,
                  **_ 
@@ -21,34 +20,28 @@ class TaskRequest:
         Indicates the existance of an event of interest at a given target point and requests a series of objectives to be performed by agents.
 
         ### Arguments:
+            - task (`GenericObservationTask` or `dict`): task being requested
             - requester (`str`): name of agent requesting the observations
-            - event (`GeophysicalEvent` or `dict`): event being requested for observation
-            - parameters (`list`): list of parameters to be observed
+            - mission_name (`str`): name of the mission
             - t_req (`float`): time at which the request is made in [s] from the beginning of the simulation
-            - id (`str`) : identifying number for this task in uuid format
+            - id (`str`) : identifying number for this task request in uuid format
         
         """
         # convert arguments if needed
-        if isinstance(event, dict): event = GeophysicalEvent.from_dict(event)
-        if isinstance(objectives[0], dict): objectives = [MissionObjective.from_dict(objective) for objective in objectives]
+        if isinstance(task, dict): task = GenericObservationTask.from_dict(task)
         if isinstance(t_req, str) and t_req.lower() == "inf": t_req = np.Inf
 
         # check argument types
+        assert isinstance(task, GenericObservationTask), f'`task` must be of type `GenericObservationTask`. Is of type {type(task)}.'
         assert isinstance(requester, str), f'`requester` must be of type `str`. Is of type {type(requester)}.'
-        assert isinstance(event, (GeophysicalEvent, dict)), f'`event` must be of type `GeophysicalEvent` or `dict`. Is of type {type(event)}.'
         assert isinstance(mission_name, str), f'`mission_name` must be of type `str`. Is of type {type(mission_name)}.'
-        assert isinstance(objectives, list), f'`objectives` must be of type `list`. Is of type {type(objectives)}.'
-        assert all([isinstance(objective, (dict, MissionObjective)) for objective in objectives]), \
-               f'`objectives` must be a `list` of elements of type `dict` or `MissionObjective`.'
-        assert len(objectives) > 0, f'`objectives` must be a non-empty `list` of elements of type `dict` or `MissionObjective`.'
         assert isinstance(t_req, (float, int)), f'`t_req` must be of type `float` or `int`. Is of type {type(t_req)}.'
         assert t_req >= 0, f"`t_req` must have a non-negative value."
         
         # initialize attributes
         self.requester : str = requester
-        self.event : GeophysicalEvent = event
+        self.task : GenericObservationTask = task
         self.mission_name : str = mission_name
-        self.objectives : list[EventDrivenObjective] = [objective for objective in objectives]
         self.t_req : float = t_req
         self.id : str = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
@@ -61,34 +54,41 @@ class TaskRequest:
         Crates a dictionary containing all information contained in this measurement request object
         """
         out = dict(self.__dict__)
-        out['event'] = out['event'].to_dict() if isinstance(out['event'], GeophysicalEvent) else out['event']
-        out['objectives'] = [objective.to_dict() for objective in out['objectives']]
+        out['task'] = self.task.to_dict()
         return out
     
-    def to_tasks(self) -> list:
-        """
-        Converts this task request into a list of `Task` objects, one for each objective.
-        """
-        return [EventObservationTask(self.event, 
-                                    self.mission_name, 
-                                    objective, 
-                                    objective.reobservation_strategy)
-                for objective in self.objectives]
-
-    def from_dict(d : dict) -> object:
-        return TaskRequest(**d)
+    @classmethod
+    def from_dict(cls, d : dict) -> 'TaskRequest':
+        return cls(**d)
     
-    def same_event(self, other : object) -> bool:
+    def same_event(self, other_req : 'TaskRequest') -> bool:
         """ compares the events being requested for observation between two measurement requests """
 
-        if not isinstance(other, TaskRequest):
-            raise ValueError(f'cannot compare `TaskRequest` object to an object of type {type(other)}.')
+        # validate inputs
+        if not isinstance(other_req, TaskRequest):
+            raise ValueError(f'cannot compare `TaskRequest` object to an object of type {type(other_req)}.')
+        if not isinstance(self.task, EventObservationTask) or not isinstance(other_req.task, EventObservationTask):
+            raise ValueError(f'`same_event` can only be used to compare `EventObservationTask` objects. One of the tasks is of type {type(self.task)} and the other is of type {type(other_req.task)}.')
 
-        same_type = self.event.event_type == other.event.event_type
-        same_target = all([abs(self.event.location[i]-other.event.location[i]) <= 1e-3 
-                           for i in range(len(self.event.location))])
-        same_severity = abs(self.event.severity - other.event.severity) <= 1e-3
-        same_time = abs(self.event.t_end - other.event.t_end) <= 1e-3
+        if self.task.event is None and other_req.task.event is None:
+            # both requests have no event associated; compare their task parameters instead
+            same_type = self.task.task_type == other_req.task.task_type
+            same_target = all([abs(self.task.location[i][j]-other_req.task.location[i][j]) <= 1e-3
+                            for i in range(len(self.task.location))
+                            for j in range(len(self.task.location[i]))
+                            ])
+            same_severity = True   # no event, so severity is not applicable
+            same_time = self.task.availability.overlaps(other_req.task.availability)
+
+        else:
+            same_type = self.task.event.event_type == other_req.task.event.event_type
+            same_target = all([abs(self.task.event.location[i]-other_req.task.event.location[i]) <= 1e-3
+                            for i in range(len(self.task.event.location))])
+            same_severity = abs(self.task.event.severity - other_req.task.event.severity) <= 1e-3
+
+            my_event_availability = Interval(self.task.event.t_start, self.task.event.t_start+self.task.event.d_exp)
+            other_event_availability = Interval(other_req.task.event.t_start, other_req.task.event.t_start+other_req.task.event.d_exp)
+            same_time = my_event_availability.overlaps(other_event_availability)
 
         return (
                 same_type
