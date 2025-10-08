@@ -1,5 +1,7 @@
 from abc import ABC
+import copy
 import os
+import pandas as pd
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
@@ -210,9 +212,7 @@ class AgentTester(ABC):
         scenario_specs['scenario'] = self.setup_scenario(scenario_name, connectivity, event_name, mission_name)
         scenario_specs['settings'] = self.setup_scenario_settings(scenario_name)
         scenario_specs['spacecraft'] = spacecraft
-        scenario_specs['groundStations'] = {
-                "gndStnFilePath": f'./tests/agents/resources/{gs_network_name}.csv'
-            } if gs_network_name else []
+        scenario_specs['groundStation'] = self.setup_ground_stations(gs_network_name) 
 
         return scenario_specs
 
@@ -278,3 +278,29 @@ class AgentTester(ABC):
                 "outDir" : f"./tests/agents/orbit_data/{scenario_name}",
             }
         return settings
+    
+    def setup_ground_stations(self, gs_network_name : str = None) -> list:
+        if gs_network_name is None: return []
+
+        grid_path = f"./tests/agents/resources/gstations/{gs_network_name}.csv"
+        assert os.path.isfile(grid_path), f"Ground station file not found: {gs_network_name}.csv"
+
+        # load ground station network from file
+        df = pd.read_csv(grid_path)
+        gs_network_df : list[dict] = df.to_dict(orient='records')
+
+        # if no id in file, add index as id
+        gs_network = []
+        for gs_idx, gs_df in enumerate(gs_network_df):
+            gs = {
+                "name": gs_df['name'],
+                "latitude": gs_df['lat[deg]'],
+                "longitude": gs_df['lon[deg]'],
+                "altitude": gs_df['alt[km]'],
+                "minimumElevation": gs_df['minElevation[deg]'],
+                "@id": gs_df['@id'] if '@id' in gs_df else f'{gs_network_name}-{gs_idx}'
+            }
+            gs_network.append(gs)
+
+        # return ground station network as list of dicts
+        return gs_network

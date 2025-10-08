@@ -255,6 +255,12 @@ class OrbitData:
         self.eclipse_data : IntervalData = IntervalData.from_dataframe(eclipse_data, self.time_step, 'eclipse')
         self.position_data : TimeIndexedData = TimeIndexedData.from_dataframe(position_data, self.time_step, 'position')   
 
+        # inter-agent link access times
+        self.comms_links : Dict[str, IntervalData] = {satellite_name : IntervalData.from_dataframe(isl_data[satellite_name], self.time_step, f"{satellite_name.lower()}-isl")
+                                                   for satellite_name in isl_data.keys()}
+        self.comms_links['gs-access'] = IntervalData.from_dataframe(gs_access_data, self.time_step, 'gs-access')
+
+
         # inter-satellite communication access times
         self.isl_data : Dict[str, IntervalData] = {satellite_name : IntervalData.from_dataframe(isl_data[satellite_name], self.time_step, f"{satellite_name.lower()}-isl")
                                                    for satellite_name in isl_data.keys()}

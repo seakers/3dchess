@@ -171,27 +171,27 @@ class Simulation:
             raise NotImplementedError('UAV agents not yet implemented.')
 
         if isinstance(gstation_dict, list):
-            raise NotImplementedError('UAV agents not yet implemented.')
+            raise NotImplementedError('GroundStation agents not yet implemented.')
         
-            # for gndstat in gstation_dict:
-            #     # create ground station agents
-            #     agent = SimulationElementFactory.generate_agent(
-            #                                         scenario_name, 
-            #                                         results_path,
-            #                                         orbitdata_dir,
-            #                                         gndstat,
-            #                                         gstation_dict.index(gndstat), 
-                                                    # nominal_missions,
-                                                    # event_missions,
-            #                                         manager_network_config, 
-            #                                         agent_port, 
-            #                                         SimulationAgentTypes.GROUND_STATION, 
-            #                                         clock_config,
-            #                                         level,
-            #                                         logger
-            #                                     )
-            #     agents.append(agent)
-            #     agent_port += 7
+            for gndstat in gstation_dict:
+                # create ground station agents
+                agent = SimulationElementFactory.generate_agent(
+                                                    scenario_name, 
+                                                    results_path,
+                                                    orbitdata_dir,
+                                                    gndstat,
+                                                    gstation_dict.index(gndstat), 
+                                                    nominal_missions,
+                                                    event_missions,
+                                                    manager_network_config, 
+                                                    agent_port, 
+                                                    SimulationAgentTypes.GROUND_STATION, 
+                                                    clock_config,
+                                                    level,
+                                                    logger
+                                                )
+                agents.append(agent)
+                agent_port += 7
         
         # ------------------------------------
         # create environment
