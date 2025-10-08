@@ -1,9 +1,9 @@
 import unittest
 
-from tests.planners.tester import TestPlanners
+from tests.planners.tester import PlannerTester
 
 
-class TestEarliest(TestPlanners, unittest.TestCase):
+class TestEarliest(PlannerTester, unittest.TestCase):
     def planner_name(self) -> str:
         return "earliest"
 

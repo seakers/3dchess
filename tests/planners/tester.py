@@ -6,7 +6,7 @@ from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
 
-class TestPlanners(ABC):
+class PlannerTester(ABC):
     def setUp(self) -> None:        
         # load scenario json file
         self.spacecraft_template = {

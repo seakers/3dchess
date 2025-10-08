@@ -1,9 +1,9 @@
 import unittest
 
-from tests.planners.tester import TestPlanners
+from tests.planners.tester import PlannerTester
 
 
-class TestHeuristic(TestPlanners, unittest.TestCase):
+class TestHeuristic(PlannerTester, unittest.TestCase):
     def planner_name(self) -> str:
         return "heuristic"
 

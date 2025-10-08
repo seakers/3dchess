@@ -5,10 +5,10 @@ import numpy as np
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
-from tests.planners.tester import TestPlanners
+from tests.planners.tester import PlannerTester
 
 
-class TestDealerWorker(TestPlanners, unittest.TestCase):
+class TestDealerWorker(PlannerTester, unittest.TestCase):
     def planner_name(self) -> str:
         return "dealer-worker"
 
