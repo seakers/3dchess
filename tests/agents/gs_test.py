@@ -1,8 +1,8 @@
 import unittest
 
-from tests.planners.tester import TestPlanners
+from tests.agents.tester import AgentTester
 
-class TestDynamicProgramming(TestPlanners, unittest.TestCase):
+class TestGroundStationAgents(AgentTester, unittest.TestCase):
     def planner_name(self) -> str:
         return "dynamic-programming"
 

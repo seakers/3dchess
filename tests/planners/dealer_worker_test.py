@@ -5,7 +5,7 @@ import numpy as np
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
-from test_planners import TestPlanners
+from tests.planners.tester import TestPlanners
 
 
 class TestDealerWorker(TestPlanners, unittest.TestCase):
@@ -50,7 +50,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
 
     def test_multiple_sats_toy(self):
         # setup scenario parameters
-        duration = 1.0 / 24.0
+        duration = 0.1 / 24.0
         grid_name = 'toy_points'
         scenario_name = f'multiple_sat_toy_scenario-{self.planner_name()}'
         connectivity = 'FULL'
@@ -63,6 +63,10 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
         dealer_spacecraft['planner'] = self.toy_planner_config()
         dealer_spacecraft['orbitState']['state']['inc'] = 0.0
         dealer_spacecraft['instrument'] = []
+        dealer_spacecraft['science'] = {
+                        "@type": "lookup", 
+                        "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
+                    }
 
         worker_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         worker_spacecraft_1['name'] = 'worker_sat_1'
@@ -82,7 +86,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
         worker_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # hyperspectral imager instrument
         
         # terminal welcome message
-        print_welcome(f'Planner Test: `{scenario_name}`')
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
 
         # Generate scenario
         scenario_specs = self.setup_scenario_specs(duration,
@@ -97,14 +101,14 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
                                                    )
 
 
-        # # initialize mission
-        # self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
-        # # execute mission
-        # self.simulation.execute()
+        # execute mission
+        self.simulation.execute()
 
-        # # print results
-        # self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
     def test_multiple_sats_lakes(self):
         # setup scenario parameters
@@ -121,10 +125,10 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
         dealer_spacecraft['planner'] = self.lake_planner_config()
         dealer_spacecraft['instrument'] = []
         dealer_spacecraft['orbitState']['state']['ta'] = np.average([95,93])  # between both workers
-        # dealer_spacecraft['science'] = {
-        #                 "@type": "lookup", 
-        #                 "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
-        #             }
+        dealer_spacecraft['science'] = {
+                        "@type": "lookup", 
+                        "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
+                    }
 
         worker_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         worker_spacecraft_1['name'] = 'worker_sat_1'
@@ -143,7 +147,7 @@ class TestDealerWorker(TestPlanners, unittest.TestCase):
         worker_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # hyperspectral imager instrument
         
         # terminal welcome message
-        print_welcome(f'Planner Test: `{scenario_name}`')
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
 
         # Generate scenario
         scenario_specs = self.setup_scenario_specs(duration,

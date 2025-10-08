@@ -169,7 +169,7 @@ class AbstractPreplanner(AbstractPlanner):
         access_opportunities = {}
         
         for i in tqdm(range(len(raw_coverage_data['time [s]'])), 
-                        desc=f'{state.agent_name}-PREPLANNER: Compiling access opportunities', 
+                        desc=f'{state.agent_name}/PREPLANNER: Compiling access opportunities', 
                         leave=False):
             t_img = raw_coverage_data['time [s]'][i]
             grid_index = raw_coverage_data['grid index'][i]

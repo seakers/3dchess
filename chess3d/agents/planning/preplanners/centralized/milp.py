@@ -221,7 +221,7 @@ class DealerMILPPreplanner(DealerPreplanner):
         """ Implements a MILP planner with static time assignment and static rewards """
 
         # Compute Rewards at start of access window
-        rewards : np.ndarray = self.__estimate_static_task_rewards(indexed_clients, schedulable_tasks, observation_history)
+        rewards : np.ndarray = self.__estimate_static_task_rewards(state, indexed_clients, schedulable_tasks, observation_history)
 
         # Create a new model
         model = gp.Model(f"multi-mission_milp_planner_{self.model.upper()}")
@@ -294,6 +294,7 @@ class DealerMILPPreplanner(DealerPreplanner):
         return y_array, t_array, z_array, model.getObjective().getValue()
 
     def __estimate_static_task_rewards(self, 
+                                       state : SimulationAgentState,
                                        indexed_clients: List[str], 
                                        schedulable_tasks: Dict[str, List[ObservationAction]], 
                                        observation_history: ObservationHistory) -> list:
@@ -307,7 +308,7 @@ class DealerMILPPreplanner(DealerPreplanner):
                                                       self.client_orbitdata[client], 
                                                       self.client_missions[client], 
                                                      observation_history)
-                            for task in tqdm(schedulable_tasks[client],leave=False,desc=f'SATELLITE: Calculating task rewards for client agent `{client}`')
+                            for task in tqdm(schedulable_tasks[client],leave=False,desc=f'{state.agent_name}/PREPLANNER: Calculating task rewards for client agent `{client}`')
                             if isinstance(task,SpecificObservationTask)]
                             for client in indexed_clients]
 
@@ -327,7 +328,7 @@ class DealerMILPPreplanner(DealerPreplanner):
         """ Implements a MILP planner with linear time assignment and linear rewards """
         
         # Compute rewards at start and end of access window
-        rewards : List[List[List[float]]] = self.__estimate_linear_task_rewards(indexed_clients, schedulable_tasks, observation_history)
+        rewards : List[List[List[float]]] = self.__estimate_linear_task_rewards(state, indexed_clients, schedulable_tasks, observation_history)
 
         # Compute slope of linear reward function during the access windows
         slopes : List[List[List[float]]] = [[ (rewards[s][j][1]-rewards[s][j][0]) / (t_end[s][j]-t_start[s][j]) 
@@ -410,6 +411,7 @@ class DealerMILPPreplanner(DealerPreplanner):
         return y_array, t_array, z_array, model.getObjective().getValue()
 
     def __estimate_linear_task_rewards(self, 
+                                       state : SimulationAgentState,
                                        indexed_clients: List[str], 
                                        schedulable_tasks: Dict[str, List[ObservationAction]], 
                                        observation_history: ObservationHistory) -> List[List[List[float]]]:
@@ -431,7 +433,7 @@ class DealerMILPPreplanner(DealerPreplanner):
                                                       self.client_orbitdata[client], 
                                                       self.client_missions[client], 
                                                      observation_history)]
-                            for task in tqdm(schedulable_tasks[client],leave=False,desc=f'SATELLITE: Calculating task rewards for client agent `{client}`')
+                            for task in tqdm(schedulable_tasks[client],leave=False,desc=f'{state.agent_name}/PREPLANNER: Calculating task rewards for client agent `{client}`')
                             if isinstance(task,SpecificObservationTask)]
                             for client in indexed_clients]
     

@@ -1,6 +1,6 @@
 import unittest
 
-from test_planners import TestPlanners
+from tests.planners.tester import TestPlanners
 
 
 class TestEarliest(TestPlanners, unittest.TestCase):

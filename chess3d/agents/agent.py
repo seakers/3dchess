@@ -724,7 +724,7 @@ class SimulatedAgent(AbstractAgent):
         states.sort(key = lambda a : a.state['t'])
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
-        if state.t < self.get_current_time() - 1e-6:
+        if state.t < self.get_current_time():
             x = 1 # breakpoint
 
         # update plan completion
@@ -737,8 +737,8 @@ class SimulatedAgent(AbstractAgent):
         generated_reqs : list[TaskRequest] = self.process_observations(incoming_reqs, observations)
         incoming_reqs.extend(generated_reqs)
         
-        # compile measurements performed by myself or other agents
-        completed_observations = self.compile_completed_observations(completed_actions, misc_messages)
+        # compile measurements performed by myself or other agents TODO do we still need this feature?
+        # completed_observations = self.compile_completed_observations(completed_actions, misc_messages)
                 
         # TODO update mission objectives from requests
             # for objective in self.mission.objectives:
@@ -957,13 +957,10 @@ class SimulatedAgent(AbstractAgent):
         Updates the list of tasks based on incoming requests and task availability.
         """
         # get tasks from incoming requests
-        event_tasks = [req.to_tasks()
+        event_tasks = [req.task
                        for req in incoming_reqs
                        if isinstance(req, TaskRequest)]
         
-        # flatten list of tasks
-        event_tasks_flat = list(chain.from_iterable(event_tasks))
-
         # # filter tasks that can be performed by agent
         # valid_event_tasks = []
         # payload_instrument_names = {instrument_name.lower() for instrument_name in self.payload.keys()}
@@ -973,7 +970,7 @@ class SimulatedAgent(AbstractAgent):
         #         valid_event_tasks.append(event_task)
 
         # add tasks to task list
-        self.tasks.extend(event_tasks_flat)
+        self.tasks.extend(event_tasks)
         
         # filter tasks to only include active tasks
         if available_only: # only consider tasks that are active and available
@@ -983,7 +980,7 @@ class SimulatedAgent(AbstractAgent):
             self.tasks = [task for task in self.tasks 
                           if not task.is_expired(self.get_current_time())]
 
-    def update_reqs(self, incoming_reqs : list = [], available_only : bool = True) -> None:
+    def update_reqs(self, incoming_reqs : List[TaskRequest] = [], available_only : bool = True) -> None:
         """ Updates the known requests based on incoming requests and request availability. """
         
         # update known requests
@@ -992,7 +989,11 @@ class SimulatedAgent(AbstractAgent):
         # check for request availability
         if available_only:
             self.known_reqs = {req for req in self.known_reqs 
-                               if req.event.is_available(self.get_current_time())}
+                               if req.task.is_available(self.get_current_time())
+                               }
+            
+        if self.known_reqs:
+            x = 1 # breakpoint
 
     @runtime_tracker
     def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
@@ -1141,14 +1142,14 @@ class SimulatedAgent(AbstractAgent):
             # log known and generated requests
             if self.processor is not None:
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
-                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, np.Inf, event.event_type)
+                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
                         for event in self.processor.known_events]
                 
                 df = pd.DataFrame(data=data, columns=columns)        
                 df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
 
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
-                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_end, np.Inf, event.event_type)
+                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
                         for event in self.processor.detected_events]
             else:
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
@@ -1302,6 +1303,7 @@ class SimulatedAgent(AbstractAgent):
             stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
 
         except Exception as e:
+            print(f'AGENT TEARDOWN ERROR: {e}')
             raise e
             x = 1
             

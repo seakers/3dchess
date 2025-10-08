@@ -439,28 +439,22 @@ class SatelliteAgentState(SimulationAgentState):
             self.attitude_rates = [rate for rate in action.attitude_rates]
 
             # estimate remaining time for completion
-            dts = []
+            dts = [action.t_end - t]
             for i in range(len(self.attitude)):
-                # check if final attitude has been reached
-                if abs(action.final_attitude[i] - self.attitude[i]) < 1e-3:
-                    # self.attitude_rates[i] = 0.0
-                    dts.append(0.0)
-
-                # check if attitude is being changed
-                elif self.attitude_rates[i] < 1e-3:
-                    dts.append(np.Inf)
-
                 # estimate completion time 
-                else:
-                    dts.append((action.final_attitude[i] - self.attitude[i]) / self.attitude_rates[i])
+                dt = (action.final_attitude[i] - self.attitude[i]) / self.attitude_rates[i] if self.attitude_rates[i] > 1e-3 else np.NAN
+                dts.append(dt)
 
-            dt = min(max(dts), action.t_end - t)
+            if not dts:
+                x = 1
 
-            assert dt >= 0.0, \
-                f"negative time-step of {dt} [s] for attitude maneuver."
+            dt_maneuver = min(dts)
+            
+            assert dt_maneuver >= 0.0, \
+                f"negative time-step of {dt_maneuver} [s] for attitude maneuver."
 
             # return status
-            return action.PENDING, dt
+            return action.PENDING, dt_maneuver
             
     def __calc_eps(self, init_pos : list):
         """

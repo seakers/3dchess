@@ -1,6 +1,6 @@
 import unittest
 
-from test_planners import TestPlanners
+from tests.planners.tester import TestPlanners
 
 class TestSingleSatMILP(TestPlanners, unittest.TestCase):
     def planner_name(self) -> str:

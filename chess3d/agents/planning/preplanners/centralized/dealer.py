@@ -389,7 +389,7 @@ class DealerPreplanner(AbstractPreplanner):
 
             # get last access interval and calculate broadcast time
             next_access : Interval = access_intervals[-1]
-            t_broadcast : float = min(next_access.right, state.t+self.period-1e-3) # ensure broadcast happens before the end of the planning period
+            t_broadcast : float = min(next_access.right, state.t+self.period-5e-3) # ensure broadcast happens before the end of the planning period
 
             # generate plan message to share state
             state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
