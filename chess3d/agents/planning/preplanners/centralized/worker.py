@@ -12,8 +12,13 @@ class WorkerReplanner(AbstractReplanner):
     Worker Replanner class that handles replanning tasks for agents.
     It processes the replanning requests and updates the agent's plan accordingly.
     """
-    def __init__(self, debug = False, logger = None):
+    def __init__(self, dealer_name : str, debug = False, logger = None):
         super().__init__(debug, logger)
+        
+        # validate inputs
+        assert isinstance(dealer_name, str), "dealer_name must of type `str`"
+
+        self.dealer_name = dealer_name
         self.plan_message : PlanMessage = None
 
     def update_percepts(self, state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions):       
@@ -24,8 +29,10 @@ class WorkerReplanner(AbstractReplanner):
 
         # check if there are any plan messages for this agent
         plan_messages = {msg for msg in misc_messages 
-                         if isinstance(msg, PlanMessage)
-                         and msg.agent_name == state.agent_name}
+                         if isinstance(msg, PlanMessage) # filter by message type
+                         and msg.agent_name == state.agent_name # filter by agent name                         
+                        #  and msg.src == self.dealer_name # TODO filter by dealer name
+                         }
         
         # update the latest plan message
         for plan_message in plan_messages:

@@ -78,7 +78,12 @@ class Simulation:
         spacecraft_dict : dict = mission_specs.get('spacecraft', None)
         uav_dict        : dict = mission_specs.get('uav', None)
         gstation_dict   : dict = mission_specs.get('groundStation', None)
+        gops_dict       : dict = mission_specs.get('groundOperator', None)
+        gsensor_dict    : dict = mission_specs.get('groundSensor', None)
         scenario_dict   : dict = mission_specs.get('scenario', None)
+
+        if gops_dict is not None: assert gstation_dict is not None, \
+            "Both `groundStation` and `groundOperator` must be defined in the input file."
 
         # unpack scenario info
         scenario_dict : dict = mission_specs.get('scenario', None)
@@ -87,13 +92,23 @@ class Simulation:
         
         # load agent names
         agent_names = [SimulationElementRoles.ENVIRONMENT.value]
-        if spacecraft_dict: agent_names.extend([spacecraft['name'] for spacecraft in spacecraft_dict])
-        if uav_dict:        agent_names.extend([uav['name'] for uav in uav_dict])
-        if gstation_dict:   agent_names.extend([gstation['name'] for gstation in gstation_dict])
+        agent_ids = []
+        if spacecraft_dict: 
+            agent_names.extend([spacecraft['name'] for spacecraft in spacecraft_dict])
+            agent_ids.extend([spacecraft['@id'] for spacecraft in spacecraft_dict])
+        if uav_dict:
+            agent_names.extend([uav['name'] for uav in uav_dict])
+            agent_ids.extend([uav['@id'] for uav in uav_dict])
+        if gstation_dict:
+            agent_names.extend([gstation['name'] for gstation in gstation_dict])
+            agent_ids.extend([gstation['@id'] for gstation in gstation_dict])
 
-        # validate agent names
+        # validate agent names and ids
+        assert len(agent_names) > 1, "At least one agent (spacecraft, UAV, or ground station) must be defined in the input file."
         unique_names = set(agent_names)
         assert len(unique_names) == len(agent_names), "All agent names must be unique."
+        unique_ids = set(agent_ids)
+        assert len(unique_ids) == len(agent_ids), "All agent IDs must be unique."
 
         # ------------------------------------
         # get scenario name
@@ -164,34 +179,37 @@ class Simulation:
                                                     logger
                                                 )
                 agents.append(agent)
-                agent_port += 7
+                agent_port += 7    
 
-        if uav_dict is not None:
-            # TODO Implement UAV agents
-            raise NotImplementedError('UAV agents not yet implemented.')
+        if isinstance(gops_dict, list):
+            # TODO allow for multiple ground ops agents representing different and independent ground station networks
 
-        if isinstance(gstation_dict, list):
-            raise NotImplementedError('GroundStation agents not yet implemented.')
-        
-            for gndstat in gstation_dict:
-                # create ground station agents
+            for ground_operator in gops_dict:
+                # create ground station agent
                 agent = SimulationElementFactory.generate_agent(
                                                     scenario_name, 
                                                     results_path,
                                                     orbitdata_dir,
-                                                    gndstat,
-                                                    gstation_dict.index(gndstat), 
-                                                    nominal_missions,
-                                                    event_missions,
+                                                    ground_operator,
+                                                    gops_dict.index(ground_operator), 
+                                                    missions,
                                                     manager_network_config, 
                                                     agent_port, 
-                                                    SimulationAgentTypes.GROUND_STATION, 
+                                                    SimulationAgentTypes.GROUND_OPERATOR, 
                                                     clock_config,
                                                     level,
                                                     logger
                                                 )
                 agents.append(agent)
                 agent_port += 7
+        
+        if uav_dict is not None:
+            # TODO Implement UAV agents
+            raise NotImplementedError('UAV agents not yet implemented.')
+        
+        if gsensor_dict is not None:
+            # TODO Implement Ground Sensor agents
+            raise NotImplementedError('Ground Sensor agents not yet implemented.')
         
         # ------------------------------------
         # create environment
@@ -1186,7 +1204,6 @@ class SimulationElementFactory:
         agent_name = agent_dict.get('name', None)
         planner_dict = agent_dict.get('planner', None)
         science_dict = agent_dict.get('science', None)
-        instruments_dict = agent_dict.get('instrument', None)
         orbit_state_dict = agent_dict.get('orbitState', None)
 
         # create agent network config
@@ -1203,6 +1220,8 @@ class SimulationElementFactory:
             # load satellite specs
             agent_specs : Spacecraft = Spacecraft.from_dict(agent_dict)
         else:
+            instruments_dict = agent_dict.get('instrument', None)   
+
             agent_specs : dict = {key: val for key,val in agent_dict.items()}
             agent_specs['payload'] = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) \
                                      if instruments_dict else []
@@ -1292,7 +1311,7 @@ class SimulationElementFactory:
                                       level,
                                       logger)     
 
-            elif agent_type == SimulationAgentTypes.GROUND_STATION:
+            elif agent_type == SimulationAgentTypes.GROUND_OPERATOR:
                 raise NotImplementedError('Ground station agents not yet implemented.')
 
                 lat = agent_specs['latitude']
@@ -1601,6 +1620,7 @@ class SimulationElementFactory:
             elif preplanner_type.lower() == 'dealer':
                 # unpack preplanner parameters
                 mode = preplanner_dict.get('@mode', 'test').lower()
+                clients = preplanner_dict.get('clients', None)
 
                 # load client orbit data
                 client_orbitdata: dict = OrbitData.from_directory(orbitdata_dir)
@@ -1620,6 +1640,14 @@ class SimulationElementFactory:
                 client_orbitdata.pop(agent_name, None) 
                 client_specs.pop(agent_name, None)
                 client_missions.pop(agent_name, None)
+
+                # remove other clients if specified
+                if clients is not None:
+                    for client in list(client_orbitdata.keys()):
+                        if client not in clients:
+                            client_orbitdata.pop(client, None)
+                            client_specs.pop(client, None)
+                            client_missions.pop(client, None)
                 
                 if mode == 'test':                   
                     preplanner = TestingDealer(client_orbitdata, client_specs, horizon, period)
@@ -1671,8 +1699,8 @@ class SimulationElementFactory:
                     raise ValueError(f'`mode` of type `{mode}` not supported for broadcaster replanner.')
 
             elif replanner_type.lower() == 'worker':
-                
-                replanner = WorkerReplanner(debug, logger)
+                dealer_name = replanner_dict.get('dealerName', None)
+                replanner = WorkerReplanner(dealer_name, debug, logger)
 
             elif replanner_type.lower() == 'acbba': 
                 threshold = replanner_dict.get('threshold', 1)

@@ -10,7 +10,8 @@ import propcov
 class SimulationAgentTypes(Enum):
     SATELLITE = 'SATELLITE'
     UAV = 'UAV'
-    GROUND_STATION = 'GROUND_STATION'
+    GROUND_OPERATOR = 'GROUND_OPERATOR'
+    GROUND_SENSOR = 'GROUND_SENSOR'
 
 class SimulationAgentState(AbstractAgentState):
     """
@@ -187,12 +188,12 @@ class SimulationAgentState(AbstractAgentState):
         return dict(self.__dict__)
 
     def from_dict(d : dict) -> object:
-        if d['state_type'] == SimulationAgentTypes.GROUND_STATION.value:
+        if d['state_type'] == SimulationAgentTypes.GROUND_OPERATOR.value:
             return GroundStationAgentState(**d)
         elif d['state_type'] == SimulationAgentTypes.SATELLITE.value:
             return SatelliteAgentState(**d)
-        elif d['state_type'] == SimulationAgentTypes.UAV.value:
-            return UAVAgentState(**d)
+        # elif d['state_type'] == SimulationAgentTypes.UAV.value:
+        #     return UAVAgentState(**d)
         else:
             raise NotImplementedError(f"Agent states of type {d['state_type']} not yet supported.")
 
@@ -227,7 +228,7 @@ class GroundStationAgentState(SimulationAgentState):
             vel = np.cross(self.angular_vel, pos)
          
         super().__init__(agent_name,
-                        SimulationAgentTypes.GROUND_STATION.value, 
+                        SimulationAgentTypes.GROUND_OPERATOR.value, 
                         pos, 
                         vel,
                         [0,0,0],

@@ -36,7 +36,7 @@ class SimulationEnvironment(EnvironmentNode):
     """
     SPACECRAFT = 'SPACECRAFT'
     UAV = 'UAV'
-    GROUND_STATION = 'GROUND_STATION'
+    GROUND_STATION = OrbitData.GROUND_STATION
 
     def __init__(self, 
                 results_path : str, 
@@ -90,7 +90,7 @@ class SimulationEnvironment(EnvironmentNode):
                 gs_name = gs.get('name')
                 gs_names.append(gs_name)
                 agent_names.append(gs_name)
-        self.agents[self.GROUND_STATION] = gs_names
+        self.agents[OrbitData.GROUND_STATION] = gs_names
 
         # load events
         self.events_path : str = events_path
@@ -418,7 +418,7 @@ class SimulationEnvironment(EnvironmentNode):
                 # Do NOT update
                 updated_state = msg.state
 
-            elif msg.src in self.agents[self.GROUND_STATION]:
+            elif msg.src in self.agents[OrbitData.GROUND_STATION]:
                 # Do NOT update state
                 updated_state = msg.state
 
@@ -483,52 +483,61 @@ class SimulationEnvironment(EnvironmentNode):
         """
         if self.connectivity == 'FULL': return True
 
-        connected = False
-        if target_type == self.SPACECRAFT:
-            if src in self.agents[self.SPACECRAFT]:
-                # check orbit data
-                src_data : OrbitData = self.orbitdata[src]
-                connected = src_data.is_accessing_agent(target, self.get_current_time())
-                
-            elif src in self.agents[self.UAV]:
-                # check orbit data with nearest GS
-                target_data : OrbitData = self.orbitdata[target]
-                connected = target_data.is_accessing_ground_station(target, self.get_current_time())
-            
-            elif src in self.agents[self.GROUND_STATION]:
-                # check orbit data
-                target_data : OrbitData = self.orbitdata[target]
-                connected = target_data.is_accessing_ground_station(target, self.get_current_time())
-        
-        elif target_type == self.UAV:
-            if src in self.agents[self.SPACECRAFT]:
-                # check orbit data with nearest GS
-                src_data : OrbitData = self.orbitdata[src]
-                connected = src_data.is_accessing_ground_station(target, self.get_current_time())
+        assert src in self.orbitdata, f'No orbit data found for agent `{src}`.'
+        # assert target in self.orbitdata, f'No orbit data found for agent `{target}`.'
 
-            elif src in self.agents[self.UAV]:
-                # always connected
-                connected = True
-
-            elif src in self.agents[self.GROUND_STATION]:
-                # always connected
-                connected = True
-        
-        elif target_type == self.GROUND_STATION:
-            if src in self.agents[self.SPACECRAFT]:
-                # check orbit data
-                src_data : OrbitData = self.orbitdata[src]
-                connected = src_data.is_accessing_ground_station(target, self.get_current_time())
-
-            elif src in self.agents[self.UAV]:
-                # always connected
-                connected = True
-
-            elif src in self.agents[self.GROUND_STATION]:
-                # always connected
-                connected = True
-
+        src_data : OrbitData = self.orbitdata[src]
+        connected = src_data.is_accessing_agent(target, self.get_current_time())
         return int(connected)
+
+        # connected = False
+        # if target_type == self.SPACECRAFT:
+        #     if src in self.agents[self.SPACECRAFT]:
+        #         # check orbit data
+        #         src_data : OrbitData = self.orbitdata[src]
+        #         connected = src_data.is_accessing_agent(target, self.get_current_time())
+                
+        #     elif src in self.agents[self.UAV]:
+        #         # check orbit data with nearest GS
+        #         target_data : OrbitData = self.orbitdata[target]
+        #         connected = target_data.is_accessing_ground_station(target, self.get_current_time())
+            
+        #     elif src in self.agents[self.GROUND_STATION]:
+        #         # check orbit data
+        #         target_data : OrbitData = self.orbitdata[target]
+        #         connected = target_data.is_accessing_ground_station(target, self.get_current_time())
+        
+        # elif target_type == self.UAV:
+        #     if src in self.agents[self.SPACECRAFT]:
+        #         # check orbit data with nearest GS
+        #         src_data : OrbitData = self.orbitdata[src]
+        #         connected = src_data.is_accessing_ground_station(target, self.get_current_time())
+
+        #     elif src in self.agents[self.UAV]:
+        #         # always connected
+        #         connected = True
+
+        #     elif src in self.agents[self.GROUND_STATION]:
+        #         # always connected
+        #         connected = True
+        
+        # elif target_type == self.GROUND_STATION:
+        #     if src in self.agents[self.SPACECRAFT]:
+        #         # check orbit data
+        #         src_data : OrbitData = self.orbitdata[src]
+        #         connected = src_data.is_accessing_ground_station(target, self.get_current_time())
+
+        #     elif src in self.agents[self.UAV]:
+        #         # always connected
+        #         connected = True
+
+        #     elif src in self.agents[self.GROUND_STATION]:
+        #         # always connected
+        #         connected = True
+        # else:
+        #     raise ValueError(f'Unrecognized agent type. Agent {target} is not part of this simulation.')
+
+        # return int(connected)
 
     @runtime_tracker
     def query_measurement_data( self,

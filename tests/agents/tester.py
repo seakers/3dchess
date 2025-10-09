@@ -1,6 +1,7 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 import copy
 import os
+from typing import List
 import pandas as pd
 
 from chess3d.simulation import Simulation
@@ -74,11 +75,11 @@ class AgentTester(ABC):
                         }
                     },
                     "planner" : {
-                        "preplanner" : {
-                            "@type" : "earliest",
-                            "period": 500,
-                            # "horizon": 500,
-                        },
+                        # "preplanner" : {
+                        #     "@type" : "earliest",
+                        #     "period": 500,
+                        #     # "horizon": 500,
+                        # },
                         # "replanner" : {
                         #     "@type" : "broadcaster",
                         #     "period" : 400
@@ -190,9 +191,14 @@ class AgentTester(ABC):
                              connectivity : str, 
                              event_name : str, 
                              mission_name : str,
-                             gs_network_name : str = None,
-                             spacecraft : list = []
+                             gs_network_names : List[str] = [],
+                             spacecraft : List[dict] = []
                              ) -> dict:
+        # validate inputs
+        assert all(isinstance(gs_network_name, str) for gs_network_name in gs_network_names), "All gs_network_names must be strings."
+        assert all(isinstance(sat, dict) for sat in spacecraft), "All spacecraft must be dictionaries."
+
+        # construct scenario specifications
         scenario_specs : dict = {
             "epoch": {
                 "@type": "GREGORIAN_UT1",
@@ -212,8 +218,12 @@ class AgentTester(ABC):
         scenario_specs['scenario'] = self.setup_scenario(scenario_name, connectivity, event_name, mission_name)
         scenario_specs['settings'] = self.setup_scenario_settings(scenario_name)
         scenario_specs['spacecraft'] = spacecraft
-        scenario_specs['groundStation'] = self.setup_ground_stations(gs_network_name) 
+        scenario_specs['groundStation'] = self.compile_ground_stations(gs_network_names)
+                
+        if gs_network_names is not None:
+            scenario_specs['groundOperator'] = self.setup_ground_operators(gs_network_names, spacecraft)
 
+        # return scenario specifications
         return scenario_specs
 
     def setup_coverage_grid(self, grid_name : str) -> dict:
@@ -278,8 +288,21 @@ class AgentTester(ABC):
                 "outDir" : f"./tests/agents/orbit_data/{scenario_name}",
             }
         return settings
-    
-    def setup_ground_stations(self, gs_network_name : str = None) -> list:
+
+    def compile_ground_stations(self, gs_network_names : List[str] = []) -> List[dict]:
+        """Compile ground stations for the scenario. """
+        # collect all ground stations from specified networks
+        ground_stations = {gs_network_name : self.load_ground_stations(gs_network_name) for gs_network_name in gs_network_names}
+
+        # add network name to each ground station specifications
+        for gs_network_name,network in ground_stations.items():
+            for gs in network:
+                gs['networkName'] = gs_network_name
+
+        # flatten list of lists
+        return [ground_station for network in ground_stations.values() for ground_station in network]
+
+    def load_ground_stations(self, gs_network_name : str = None) -> List[dict]:
         if gs_network_name is None: return []
 
         grid_path = f"./tests/agents/resources/gstations/{gs_network_name}.csv"
@@ -304,3 +327,7 @@ class AgentTester(ABC):
 
         # return ground station network as list of dicts
         return gs_network
+    
+    @abstractmethod
+    def setup_ground_operators(self, gs_network_names : List[str], spacecraft : List[dict]) -> List[dict]:
+        """ Setup ground operations for the scenario. """

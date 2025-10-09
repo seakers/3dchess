@@ -217,19 +217,20 @@ class IntervalData(AbstractData):
         """
         return any([t_start-1e-6 <= t <= t_end+1e-6 for t_start,t_end,*_ in self.data])
     
-    def update_expired_values(self, t : float):
-        # only keep intervals that are still active or that haven't ended yet
+    def update_expired_values(self, t : float) -> None:
+        """ 
+        Updates the data by removing all intervals that have ended before time `t`. 
+        """
         self.data = [(t_start,t_end,row) for t_start,t_end,row in self.data
                      if t <= t_end or abs(t - t_end) <= 1e-6]
         
-        return
-
 class OrbitData:
     """
     Stores and queries data regarding an agent's orbital data. 
 
     TODO: add support to load ground station agents' data
     """
+    GROUND_STATION = 'GROUND_STATION'
     JDUT1 = 'JDUT1'
 
     def __init__(self, 
@@ -258,14 +259,13 @@ class OrbitData:
         # inter-agent link access times
         self.comms_links : Dict[str, IntervalData] = {satellite_name : IntervalData.from_dataframe(isl_data[satellite_name], self.time_step, f"{satellite_name.lower()}-isl")
                                                    for satellite_name in isl_data.keys()}
-        self.comms_links['gs-access'] = IntervalData.from_dataframe(gs_access_data, self.time_step, 'gs-access')
-
+        self.comms_links[self.GROUND_STATION] = IntervalData.from_dataframe(gs_access_data, self.time_step, 'gs-access')
 
         # inter-satellite communication access times
         self.isl_data : Dict[str, IntervalData] = {satellite_name : IntervalData.from_dataframe(isl_data[satellite_name], self.time_step, f"{satellite_name.lower()}-isl")
                                                    for satellite_name in isl_data.keys()}
         
-        # TODO ground station access times
+        # ground station access times
         self.gs_access_data : IntervalData = IntervalData.from_dataframe(gs_access_data, self.time_step, 'gs-access')
         
         # ground point access times
@@ -274,29 +274,29 @@ class OrbitData:
         # grid information
         self.grid_data : list[pd.DataFrame] = grid_data
     
-    def get_epoc_in_datetime(self, delta_ut1=0.0) -> datetime:
-        """
-        Converts epoc to a datetime in UTC.
+    # def get_epoc_in_datetime(self, delta_ut1=0.0) -> datetime:
+    #     """
+    #     Converts epoc to a datetime in UTC.
         
-        Parameters
-        ----------
-        delta_ut1 : float, optional
-            UT1-UTC offset in seconds (default 0.0, but usually provided by IERS).
+    #     Parameters
+    #     ----------
+    #     delta_ut1 : float, optional
+    #         UT1-UTC offset in seconds (default 0.0, but usually provided by IERS).
         
-        Returns
-        -------
-        datetime
-            Corresponding UTC datetime.
-        """
-        # check epoc type 
-        if self.epoc_type == self.JDUT1: # convert JDUT1 to datetime
-            JD_UNIX_EPOCH = 2440587.5  # JD of 1970-01-01 00:00:00 UTC
-            days_since_unix = self.epoc - JD_UNIX_EPOCH
-            seconds_since_unix = days_since_unix * 86400.0 - delta_ut1  # adjust to UTC
-            return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=seconds_since_unix)
+    #     Returns
+    #     -------
+    #     datetime
+    #         Corresponding UTC datetime.
+    #     """
+    #     # check epoc type 
+    #     if self.epoc_type == self.JDUT1: # convert JDUT1 to datetime
+    #         JD_UNIX_EPOCH = 2440587.5  # JD of 1970-01-01 00:00:00 UTC
+    #         days_since_unix = self.epoc - JD_UNIX_EPOCH
+    #         seconds_since_unix = days_since_unix * 86400.0 - delta_ut1  # adjust to UTC
+    #         return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=seconds_since_unix)
 
-        else:
-            raise NotImplementedError(f"Unsupported epoc type: {self.epoc_type}. Only 'JDUT1' is supported.")
+    #     else:
+    #         raise NotImplementedError(f"Unsupported epoc type: {self.epoc_type}. Only 'JDUT1' is supported.")
 
     def copy(self) -> object:
         return OrbitData(self.agent_name, 
@@ -310,12 +310,6 @@ class OrbitData:
                          )
     
     def update_databases(self, t : float) -> None:
-        
-        for satellite_name, isl_data in self.isl_data.items():
-            if isl_data is None:
-                x = 1
-
-
         # exclude outdated data
         self.eclipse_data.update_expired_values(t)
         self.position_data.update_expired_values(t)
@@ -323,83 +317,80 @@ class OrbitData:
         self.gs_access_data.update_expired_values(t)
         self.gp_access_data.update_expired_values(t)
 
-        # self.eclipse_data = self.eclipse_data[self.eclipse_data['end index'] >= t_index - 1]
-        # self.position_data = self.position_data[self.position_data['time index'] >= t_index - 1]
-        # self.isl_data = {   satellite_name : self.isl_data[satellite_name][self.isl_data[satellite_name]['end index'] >= t_index - 1]
-        #                     for satellite_name in self.isl_data}
-        # self.gs_access_data = self.gs_access_data[self.gs_access_data['end index'] >= t_index - 1]
-        # self.gp_access_data = self.gp_access_data[self.gp_access_data['time index'] >= t_index - 1]
-
     """
     GET NEXT methods
     """
-    def get_next_agent_access(self, target : str, t: float):
-        src = self.agent_name
+    def get_next_agent_access(self, target : str, t: float) -> Interval:
+        """ returns the next access interval to another agent or ground station after or during time `t`. """
 
-        if target in self.isl_data.keys():
-            return self.get_next_isl_access_interval(target, t)
-        else:
-            raise ValueError(f'{src} cannot access {target}.')
+        # check if target is within the list of known agents
+        assert target in self.comms_links.keys(), f'No comms data found for target agent `{target}`.'
+
+        # return next access interval
+        return self.__get_next_interval(self.comms_links[target], t)
 
     def get_next_isl_access_interval(self, target : str, t : float) -> Interval:
-        t = t/self.time_step
-        isl_data : pd.DataFrame = self.isl_data[target]
-        isl_access : pd.DataFrame = isl_data.query('@t <= `end index`').sort_values('start index')
+        """ returns the next access interval to another agent after or during time `t`. """
+
+        # check if target is within the list of known satellite agents
+        assert target in self.isl_data.keys(), f'No ISL data found for target agent `{target}`.'
+
+        # return next access interval
+        return self.__get_next_interval(self.isl_data[target], t)
+    
+    def get_next_gs_access(self, t) -> Interval:
+        """ returns the next access interval to a ground station after or during time `t`. """
+        return self.__get_next_interval(self.gs_access_data, t)
+    
+    def get_next_eclipse_interval(self, t: float) -> Interval:
+        """ returns the next eclipse interval after or during time `t`. """
+        return self.__get_next_interval(self.eclipse_data, t)
+    
+    def __get_next_interval(self, interval_data : IntervalData, t : float) -> Interval:
+        """ returns the next access interval from `interval_data` after or during time `t`. """
+        # find all intervals that end after time `t`
+        future_intervals: list[tuple[float, float]] = [(t_start, t_end)
+                                                        for t_start,t_end,*_ in interval_data.data
+                                                        if t <= t_end]
+
+        # check if there are any valid intervals
+        if not future_intervals: return None
         
-        for _, row in isl_access.iterrows():
-            t_start = max(t, row['start index']) * self.time_step
-            t_end = row['end index'] * self.time_step
+        # sort by start time
+        future_intervals.sort(key=lambda interval: interval[0])
 
-            return Interval(t_start, t_end)
+        # get interval bounds
+        t_start,t_end = future_intervals[0]
 
-        return Interval(np.Inf, np.Inf)
+        # return the first interval that starts after or at time `t`
+        return Interval(max(t, t_start), t_end)
 
-    def get_next_gs_access(self, t):
-        t = t/self.time_step
-        accesses = self.gp_access_data.query('`time index` >= @t').sort_values(by='time index')        
-        for _, row in accesses.iterrows():
-            return row['time index'] * self.time_step
-        return np.Inf
-
-    def get_next_gp_access_interval(self, lat: float, lon: float, t: float):
+    def get_next_gp_access_interval(self, lat: float, lon: float, t: float) -> Interval:
         """
         Returns the next access to a ground point
         """
-        # # find closest gridpoint 
-        # grid_index, gp_index, _, _ = self.find_gp_index(lat, lon)
-
-        # find next access
         # TODO
         raise NotImplementedError('TODO: need to implement.')
-
-        interval = Interval(-np.Inf, np.Inf)
-        instruments = []
-        modes = dict()
-        return interval, instruments, modes
-
-    def get_next_eclipse_interval(self, t: float):
-        for _, row in self.eclipse_data.iterrows():
-            t_start = row['start index'] * self.time_step
-            t_end = row['end index'] * self.time_step
-            if t_end <= t:
-                continue
-            elif t < t_start:
-                return t_start
-            elif t < t_end:
-                return t_end
-        return np.Infinity
 
     """
     STATE QUERY methods
     """
     def is_accessing_agent(self, target: str, t: float) -> bool:
-        if target in self.agent_name:
-            return True
+        """ checks if a satellite is currently accessing another agent at time `t`. """
+        # check if the target is the agent itself
+        if target in self.agent_name: return True
 
-        if target not in self.isl_data.keys():
-            return False 
+        # check if target is within the list of known agents
+        if target not in self.comms_links.keys(): return False
 
-        return any([t_start <= t <= t_end for t_start,t_end,*_ in self.isl_data[target].data])
+        # get next access interval
+        next_access : Interval = self.__get_next_interval(self.comms_links[target], t)
+
+        # if no current or future access interval, return False
+        if next_access is None: return False
+
+        # check if the next access interval contains time `t`
+        return t in next_access
 
     def is_accessing_ground_station(self, target : str, t: float) -> bool:
         raise NotImplementedError('TODO: implement ground station access check.')
@@ -832,7 +823,8 @@ class OrbitData:
             data = dict()
             spacecraft_list : list = mission_dict.get('spacecraft', None)
             uav_list : list = mission_dict.get('uav', None)
-            ground_station_list = mission_dict.get('groundStation', None)
+            ground_station_list : list = mission_dict.get('groundStation', None)
+            ground_ops_list = mission_dict.get('groundOps', None)
 
             # load pre-computed data
             if spacecraft_list:
@@ -846,13 +838,14 @@ class OrbitData:
                 raise NotImplementedError('Orbitdata for UAVs not yet supported')
 
             if ground_station_list:
+                raise NotImplementedError('Orbitdata for ground stations not yet supported')
+                
                 for ground_station in ground_station_list:
                     ground_station : dict
                     agent_name = ground_station.get('name')
 
                     data[agent_name] = OrbitData.load(orbitdata_dir, agent_name)
 
-                raise NotImplementedError('Orbitdata for ground stations not yet supported')
 
             return data
                

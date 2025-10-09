@@ -70,11 +70,11 @@ class PlannerTester(ABC):
                         }
                     },
                     "planner" : {
-                        "preplanner" : {
-                            "@type" : "earliest",
-                            "period": 500,
-                            # "horizon": 500,
-                        },
+                        # "preplanner" : {
+                        #     "@type" : "earliest",
+                        #     "period": 500,
+                        #     # "horizon": 500,
+                        # },
                         # "replanner" : {
                         #     "@type" : "broadcaster",
                         #     "period" : 400
