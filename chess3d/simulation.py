@@ -1316,22 +1316,19 @@ class SimulationElementFactory:
                                       logger)     
 
             elif agent_type == SimulationAgentTypes.GROUND_OPERATOR:
-                raise NotImplementedError('Ground station agents not yet implemented.')
-
-                lat = agent_specs['latitude']
-                lon = agent_specs['longitude']
-                alt = agent_specs.get('altitude', 0.0)
-                initial_state = GroundStationAgentState(agent_name, lat, lon, alt)
-
-                return GroundStationAgent(agent_name,
+                # define initial state
+                initial_state = GroundOperatorAgentState(agent_name)
+                
+                # return ground operator agent
+                return GroundOperatorAgent(agent_name,
                                           results_path,
                                           agent_network_config,
                                           manager_network_config,
                                           initial_state,
                                           agent_specs, 
                                           processor,
-                                        #   preplanner,
-                                        #   replanner,
+                                          preplanner,
+                                          replanner,
                                           level=level,
                                           logger=logger
                                           )

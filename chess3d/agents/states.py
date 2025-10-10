@@ -189,7 +189,7 @@ class SimulationAgentState(AbstractAgentState):
 
     def from_dict(d : dict) -> object:
         if d['state_type'] == SimulationAgentTypes.GROUND_OPERATOR.value:
-            return GroundStationAgentState(**d)
+            return GroundOperatorAgentState(**d)
         elif d['state_type'] == SimulationAgentTypes.SATELLITE.value:
             return SatelliteAgentState(**d)
         # elif d['state_type'] == SimulationAgentTypes.UAV.value:
@@ -197,36 +197,26 @@ class SimulationAgentState(AbstractAgentState):
         else:
             raise NotImplementedError(f"Agent states of type {d['state_type']} not yet supported.")
 
-class GroundStationAgentState(SimulationAgentState):
+class GroundOperatorAgentState(SimulationAgentState):
     """
     Describes the state of a Ground Station Agent
     """
+    R = 6.3781363e+003         # radius of the earth [km]
+    W = 360 / (24 * 3600)      # angular speed of Earth [deg/s]
+
     def __init__(self, 
-                agent_name : str,
-                lat: float, 
-                lon: float,
-                alt: float, 
+                agent_name : str, 
                 status: str = SimulationAgentState.IDLING, 
                 pos : list = None,
                 vel : list = None,
-                t: Union[float, int] = 0, **_) -> None:
+                t: Union[float, int] = 0, 
+                **_) -> None:
         
-        self.lat = lat
-        self.lon = lon
-        self.alt = alt 
-
-        self.R = 6.3781363e+003 + alt   # radius of the earth [km]
-        self.W = 360 / (24 * 3600)      # angular speed of Earth [deg/s]
-
-        self.angular_vel = [0, 0, self.W]
-
-        if pos is None:
-            pos = [self.R + self.alt, 0, 0] # in rotating frame
-            pos = GroundStationAgentState._rotating_to_inertial(self, pos, lat, lon)
-        
-        if vel is None:
-            vel = np.cross(self.angular_vel, pos)
+        # calculate position and velocity if not given
+        if pos is None: pos = [self.R, 0, 0]
+        if vel is None: vel = np.cross([0, 0, self.W], pos)
          
+        # initialize parent class
         super().__init__(agent_name,
                         SimulationAgentTypes.GROUND_OPERATOR.value, 
                         pos, 
@@ -236,6 +226,54 @@ class GroundStationAgentState(SimulationAgentState):
                         status, 
                         t)
         
+    def kinematic_model(self, _: Union[int, float]) -> tuple:
+        # ground operators are fixed on the earth surface
+        return self.pos, self.vel, self.attitude, self.attitude_rates
+
+    def is_failure(self) -> None:
+        return False # agent never reaches a failure state
+
+    def perform_travel(self, action: TravelAction, _: Union[int, float]) -> tuple:
+        # agent cannot travel
+        return action.FAILED, 0.0 # ground operators cannot displace
+
+    def perform_maneuver(self, action: ManeuverAction, _: Union[int, float]) -> tuple:
+        # agent cannot maneuver
+        return action.FAILED, 0.0 # ground operators cannot perform maneuvers
+
+class GroundSensorAgentState(SimulationAgentState):
+    """
+    Describes the state of a Ground Sensor Agent
+    """
+    R = 6.3781363e+003         # radius of the earth [km]
+    W = 360 / (24 * 3600)      # angular speed of Earth [deg/s]
+
+    def __init__( self, 
+                    agent_name : str,
+                    lat : float,
+                    lon : float, 
+                    alt : float = 0.0,
+                    pos : list = None,
+                    vel : list = None,
+                    t: Union[float, int] = 0, 
+                    status : str = SimulationAgentState.IDLING,
+                    **_
+                ) -> None:
+
+        # calculate position and velocity if not given
+        if pos is None: pos = self._rotating_to_inertial([self.R + alt, 0, 0], lat, lon)
+        if vel is None: vel = np.cross([0, 0, self.W], pos)
+
+        # initialize parent class
+        super().__init__(agent_name,
+                        SimulationAgentTypes.GROUND_SENSOR.value,
+                        pos,
+                        vel,
+                        [0,0,0],
+                        [0,0,0],
+                        status,
+                        t)
+
     def to_rads(self, th : float) -> float:
         return th * np.pi / 180
 
@@ -264,28 +302,29 @@ class GroundStationAgentState(SimulationAgentState):
         R_b2i = np.transpose(R_i2b)
         return np.dot(R_b2i, v)
 
-    def kinematic_model(self, tf: Union[int, float]) -> tuple:
-        lon = self.lon * self.W * tf    # longitude "changes" as earth spins 
-        lat = self.lat                  # lattitude stays constant
+    def kinematic_model(self, _: Union[int, float]) -> tuple:
+        # ground sensors are fixed on the earth surface
+        return self.pos, self.vel, self.attitude, self.attitude_rates   
 
-        pos = [self.R + self.alt, 0, 0] # in rotating frame
-        pos = GroundStationAgentState._rotating_to_inertial(self, pos, lat, lon)
-        vel = np.cross(self.angular_vel, pos)
+        # lon = self.lon * self.W * tf    # longitude "changes" as earth spins 
+        # lat = self.lat                  # lattitude stays constant
+
+        # pos = [self.R + self.alt, 0, 0] # in rotating frame
+        # pos = GroundOperatorAgentState._rotating_to_inertial(self, pos, lat, lon)
+        # vel = np.cross(self.angular_vel, pos)
         
-        return list(pos), list(vel), self.attitude, self.attitude
+        # return list(pos), list(vel), self.attitude, self.attitude
 
     def is_failure(self) -> None:
-        # agent never fails
-        return False
+        return False # agent never reaches a failure state
 
     def perform_travel(self, action: TravelAction, _: Union[int, float]) -> tuple:
         # agent cannot travel
-        return action.ABORTED, 0.0
+        return action.FAILED, 0.0 # ground sensors cannot displace
 
     def perform_maneuver(self, action: ManeuverAction, _: Union[int, float]) -> tuple:
         # agent cannot maneuver
-        return action.ABORTED, 0.0
-
+        return action.FAILED, 0.0 # ground sensors cannot perform maneuvers
 
 class SatelliteAgentState(SimulationAgentState):
     """

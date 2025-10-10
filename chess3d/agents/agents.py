@@ -27,7 +27,7 @@ class RealtimeGroundStationAgent(RealtimeAgent):
     async def teardown(self) -> None:
         await super().teardown()
 
-class GroundStationAgent(SimulatedAgent):
+class GroundOperatorAgent(SimulatedAgent):
     async def setup(self) -> None:
         # nothing to setup
         return
