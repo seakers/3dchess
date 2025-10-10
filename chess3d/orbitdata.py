@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import copy
 import json
+from math import ceil
 import os
 import random
 import re
@@ -749,8 +750,51 @@ class OrbitData:
             # validate that a network name and a list of ground stations is assigned
             assert gs_network_station_indices, f'No ground station network found for ground operator `{agent_name}`.'
 
-            # compile satellite link interval data
+            # compile time data
             time_data = None
+            for sat_idx, spacecraft in enumerate(spacecraft_list):
+                # spacecraft is not part of the ground station network; skip
+                if spacecraft.get('groundStationNetwork', None) != name: continue
+
+                # initiate access data for this spacecraft
+                satellite_access_data = pd.DataFrame(columns=['start index', 'end index'])
+
+                # load access time for this spacecraft with each ground_station in the network
+                for file in os.listdir(os.path.join(orbitdata_path,"sat" + str(sat_idx))):
+                    if 'state' not in file: continue
+
+                    # load propagation time data
+                    agent_access_file = os.path.join(orbitdata_path, "sat" + str(sat_idx), file)
+                    time_data =  pd.read_csv(agent_access_file, nrows=3)
+                    _, epoch_type, _, epoch = time_data.at[0,time_data.axes[1][0]].split(' ')
+                    epoch_type = epoch_type[1 : -1]
+                    epoch = float(epoch)
+                    _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
+                    time_step = float(time_step)
+                    _, _, _, _, duration = time_data.at[2,time_data.axes[1][0]].split(' ')
+                    duration = float(duration)
+
+                    time_data = { "epoch": epoch, 
+                                "epoch type": epoch_type, 
+                                "time step": time_step,
+                                "duration" : duration }
+                    
+                    break # only need to load time data once
+                if time_data is not None: break # only need to load time data once
+
+            assert time_data is not None, f'No propagation data found for any spacecraft in ground station network `{agent_name}`.'
+
+            # load eclipse data
+            # TODO implement eclipse data for ground stations, currently empty
+            eclipse_data = pd.DataFrame(columns=['start index', 'end index'])
+
+            # calculate position data
+            # TODO implement position data for ground stations, currently empty.
+            # Since the operator consists of a network of ground stations, and the ground stations are static, 
+            # there is no single position data to represent the entire network.
+            position_data = pd.DataFrame(columns=['time index','x [km]','y [km]','z [km]','vx [km/s]','vy [km/s]','vz [km/s]'])
+
+            # compile satellite link interval data
             satellite_link_data : Dict[str, pd.DataFrame] = dict()
             for sat_idx, spacecraft in enumerate(spacecraft_list):
                 # spacecraft is not part of the ground station network; skip
@@ -778,16 +822,14 @@ class OrbitData:
                 
                 # save access data for this spacecraft
                 satellite_link_data[spacecraft.get('name')] = satellite_access_data
-
-            assert time_data is not None, f'No satellite links found for ground operator `{agent_name}`.'
-
+            
             # load ground station access data
-            # gs_access_data = pd.DataFrame(columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]'])
-            # for op_ids,gs_op in enumerate(ground_ops_list):
-            #     # ground operator is the same agent; skip
-            #     if gs_op.get('name') == agent_name: continue
-
-                
+            columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]']
+            n_steps = int(ceil(time_data.get('duration') * 24 * 3600 / time_data.get('time step')))
+            data = [(0, n_steps-1, ground_station.get('@id'), ground_station.get('name'), ground_station.get('latitude'), ground_station.get('longitude'))
+                    for ground_station in ground_station_list
+                    if ground_station.get('networkName', None) == name]
+            gs_access_data = pd.DataFrame(data=data, columns=columns)
 
             # Ground Operators have no sensing capability; create empty ground point coverage data
             gp_access_data = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]', 'agent','instrument',
