@@ -285,6 +285,7 @@ class OrbitData:
         self.gp_access_data : TimeIndexedData = TimeIndexedData.from_dataframe(gp_access_data, self.time_step, 'gp-access')
 
         # grid information
+        assert isinstance(grid_data, list) and all([isinstance(df, pd.DataFrame) for df in grid_data]), 'grid data must be a list of pandas DataFrames'
         self.grid_data : list[pd.DataFrame] = grid_data
     
     # def get_epoc_in_datetime(self, delta_ut1=0.0) -> datetime:
@@ -878,7 +879,7 @@ class OrbitData:
                 grid_data['GP index'] = [i for i in range(nrows)]
                 grid_data_compiled.append(grid_data)
 
-            return OrbitData(agent_name, agent_name, time_data, eclipse_data, position_data, satellite_link_data, ground_operator_link_data, gs_access_data, gp_access_data, grid_data)
+            return OrbitData(agent_name, agent_name, time_data, eclipse_data, position_data, satellite_link_data, ground_operator_link_data, gs_access_data, gp_access_data, grid_data_compiled)
                 
         raise ValueError(f'Orbitdata for satellite `{agent_name}` not found in precalculated data.')
                

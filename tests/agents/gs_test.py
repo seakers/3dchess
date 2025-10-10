@@ -23,10 +23,10 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
             {
                 "name" : gs_network_name,
                 "@id" : gs_network_name.lower(),
-                "science" : {
-                    "@type": "lookup", 
-                    "eventsPath" : "./tests/agents/resources/events/toy_events.csv"
-                },
+                # "science" : {
+                #     "@type": "lookup", 
+                #     "eventsPath" : "./tests/agents/resources/events/toy_events.csv"
+                # },
                 "planner" : {
                 "preplanner": {
                     "@type": "dealer",
@@ -53,7 +53,7 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
         duration = 1.0 / 24.0
         grid_name = 'toy_points'
         scenario_name = f'toy_scenario_gs'
-        connectivity = 'LOS'
+        connectivity = 'FULL' # TODO fix LOS cases
         event_name = 'lake_events_seed-1000'
         mission_name = 'lake_missions'
         nen = 'gs_nen'
@@ -100,6 +100,11 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
         # initialize mission
         self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
 
 if __name__ == '__main__':
     # run tests

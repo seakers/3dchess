@@ -1,6 +1,7 @@
 import copy
 import os
 import time
+from typing import Dict
 from dmas.elements import SimulationMessage
 from dmas.messages import SimulationMessage
 import numpy as np
@@ -35,7 +36,6 @@ class SimulationEnvironment(EnvironmentNode):
     
     """
     
-
     def __init__(self, 
                 results_path : str, 
                 orbitdata_dir : str,
@@ -54,7 +54,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.results_path : str = os.path.join(results_path, self.get_element_name().lower())
 
         # load observation data
-        self.orbitdata : dict = OrbitData.from_directory(orbitdata_dir) if orbitdata_dir is not None else None
+        self.orbitdata : Dict[str,OrbitData] = OrbitData.from_directory(orbitdata_dir) if orbitdata_dir is not None else None
 
         # load agent names and classify by type of agent
         self.agents = {}
@@ -402,7 +402,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         else:
             # check current state
-            if msg.src in self.agents[SimulationAgentTypes.SPACECRAFT]:
+            if msg.src in self.agents[SimulationAgentTypes.SATELLITE]:
                 # look up orbit state
                 pos, vel, eclipse = self.get_updated_orbit_state(sat_orbitdata, self.get_current_time())
 
@@ -467,7 +467,7 @@ class SimulationEnvironment(EnvironmentNode):
         return resp_msgs
     
     @runtime_tracker
-    def check_agent_connectivity(self, src : str, target : str, target_type : str) -> bool:
+    def check_agent_connectivity(self, src : str, target : str, target_type : str) -> int:
         """
         Checks if an agent is in communication range with another agent
 
@@ -479,14 +479,18 @@ class SimulationEnvironment(EnvironmentNode):
         #### Returns:
             - connected (`int`): binary value representing if the `src` and `target` are connected
         """
-        if self.connectivity == 'FULL': return True
+        # check if full connectivity has been assumed
+        if self.connectivity == 'FULL': return 1
 
+        # check if orbit data is available for the source agent
         assert src in self.orbitdata, f'No orbit data found for agent `{src}`.'
-        # assert target in self.orbitdata, f'No orbit data found for agent `{target}`.'
+        
+        # check if target is in the list of comms links for the source agent
+        if target not in self.orbitdata[src].comms_links: return 0
 
+        # check connectivity based on orbit data
         src_data : OrbitData = self.orbitdata[src]
-        connected = src_data.is_accessing_agent(target, self.get_current_time())
-        return int(connected)
+        return int(src_data.is_accessing_agent(target, self.get_current_time()))
 
         # connected = False
         # if target_type == self.SPACECRAFT:

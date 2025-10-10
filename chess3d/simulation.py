@@ -87,7 +87,6 @@ class Simulation:
             "Both `groundStation` and `groundOperator` must be defined in the input file."
 
         # unpack scenario info
-        scenario_dict : dict = mission_specs.get('scenario', None)
         grid_dict : dict = mission_specs.get('grid', None)
         settings_dict : dict = mission_specs.get('settings', None)
         
@@ -100,9 +99,9 @@ class Simulation:
         if uav_dict:
             agent_names.extend([uav['name'] for uav in uav_dict])
             agent_ids.extend([uav['@id'] for uav in uav_dict])
-        if gstation_dict:
-            agent_names.extend([gstation['name'] for gstation in gstation_dict])
-            agent_ids.extend([gstation['@id'] for gstation in gstation_dict])
+        if gops_dict:
+            agent_names.extend([ground_operator['name'] for ground_operator in gops_dict])
+            agent_ids.extend([ground_operator['@id'] for ground_operator in gops_dict])
 
         # validate agent names and ids
         assert len(agent_names) > 1, "At least one agent (spacecraft, UAV, or ground station) must be defined in the input file."
@@ -146,7 +145,7 @@ class Simulation:
                                                 )
 
 
-        manager = SimulationManager(results_path, agent_names, clock_config, manager_network_config, level)
+        manager : SimulationManager = SimulationManager(results_path, agent_names, clock_config, manager_network_config, level)
         logger = manager.get_logger()
 
         # ------------------------------------
@@ -164,7 +163,7 @@ class Simulation:
         agent_port = port + 6
         if isinstance(spacecraft_dict, list):
             for spacecraft in spacecraft_dict:
-                # create satellite agents
+                # create satellite agent
                 agent = SimulationElementFactory.generate_agent(
                                                     scenario_name, 
                                                     results_path,
@@ -179,14 +178,15 @@ class Simulation:
                                                     level,
                                                     logger
                                                 )
+                # add to list of agents
                 agents.append(agent)
+
+                # update port counter
                 agent_port += 7    
 
         if isinstance(gops_dict, list):
-            # TODO allow for multiple ground ops agents representing different and independent ground station networks
-
             for ground_operator in gops_dict:
-                # create ground station agent
+                # create ground operator agent
                 agent = SimulationElementFactory.generate_agent(
                                                     scenario_name, 
                                                     results_path,
@@ -201,8 +201,11 @@ class Simulation:
                                                     level,
                                                     logger
                                                 )
+                # add to list of agents
                 agents.append(agent)
-                agent_port += 7
+
+                # update port counter
+                agent_port += 7 
         
         if uav_dict is not None:
             # TODO Implement UAV agents
@@ -242,7 +245,7 @@ class Simulation:
                                             orbitdata_dir,
                                             spacecraft_dict,
                                             uav_dict,
-                                            gstation_dict,
+                                            gops_dict,
                                             env_network_config, 
                                             manager_network_config,
                                             connectivity,
@@ -1220,6 +1223,16 @@ class SimulationElementFactory:
 
             # load satellite specs
             agent_specs : Spacecraft = Spacecraft.from_dict(agent_dict)
+        elif agent_type == SimulationAgentTypes.GROUND_OPERATOR:
+            # load orbitdata
+            agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name) if orbitdata_dir is not None else None
+            
+            # load payload
+            instruments_dict = agent_dict.get('instrument', None)   
+            agent_specs : dict = {key: val for key,val in agent_dict.items()}
+            agent_specs['payload'] = orbitpy.util.dictionary_list_to_object_list(instruments_dict, Instrument) \
+                                     if instruments_dict else []
+
         else:
             instruments_dict = agent_dict.get('instrument', None)   
 
@@ -1320,18 +1333,19 @@ class SimulationElementFactory:
                 initial_state = GroundOperatorAgentState(agent_name)
                 
                 # return ground operator agent
-                return GroundOperatorAgent(agent_name,
-                                          results_path,
-                                          agent_network_config,
-                                          manager_network_config,
-                                          initial_state,
-                                          agent_specs, 
-                                          processor,
-                                          preplanner,
-                                          replanner,
-                                          level=level,
-                                          logger=logger
-                                          )
+                return GroundOperatorAgent(agent_name, 
+                                            results_path,
+                                            agent_network_config,
+                                            manager_network_config,
+                                            initial_state,
+                                            agent_specs,
+                                            agent_orbitdata,
+                                            mission,
+                                            processor,
+                                            preplanner,
+                                            replanner,
+                                            level,
+                                            logger)   
 
         
         raise NotImplementedError(f"agents of type `{agent_type}` not yet supported by agent factory.")

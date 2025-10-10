@@ -214,7 +214,7 @@ class GroundOperatorAgentState(SimulationAgentState):
         
         # calculate position and velocity if not given
         if pos is None: pos = [self.R, 0, 0]
-        if vel is None: vel = np.cross([0, 0, self.W], pos)
+        if vel is None: vel = np.cross([0, 0, self.W], pos).tolist()
          
         # initialize parent class
         super().__init__(agent_name,

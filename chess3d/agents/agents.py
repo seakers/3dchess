@@ -28,6 +28,81 @@ class RealtimeGroundStationAgent(RealtimeAgent):
         await super().teardown()
 
 class GroundOperatorAgent(SimulatedAgent):
+    def __init__(self, 
+                 agent_name, 
+                 results_path, 
+                 agent_network_config, 
+                 manager_network_config, 
+                 initial_state, 
+                 specs, 
+                 orbitdata : OrbitData,
+                 mission,
+                 processor = None, 
+                 preplanner = None, 
+                 replanner = None, 
+                 level=logging.INFO, 
+                 logger=None):
+        
+        super().__init__(agent_name, 
+                         results_path, 
+                         agent_network_config, 
+                         manager_network_config, 
+                         initial_state, 
+                         specs,
+                         mission,
+                         processor, 
+                         preplanner, 
+                         replanner, 
+                         level, 
+                         logger)
+        
+        # assign orbitdata
+        self.orbitdata : OrbitData = orbitdata
+
+        # initialize observation history
+        self.observation_history = ObservationHistory(orbitdata)
+
+        # gather targets for default mission tasks
+        objective_targets = { objective : [] for objective in self.mission 
+                             # ignore non-default objectives
+                             if not isinstance(objective, DefaultMissionObjective)
+                             }
+        for objective in objective_targets:         
+            for req in objective:
+                # ignore non-spatial requirements
+                if not isinstance(req, SpatialRequirement): continue
+                
+                elif isinstance(req, PointTargetSpatialRequirement):
+                    raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                
+                elif isinstance(req, TargetListSpatialRequirement):
+                    raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
+                
+                elif isinstance(req, GridTargetSpatialRequirement):
+                    req_targets = [
+                        (lat, lon, grid_index, gp_index)
+                        for grid in self.orbitdata.grid_data
+                        for lat,lon,grid_index,gp_index in grid.values
+                        if grid_index == req.grid_index and gp_index < req.grid_size
+                    ]
+                    
+                else: 
+                    raise TypeError(f"Unknown spatial requirement type: {type(req)}")
+                    
+            # create monitoring tasks from each location in this mission objective
+            tasks = [DefaultMissionTask(objective.parameter,
+                                        location=(lat, lon, grid_index, gp_index),
+                                        mission_duration=self.orbitdata.duration*24*3600,
+                                        objective=objective,
+                                        )
+                        for lat,lon,grid_index,gp_index in req_targets
+                    ]
+            
+            # add to list of known tasks
+            self.tasks.extend(tasks)
+        
+        return
+
     async def setup(self) -> None:
         # nothing to setup
         return
