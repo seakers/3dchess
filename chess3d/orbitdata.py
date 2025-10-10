@@ -5,7 +5,7 @@ import os
 import random
 import re
 import time
-from typing import Dict
+from typing import Dict, List
 import pandas as pd
 import numpy as np
 
@@ -448,19 +448,25 @@ class OrbitData:
             
     def load_spacecraft_data(
                              agent_name : str, 
-                             spacecraft_list : list, 
-                             ground_station_list: list,
+                             spacecraft_list : List[dict], 
+                             ground_station_list: List[dict],
                              orbitdata_path : str,
                              mission_dict : dict
                              ) -> object:
-        for spacecraft in spacecraft_list:
-            spacecraft : dict
-            name = spacecraft.get('name')
-            index = spacecraft_list.index(spacecraft)
-            agent_folder = "sat" + str(index) + '/'
+        """
+        Loads orbit data for a spacecraft from pre-computed csv files in scenario directory
+        """
 
-            if name != agent_name:
-                continue
+        # find the desired spacecraft specifications in the mission dictionary
+        for spacecraft_idx,spacecraft in enumerate(spacecraft_list):
+            # get spacecraft name
+            name = spacecraft.get('name')
+
+            # check if this is the desired spacecraft
+            if name != agent_name: continue
+
+            # define agent folder
+            agent_folder = "sat" + str(spacecraft_idx) + '/'
 
             # load eclipse data
             eclipse_file = os.path.join(orbitdata_path, agent_folder, "eclipses.csv")
@@ -492,9 +498,9 @@ class OrbitData:
                 isl = re.sub(".csv", "", file)
                 sender, _, receiver = isl.split('_')
 
-                if 'sat' + str(index) in sender or 'sat' + str(index) in receiver:
+                if 'sat' + str(spacecraft_idx) in sender or 'sat' + str(spacecraft_idx) in receiver:
                     isl_file = os.path.join(comms_path, file)
-                    if 'sat' + str(index) in sender:
+                    if 'sat' + str(spacecraft_idx) in sender:
                         receiver_index = int(re.sub("[^0-9]", "", receiver))
                         receiver_name = spacecraft_list[receiver_index].get('name')
                         if (
@@ -527,38 +533,58 @@ class OrbitData:
                             # load connectivity
                             isl_data[sender_name] = pd.read_csv(isl_file, skiprows=range(3))
 
+            # compile list of ground stations that are part of the desired network
+            gs_network_name = spacecraft.get('groundStationNetwork', None)
+            gs_network_station_ids : List[str] = [
+                gs['@id'] for gs in ground_station_list
+                if gs.get('networkName', None) == gs_network_name
+            ]
+
             # load ground station access data
             gs_access_data = pd.DataFrame(columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]'])
             agent_orbitdata_path = os.path.join(orbitdata_path, agent_folder)
             for file in os.listdir(agent_orbitdata_path):
-                if 'gndStn' in file:
-                    gndStn_access_file = os.path.join(orbitdata_path, agent_folder, file)
-                    gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
-                    nrows, _ = gndStn_access_data.shape
+                # check if file is a ground station access file
+                if 'gndStn' not in file: continue
 
-                    if nrows > 0:
-                        gndStn, _ = file.split('_')
-                        gndStn_index = int(re.sub("[^0-9]", "", gndStn))
-                        
-                        gndStn_name = ground_station_list[gndStn_index].get('name')
-                        gndStn_id = ground_station_list[gndStn_index].get('@id')
-                        gndStn_lat = ground_station_list[gndStn_index].get('latitude')
-                        gndStn_lon = ground_station_list[gndStn_index].get('longitude')
+                # get ground station index from file name
+                gndStn, _ = file.split('_')
+                gndStn_index = int(re.sub("[^0-9]", "", gndStn))
+                
+                # check if ground station is part of the desired network
+                gndStn_id = ground_station_list[gndStn_index].get('@id')
+                if gs_network_station_ids and gndStn_id not in gs_network_station_ids:
+                    continue
 
-                        gndStn_name_column = [gndStn_name] * nrows
-                        gndStn_id_column = [gndStn_id] * nrows
-                        gndStn_lat_column = [gndStn_lat] * nrows
-                        gndStn_lon_column = [gndStn_lon] * nrows
+                # load ground station access data
+                gndStn_access_file = os.path.join(orbitdata_path, agent_folder, file)
+                gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
+                nrows, _ = gndStn_access_data.shape
 
-                        gndStn_access_data['gndStn name'] = gndStn_name_column
-                        gndStn_access_data['gndStn id'] = gndStn_id_column
-                        gndStn_access_data['lat [deg]'] = gndStn_lat_column
-                        gndStn_access_data['lon [deg]'] = gndStn_lon_column
+                # # check if there is any access data
+                # if nrows == 0: continue
 
-                        if len(gs_access_data) == 0:
-                            gs_access_data = gndStn_access_data
-                        else:
-                            gs_access_data = pd.concat([gs_access_data, gndStn_access_data])
+                # get ground station information
+                gndStn_name = ground_station_list[gndStn_index].get('name')
+                gndStn_lat = ground_station_list[gndStn_index].get('latitude')
+                gndStn_lon = ground_station_list[gndStn_index].get('longitude')
+
+                # add ground station information to access data
+                gndStn_name_column = [gndStn_name] * nrows
+                gndStn_id_column = [gndStn_id] * nrows
+                gndStn_lat_column = [gndStn_lat] * nrows
+                gndStn_lon_column = [gndStn_lon] * nrows
+
+                gndStn_access_data['gndStn name'] = gndStn_name_column
+                gndStn_access_data['gndStn id'] = gndStn_id_column
+                gndStn_access_data['lat [deg]'] = gndStn_lat_column
+                gndStn_access_data['lon [deg]'] = gndStn_lon_column
+
+                # append to overall ground station access data
+                if len(gs_access_data) == 0:
+                    gs_access_data = gndStn_access_data
+                else:
+                    gs_access_data = pd.concat([gs_access_data, gndStn_access_data])
 
             # land coverage data metrics data
             payload = spacecraft.get('instrument', None)
