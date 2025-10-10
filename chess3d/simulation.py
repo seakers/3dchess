@@ -1,5 +1,6 @@
 
 import concurrent.futures
+import copy
 import datetime
 from datetime import timedelta
 import logging
@@ -1228,7 +1229,7 @@ class SimulationElementFactory:
 
         # load specific mission assigned to this satellite
         mission : Mission = missions[agent_dict['mission'].lower()]
-        mission = mission.copy()
+        mission = copy.deepcopy(mission)
 
         if isinstance(clock_config, RealTimeClockConfig):            
             # load science module
@@ -1276,12 +1277,16 @@ class SimulationElementFactory:
                                     )
             
         else:
+            # initialize observation data processor 
             processor : DataProcessor = \
                 SimulationElementFactory.load_data_processor(science_dict, agent_name, mission)
-            # preplanner : AbstractPreplanner = 
+            
+            # load planners
+            preplanner, replanner = \
+                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, missions, logger)               
 
+            # create agent
             if agent_type == SimulationAgentTypes.SATELLITE:
-
                 # define initial state
                 position_file = os.path.join(orbitdata_dir, 
                                              f'sat{agent_index}', 
@@ -1290,13 +1295,12 @@ class SimulationElementFactory:
                 l : str = time_data.at[1,time_data.axes[1][0]]
                 _, _, _, _, dt = l.split(' '); dt = float(dt)
 
+                # create initial state
                 initial_state = SatelliteAgentState(agent_name,
                                                     orbit_state_dict,
                                                     time_step=dt) 
                 
-                preplanner, replanner = \
-                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, missions, logger)
-                
+                # return satellite agent
                 return SatelliteAgent(agent_name, 
                                       results_path,
                                       agent_network_config,

@@ -39,7 +39,8 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
                     "debug" : "False",
                     "clients" : gs_clients[gs_network_name]
                     },
-                }
+                },
+                "mission" : "Algal blooms monitoring"
             }
 
             for gs_network_name in gs_network_names
@@ -62,6 +63,7 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
         spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         spacecraft_1['name'] = 'sat-1'
         spacecraft_1['@id'] = 'sat-1'
+        spacecraft_1['orbitState']['state']['sma'] = 42164.0
         spacecraft_1['orbitState']['state']['inc'] = 0.0
         spacecraft_1['groundStationNetwork'] = nen
         spacecraft_1['planner']['replanner'] = {"@type": "worker", "dealerName" : nen}

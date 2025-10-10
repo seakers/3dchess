@@ -34,16 +34,14 @@ class SimulationEnvironment(EnvironmentNode):
     of eachother.
     
     """
-    SPACECRAFT = 'SPACECRAFT'
-    UAV = 'UAV'
-    GROUND_STATION = OrbitData.GROUND_STATION
+    
 
     def __init__(self, 
                 results_path : str, 
                 orbitdata_dir : str,
                 sat_list : list,
                 uav_list : list,
-                gs_list : list,
+                gs_list : list,                
                 env_network_config: NetworkConfig, 
                 manager_network_config: NetworkConfig, 
                 connectivity : str = 'full',
@@ -70,7 +68,7 @@ class SimulationEnvironment(EnvironmentNode):
                 sat_name = sat.get('name')
                 sat_names.append(sat_name)
                 agent_names.append(sat_name)
-        self.agents[self.SPACECRAFT] = sat_names
+        self.agents[SimulationAgentTypes.SATELLITE] = sat_names
 
         # load uav names
         uav_names = []
@@ -80,7 +78,7 @@ class SimulationEnvironment(EnvironmentNode):
                 uav_name = uav.get('name')
                 uav_names.append(uav_name)
                 agent_names.append(uav_name)
-        self.agents[self.UAV] = uav_names
+        self.agents[SimulationAgentTypes.UAV] = uav_names
 
         # load GS agent names
         gs_names : list = []
@@ -90,7 +88,7 @@ class SimulationEnvironment(EnvironmentNode):
                 gs_name = gs.get('name')
                 gs_names.append(gs_name)
                 agent_names.append(gs_name)
-        self.agents[OrbitData.GROUND_STATION] = gs_names
+        self.agents[SimulationAgentTypes.GROUND_OPERATOR] = gs_names
 
         # load events
         self.events_path : str = events_path
@@ -404,7 +402,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         else:
             # check current state
-            if msg.src in self.agents[self.SPACECRAFT]:
+            if msg.src in self.agents[SimulationAgentTypes.SPACECRAFT]:
                 # look up orbit state
                 pos, vel, eclipse = self.get_updated_orbit_state(sat_orbitdata, self.get_current_time())
 
@@ -414,11 +412,11 @@ class SimulationEnvironment(EnvironmentNode):
                 updated_state['vel'] = vel
                 updated_state['eclipse'] = int(eclipse)
 
-            elif msg.src in self.agents[self.UAV]:
-                # Do NOT update
-                updated_state = msg.state
+            # elif msg.src in self.agents[SimulationAgentTypes.UAV]:
+            #     # Do NOT update
+            #     updated_state = msg.state
 
-            elif msg.src in self.agents[OrbitData.GROUND_STATION]:
+            elif msg.src in self.agents[SimulationAgentTypes.GROUND_OPERATOR]:
                 # Do NOT update state
                 updated_state = msg.state
 

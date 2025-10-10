@@ -67,7 +67,7 @@ class AgentTester(ABC):
                         "state": {
                             "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                             "sma": 7078,
-                            "ecc": 0.01,
+                            "ecc": 0.0,
                             "inc": 60.0,
                             "raan": 0.0,
                             "aop": 0.0,

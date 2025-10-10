@@ -435,7 +435,7 @@ class DealerPreplanner(AbstractPreplanner):
         """ calculates future broadcast times based on inter-agent access opportunities """
 
         # get access intervals for the client
-        data : IntervalData = orbitdata.isl_data.get(client.lower(), None)
+        data : IntervalData = orbitdata.satellite_links.get(client.lower(), None)
             
         # if no data for the client, return empty list
         if data is None or not isinstance(data, IntervalData): return []
