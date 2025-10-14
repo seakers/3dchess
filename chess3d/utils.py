@@ -37,6 +37,12 @@ class Interval:
         if self.right < self.left:
             raise ValueError('The right side of interval must be later than the left side of the interval.')
 
+    def __contains__(self, x: float) -> bool:
+        """ checks if `x` is contained in the interval """
+        l = self.left < x if self.left_open else self.left < x or abs(self.left - x) < 1e-6
+        r = x < self.right if self.right_open else x < self.right or abs(self.right - x) < 1e-6        
+        return l and r
+
     def is_after(self, x : float) -> bool:
         """ checks if the interval starts after the value `x` """
         return x < self.left if self.left_open else (x < self.left or abs(self.left - x) < 1e-6)
@@ -149,12 +155,6 @@ class Interval:
     def span(self) -> float:
         """ returns the span of the interval """       
         return self.right - self.left
-    
-    def __contains__(self, x: float) -> bool:
-        """ checks if `x` is contained in the interval """
-        l = self.left < x if self.left_open else self.left < x or abs(self.left - x) < 1e-6
-        r = x < self.right if self.right_open else x < self.right or abs(self.right - x) < 1e-6        
-        return l and r
 
     def __eq__(self, __other: 'Interval') -> bool:
 

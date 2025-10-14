@@ -298,6 +298,8 @@ class Plan(ABC):
         else:
             # no actions in output plan; wait for future actions
             t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
+            assert t_idle >= t, \
+                f'next action time {t_idle} cannot be prior to current time {t}'
             return [WaitForMessages(t, t_idle)]
     
     def copy(self) -> object:

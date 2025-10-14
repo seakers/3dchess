@@ -34,7 +34,7 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
                     "model": "static",
                     "licensePath": "./gurobi.lic",
                     # "horizon": 500,
-                    "period" : 100,
+                    "period" : 1000,
                     "maxTasks": 100,
                     "debug" : "False",
                     "clients" : gs_clients[gs_network_name]
@@ -50,31 +50,33 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
     def test_initializer(self):
         """ Test case for a single satellite in a lake-monitoring scenario. """
         # setup scenario parameters
-        duration = 1.0 / 24.0
+        duration = 2.0 / 24.0
         grid_name = 'toy_points'
         scenario_name = f'toy_scenario_gs'
-        connectivity = 'FULL' # TODO fix LOS cases
+        connectivity = 'LOS' # TODO fix LOS cases
         event_name = 'lake_events_seed-1000'
         mission_name = 'lake_missions'
-        nen = 'gs_nen'
-        lakes = 'gs_lakes'
+        
+        # ground station networks
+        toy_1 = 'gs_toy_1'
+        toy_2 = 'gs_toy_2'
 
         # set toy satellites to equatorial orbit
         spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         spacecraft_1['name'] = 'sat-1'
         spacecraft_1['@id'] = 'sat-1'
-        spacecraft_1['orbitState']['state']['sma'] = 42164.0
+        # spacecraft_1['orbitState']['state']['sma'] = 42164.0
         spacecraft_1['orbitState']['state']['inc'] = 0.0
-        spacecraft_1['groundStationNetwork'] = nen
-        spacecraft_1['planner']['replanner'] = {"@type": "worker", "dealerName" : nen}
+        spacecraft_1['groundStationNetwork'] = toy_2
+        spacecraft_1['planner']['replanner'] = {"@type": "worker", "dealerName" : toy_2}
 
         spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
         spacecraft_2['name'] = 'sat-2'
         spacecraft_2['@id'] = 'sat-2'
         spacecraft_2['orbitState']['state']['inc'] = 0.0
-        spacecraft_2['orbitState']['state']['ta'] = 90.0
-        spacecraft_2['groundStationNetwork'] = lakes
-        spacecraft_2['planner']['replanner'] = {"@type": "worker", "dealerName" : lakes}
+        spacecraft_2['orbitState']['state']['ta'] = 94.5
+        spacecraft_2['groundStationNetwork'] = toy_2
+        spacecraft_2['planner']['replanner'] = {"@type": "worker", "dealerName" : toy_2}
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` AGENT TEST')
@@ -87,8 +89,8 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
                                                    event_name,
                                                    mission_name,
                                                    gs_network_names=[
-                                                       nen,
-                                                       lakes
+                                                    #    toy_1,
+                                                       toy_2
                                                     ],
                                                    spacecraft=[
                                                        spacecraft_1, 

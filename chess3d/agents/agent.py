@@ -18,7 +18,7 @@ from chess3d.agents.planning.plan import Replan, Plan, Preplan
 from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
 from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
 from chess3d.agents.planning.replanners.replanner import AbstractReplanner
-from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask
+from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
@@ -28,6 +28,9 @@ from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
 from chess3d.mission.mission import Mission
+from chess3d.mission.objectives import DefaultMissionObjective
+from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
+from chess3d.orbitdata import OrbitData
 
 class AbstractAgent(Agent):
     """
@@ -152,8 +155,13 @@ class AbstractAgent(Agent):
 
             elif isinstance(resp_msg, AgentConnectivityUpdate):
                 if resp_msg.connected == 1:
+                    # subscribe from broadcasts
                     self.subscribe_to_broadcasts(resp_msg.target)
                 else:
+                    # add randomness to avoid sync issues with possible concurrent broadcasts
+                    await asyncio.sleep(np.random.random() * 1e-9)
+
+                    # unsubscribe from broadcasts
                     self.unsubscribe_to_broadcasts(resp_msg.target)
         return senses 
     
@@ -676,6 +684,7 @@ class SimulatedAgent(AbstractAgent):
                  initial_state, 
                  specs, 
                  mission : Mission,
+                 orbitdata : OrbitData = None,
                  processor : DataProcessor = None, 
                  preplanner : AbstractPreplanner = None,
                  replanner : AbstractReplanner = None,
@@ -700,11 +709,53 @@ class SimulatedAgent(AbstractAgent):
 
         # initialize parameters
         self.plan : Plan = Preplan(t=-1.0)
-        self.orbitdata = None
+        self.orbitdata = orbitdata
         self.plan_history = []
         self.tasks : list[GenericObservationTask] = []
         self.known_reqs : set[TaskRequest] = set() # TODO do we need this or is the task list enough?
         self.observation_history : ObservationHistory = None
+
+        # initialize observation history
+        self.observation_history = ObservationHistory(orbitdata)
+
+        # gather targets for default mission tasks
+        objective_targets = { objective : [] for objective in self.mission 
+                             # ignore non-default objectives
+                             if not isinstance(objective, DefaultMissionObjective)
+                             }
+        for objective in objective_targets:         
+            for req in objective:
+                # ignore non-spatial requirements
+                if not isinstance(req, SpatialRequirement): continue
+                
+                elif isinstance(req, PointTargetSpatialRequirement):
+                    raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                
+                elif isinstance(req, TargetListSpatialRequirement):
+                    raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
+                
+                elif isinstance(req, GridTargetSpatialRequirement):
+                    req_targets = [
+                        (lat, lon, grid_index, gp_index)
+                        for grid in self.orbitdata.grid_data
+                        for lat,lon,grid_index,gp_index in grid.values
+                        if grid_index == req.grid_index and gp_index < req.grid_size
+                    ]
+                    
+                else: 
+                    raise TypeError(f"Unknown spatial requirement type: {type(req)}")
+                    
+            # create monitoring tasks from each location in this mission objective
+            tasks = [DefaultMissionTask(objective.parameter,
+                                        location=(lat, lon, grid_index, gp_index),
+                                        mission_duration=self.orbitdata.duration*24*3600,
+                                        objective=objective,
+                                        )
+                        for lat,lon,grid_index,gp_index in req_targets
+                    ]
+            
+            # add to list of known tasks
+            self.tasks.extend(tasks)
 
     @runtime_tracker
     async def think(self, senses : list):

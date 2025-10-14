@@ -568,7 +568,7 @@ class AbstractPlanner(ABC):
 
         # populate list of all agents except the parent agent
         target_agents = [target_agent 
-                         for target_agent in orbitdata.satellite_links 
+                         for target_agent in orbitdata.comms_links.keys() 
                          if target_agent != state.agent_name]
         
         if not target_agents: 

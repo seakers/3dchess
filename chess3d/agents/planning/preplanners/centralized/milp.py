@@ -94,9 +94,12 @@ class DealerMILPPreplanner(DealerPreplanner):
             # # Check if there are no tasks to schedule
             # if not client_tasks: raise NotImplementedError("Client observation scheduling not yet implemented.")
 
+            # select an instrument for dummy task
+            instrument : str = self.client_specs[client].instrument[0].name  # choose the first instrument by default
+
             # Add dummy task to represent initial state of each client
             dummy_task = SpecificObservationTask(set(),                                             # empty set of parent tasks
-                                                client_tasks[0].instrument_name, 
+                                                instrument, 
                                                 Interval(self.client_states[client].t,
                                                          self.client_states[client].t),             # set accessibility to current time only
                                                 0.0,                                                # zero duration

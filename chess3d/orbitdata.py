@@ -6,7 +6,7 @@ import os
 import random
 import re
 import time
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import pandas as pd
 import numpy as np
 
@@ -336,48 +336,110 @@ class OrbitData:
     """
     GET NEXT methods
     """
-    def get_next_agent_access(self, target : str, t: float, t_max: float = np.Inf) -> Interval:
-        """ returns the next access interval to another agent or ground station after or during time `t`. """
+    def get_next_agent_access(self, target : str, t: float, t_max: float = np.Inf, include_current: bool = False) -> Interval:
+        """ returns the next access interval to another agent or ground station after or during time `t` up to a given time `t_max`. """
 
         # check if target is within the list of known agents
         assert target in self.comms_links.keys(), f'No comms data found for target agent `{target}`.'
 
         # return next access interval
-        return self.__get_next_interval(self.comms_links[target], t, t_max)
+        return self.__get_next_interval(self.comms_links[target], t, t_max, include_current)
 
-    def get_next_isl_access_interval(self, target : str, t : float, t_max: float = np.Inf) -> Interval:
+    def get_next_agent_accesses(self, target : str, t: float, t_max: float = np.Inf, include_current: bool = False) -> List[Interval]:
+        """ returns a list of the next access interval to another agent or ground station after or during time `t` up to a given time `t_max`. """
+
+        # check if target is within the list of known agents
+        assert target in self.comms_links.keys(), f'No comms data found for target agent `{target}`.'
+
+        # get next access intervals
+        future_access_intervals = self.__get_next_intervals(self.comms_links[target], t, t_max, include_current)
+
+        # return in interval form
+        return [Interval(t_start,t_end) for t_start,t_end in future_access_intervals] if future_access_intervals else []
+
+    def get_next_isl_access_interval(self, target : str, t : float, t_max: float = np.Inf, include_current: bool = False) -> Interval:
         """ returns the next access interval to another agent after or during time `t`. """
 
         # check if target is within the list of known satellite agents
         assert target in self.satellite_links.keys(), f'No ISL data found for target agent `{target}`.'
 
         # return next access interval
-        return self.__get_next_interval(self.satellite_links[target], t, t_max)
+        return self.__get_next_interval(self.satellite_links[target], t, t_max, include_current)
 
-    def get_next_ground_operator_access_interval(self, target : str, t : float, t_max: float = np.Inf) -> Interval:
+    def get_next_ground_operator_access_interval(self, target : str, t : float, t_max: float = np.Inf, include_current: bool = False) -> Interval:
         """ returns the next access interval to a ground operator agent after or during time `t`. """
 
         # check if target is within the list of known ground operator agents
         assert target in self.ground_operator_links.keys(), f'No ground operator data found for target agent `{target}`.'
 
         # return next access interval
-        return self.__get_next_interval(self.ground_operator_links[target], t, t_max)
+        return self.__get_next_interval(self.ground_operator_links[target], t, t_max, include_current)
 
-    def get_next_gs_access(self, t, t_max: float = np.Inf) -> Interval:
+    def get_next_gs_access(self, t, t_max: float = np.Inf, include_current: bool = False) -> Interval:
         """ returns the next access interval to a ground station after or during time `t`. """
-        return self.__get_next_interval(self.ground_station_links, t, t_max)
+        return self.__get_next_interval(self.ground_station_links, t, t_max, include_current)
 
-    def get_next_eclipse_interval(self, t: float, t_max: float = np.Inf) -> Interval:
+    def get_next_eclipse_interval(self, t: float, t_max: float = np.Inf, include_current: bool = False) -> Interval:
         """ returns the next eclipse interval after or during time `t`. """
-        return self.__get_next_interval(self.eclipse_data, t, t_max)
+        return self.__get_next_interval(self.eclipse_data, t, t_max, include_current)
 
-    def __get_next_interval(self, interval_data : IntervalData, t : float, t_max: float = np.Inf) -> Interval:
+    def __get_next_interval(self, interval_data : IntervalData, t : float, t_max: float = np.Inf, include_current: bool = False) -> Interval:
         """ returns the next access interval from `interval_data` after or during time `t`. """
-        # find all intervals that end after time `t`
+        # get next intervals
+        future_intervals: list[tuple[float, float]] = self.__get_next_intervals(interval_data, t, t_max, include_current)
+
+        # check if there are any valid intervals
+        if not future_intervals: return None
+
+        # get interval bounds
+        t_start,t_end = future_intervals[0]
+
+        # return the first interval that starts after or at time `t`
+        return Interval(max(t, t_start), min(t_end, t_max))
+
+    def __get_next_intervals(self, interval_data : IntervalData, t : float, t_max: float = np.Inf, include_current: bool = False) -> List[Tuple[float, float]]:
+        # find all intervals that end after time `t` and start before time `t_max`
         future_intervals: list[tuple[float, float]] = [(t_start, t_end)
                                                         for t_start,t_end,*_ in interval_data.data
-                                                        if t <= t_end
-                                                        and t_start <= t_max]
+                                                        if t <= t_end # interval ends after or at time `t`
+                                                        and t_start <= t_max # interval starts before or at time `t_max`
+                                                        ]
+        
+        # check if current interval should be included
+        if not include_current:
+            # exclude intervals that contain time `t`
+            future_intervals = [(t_start, t_end) for t_start,t_end in future_intervals
+                                if t < t_start] # interval starts after time `t`
+
+        # check if there are any valid intervals
+        if not future_intervals: return None
+        
+        # sort by start time and return
+        return sorted(future_intervals, key=lambda interval: interval[0])
+    
+    def get_latest_agent_access(self, target : str, t: float, t_max: float, include_current: bool = False) -> Interval:
+        """ returns the latest access interval to another agent or ground station after or during time `t`. """
+
+        # check if target is within the list of known agents
+        assert target in self.comms_links.keys(), f'No comms data found for target agent `{target}`.'
+
+        # return next access interval
+        return self.__get_latest_interval(self.comms_links[target], t, t_max, include_current)
+
+    def __get_latest_interval(self, interval_data : IntervalData, t : float, t_max: float, include_current: bool = False) -> Interval:
+        """ returns the latest access interval from `interval_data` after or during time `t`. """
+        # find all intervals that end after time `t` and start before time `t_max`
+        future_intervals: list[tuple[float, float]] = [(t_start, t_end)
+                                                        for t_start,t_end,*_ in interval_data.data
+                                                        if t <= t_end # interval ends after or at time `t`
+                                                        and t_start <= t_max # interval starts before or at time `t_max`
+                                                        ]
+        
+        # check if current interval should be included
+        if not include_current:
+            # exclude intervals that contain time `t`
+            future_intervals = [(t_start, t_end) for t_start,t_end in future_intervals
+                                if t < t_start] # interval starts after time `t`
 
         # check if there are any valid intervals
         if not future_intervals: return None
@@ -386,9 +448,9 @@ class OrbitData:
         future_intervals.sort(key=lambda interval: interval[0])
 
         # get interval bounds
-        t_start,t_end = future_intervals[0]
+        t_start,t_end = future_intervals[-1]
 
-        # return the first interval that starts after or at time `t`
+        # return the last interval that starts after or at time `t`
         return Interval(max(t, t_start), min(t_end, t_max))
 
     def get_next_gp_access_interval(self, lat: float, lon: float, t: float, t_max : float = np.Inf) -> Interval:
@@ -410,7 +472,7 @@ class OrbitData:
         if target not in self.comms_links.keys(): return False
 
         # get next access interval
-        next_access : Interval = self.__get_next_interval(self.comms_links[target], t)
+        next_access : Interval = self.__get_next_interval(self.comms_links[target], t, include_current=True)
 
         # if no current or future access interval, return False
         if next_access is None: return False

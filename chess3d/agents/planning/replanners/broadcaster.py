@@ -150,7 +150,7 @@ class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
                                                     if isinstance(data, IntervalData)
                                                     and (t_start <= t_access_start <= t_end
                                                          or t_start <= t_access_end <= t_end)], key=lambda x: x.left)
-                                        for agent_name,data in orbitdata.satellite_links.items()}
+                                        for agent_name,data in orbitdata.comms_links.items()}
         
 
         # TODO include ground station support

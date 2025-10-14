@@ -177,3 +177,6 @@ cython_debug/
 # Gurobi
 *.lic
 *.ilp*
+
+# Copilot
+*copilot*

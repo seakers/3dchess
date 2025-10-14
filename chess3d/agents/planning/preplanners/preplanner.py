@@ -162,6 +162,10 @@ class AbstractPreplanner(AbstractPlanner):
                                     ) -> dict:
         """ Calculate access opportunities for targets visible in the planning horizon """
 
+        # check planning horizon span
+        if planning_horizon.is_empty(): 
+            return {}
+
         # compile coverage data
         raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(planning_horizon.left, planning_horizon.right)
 

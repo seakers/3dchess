@@ -102,8 +102,9 @@ class SimulationEnvironment(EnvironmentNode):
             for target in agent_names:
                 if src not in self.agent_connectivity:
                     self.agent_connectivity[src] = {}    
-                
-                self.agent_connectivity[src][target] = -1
+                if target != src:
+                    self.agent_connectivity[src][target] = -1
+
         self.agent_state_update_times = {}
 
         self.measurement_reqs : set[TaskRequest] = set()
@@ -438,43 +439,34 @@ class SimulationEnvironment(EnvironmentNode):
         # initiate update list
         resp_msgs = []
 
-        # check connectivity status
-        for target_type in self.agents:
-            for target in self.agents[target_type]:
-                # do not compare to self
-                if target == msg.src: continue
-                
-                # check updated connectivity
-                connected = self.check_agent_connectivity(msg.src, target, target_type)
-                
-                # check if it changes from previously known connectivity state
-                if connected == 0 and self.agent_connectivity[msg.src][target] == -1:
-                    # no change found; do not announce
-                    pass
+        # check connectivity of sender agent status with all other agents
+        for target in self.agent_connectivity[msg.src]:
+            # check updated connectivity
+            connected = self.check_agent_connectivity(msg.src, target)
+            
+            # check if it changes from previously known connectivity state
+            if connected == 0 and self.agent_connectivity[msg.src][target] == -1:
+                # no change found; do not announce
+                pass
 
-                    # update internal state
-                    self.agent_connectivity[msg.src][target] = connected
-                    continue
+            elif self.agent_connectivity[msg.src][target] != connected:
+                # change found; make announcement 
+                connectivity_update = AgentConnectivityUpdate(msg.src, target, connected)
+                resp_msgs.append(connectivity_update.to_dict())
 
-                if self.agent_connectivity[msg.src][target] != connected:
-                    # change found; make announcement 
-                    connectivity_update = AgentConnectivityUpdate(msg.src, target, connected)
-                    resp_msgs.append(connectivity_update.to_dict())
-
-                    # update internal state
-                    self.agent_connectivity[msg.src][target] = connected
+            # update internal state
+            self.agent_connectivity[msg.src][target] = connected   
 
         return resp_msgs
     
     @runtime_tracker
-    def check_agent_connectivity(self, src : str, target : str, target_type : str) -> int:
+    def check_agent_connectivity(self, src : str, target : str) -> int:
         """
         Checks if an agent is in communication range with another agent
 
         #### Arguments:
             - src (`str`): name of agent starting the connection
             - target (`str`): name of agent receving the connection
-            - target_type (`str`): type of agent receving the connection
 
         #### Returns:
             - connected (`int`): binary value representing if the `src` and `target` are connected
@@ -491,55 +483,6 @@ class SimulationEnvironment(EnvironmentNode):
         # check connectivity based on orbit data
         src_data : OrbitData = self.orbitdata[src]
         return int(src_data.is_accessing_agent(target, self.get_current_time()))
-
-        # connected = False
-        # if target_type == self.SPACECRAFT:
-        #     if src in self.agents[self.SPACECRAFT]:
-        #         # check orbit data
-        #         src_data : OrbitData = self.orbitdata[src]
-        #         connected = src_data.is_accessing_agent(target, self.get_current_time())
-                
-        #     elif src in self.agents[self.UAV]:
-        #         # check orbit data with nearest GS
-        #         target_data : OrbitData = self.orbitdata[target]
-        #         connected = target_data.is_accessing_ground_station(target, self.get_current_time())
-            
-        #     elif src in self.agents[self.GROUND_STATION]:
-        #         # check orbit data
-        #         target_data : OrbitData = self.orbitdata[target]
-        #         connected = target_data.is_accessing_ground_station(target, self.get_current_time())
-        
-        # elif target_type == self.UAV:
-        #     if src in self.agents[self.SPACECRAFT]:
-        #         # check orbit data with nearest GS
-        #         src_data : OrbitData = self.orbitdata[src]
-        #         connected = src_data.is_accessing_ground_station(target, self.get_current_time())
-
-        #     elif src in self.agents[self.UAV]:
-        #         # always connected
-        #         connected = True
-
-        #     elif src in self.agents[self.GROUND_STATION]:
-        #         # always connected
-        #         connected = True
-        
-        # elif target_type == self.GROUND_STATION:
-        #     if src in self.agents[self.SPACECRAFT]:
-        #         # check orbit data
-        #         src_data : OrbitData = self.orbitdata[src]
-        #         connected = src_data.is_accessing_ground_station(target, self.get_current_time())
-
-        #     elif src in self.agents[self.UAV]:
-        #         # always connected
-        #         connected = True
-
-        #     elif src in self.agents[self.GROUND_STATION]:
-        #         # always connected
-        #         connected = True
-        # else:
-        #     raise ValueError(f'Unrecognized agent type. Agent {target} is not part of this simulation.')
-
-        # return int(connected)
 
     @runtime_tracker
     def query_measurement_data( self,

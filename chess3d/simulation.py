@@ -304,6 +304,8 @@ class Simulation:
         for agent in self.agents:
             _,agent_name = agent.name.split('/')
             events_detected_path = os.path.join(self.results_path, agent_name, 'events_detected.csv')
+            if not os.path.isfile(events_detected_path): continue
+            
             events_detected_temp = pd.read_csv(events_detected_path)
 
             if event_detections is None: 
@@ -1320,8 +1322,8 @@ class SimulationElementFactory:
                                       manager_network_config,
                                       initial_state,
                                       agent_specs,
-                                      agent_orbitdata,
                                       mission,
+                                      agent_orbitdata,
                                       processor,
                                       preplanner,
                                       replanner,
@@ -1339,8 +1341,8 @@ class SimulationElementFactory:
                                             manager_network_config,
                                             initial_state,
                                             agent_specs,
-                                            agent_orbitdata,
                                             mission,
+                                            agent_orbitdata,
                                             processor,
                                             preplanner,
                                             replanner,
@@ -1637,17 +1639,17 @@ class SimulationElementFactory:
                 mode = preplanner_dict.get('@mode', 'test').lower()
                 clients = preplanner_dict.get('clients', None)
 
-                # load client orbit data
+                # load client orbit data for all agents
                 client_orbitdata: dict = OrbitData.from_directory(orbitdata_dir)
 
-                # load client specs 
+                # load client specs for all agents
                 clients_path = os.path.join(orbitdata_dir, 'MissionSpecs.json')
                 with open(clients_path, 'r') as clients_file:
                     mission_specs : dict = json.load(clients_file)
                 client_specs : Dict[str, Spacecraft] = {d['name']: Spacecraft.from_dict(d) 
                                                         for d in mission_specs.get('spacecraft', [])}
 
-                # load client missions
+                # load client missions for all agents
                 client_missions : Dict[str, Mission] = {d['name'] : missions[d['mission'].lower()] 
                                                         for d in mission_specs.get('spacecraft', [])}
 
@@ -1658,6 +1660,9 @@ class SimulationElementFactory:
 
                 # remove other clients if specified
                 if clients is not None:
+                    assert len(clients) > 0, '`clients` list is empty.'
+                    assert all([isinstance(c, str) for c in clients]), '`clients` list must contain strings.'
+
                     for client in list(client_orbitdata.keys()):
                         if client not in clients:
                             client_orbitdata.pop(client, None)

@@ -24,9 +24,6 @@ class WorkerReplanner(AbstractReplanner):
     def update_percepts(self, state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions):       
         super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
 
-        if misc_messages or relay_messages:
-            x = 1 # breakpoint
-
         # check if there are any plan messages for this agent
         plan_messages = {msg for msg in misc_messages 
                          if isinstance(msg, PlanMessage) # filter by message type
@@ -40,22 +37,23 @@ class WorkerReplanner(AbstractReplanner):
                 self.plan_message = plan_message        
         
     def needs_planning(self, _, __, current_plan : Plan, ___, **kwargs):
-        # only replans if there is a plan message
-        return current_plan.t < self.plan_message.t_plan if self.plan_message else False
+        # only replans if there is an unprocessed plan message
+        return self.plan_message is not None
 
-    def generate_plan(self, *_):
+    def generate_plan(self, state : SimulationAgentState, *_):
         # get actions from latest plan message
         actions : list[AgentAction] = [action_from_dict(**action) 
                                        for action in self.plan_message.plan]
         
         # only keep actions that start after the current time
-        actions = [action for action in actions if action.t_start >= self.plan_message.t_plan]
+        actions = [action for action in actions if action.t_start >= state.t]
 
         # create a plan from plan message actions
         self.plan = Replan(actions, t=self.plan_message.t_plan)
 
-        # # remove the plan message after processing
-        # self.plan_message = None
+        # remove the plan message after processing
+        del self.plan_message
+        self.plan_message = None
 
         # return the generated plan
         return self.plan.copy()

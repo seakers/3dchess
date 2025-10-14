@@ -107,7 +107,7 @@ class AgentTester(ABC):
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
                                     "angleHeight": 2.5, 
-                                    "angleWidth": 45.0
+                                    "angleWidth": 5.0
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
