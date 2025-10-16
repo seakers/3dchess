@@ -34,7 +34,7 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
                     "model": "static",
                     "licensePath": "./gurobi.lic",
                     # "horizon": 500,
-                    "period" : 500,
+                    "period" : 100,
                     "maxTasks": 100,
                     "debug" : "False",
                     "clients" : gs_clients[gs_network_name]
