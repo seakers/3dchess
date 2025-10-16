@@ -73,38 +73,25 @@ class DealerMILPPreplanner(DealerPreplanner):
     @runtime_tracker
     def _schedule_client_observations(self, 
                                       state : SimulationAgentState,
-                                      available_tasks : Dict[Mission, List[GenericObservationTask]],
-                                      schedulable_tasks: Dict[str, List[SpecificObservationTask]], 
+                                      available_client_tasks : Dict[Mission, List[GenericObservationTask]],
+                                      schedulable_client_tasks: Dict[str, List[SpecificObservationTask]], 
                                       observation_history : ObservationHistory
                                     ) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """
         
         # short-circuit if no tasks to schedule
-        if all([len(tasks) == 0 for tasks in schedulable_tasks.values()]) or len(available_tasks) == 0:
+        if all([len(tasks) == 0 for tasks in schedulable_client_tasks.values()]) or len(available_client_tasks) == 0:
                 return {client: [] for client in self.client_orbitdata} # no tasks to schedule
         
         # collect max slew rates for each client
-        max_slew_rates : Dict[str, float] = {client : self._collect_agility_specs(specs)[0] 
-                                             for client,specs in self.client_specs.items()}
-        max_torques : Dict[str, float] = {client : self._collect_agility_specs(specs)[1] 
-                                             for client,specs in self.client_specs.items()}
+        max_client_slew_rates, _ = self._collect_client_agility_specs()
 
         # add dummy tasks to each client's task list
-        for client,client_tasks in schedulable_tasks.items():
-            # # Check if there are no tasks to schedule
-            # if not client_tasks: raise NotImplementedError("Client observation scheduling not yet implemented.")
+        for client,client_tasks in schedulable_client_tasks.items():
+            # generate dummy task to represent initial state of each client
+            dummy_task = self.__generate_dummy_task(client)
 
-            # select an instrument for dummy task
-            instrument : str = self.client_specs[client].instrument[0].name  # choose the first instrument by default
-
-            # Add dummy task to represent initial state of each client
-            dummy_task = SpecificObservationTask(set(),                                             # empty set of parent tasks
-                                                instrument, 
-                                                Interval(self.client_states[client].t,
-                                                         self.client_states[client].t),             # set accessibility to current time only
-                                                0.0,                                                # zero duration
-                                                Interval(self.client_states[client].attitude[0],
-                                                         self.client_states[client].attitude[0]))   # set slew angle to current angle
+            # insert dummy task at start of task list
             client_tasks.insert(0, dummy_task)      
 
         # collect list of unique instruments across all clients
@@ -113,11 +100,13 @@ class DealerMILPPreplanner(DealerPreplanner):
                                         for instrument in specs.instrument})
 
         # collect list of unique parent tasks across all missions
-        parent_tasks : list[GenericObservationTask] = list({ptask for mission_ptasks in available_tasks.values() for ptask in mission_ptasks})
+        parent_tasks : list[GenericObservationTask] = list({ptask 
+                                                            for mission_ptasks in available_client_tasks.values() 
+                                                            for ptask in mission_ptasks})
         
         # count max number of reobservations per parent task and instrument
         K : list[list[int]] = [len([task 
-                                        for client_tasks in schedulable_tasks.values() 
+                                        for client_tasks in schedulable_client_tasks.values() 
                                         for task in client_tasks 
                                         if ptask in task.parent_tasks 
                                     ])
@@ -130,41 +119,41 @@ class DealerMILPPreplanner(DealerPreplanner):
                                                         for task_idx,_ in enumerate(parent_tasks)
                                                         for obs_idx in range(1,K[task_idx]+1)]
 
-        indexed_clients : list[str] = list(schedulable_tasks.keys())
+        indexed_clients : list[str] = list(schedulable_client_tasks.keys())
         client_indices : Dict[str, int] = {client : idx 
                                            for idx,client in enumerate(indexed_clients)}
 
-        indexed_missions : list[Mission] = list(available_tasks.keys())
+        indexed_missions : list[Mission] = list(available_client_tasks.keys())
         mission_indices : Dict[Mission, int] = {mission : idx 
                                                 for idx,mission in enumerate(indexed_missions)}
 
         task_indices : list[tuple[int,int]] = [(client_idx,task_idx) 
                                                 for client_idx,client in enumerate(indexed_clients)
-                                                for task_idx,_ in enumerate(schedulable_tasks[client])]
+                                                for task_idx,_ in enumerate(schedulable_client_tasks[client])]
         
         # Initialize constants
         t_start   = [[task.accessibility.left-state.t 
-                              for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for task in schedulable_client_tasks[client]  if isinstance(task, SpecificObservationTask)]
                               for client in indexed_clients]
         t_end     = [[task.accessibility.right-state.t 
-                              for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for task in schedulable_client_tasks[client]  if isinstance(task, SpecificObservationTask)]
                               for client in indexed_clients]
         d         = [[task.min_duration 
-                              for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for task in schedulable_client_tasks[client]  if isinstance(task, SpecificObservationTask)]
                               for client in indexed_clients]
         th_imgs   = [[np.average((task.slew_angles.left, task.slew_angles.right)) 
-                              for task in schedulable_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for task in schedulable_client_tasks[client]  if isinstance(task, SpecificObservationTask)]
                               for client in indexed_clients]
-        slew_times= [[[abs(th_imgs[client_index][j_p]-th_imgs[client_index][j]) / max_slew_rates[client]
-                                for j_p,task_j_p in enumerate(schedulable_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)]
-                                for j,task_j in enumerate(schedulable_tasks[client]) if isinstance(task_j, SpecificObservationTask)]
+        slew_times= [[[abs(th_imgs[client_index][j_p]-th_imgs[client_index][j]) / max_client_slew_rates[client]
+                                for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)]
+                                for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, SpecificObservationTask)]
                                 for client_index, client in enumerate(indexed_clients)]
         
         # Map sparse arch matrix of feasible task sequences
         A : list = [(s,j,j_p)
                         for s,client in enumerate(indexed_clients)
-                        for j,task_j in enumerate(schedulable_tasks[client]) if isinstance(task_j, SpecificObservationTask)
-                        for j_p,task_j_p in enumerate(schedulable_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)
+                        for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, SpecificObservationTask)
+                        for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)
                         if t_start[s][j] + d[s][j] + slew_times[s][j][j_p]
                             <= t_end[s][j_p] - d[s][j_p]    # sequence j->j' is feasible
                             and j != j_p                  # ensure distinct tasks
@@ -173,8 +162,8 @@ class DealerMILPPreplanner(DealerPreplanner):
         # Map task mutual exclusivity constraints
         E : list = [(s,j,j_p)
                     for s,client in enumerate(indexed_clients)
-                    for j,task_j in enumerate(schedulable_tasks[client]) if isinstance(task_j, SpecificObservationTask)
-                    for j_p,task_j_p in enumerate(schedulable_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)
+                    for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, SpecificObservationTask)
+                    for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)
                     if (task_j.is_mutually_exclusive(task_j_p) 
                         or (t_start[s][j] + d[s][j] + slew_times[s][j][j_p] > t_end[s][j_p] - d[s][j_p]    # sequence j->j' is not feasible
                             and t_start[s][j_p] + d[s][j_p] + slew_times[s][j_p][j] > t_end[s][j] - d[s][j] # sequence j'->j is not feasible
@@ -184,30 +173,120 @@ class DealerMILPPreplanner(DealerPreplanner):
 
         # Run optimization on each chunk and flatten results
         if self.model == self.STATIC:
-            y,t,z,obj = self.__static_milp_planner(state, schedulable_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, d, slew_times)
+            y,t,z,obj = self.__static_milp_planner(state, schedulable_client_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, d, slew_times)
         elif self.model == self.LINEAR:
-            y,t,z,obj = self.__linear_milp_planner(state, schedulable_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, t_end, d, slew_times)
+            y,t,z,obj = self.__linear_milp_planner(state, schedulable_client_tasks, observation_history, indexed_clients, task_indices, A, E, t_start, t_end, d, slew_times)
         elif self.model == self.REOBS:
-            y,t,z,obj = self.__reobs_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
+            y,t,z,obj = self.__reobs_milp_planner(state, available_client_tasks, schedulable_client_tasks, observation_history)
         elif self.model == self.REVISIT:
-            y,t,z,obj = self.__revisit_milp_planner(state, available_tasks, schedulable_tasks, observation_history)
+            y,t,z,obj = self.__revisit_milp_planner(state, available_client_tasks, schedulable_client_tasks, observation_history)
 
-        # DEBUGGING ----------------------------------------------
-        # # validate MILP outputs
-        # y_active = {(s,j): y[s][j] for s,tasks in enumerate(y) for j,_ in enumerate(tasks) if y[s][j] > 0}
-        # t_active = {(s,j): t[s][j] for s,tasks in enumerate(y) for j,_ in enumerate(tasks) if y[s][j] > 0}
-        # slew_times_active = {(s,j,j_p): slew_times[s][j][j_p] for s,tasks in enumerate(z) for j,tasks_p in enumerate(tasks) for j_p,tasks_p in enumerate(tasks_p) if z[s][j][j_p] > 0}
-        # z_active = {(s,j,j_p): z[s][j][j_p] for s,j,j_p in slew_times_active.keys() if z[s][j][j_p] > 0}
-
-        # # validate start times
-        # assert all([t_active[s,j] + d[s][j] + slew_times_active[(s,j,j_p)] <= t_active[s,j_p] for (s,j,j_p) in slew_times_active])
+        # DEBUGGING OUTPUTS --------------------------------------
+        if self._debug: self.__validate_results(y, t, slew_times, d, z)
         # --------------------------------------------------------
 
         # Extract and return observation sequence
         observations : Dict[str, list[ObservationAction]] = \
-            self.__extract_observation_sequence(state, schedulable_tasks, observation_history, indexed_clients, task_indices, d, th_imgs, y, t)
+            self.__extract_observation_sequence(state, schedulable_client_tasks, observation_history, indexed_clients, task_indices, d, th_imgs, y, t)
 
-        return observations
+        return observations    
+
+    def __generate_dummy_task(self, client : str) -> SpecificObservationTask:
+        """ 
+        Generates a dummy task to represent the initial state a given client. 
+        Uses previously estimated or measured state of the desired client as the initial state.        
+        """        
+        # select an instrument from the agent's payload
+        instrument : str = self.client_specs[client].instrument[0].name  # choose the first instrument by default
+
+        # generate and return dummy task
+        return SpecificObservationTask(set(),                                                   # empty set of parent tasks
+                                            instrument,                                         # some default instrument
+                                            Interval(self.client_states[client].t,
+                                                     self.client_states[client].t),             # accessibility set to current time only
+                                            0.0,                                                # zero duration
+                                            Interval(self.client_states[client].attitude[0],
+                                                     self.client_states[client].attitude[0]))   # set slew angle to current attitude angle
+
+
+    def __extract_observation_sequence(self,
+                              state : SimulationAgentState,
+                              schedulable_tasks: Dict[str, List[ObservationAction]], 
+                              observation_history : ObservationHistory,
+                              indexed_clients : List[str],
+                              task_indices : List[Tuple[int,int]],
+                              d : np.ndarray,
+                              th_imgs : np.ndarray,
+                              y : List[List[int]],
+                              t : List[List[float]]
+                              ) -> Dict[str, List[ObservationAction]]:
+        """ Extracts the observation sequence from the solved MILP model """
+        return {client : sorted([ObservationAction(task.instrument_name,
+                                    th_imgs[s][j],
+                                    t[s][j],
+                                    d[s][j],
+                                    task
+                                    ) 
+                                 for j,task in enumerate(schedulable_tasks[client]) 
+                                 if y[s][j] > 0.5 and j > 0 # only include assigned tasks and ignore dummy tasks
+                            ], key=lambda action: action.t_start)
+                        for s,client in enumerate(indexed_clients)}
+        
+    def __print_model_results(self, model : gp.Model) -> None:
+        """ Prints model results to console and outputs error logs in case of infeasibility """
+
+        # Print model status
+        print("\nStatus code:", model.Status)
+
+        # Check model status
+        if model.Status == gp.GRB.OPTIMAL:
+            print("Optimal solution found.")
+            print(f"Obj: {model.ObjVal:g}")
+
+            # delete any `.ilp` files that may have been generated when debugging the model
+            class_path = inspect.getfile(type(self))
+            class_path = class_path.replace('milp.py', '')
+            for filename in os.listdir(class_path):
+                if ".ilp" in filename:
+                    os.remove(os.path.join(class_path, filename))
+        else:
+            if model.Status == gp.GRB.INFEASIBLE:
+                print("Model is infeasible.")
+            
+                # diagnose problems with model
+                print("Computing IIS...")
+                model.computeIIS()
+
+                # print results to file
+                filepath = f"./chess3d/agents/planning/preplanners/decentralized/{model.ModelName}.ilp"
+                model.write(filepath)
+                model.write(f"{filepath}.json")
+                print(f"IIS written to `{filepath}`")
+
+            if model.Status == gp.GRB.UNBOUNDED:
+                print("Model is unbounded.")
+
+            if model.Status == gp.GRB.INTERRUPTED:
+                print("Model was interrupted.")
+
+            raise ValueError(f"Unexpected model status: {model.Status}")
+
+    def __validate_results(self, y : List[List[int]], t : List[List[float]], slew_times : List[List[List[float]]], d : List[List[float]], z : List[List[List[int]]]) -> None:
+        """ validate MILP outputs """
+
+        # unpack active variables
+        y_active = {(s,j): y[s][j] for s,tasks in enumerate(y) for j,_ in enumerate(tasks) if y[s][j] > 0}
+        t_active = {(s,j): t[s][j] for s,tasks in enumerate(y) for j,_ in enumerate(tasks) if y[s][j] > 0}
+        slew_times_active = {(s,j,j_p): slew_times[s][j][j_p] for s,tasks in enumerate(z) for j,tasks_p in enumerate(tasks) for j_p,tasks_p in enumerate(tasks_p) if z[s][j][j_p] > 0}
+        z_active = {(s,j,j_p): z[s][j][j_p] for s,j,j_p in slew_times_active.keys() if z[s][j][j_p] > 0}
+
+        # validate start times
+        assert all([t_active[s,j] + d[s][j] + slew_times_active[(s,j,j_p)] <= t_active[s,j_p] for (s,j,j_p) in slew_times_active])
+       
+
+    # -----------------------
+    #      MILP MODELS
+    # -----------------------
 
     def __static_milp_planner(self,
                               state : SimulationAgentState,
@@ -454,68 +533,6 @@ class DealerMILPPreplanner(DealerPreplanner):
         # TODO
         raise NotImplementedError("MILP preplanner not yet implemented. Working on it...")
 
-    def __extract_observation_sequence(self,
-                              state : SimulationAgentState,
-                              schedulable_tasks: Dict[str, List[ObservationAction]], 
-                              observation_history : ObservationHistory,
-                              indexed_clients : List[str],
-                              task_indices : List[Tuple[int,int]],
-                              d : np.ndarray,
-                              th_imgs : np.ndarray,
-                              y : List[List[int]],
-                              t : List[List[float]]
-                              ) -> Dict[str, List[ObservationAction]]:
-        """ Extracts the observation sequence from the solved MILP model """
-        return {client : sorted([ObservationAction(task.instrument_name,
-                                    th_imgs[s][j],
-                                    t[s][j],
-                                    d[s][j],
-                                    task
-                                    ) 
-                                 for j,task in enumerate(schedulable_tasks[client]) 
-                                 if y[s][j] > 0.5 and j > 0 # only include assigned tasks and ignore dummy tasks
-                            ], key=lambda action: action.t_start)
-                        for s,client in enumerate(indexed_clients)}
-        
-    def __print_model_results(self, model : gp.Model) -> None:
-        """ Prints model results to console and outputs error logs in case of infeasibility """
-
-        # Print model status
-        print("\nStatus code:", model.Status)
-
-        # Check model status
-        if model.Status == gp.GRB.OPTIMAL:
-            print("Optimal solution found.")
-            print(f"Obj: {model.ObjVal:g}")
-
-            # delete any `.ilp` files that may have been generated when debugging the model
-            class_path = inspect.getfile(type(self))
-            class_path = class_path.replace('milp.py', '')
-            for filename in os.listdir(class_path):
-                if ".ilp" in filename:
-                    os.remove(os.path.join(class_path, filename))
-        else:
-            if model.Status == gp.GRB.INFEASIBLE:
-                print("Model is infeasible.")
-            
-                # diagnose problems with model
-                print("Computing IIS...")
-                model.computeIIS()
-
-                # print results to file
-                filepath = f"./chess3d/agents/planning/preplanners/decentralized/{model.ModelName}.ilp"
-                model.write(filepath)
-                model.write(f"{filepath}.json")
-                print(f"IIS written to `{filepath}`")
-
-            if model.Status == gp.GRB.UNBOUNDED:
-                print("Model is unbounded.")
-
-            if model.Status == gp.GRB.INTERRUPTED:
-                print("Model was interrupted.")
-
-            raise ValueError(f"Unexpected model status: {model.Status}")
-            
 
         # # Create a new model
         # model = gp.Model("multi-mission_milp_planner")

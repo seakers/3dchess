@@ -1,7 +1,7 @@
 from collections import defaultdict
 import logging
 import os
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from abc import abstractmethod
 
 import numpy as np
@@ -82,6 +82,19 @@ class DealerPreplanner(AbstractPreplanner):
         """ get instrument field of view specifications from agent specs object """
         return {client: self._collect_fov_specs(client_specs[client]) 
                 for client in client_specs}
+    
+    def _collect_client_agility_specs(self) -> Tuple[Dict[str, float], Dict[str, float]]:
+        """ 
+        Collects and returns the agility specifications from agent specs object 
+
+        Returns:
+            `max_client_slew_rates`: A dictionary mapping client names to their maximum slew rates [degrees per second].
+            `max_client_torques`: A dictionary mapping client names to their maximum torques [Nm].        
+        """
+        return ({client : self._collect_agility_specs(self.client_specs[client])[0] 
+                 for client in self.client_specs},
+                {client : self._collect_agility_specs(self.client_specs[client])[1] 
+                 for client in self.client_specs})
 
     def __initiate_client_states(self, 
                                  client_orbitdata : Dict[str, OrbitData], 
@@ -152,7 +165,7 @@ class DealerPreplanner(AbstractPreplanner):
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
                         mission : Mission,
-                        tasks : list,
+                        tasks : List[GenericObservationTask],
                         observation_history : ObservationHistory,
                     ) -> Plan:
         # generate plans for all client agents
@@ -177,43 +190,42 @@ class DealerPreplanner(AbstractPreplanner):
                                clock_config : ClockConfig, 
                                orbitdata : OrbitData, 
                                mission : Mission, 
-                               tasks : list, 
+                               tasks : List[GenericObservationTask], 
                                observation_history : ObservationHistory):
         """
         Generates plans for each agent based on the provided parameters.
         """
 
-        if state.t >= 6000.0:
-            x = 1 # debugging breakpoint
-
         # Outline planning horizon interval
         planning_horizons : Dict[str,Interval] = self._calculate_horizons(state, orbitdata, self.horizon)
 
-        # schedule broadcasts for each client
-        client_broadcasts : Dict[str, List[BroadcastMessageAction]] = self._schedule_client_broadcasts(state, orbitdata, planning_horizons)
+        # check if there are clients reachable in the planning horizon
+        if all([orbitdata.get_next_agent_access(client, state.t, state.t+self.period, True) is None 
+                for client in self.client_orbitdata.keys()]):
+            client_plans : Dict[str, Preplan] = {client: Preplan([], 
+                                                            t=state.t, 
+                                                            horizon=planning_horizons[client].right, 
+                                                            t_next=state.t+self.period)
+                                                for client in self.client_orbitdata
+                                            }
+        else:
+            x = 1
 
-        # validate broadcast paths for each client
-        for client,broadcasts in client_broadcasts.items():
-            assert all(isinstance(broadcast, (BroadcastMessageAction, FutureBroadcastMessageAction)) for broadcast in broadcasts), \
-                f'All scheduled broadcasts for client {client} must be instances of `BroadcastMessageAction` or `FutureBroadcastMessageAction`.'
-
-        x = 1 # DEBUG breakpoint
-
-        # get only available tasks
-        available_tasks : Dict[Mission, GenericObservationTask] = \
-            self._get_available_client_tasks(planning_horizons)
+        # collect only available tasks
+        available_client_tasks : Dict[Mission, GenericObservationTask] = \
+            self._collect_available_client_tasks(planning_horizons)
 
         # calculate coverage opportunities for tasks
         target_access_opportunities : Dict[str, List[ List[ Dict[str, tuple]]]] = \
               self._calculate_client_target_access_opportunities(planning_horizons)
 
         # create schedulable tasks from known tasks and future access opportunities
-        schedulable_tasks : Dict[str, list[SpecificObservationTask]] = \
-              self._collect_schedulable_client_tasks(available_tasks, target_access_opportunities)
+        schedulable_client_tasks : Dict[str, list[SpecificObservationTask]] = \
+              self._create_schedulable_client_tasks(available_client_tasks, target_access_opportunities)
 
         # schedule observations for each client
         client_observations : Dict[str, List[ObservationAction]] = \
-              self._schedule_client_observations(state, available_tasks, schedulable_tasks, observation_history)
+              self._schedule_client_observations(state, available_client_tasks, schedulable_client_tasks, observation_history)
                 
         # validate observation paths for each client
         for client,observations in client_observations.items():
@@ -231,7 +243,7 @@ class DealerPreplanner(AbstractPreplanner):
         for client,maneuvers in client_maneuvers.items():
             assert all(isinstance(maneuver, ManeuverAction) for maneuver in maneuvers), \
                 f'All scheduled maneuvers for client {client} must be instances of `ManeuverAction`.'
-            max_slew_rate, max_torque = self._collect_agility_specs(self.client_specs[client])
+            max_slew_rate,_ = self._collect_agility_specs(self.client_specs[client])
             assert self.is_maneuver_path_valid(self.client_states[client],
                                                self.client_specs[client],
                                                client_observations[client],
@@ -239,6 +251,15 @@ class DealerPreplanner(AbstractPreplanner):
                                                max_slew_rate,
                                                self.cross_track_fovs[client]), \
                 f'Generated maneuver path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
+
+        # schedule broadcasts for each client
+        client_broadcasts : Dict[str, List[BroadcastMessageAction]] = self._schedule_client_broadcasts(state, orbitdata, planning_horizons)
+
+        # validate broadcast paths for each client
+        for client,broadcasts in client_broadcasts.items():
+            assert all(isinstance(broadcast, (BroadcastMessageAction, FutureBroadcastMessageAction)) for broadcast in broadcasts), \
+                f'All scheduled broadcasts for client {client} must be instances of `BroadcastMessageAction` or `FutureBroadcastMessageAction`.'
+
 
         # combine scheduled actions to create plans for each client
         client_plans : Dict[str, Preplan] = {client: Preplan(client_observations[client], 
@@ -251,7 +272,7 @@ class DealerPreplanner(AbstractPreplanner):
         # return plans
         return client_plans
 
-    def _calculate_horizons(self, state : SimulationAgentState, orbitdata : OrbitData, dt : float, include_current: bool = False) -> Dict[str, Interval]:
+    def _calculate_horizons(self, state : SimulationAgentState, orbitdata : OrbitData, dt : float) -> Dict[str, Interval]:
         """ calculate planning horizon intervals for each client """
 
         # initialize dictionary to hold planning horizons for each client
@@ -262,12 +283,9 @@ class DealerPreplanner(AbstractPreplanner):
             # Try to find the next access after the desired horizon `dt`
             next_access : Interval = orbitdata.get_next_agent_access(client, state.t + dt)
 
-            if next_access:
-                # If access exists after the planning horizon, plan up to that start time
-                horizon_end = max(next_access.left, state.t+dt)
-            else:
-                # Otherwise, this agent wont be accessible again, so just plan up to the desired horizon
-                horizon_end = state.t + dt
+            # If access exists after the planning horizon, plan up to that start time
+            # Otherwise, this agent wont be accessible again, so just plan up to the desired horizon
+            horizon_end = max(next_access.left, state.t+dt) if next_access else state.t + dt
 
             # set planning horizon interval for this client
             horizons[client] = Interval(state.t, horizon_end)
@@ -357,7 +375,7 @@ class DealerPreplanner(AbstractPreplanner):
 
         return tasks
 
-    def _get_available_client_tasks(self, planning_horizons : Dict[str, Interval]) -> Dict[Mission, List[GenericObservationTask]]:
+    def _collect_available_client_tasks(self, planning_horizons : Dict[str, Interval]) -> Dict[Mission, List[GenericObservationTask]]:
         """ get all known and active tasks for all clients within the planning horizon """        
         # overall planning horizon is the max of all client planning horizons
         mission_planning_horizon = {mission : max([interval 
@@ -379,7 +397,7 @@ class DealerPreplanner(AbstractPreplanner):
                                                              client_orbitdata)
                 for client, client_orbitdata in self.client_orbitdata.items()}
 
-    def _collect_schedulable_client_tasks(self, 
+    def _create_schedulable_client_tasks(self, 
                                           available_tasks : Dict[Mission, List[GenericObservationTask]], 
                                           target_access_opportunities : dict
                                         ) -> Dict:
@@ -392,8 +410,8 @@ class DealerPreplanner(AbstractPreplanner):
     @abstractmethod
     def _schedule_client_observations(self, 
                                       state : SimulationAgentState, 
-                                      available_tasks : Dict[Mission, List[GenericObservationTask]],
-                                      schedulable_tasks: Dict[str, List[SpecificObservationTask]], 
+                                      available_client_tasks : Dict[Mission, List[GenericObservationTask]],
+                                      schedulable_client_tasks: Dict[str, List[SpecificObservationTask]], 
                                       observation_history : ObservationHistory
                                     ) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """        
