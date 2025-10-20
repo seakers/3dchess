@@ -167,6 +167,7 @@ cython_debug/
 **tests/study/experiments
 **tests/**/results
 *geodata*
+swifa/
 
 *.tar
 *.tar*
