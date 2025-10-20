@@ -8,10 +8,9 @@ from dmas.modules import *
 from dmas.utils import runtime_tracker
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.planning.planner import AbstractPreplanner
-from chess3d.agents.planning.planner import AbstractReplanner
-from chess3d.agents.orbitdata import OrbitData
-from chess3d.agents.planning.rewards import RewardGrid
+from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.replanners.replanner import AbstractReplanner
+from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
@@ -21,7 +20,6 @@ class PlanningModule(InternalModule):
                 results_path : str, 
                 parent_agent_specs : object,
                 parent_network_config: NetworkConfig, 
-                reward_grid : RewardGrid,
                 preplanner : AbstractPreplanner = None,
                 replanner : AbstractReplanner = None,
                 orbitdata : OrbitData = None,
@@ -61,7 +59,6 @@ class PlanningModule(InternalModule):
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
         self.orbitdata : OrbitData = orbitdata
-        self.reward_grid : RewardGrid = reward_grid
 
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
         """ Sets up network configuration for intra-agent module communication """
@@ -238,7 +235,7 @@ class PlanningModule(InternalModule):
             self.log(f"received measurement request message!")
 
             # unapack measurement request
-            req : MeasurementRequest = MeasurementRequest.from_dict(msg.req)
+            req : TaskRequest = TaskRequest.from_dict(msg.req)
             
             # send to planner
             await self.req_inbox.put(req)
@@ -487,7 +484,7 @@ class PlanningModule(InternalModule):
                     # check if an outlier was deteced
                     if internal_msg.req['severity'] > 0.0:
                         # event was detected and an observation was requested
-                        requests.append(MeasurementRequest.from_dict(internal_msg.req))
+                        requests.append(TaskRequest.from_dict(internal_msg.req))
 
                 else:
                     # the science module generated a different response; process later
@@ -510,7 +507,7 @@ class PlanningModule(InternalModule):
                     # check if an outlier was deteced
                     if internal_msg.req['severity'] > 0.0:
                         # event was detected and an observation was requested
-                        requests.append(MeasurementRequest.from_dict(internal_msg.req))
+                        requests.append(TaskRequest.from_dict(internal_msg.req))
                         
                     # request : MeasurementRequest = MeasurementRequest.from_dict(internal_msg.req)
                     

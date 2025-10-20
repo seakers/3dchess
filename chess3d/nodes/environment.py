@@ -1,6 +1,7 @@
 import copy
 import os
 import time
+from typing import Dict
 from dmas.elements import SimulationMessage
 from dmas.messages import SimulationMessage
 import numpy as np
@@ -11,10 +12,12 @@ import concurrent.futures
 
 from instrupy.base import Instrument
 from instrupy.base import BasicSensorModel
+from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
 from instrupy.util import SphericalGeometry, ViewGeometry
 
 from chess3d.agents.science.requests import *
-from chess3d.agents.orbitdata import OrbitData
+from chess3d.mission.events import GeophysicalEvent
+from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import *
@@ -32,16 +35,13 @@ class SimulationEnvironment(EnvironmentNode):
     of eachother.
     
     """
-    SPACECRAFT = 'SPACECRAFT'
-    UAV = 'UAV'
-    GROUND_STATION = 'GROUND_STATION'
-
+    
     def __init__(self, 
                 results_path : str, 
                 orbitdata_dir : str,
                 sat_list : list,
                 uav_list : list,
-                gs_list : list,
+                gs_list : list,                
                 env_network_config: NetworkConfig, 
                 manager_network_config: NetworkConfig, 
                 connectivity : str = 'full',
@@ -54,7 +54,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.results_path : str = os.path.join(results_path, self.get_element_name().lower())
 
         # load observation data
-        self.orbitdata : dict = OrbitData.from_directory(orbitdata_dir) if orbitdata_dir is not None else None
+        self.orbitdata : Dict[str,OrbitData] = OrbitData.from_directory(orbitdata_dir) if orbitdata_dir is not None else None
 
         # load agent names and classify by type of agent
         self.agents = {}
@@ -68,7 +68,7 @@ class SimulationEnvironment(EnvironmentNode):
                 sat_name = sat.get('name')
                 sat_names.append(sat_name)
                 agent_names.append(sat_name)
-        self.agents[self.SPACECRAFT] = sat_names
+        self.agents[SimulationAgentTypes.SATELLITE] = sat_names
 
         # load uav names
         uav_names = []
@@ -78,7 +78,7 @@ class SimulationEnvironment(EnvironmentNode):
                 uav_name = uav.get('name')
                 uav_names.append(uav_name)
                 agent_names.append(uav_name)
-        self.agents[self.UAV] = uav_names
+        self.agents[SimulationAgentTypes.UAV] = uav_names
 
         # load GS agent names
         gs_names : list = []
@@ -88,7 +88,7 @@ class SimulationEnvironment(EnvironmentNode):
                 gs_name = gs.get('name')
                 gs_names.append(gs_name)
                 agent_names.append(gs_name)
-        self.agents[self.GROUND_STATION] = gs_names
+        self.agents[SimulationAgentTypes.GROUND_OPERATOR] = gs_names
 
         # load events
         self.events_path : str = events_path
@@ -102,11 +102,12 @@ class SimulationEnvironment(EnvironmentNode):
             for target in agent_names:
                 if src not in self.agent_connectivity:
                     self.agent_connectivity[src] = {}    
-                
-                self.agent_connectivity[src][target] = -1
+                if target != src:
+                    self.agent_connectivity[src][target] = -1
+
         self.agent_state_update_times = {}
 
-        self.measurement_reqs : set[MeasurementRequest] = set()
+        self.measurement_reqs : set[TaskRequest] = set()
         self.stats = {}
         self.t_0 = None
         self.t_f = None
@@ -129,18 +130,28 @@ class SimulationEnvironment(EnvironmentNode):
         else:
             sim_duration = np.Inf
 
-        # load events 
-        events : pd.DataFrame = pd.read_csv(events_path)
-        columns = events.columns
-        if len(columns) == 6:
-            data = [(lat,lon,t_start,duration,severity,measurements)
-                    for lat,lon,t_start,duration,severity,measurements in events.values
-                    if t_start <= sim_duration]
-        else:
-            data = [(gp_idx,lat,lon,t_start,duration,severity,measurements)
-                    for gp_idx,lat,lon,t_start,duration,severity,measurements in events.values
-                    if t_start <= sim_duration]
-        events = pd.DataFrame(data=data,columns=columns)
+        if not os.path.isfile(events_path):
+            raise ValueError('`events_path` must point to an existing file.')
+        
+        events_df : pd.DataFrame = pd.read_csv(events_path)
+
+        events = []
+        for _,row in events_df.iterrows():
+            # convert event to GeophysicalEvent
+            if row['start time [s]'] > sim_duration:
+                # event is not in the simulation time frame
+                continue
+
+            event = GeophysicalEvent(
+                row['event type'],
+                (row['lat [deg]'], row['lon [deg]'], row.get('grid index', 0), row['gp_index']),
+                row['start time [s]'],
+                row['duration [s]'],
+                row['severity'],
+                row['start time [s]'],
+                row['id']
+            )
+            events.append(event)
 
         return events
 
@@ -231,7 +242,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
             # some agent broadcasted a measurement request
-            measurement_req : MeasurementRequest = MeasurementRequest.from_dict(content['req'])
+            measurement_req : TaskRequest = TaskRequest.from_dict(content['req'])
 
             # add to list of received measurement requests 
             self.measurement_reqs.add(measurement_req)
@@ -241,11 +252,14 @@ class SimulationEnvironment(EnvironmentNode):
             bus_msg : BusMessage = message_from_dict(**content)
             
             # filter out measurement request messages
-            measurement_reqs : list[MeasurementRequest] \
-                = [ MeasurementRequest.from_dict(msg['req'])
+            measurement_reqs : list[TaskRequest] \
+                = [ TaskRequest.from_dict(msg['req'])
                     for msg in bus_msg.msgs
                     if msg['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value]
             
+            if measurement_reqs:
+                x =1 
+
             # add to list of received measurement requests 
             self.measurement_reqs.update(measurement_reqs)
 
@@ -300,13 +314,14 @@ class SimulationEnvironment(EnvironmentNode):
 
     @runtime_tracker
     def update_databases(self, t : float) -> None:
-        # update orbitdata
+        # TODO fix update orbitdata to consider two time steps ago
         for _,agent_orbitdata in self.orbitdata.items(): 
             agent_orbitdata : OrbitData
-            agent_orbitdata.update_databases(t)
+            t_update = self.t_update if self.t_update is not None else 0.0
+            agent_orbitdata.update_databases(t_update)
 
         # update events
-        self.events = self.events[self.events['start time [s]'] + self.events['duration [s]'] >= t]
+        self.events = [event for event in self.events if event.is_active(t) or event.is_future(t)]
         
         # update time tracker
         self.t_update = t
@@ -320,7 +335,17 @@ class SimulationEnvironment(EnvironmentNode):
         instrument = Instrument.from_dict(msg.instrument) if isinstance(msg.instrument, dict) else msg.instrument
 
         # find/generate measurement results
-        observation_data = self.query_measurement_data(agent_state, instrument)
+        observation_data = self.query_measurement_data(agent_state, instrument, msg.t_start, msg.t_end)
+
+        # DEBUG ----------------
+        # targets_requested : set = {(np.round(lat,3),np.round(lon,3)) for lat,lon,_ in msg.observation_action['targets']}
+        # targets_observed : set = {(obs['lat [deg]'], obs['lon [deg]']) for obs in observation_data}
+        # additional_targets = targets_observed.difference(targets_requested)
+        # if len(targets_requested) > len(targets_observed):
+        #     print(f'\nWARNING: number of targets requested ({len(targets_requested)}) is larger than observed ({len(targets_observed)}) at T={np.round(self.get_current_time(),3)} [s].')
+        # elif additional_targets:
+        #     print(f'\nWARNING: number of targets observed ({len(targets_observed)}) does not match requested targets ({len(msg.observation_action["targets"])}) at T={np.round(self.get_current_time(),3)} [s].')
+        # ----------------------
 
         # repsond to request
         self.log(f'measurement results obtained! responding to request')
@@ -378,7 +403,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         else:
             # check current state
-            if msg.src in self.agents[self.SPACECRAFT]:
+            if msg.src in self.agents[SimulationAgentTypes.SATELLITE]:
                 # look up orbit state
                 pos, vel, eclipse = self.get_updated_orbit_state(sat_orbitdata, self.get_current_time())
 
@@ -388,11 +413,11 @@ class SimulationEnvironment(EnvironmentNode):
                 updated_state['vel'] = vel
                 updated_state['eclipse'] = int(eclipse)
 
-            elif msg.src in self.agents[self.UAV]:
-                # Do NOT update
-                updated_state = msg.state
+            # elif msg.src in self.agents[SimulationAgentTypes.UAV]:
+            #     # Do NOT update
+            #     updated_state = msg.state
 
-            elif msg.src in self.agents[self.GROUND_STATION]:
+            elif msg.src in self.agents[SimulationAgentTypes.GROUND_OPERATOR]:
                 # Do NOT update state
                 updated_state = msg.state
 
@@ -414,100 +439,57 @@ class SimulationEnvironment(EnvironmentNode):
         # initiate update list
         resp_msgs = []
 
-        # check connectivity status
-        for target_type in self.agents:
-            for target in self.agents[target_type]:
-                # do not compare to self
-                if target == msg.src: continue
-                
-                # check updated connectivity
-                connected = self.check_agent_connectivity(msg.src, target, target_type)
-                
-                # check if it changes from previously known connectivity state
-                if connected == 0 and self.agent_connectivity[msg.src][target] == -1:
-                    # no change found; do not announce
-                    pass
+        # check connectivity of sender agent status with all other agents
+        for target in self.agent_connectivity[msg.src]:
+            # check updated connectivity
+            connected = self.check_agent_connectivity(msg.src, target)
+            
+            # check if it changes from previously known connectivity state
+            if connected == 0 and self.agent_connectivity[msg.src][target] == -1:
+                # no change found; do not announce
+                pass
 
-                    # update internal state
-                    self.agent_connectivity[msg.src][target] = connected
-                    continue
+            elif self.agent_connectivity[msg.src][target] != connected:
+                # change found; make announcement 
+                connectivity_update = AgentConnectivityUpdate(msg.src, target, connected)
+                resp_msgs.append(connectivity_update.to_dict())
 
-                if self.agent_connectivity[msg.src][target] != connected:
-                    # change found; make announcement 
-                    connectivity_update = AgentConnectivityUpdate(msg.src, target, connected)
-                    resp_msgs.append(connectivity_update.to_dict())
-
-                    # update internal state
-                    self.agent_connectivity[msg.src][target] = connected
+            # update internal state
+            self.agent_connectivity[msg.src][target] = connected   
 
         return resp_msgs
     
     @runtime_tracker
-    def check_agent_connectivity(self, src : str, target : str, target_type : str) -> bool:
+    def check_agent_connectivity(self, src : str, target : str) -> int:
         """
         Checks if an agent is in communication range with another agent
 
         #### Arguments:
             - src (`str`): name of agent starting the connection
             - target (`str`): name of agent receving the connection
-            - target_type (`str`): type of agent receving the connection
 
         #### Returns:
             - connected (`int`): binary value representing if the `src` and `target` are connected
         """
-        if self.connectivity == 'FULL': return True
+        # check if full connectivity has been assumed
+        if self.connectivity == 'FULL': return 1
 
-        connected = False
-        if target_type == self.SPACECRAFT:
-            if src in self.agents[self.SPACECRAFT]:
-                # check orbit data
-                src_data : OrbitData = self.orbitdata[src]
-                connected = src_data.is_accessing_agent(target, self.get_current_time())
-                
-            elif src in self.agents[self.UAV]:
-                # check orbit data with nearest GS
-                target_data : OrbitData = self.orbitdata[target]
-                connected = target_data.is_accessing_ground_station(target, self.get_current_time())
-            
-            elif src in self.agents[self.GROUND_STATION]:
-                # check orbit data
-                target_data : OrbitData = self.orbitdata[target]
-                connected = target_data.is_accessing_ground_station(target, self.get_current_time())
+        # check if orbit data is available for the source agent
+        assert src in self.orbitdata, f'No orbit data found for agent `{src}`.'
         
-        elif target_type == self.UAV:
-            if src in self.agents[self.SPACECRAFT]:
-                # check orbit data with nearest GS
-                src_data : OrbitData = self.orbitdata[src]
-                connected = src_data.is_accessing_ground_station(target, self.get_current_time())
+        # check if target is in the list of comms links for the source agent
+        if target not in self.orbitdata[src].comms_links: return 0
 
-            elif src in self.agents[self.UAV]:
-                # always connected
-                connected = True
-
-            elif src in self.agents[self.GROUND_STATION]:
-                # always connected
-                connected = True
-        
-        elif target_type == self.GROUND_STATION:
-            if src in self.agents[self.SPACECRAFT]:
-                # check orbit data
-                src_data : OrbitData = self.orbitdata[src]
-                connected = src_data.is_accessing_ground_station(target, self.get_current_time())
-
-            elif src in self.agents[self.UAV]:
-                # always connected
-                connected = True
-
-            elif src in self.agents[self.GROUND_STATION]:
-                # always connected
-                connected = True
-
-        return int(connected)
+        # check connectivity based on orbit data
+        src_data : OrbitData = self.orbitdata[src]
+        return int(src_data.is_accessing_agent(target, self.get_current_time()))
 
     @runtime_tracker
     def query_measurement_data( self,
                                 agent_state : SimulationAgentState, 
-                                instrument : Instrument
+                                instrument : Instrument,
+                                t_start : float,
+                                t_end : float
                                 ) -> dict:
         """
         Queries internal models or data and returns observation information being sensed by the agent
@@ -516,14 +498,9 @@ class SimulationEnvironment(EnvironmentNode):
         if isinstance(agent_state, SatelliteAgentState):
             agent_orbitdata : OrbitData = self.orbitdata[agent_state.agent_name]
 
-            # get time indexes and bounds
-            t = agent_state.t/agent_orbitdata.time_step
-            t_u = t + 1
-            t_l = t - 1
-            
-            # get names of the columns of the available coverage data
-            orbitdata_columns : list = list(agent_orbitdata.gp_access_data.columns.values)
-            
+            # get access data for the agent
+            raw_access_data = agent_orbitdata.gp_access_data.lookup_interval(t_start, t_end)
+                        
             # get satellite's off-axis angle
             satellite_off_axis_angle = agent_state.attitude[0]
             
@@ -535,29 +512,67 @@ class SimulationEnvironment(EnvironmentNode):
                     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
                     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
                     instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
+                elif isinstance(instrument_model, PassiveOpticalScannerModel):
+                    instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
+                    instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
+                    instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
+
                 else:
                     raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
 
                 # query coverage data of everything that is within the field of view of the agent
-                raw_coverage_data = [list(data)
-                                    for data in agent_orbitdata.gp_access_data.values
-                                    if t_l < data[orbitdata_columns.index('time index')] < t_u # is being observed at this given time
-                                    and data[orbitdata_columns.index('instrument')] == instrument.name # is being observed by the correct instrument
-                                    and abs(satellite_off_axis_angle - data[orbitdata_columns.index('look angle [deg]')]) <= instrument_off_axis_fov # agent is pointing at the ground point
-                                    ]
-                
+                valid_access_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
+                                     if abs(raw_access_data['look angle [deg]'][i] - satellite_off_axis_angle) <= instrument_off_axis_fov
+                                     and instrument.name == raw_access_data['instrument'][i]]
+        
+                matching_data = {col : [raw_access_data[col][i] for i in valid_access_data_indeces]
+                                            for col in raw_access_data}
+
                 # compile data
-                for data in raw_coverage_data:                    
-                    obs_data.append({
-                        "t_img"     : data[orbitdata_columns.index('time index')]*agent_orbitdata.time_step,
-                        "lat"       : data[orbitdata_columns.index('lat [deg]')],
-                        "lon"       : data[orbitdata_columns.index('lon [deg]')],
-                        "range"     : data[orbitdata_columns.index('observation range [km]')],
-                        "look"      : data[orbitdata_columns.index('look angle [deg]')],
-                        "incidence" : data[orbitdata_columns.index('incidence angle [deg]')],
-                        "zenith"         : data[orbitdata_columns.index('solar zenith [deg]')],
-                        "instrument_name": data[orbitdata_columns.index('instrument')]
-                    })
+                unique_targets = {(matching_data['grid index'][i], matching_data['GP index'][i]) 
+                                  for i in range(len(matching_data['time [s]']))}
+                for grid_index,gp_index in unique_targets:
+                    # get matching observations for a given (lat,lon) target
+                    matching_observation_indeces = [i for i in range(len(matching_data['time [s]']))
+                                                    if matching_data['grid index'][i] == grid_index
+                                                    and matching_data['GP index'][i] == gp_index]
+                    matching_observations = { column : [matching_data[column][i] for i in matching_observation_indeces]
+                                             for column in matching_data }
+
+                    # initialzie merged observation dictionary
+                    merged_observation = { column : [] for column in matching_observations.keys() }
+                    merged_observation['t_start'] = np.Inf
+                    merged_observation['t_end'] = np.NINF
+
+                    # merge observations
+                    for obs_index in range(len(matching_observations['time [s]'])):
+                        datum = { column : matching_observations[column][obs_index] 
+                                 for column in matching_observations.keys() }
+                        
+                        # fix data types to serializable types
+                        for column in datum.keys():
+                            if isinstance(datum[column], np.int64):
+                                datum[column] = int(datum[column])
+                            elif isinstance(datum[column], np.float64):
+                                datum[column] = float(datum[column])
+                        
+                        datum['t_start'] = datum['time [s]'] 
+                        datum['t_end'] = datum['time [s]'] 
+                        
+                        for column in matching_observations.keys():
+                            if (column in ['instrument', 'agent name', 'grid index', 'GP index', 'lat [deg]', 'lon [deg]', 'pnt-opt index']
+                                and len(merged_observation[column]) > 0): 
+                                continue
+                            merged_observation[column].append(datum[column])
+
+                        merged_observation['t_start'] = min(datum['t_start'], merged_observation['t_start'])
+                        merged_observation['t_end'] = max(datum['t_end'], merged_observation['t_end'])
+
+                    for key in merged_observation:
+                        if isinstance(merged_observation[key], list) and len(merged_observation[key]) == 1:
+                            merged_observation[key] = merged_observation[key][0]
+
+                    obs_data.append(merged_observation)
 
             # return processed observation data
             return obs_data
@@ -573,7 +588,7 @@ class SimulationEnvironment(EnvironmentNode):
                 if lat==lat_img 
                 and lon==lon_img
                 and t_start<= t_img <=t_start+duration
-                and instrument_name in measurements  #TODO include better reasoning]
+                and instrument_name in measurements  #TODO include better reasoning
                 ]
     
     async def teardown(self) -> None:
@@ -668,9 +683,23 @@ class SimulationEnvironment(EnvironmentNode):
                 if columns is None:
                     columns = [key for key in obs]
                     columns.insert(0, 'observer')
-                    
+                    columns.insert(2, 't_img')
+                    columns.remove('t_start')
+                    columns.remove('t_end')
+
                 # add observation to data list
                 obs['observer'] = observer
+                for key in columns:
+                    val = obs.get(key, None)
+                    if isinstance(val, list):
+                        if len(val) == 1:
+                            obs[key] = val[0]
+                        else:
+                            obs[key] = [val[0], val[-1]]
+
+                obs['t_img'] = [obs['t_start'], obs['t_end']]
+                obs.pop('t_start')
+                obs.pop('t_end')
                 data.append([obs[key] for key in columns])
 
         return pd.DataFrame(data=data, columns=columns)
@@ -689,16 +718,12 @@ class SimulationEnvironment(EnvironmentNode):
         return pd.DataFrame(data=data, columns=columns)
     
     def compile_requests(self) -> pd.DataFrame:
-        columns = ['ID', 'Requester', 'lat [deg]', 'lon [deg]', 'Severity', 't start', 't end', 't corr', 'Measurment Types']
+        columns = ['request ID', 'Requester', 'event ID', 'mission name', 't_req']
         data = [[req.id,
                  req.requester,
-                 req.target[0],
-                 req.target[1],
-                 req.severity,
-                 req.t_start,
-                 req.t_end,
-                 req.t_corr,
-                 req.observation_types] 
+                 req.event.id,
+                 req.mission_name,
+                 req.t_req] 
                  for req in self.measurement_reqs]
 
         return pd.DataFrame(data=data, columns=columns)

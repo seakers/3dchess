@@ -14,5 +14,6 @@
     "python.testing.autoTestDiscoverOnSaveEnabled": true,
     "python.analysis.extraPaths": [
         "./tests/preplanners/earliest"
-    ]
+    ],
+    "makefile.configureOnOpen": true
 }
