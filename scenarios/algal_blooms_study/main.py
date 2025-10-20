@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import tqdm
 
-from chess3d.mission import Mission
+from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
 
@@ -259,7 +259,7 @@ if __name__ == "__main__":
                                                             continue
 
                                                         # initialize mission
-                                                        mission : Mission = Mission.from_dict(scenario_specs)
+                                                        mission : Simulation = Simulation.from_dict(scenario_specs)
 
                                                         # print welcome message
                                                         print_welcome(scenario_name)

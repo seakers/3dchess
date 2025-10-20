@@ -127,6 +127,8 @@ class ObservationResultsMessage(SimulationMessage):
                  agent_state : dict, 
                  observation_action : dict, 
                  instrument : dict,
+                 t_start : float,
+                 t_end : float,
                  observation_data : list = [],
                  id: str = None, 
                  path : list = [], **_):
@@ -140,6 +142,8 @@ class ObservationResultsMessage(SimulationMessage):
         self.agent_state = agent_state
         self.observation_action = observation_action
         self.instrument = instrument
+        self.t_start = t_start
+        self.t_end = t_end
         self.observation_data = observation_data
 
 class ObservationPerformedMessage(SimulationMessage):
@@ -206,7 +210,7 @@ class PlanMessage(SimulationMessage):
         - t_plan (`float`): time at which the plan was created
         - id (`str`) : Universally Unique IDentifier for this message
     """
-    def __init__(self, src: str, dst: str, plan : list, t_plan : float, id: str = None, path : list = [], **_):
+    def __init__(self, src: str, dst: str, plan : list, t_plan : float, agent_name : str = None, id: str = None, path : list = [], **_):
         """
         Creates an instance of a plan message
 
@@ -218,6 +222,7 @@ class PlanMessage(SimulationMessage):
             - id (`str`) : Universally Unique IDentifier for this message
         """
         super().__init__(src, dst, SimulationMessageTypes.PLAN.value, id, path)
+        self.agent_name = agent_name if agent_name else dst
         self.plan = plan
         self.t_plan = t_plan
 

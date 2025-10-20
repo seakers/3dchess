@@ -166,9 +166,17 @@ cython_debug/
 *results*
 **tests/study/experiments
 **tests/**/results
+*geodata*
 
 *.tar
 *.tar*
 *.tar.xz
 *.png
 .zip
+
+# Gurobi
+*.lic
+*.ilp*
+
+# Copilot
+*copilot*

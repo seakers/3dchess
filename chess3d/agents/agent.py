@@ -1,5 +1,7 @@
+from itertools import chain
 import logging
 import os
+from typing import List
 from dmas.messages import SimulationMessage
 import numpy as np
 import pandas as pd
@@ -13,15 +15,22 @@ from dmas.utils import runtime_tracker
 from zmq import SocketType
 
 from chess3d.agents.planning.plan import Replan, Plan, Preplan
-from chess3d.agents.planning.planner import AbstractPreplanner, AbstractReplanner
-from chess3d.agents.planning.rewards import RewardGrid
-from chess3d.agents.science.requests import MeasurementRequest
+from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
+from chess3d.agents.planning.replanners.replanner import AbstractReplanner
+from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
+from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
+from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
 from chess3d.messages import *
 from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
+from chess3d.mission.mission import Mission
+from chess3d.mission.objectives import DefaultMissionObjective
+from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
+from chess3d.orbitdata import OrbitData
 
 class AbstractAgent(Agent):
     """
@@ -34,11 +43,14 @@ class AbstractAgent(Agent):
                  manager_network_config, 
                  initial_state, 
                  specs : object,
-                 modules, 
+                 modules : list, 
+                 mission : Mission,
                  level = logging.INFO, 
                  logger = None):
+        # initialize agent class
         super().__init__(agent_name, agent_network_config, manager_network_config, initial_state, modules, level, logger)
         
+        # set parameters
         self.specs = specs
         if isinstance(self.specs, Spacecraft):
             self.payload = {instrument.name: instrument for instrument in self.specs.instrument}
@@ -46,7 +58,7 @@ class AbstractAgent(Agent):
             self.payload = {instrument['name']: instrument for instrument in self.specs['instrument']} if 'instrument' in self.specs else dict()
         else:
             raise ValueError(f'`specs` must be of type `Spacecraft` or `dict`. Is of type `{type(specs)}`.')
-
+        self.mission = mission
         self.state_history : list = []
         
         # setup results folder:
@@ -143,8 +155,13 @@ class AbstractAgent(Agent):
 
             elif isinstance(resp_msg, AgentConnectivityUpdate):
                 if resp_msg.connected == 1:
+                    # subscribe from broadcasts
                     self.subscribe_to_broadcasts(resp_msg.target)
                 else:
+                    # add randomness to avoid sync issues with possible concurrent broadcasts
+                    await asyncio.sleep(np.random.random() * 1e-9)
+
+                    # unsubscribe from broadcasts
                     self.unsubscribe_to_broadcasts(resp_msg.target)
         return senses 
     
@@ -333,6 +350,8 @@ class AbstractAgent(Agent):
                     
     @runtime_tracker
     async def perform_observation(self, action : ObservationAction) -> str:
+        """ Performs a measurement or observation of a given target """
+        
         # update agent state and state history
         self.state : SimulationAgentState
         self.state.update_state(self.get_current_time(), 
@@ -340,6 +359,18 @@ class AbstractAgent(Agent):
         self.state_history.append(self.state.to_dict())
         
         try:
+            t = self.get_current_time()
+            dt = action.t_end - action.t_start
+
+            if dt > 0:
+                # perfrom time wait if needed
+                await self.perform_wait_for_messages(WaitForMessages(t, t+dt), False)
+
+                # update the agent's state
+                self.state.update_state(self.get_current_time(), 
+                                        status=SimulationAgentState.MEASURING)      
+                self.state_history.append(self.state.to_dict())
+            
             # find relevant instrument information 
             instrument : Instrument = self.payload[action.instrument_name]
 
@@ -349,12 +380,17 @@ class AbstractAgent(Agent):
                                                     SimulationElementRoles.ENVIRONMENT.value,
                                                     self.state.to_dict(),
                                                     action.to_dict(),
-                                                    instrument.to_dict()
+                                                    instrument.to_dict(),
+                                                    t,
+                                                    self.get_current_time()
                                                     )
 
             # request measurement data from the environment
             dst,src,observation_results = await self.send_peer_message(observation_req)
             msg_sci = ObservationResultsMessage(**observation_results)
+
+            if any([data['GP index'] in [2641, 3752, 4946] for data in msg_sci.observation_data]):
+                x=1
             
             # send measurement data to results logger
             # await self._send_manager_msg(msg_sci, zmq.PUB)
@@ -386,8 +422,6 @@ class AbstractAgent(Agent):
         # notify manager
         manager_message = NodeDeactivatedMessage(self.get_element_name(), SimulationElementRoles.MANAGER.value)
         await self._send_manager_msg(manager_message, zmq.PUB)
-
-        x = 1
 
     async def teardown(self) -> None:
         try:
@@ -582,10 +616,12 @@ class RealtimeAgent(AbstractAgent):
                  manager_network_config, 
                  initial_state, 
                  specs, 
+                 mission : Mission,
                  planning_module : InternalModule = None,
                  science_module : InternalModule = None,
                  level=logging.INFO, 
                  logger=None):
+        
         # load agent modules
         modules = []
         if planning_module is not None:
@@ -597,7 +633,7 @@ class RealtimeAgent(AbstractAgent):
                 raise AttributeError(f'`science_module` must be of type `ScienceModule`; is of type {type(science_module)}')
             modules.append(science_module)
 
-        super().__init__(agent_name, results_path, agent_network_config, manager_network_config, initial_state, specs, modules, level, logger)
+        super().__init__(agent_name, results_path, agent_network_config, manager_network_config, initial_state, specs, modules, mission, level, logger)
 
     @runtime_tracker
     async def think(self, senses: list) -> list:
@@ -647,10 +683,11 @@ class SimulatedAgent(AbstractAgent):
                  manager_network_config, 
                  initial_state, 
                  specs, 
+                 mission : Mission,
+                 orbitdata : OrbitData = None,
                  processor : DataProcessor = None, 
                  preplanner : AbstractPreplanner = None,
                  replanner : AbstractReplanner = None,
-                 reward_grid : RewardGrid = None,
                  level=logging.INFO, 
                  logger=None):
         
@@ -660,7 +697,8 @@ class SimulatedAgent(AbstractAgent):
                          manager_network_config, 
                          initial_state, 
                          specs, 
-                         [], 
+                         [],
+                         mission, 
                          level, 
                          logger)
         
@@ -668,12 +706,56 @@ class SimulatedAgent(AbstractAgent):
         self.processor : DataProcessor = processor
         self.preplanner : AbstractPreplanner = preplanner
         self.replanner : AbstractReplanner = replanner
-        self.reward_grid : RewardGrid = reward_grid
 
         # initialize parameters
         self.plan : Plan = Preplan(t=-1.0)
-        self.orbitdata = None
+        self.orbitdata = orbitdata
         self.plan_history = []
+        self.tasks : list[GenericObservationTask] = []
+        self.known_reqs : set[TaskRequest] = set() # TODO do we need this or is the task list enough?
+        self.observation_history : ObservationHistory = None
+
+        # initialize observation history
+        self.observation_history = ObservationHistory(orbitdata)
+
+        # gather targets for default mission tasks
+        objective_targets = { objective : [] for objective in self.mission 
+                             # ignore non-default objectives
+                             if not isinstance(objective, DefaultMissionObjective)
+                             }
+        for objective in objective_targets:         
+            for req in objective:
+                # ignore non-spatial requirements
+                if not isinstance(req, SpatialRequirement): continue
+                
+                elif isinstance(req, PointTargetSpatialRequirement):
+                    raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                
+                elif isinstance(req, TargetListSpatialRequirement):
+                    raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
+                
+                elif isinstance(req, GridTargetSpatialRequirement):
+                    req_targets = [
+                        (lat, lon, grid_index, gp_index)
+                        for grid in self.orbitdata.grid_data
+                        for lat,lon,grid_index,gp_index in grid.values
+                        if grid_index == req.grid_index and gp_index < req.grid_size
+                    ]
+                    
+                else: 
+                    raise TypeError(f"Unknown spatial requirement type: {type(req)}")
+                    
+            # create monitoring tasks from each location in this mission objective
+            tasks = [DefaultMissionTask(objective.parameter,
+                                        location=(lat, lon, grid_index, gp_index),
+                                        mission_duration=self.orbitdata.duration*24*3600,
+                                        objective=objective,
+                                        )
+                        for lat,lon,grid_index,gp_index in req_targets
+                    ]
+            
+            # add to list of known tasks
+            self.tasks.extend(tasks)
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -681,36 +763,45 @@ class SimulatedAgent(AbstractAgent):
         # unpack and sort senses
         relay_messages, incoming_reqs, observations, \
             states, action_statuses, misc_messages = self._read_incoming_messages(senses)
-        incoming_reqs : list[MeasurementRequest]
-        states : list[SimulationAgentState]
+        incoming_reqs : list[TaskRequest]
+        states : list[AgentStateMessage]
 
         # check action completion
-        completed_actions, aborted_actions, pending_actions = self._check_action_completion(action_statuses)
+        completed_actions, aborted_actions, pending_actions \
+            = self._check_action_completion(action_statuses)
 
         # extract latest state from senses
+        states = [a for a in states if a.state['agent_name'] == self.get_element_name()]
         states.sort(key = lambda a : a.state['t'])
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
+        if state.t < self.get_current_time():
+            x = 1 # breakpoint
+
         # update plan completion
-        self.plan.update_action_completion(completed_actions, 
-                                           aborted_actions, 
-                                           pending_actions, 
-                                           state.t
-                                           )    
+        self.update_plan_completion(completed_actions, 
+                                    aborted_actions, 
+                                    pending_actions, 
+                                    state.t)
 
         # process performed observations
-        generated_reqs : list[MeasurementRequest] = self.processor.process(incoming_reqs, observations)
+        generated_reqs : list[TaskRequest] = self.process_observations(incoming_reqs, observations)
         incoming_reqs.extend(generated_reqs)
-
-        # compile measurements performed by myself or other agents
-        completed_observations = {action for action in completed_actions
-                        if isinstance(action, ObservationAction)}
-        completed_observations.update({action_from_dict(**msg.observation_action) 
-                            for msg in misc_messages
-                            if isinstance(msg, ObservationPerformedMessage)})
+        
+        # compile measurements performed by myself or other agents TODO do we still need this feature?
+        # completed_observations = self.compile_completed_observations(completed_actions, misc_messages)
                 
-        # update reward grid
-        if self.reward_grid: self.reward_grid.update(self.get_current_time(), observations, incoming_reqs)
+        # TODO update mission objectives from requests
+            # for objective in self.mission.objectives:
+
+        # update observation history
+        self.update_observation_history(observations)
+
+        # update tasks from incoming requests
+        self.update_tasks(incoming_reqs=incoming_reqs)
+
+        # update known requests
+        self.update_reqs(incoming_reqs=incoming_reqs)
 
         # --- Create plan ---
         if self.preplanner is not None:
@@ -731,12 +822,18 @@ class SimulatedAgent(AbstractAgent):
             if self.preplanner.needs_planning(state, 
                                               self.specs, 
                                               self.plan):  
+                
+                # update tasks for only tasks that are available
+                self.update_tasks(available_only=True)
+                
                 # initialize plan      
                 self.plan : Plan = self.preplanner.generate_plan(state, 
                                                             self.specs,
-                                                            self.reward_grid,
                                                             self._clock_config,
-                                                            self.orbitdata
+                                                            self.orbitdata,
+                                                            self.mission,
+                                                            self.tasks,
+                                                            self.observation_history
                                                             )
 
                 # save copy of plan for post-processing
@@ -744,11 +841,9 @@ class SimulatedAgent(AbstractAgent):
                 self.plan_history.append((state.t, plan_copy))
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
-
-        t_3 = time.perf_counter()
 
         # --- Modify plan ---
         # Check if reeplanning is needed
@@ -776,12 +871,14 @@ class SimulatedAgent(AbstractAgent):
                 # -------------------------------------
 
                 # Modify current Plan      
-                self.plan : Plan = self.replanner.generate_plan(state, 
-                                                                self.specs,    
-                                                                self.reward_grid,
+                self.plan : Replan = self.replanner.generate_plan(state, 
+                                                                self.specs,
                                                                 self.plan,
                                                                 self._clock_config,
-                                                                self.orbitdata
+                                                                self.orbitdata,
+                                                                self.mission,
+                                                                self.tasks,
+                                                                self.observation_history
                                                                 )
 
                 # update last time plan was updated
@@ -795,35 +892,11 @@ class SimulatedAgent(AbstractAgent):
                 pending_actions = []
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                self.__log_plan(self.plan, "REPLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 
-        plan_out : list[AgentAction] = self.plan.get_next_actions(state.t)
-
-        future_broadcasts = [action for action in plan_out
-                             if isinstance(action, FutureBroadcastMessageAction)]
-        if future_broadcasts:
-            if self.replanner is not None:
-                for action in future_broadcasts:
-                    # get index of current future broadcast message action in output plan
-                    i_action = plan_out.index(action)
-                    # get contents of future broadcast message action
-                    broadcast : BroadcastMessageAction = self.replanner.get_broadcast_contents(action, state, self.reward_grid)
-                    # replace future message action with broadcast action
-                    plan_out[i_action] = broadcast
-                    # remove future message action from current plan
-                    self.plan.remove(action, state.t)
-                    # add broadcast message action from current plan
-                    self.plan.add(broadcast, state.t)
-                
-                # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
-                x = 1 # breakpoint
-                # -------------------------------------
-            else:
-                # ignore unknown plan types
-                for action in future_broadcasts: plan_out.remove(action)
+        plan_out = self.get_next_actions(state)
 
         # --- FOR DEBUGGING PURPOSES ONLY: ---
         # plan_out_dict = [action.to_dict() for action in plan_out]
@@ -832,7 +905,8 @@ class SimulatedAgent(AbstractAgent):
         # -------------------------------------
         
         return plan_out
-
+    
+    @runtime_tracker
     def _read_incoming_messages(self, senses : list) -> tuple:
         ## extract relay messages
         relay_messages = [msg for msg in senses if msg.path]
@@ -845,7 +919,7 @@ class SimulatedAgent(AbstractAgent):
             senses.remove(bus_msg)
 
         ## classify senses
-        incoming_reqs : list[MeasurementRequest] = [MeasurementRequest.from_dict(msg.req) 
+        incoming_reqs : list[TaskRequest] = [TaskRequest.from_dict(msg.req) 
                                                     for msg in senses 
                                                     if isinstance(msg, MeasurementRequestMessage)
                                                     and msg.req['severity'] > 0.0]
@@ -860,7 +934,10 @@ class SimulatedAgent(AbstractAgent):
                                           for msg in senses 
                                           if isinstance(msg, ObservationResultsMessage)
                                           and isinstance(msg.instrument, dict)]
-        observations = []; observations.extend(external_observations); observations.extend(own_observations)
+        
+        observations = []
+        observations.extend(external_observations)
+        observations.extend(own_observations)
 
         states : list[AgentStateMessage] = [sense for sense in senses 
                                             if isinstance(sense, AgentStateMessage)
@@ -877,6 +954,7 @@ class SimulatedAgent(AbstractAgent):
 
         return relay_messages, incoming_reqs, observations, states, action_statuses, misc_messages
 
+    @runtime_tracker
     def _check_action_completion(self, action_statuses : list) -> tuple:
         
         # collect all action statuses from messages
@@ -897,6 +975,197 @@ class SimulatedAgent(AbstractAgent):
 
         # return classified lists
         return completed_actions, aborted_actions, pending_actions
+
+    @runtime_tracker
+    def update_plan_completion(self, 
+                                completed_actions : list, 
+                                aborted_actions : list, 
+                                pending_actions : list, 
+                                t : float) -> None:
+        """
+        Updates the plan completion based on the actions performed.
+        """
+        # update plan completion
+        self.plan.update_action_completion(completed_actions, 
+                                           aborted_actions, 
+                                           pending_actions, 
+                                           t)    
+
+    @runtime_tracker
+    def process_observations(self, incoming_reqs, observations) -> list:
+        """
+        Processes observations and generates new requests based on the observations.
+        """
+        if self.processor is not None:
+            # process observations
+            return self.processor.process_observations(incoming_reqs, observations)
+        else:
+            # no processor assigned; return empty list
+            return []
+    
+    def update_tasks(self, incoming_reqs : list = [], available_only : bool = False) -> None:
+        """
+        Updates the list of tasks based on incoming requests and task availability.
+        """
+        # get tasks from incoming requests
+        event_tasks = [req.task
+                       for req in incoming_reqs
+                       if isinstance(req, TaskRequest)]
+        
+        # # filter tasks that can be performed by agent
+        # valid_event_tasks = []
+        # payload_instrument_names = {instrument_name.lower() for instrument_name in self.payload.keys()}
+        # for event_task in event_tasks_flat:
+        #     if any([instrument in event_task.objective.valid_instruments 
+        #             for instrument in payload_instrument_names]):
+        #         valid_event_tasks.append(event_task)
+
+        # add tasks to task list
+        self.tasks.extend(event_tasks)
+        
+        # filter tasks to only include active tasks
+        if available_only: # only consider tasks that are active and available
+            # self.tasks = [task for task in self.tasks 
+            #               if task.is_available(self.get_current_time())]
+        # else: # consider all tasks that have not expired yet
+            self.tasks = [task for task in self.tasks 
+                          if not task.is_expired(self.get_current_time())]
+
+    def update_reqs(self, incoming_reqs : List[TaskRequest] = [], available_only : bool = True) -> None:
+        """ Updates the known requests based on incoming requests and request availability. """
+        
+        # update known requests
+        self.known_reqs.update(incoming_reqs)
+
+        # check for request availability
+        if available_only:
+            self.known_reqs = {req for req in self.known_reqs 
+                               if req.task.is_available(self.get_current_time())
+                               }
+            
+        if self.known_reqs:
+            x = 1 # breakpoint
+
+    @runtime_tracker
+    def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
+        """
+        Compiles completed observations from the plan.
+        """
+        completed_observations = {action for action in completed_actions
+                        if isinstance(action, ObservationAction)}
+        completed_observations.update({action_from_dict(**msg.observation_action) 
+                            for msg in misc_messages
+                            if isinstance(msg, ObservationPerformedMessage)})
+        
+        return completed_observations
+
+    @runtime_tracker
+    def update_observation_history(self, observations : list) -> None:
+        """
+        Updates the observation history with the completed observations.
+        """        
+        # update observation history
+        self.observation_history.update(observations)
+
+    @runtime_tracker
+    def get_next_actions(self, state : SimulationAgentState) -> List[AgentAction]:
+        # get list of next actions from plan
+        plan_out : List[AgentAction] = self.plan.get_next_actions(state.t)
+
+        # check for future broadcast message actions in plan
+        future_broadcasts = [action for action in plan_out
+                             if isinstance(action, FutureBroadcastMessageAction)]
+        
+        # no future broadcasts; return plan as is
+        if not future_broadcasts: return plan_out
+
+        # compile broadcast messages
+        msgs : list[SimulationMessage] = []
+        for future_broadcast in future_broadcasts:
+            
+            # create appropriate broadcast message
+            if future_broadcast.broadcast_type == FutureBroadcastMessageAction.STATE:
+                msgs.append(AgentStateMessage(state.agent_name, state.agent_name, state.to_dict()))
+                
+            elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.OBSERVATIONS:
+                # compile latest observations from the observation history
+                latest_observations : List[ObservationAction] = self.get_latest_observations(state)
+
+                # index by instrument name
+                instruments_used : set = {latest_observation['instrument'].lower() 
+                                        for latest_observation in latest_observations}
+                indexed_observations = {instrument_used: [latest_observation for latest_observation in latest_observations
+                                                        if latest_observation['instrument'].lower() == instrument_used]
+                                        for instrument_used in instruments_used}
+
+                # create ObservationResultsMessage for each instrument
+                msgs.extend([ObservationResultsMessage(state.agent_name, 
+                                                state.agent_name, 
+                                                state.to_dict(), 
+                                                {}, 
+                                                instrument,
+                                                state.t,
+                                                state.t,
+                                                observations
+                                                )
+                        for instrument, observations in indexed_observations.items()])
+                
+                # msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+
+            elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.REQUESTS:
+                msgs.extend([MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+                        for req in self.known_reqs
+                        if req.event.is_available(state.t)     # only active or future events
+                        and req.requester == state.agent_name   # only requests created by myself
+                        ])
+
+            else: # unsupported broadcast type
+                raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
+        
+        # create bus message if there are messages to broadcast
+        msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+
+        # create state broadcast message action
+        broadcast = BroadcastMessageAction(msg.to_dict(), future_broadcast.t_start)
+
+        # remove future message action from current plan
+        for future_broadcast in future_broadcasts: 
+            self.plan.remove(future_broadcast, state.t)
+
+        # add broadcast message action from current plan
+        self.plan.add(broadcast, state.t)
+
+        # get indices of future broadcast message actions in output plan
+        future_broadcast_indices = [i for i, action in enumerate(plan_out) if action in future_broadcasts]
+
+        # remove future message actions from output plan
+        for i in sorted(future_broadcast_indices, reverse=True): plan_out.pop(i)
+        
+        # replace future message action with broadcast action in out plan
+        plan_out.insert(min(future_broadcast_indices), broadcast)    
+
+        # --- FOR DEBUGGING PURPOSES ONLY: ---
+        # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
+        x = 1 # breakpoint
+        # -------------------------------------
+
+        return plan_out
+    
+    def get_latest_observations(self, 
+                                state : SimulationAgentState,
+                                latest_plan_only : bool = True
+                                ) -> List[dict]:
+        return [observation_tracker.latest_observation
+                 for _,grid in self.observation_history.history.items()
+                for _, observation_tracker in grid.items()
+                if isinstance(observation_tracker, ObservationTracker)
+                # check if there is a latest observation
+                and observation_tracker.latest_observation is not None
+                # only include observations performed by myself 
+                and observation_tracker.latest_observation['agent name'] == state.agent_name
+                # only include observations performed for the current plan
+                and self.plan.t * int(latest_plan_only) <= observation_tracker.latest_observation['t_end'] <= state.t
+            ]
 
     def __log_plan(self, plan : Plan, title : str, level : int = logging.DEBUG) -> None:
         try:
@@ -923,19 +1192,22 @@ class SimulatedAgent(AbstractAgent):
 
             # log known and generated requests
             if self.processor is not None:
-                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
-                data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
-                        for req in self.processor.known_reqs]
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
+                        for event in self.processor.known_events]
                 
                 df = pd.DataFrame(data=data, columns=columns)        
                 df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
 
-                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
-                data = [(req.id, req.requester, req.target[0], req.target[1], req.severity, req.t_start, req.t_end, req.t_corr, str(req.observation_types))
-                        for req in self.processor.generated_reqs]
-                
-                df = pd.DataFrame(data=data, columns=columns)        
-                df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
+                        for event in self.processor.detected_events]
+            else:
+                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+                data = []
+
+            df = pd.DataFrame(data=data, columns=columns)        
+            df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
         
             # log plan history
             headers = ['plan_index', 't_plan', 'desc', 't_start', 't_end']
@@ -961,14 +1233,32 @@ class SimulatedAgent(AbstractAgent):
             df = pd.DataFrame(data, columns=headers)
             # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
             df.to_csv(f"{self.results_path}/planner_history.csv", index=False)
+            
+            # log observation history
+            headers = ['grid_index','gp_index', 'lat [deg]', 'lon [deg]', 'n_obs', 't_last', 'latest_observation']
+            data = []
+            for grid_index, grid in self.observation_history.history.items():
+                grid : dict[int, ObservationTracker]
+                for gp_index, observation_tracker in grid.items():
+                    observation_tracker : ObservationTracker
+                    if observation_tracker.n_obs == 0:
+                        # no observations for this grid point
+                        continue
 
-            # log reward grid history
-            if self.reward_grid is not None:
-                headers = ['t_update','grid_index','GP index','lat [deg]', 'log [deg]','instrument','reward','n_observations','n_events']
-                data = self.reward_grid.get_history()
-                df = pd.DataFrame(data, columns=headers)
-                # self.log(f'\nREWARD GRID HISTORY\n{str(df)}\n', level=logging.DEBUG)
-                df.to_csv(f"{self.results_path}/reward_grid_history.csv", index=False)
+                    # log observation tracker
+                    line_data = [   grid_index,
+                                    gp_index,
+                                    np.round(observation_tracker.lat,3),
+                                    np.round(observation_tracker.lon,3),
+                                    observation_tracker.n_obs,
+                                    np.round(observation_tracker.t_last,3),
+                                    observation_tracker.latest_observation
+                                ]
+                    data.append(line_data)
+            x = 1
+            df = pd.DataFrame(data, columns=headers)
+            # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+            df.to_csv(f"{self.results_path}/observation_history.csv", index=False)
 
             # log performance stats
             n_decimals = 5
@@ -1058,33 +1348,13 @@ class SimulatedAgent(AbstractAgent):
                     routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-replanner_{routine}.csv")
                     routine_df.to_csv(routine_dir,index=False)
 
-            if self.reward_grid:
-                for routine in self.reward_grid.stats:
-                    n = len(self.reward_grid.stats[routine])
-                    t_avg = np.round(np.mean(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
-                    t_std = np.round(np.std(self.reward_grid.stats[routine]),n_decimals) if n > 0 else 0.0
-                    t_median = np.round(np.median(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
-                    t_max = np.round(max(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
-                    t_min = np.round(min(self.reward_grid.stats[routine]),n_decimals) if n > 0 else -1
-                    t_total = t_avg * n
-
-                    line_data = [ 
-                                    f"reward_grid/{routine}",
-                                    t_avg,
-                                    t_std,
-                                    t_median,
-                                    t_max,
-                                    t_min,
-                                    n,
-                                    t_total
-                                    ]
-                    data.append(line_data)
-
             stats_df = pd.DataFrame(data, columns=headers)
             # self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
             # self.log(f'total: {sum(stats_df["t_total"])}', level=logging.WARNING)
             stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
 
-
         except Exception as e:
+            print(f'AGENT TEARDOWN ERROR: {e}')
+            raise e
             x = 1
+            

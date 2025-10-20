@@ -167,10 +167,8 @@ class Plan(ABC):
 
             if interrupted_actions:
                 earliest_interrupted_action : AgentAction = interrupted_actions.pop(0)
-                if (    isinstance(earliest_interrupted_action, ObservationAction) 
-                    or  isinstance(earliest_interrupted_action, BroadcastMessageAction)
-                    ):
-                    # interrupted action has no duration, schedule broadcast for right after
+                if abs(earliest_interrupted_action.t_end - earliest_interrupted_action.t_start) < 1e-6:
+                    # interrupted action has no duration, schedule task for right after
                     self.actions.insert(self.actions.index(earliest_interrupted_action) + 1, action)
                     
                 else:
@@ -179,6 +177,7 @@ class Plan(ABC):
 
                     # create duplciate of interrupted action with a new ID
                     continued_action : AgentAction = action_from_dict(**earliest_interrupted_action.to_dict())
+                    continued_action.t_end = earliest_interrupted_action.t_end
                     continued_action.id = str(uuid.uuid1())
 
                     # modify interrupted action
@@ -288,6 +287,10 @@ class Plan(ABC):
         # sort plan in order of ascending start time 
         plan_out.sort(key=lambda a: (a.t_start, a.t_end))
 
+        # if there are waits in the plan out, remove them and execute them in a future batch
+        if not all([isinstance(action, WaitForMessages) for action in plan_out]):
+            plan_out = [action for action in plan_out if not isinstance(action, WaitForMessages)]
+
         # check if actions are contained in output plan
         if plan_out:
             # there are actions in output plan; return plan
@@ -295,25 +298,9 @@ class Plan(ABC):
         else:
             # no actions in output plan; wait for future actions
             t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
-            if t > t_idle:
-                x =1
+            assert t_idle >= t, \
+                f'next action time {t_idle} cannot be prior to current time {t}'
             return [WaitForMessages(t, t_idle)]
-
-        # if plan_out:
-        #     plan_out = [action.to_dict()
-        #                 for action in plan_out]
-        # else:
-        #     # idle if no more actions can be performed at this time
-        #     t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
-        #     action = WaitForMessages(t, t_idle)
-        #     plan_out.append(action.to_dict())     
-        
-        # if (len(plan_out) > 1 and 
-        #     any([action_out['t_start'] == action_out['t_end'] for action_out in plan_out])):
-        #     plan_out = [action_out for action_out in plan_out
-                    #    if action_out['t_start'] == action_out['t_end']]
-        
-        # return plan_out    
     
     def copy(self) -> object:
         """ Copy contructor. Creates a deep copy of this oject. """
@@ -340,9 +327,10 @@ class Plan(ABC):
 
             # check if there is no overlap between tasks
             if t_start_prev is not None and t_end_prev is not None:
-                if t_start_prev > t_start:
-                    continue 
-                elif t_end_prev > t_start:
+                if t_start < t_start_prev:
+                    continue
+                elif t_start < t_end_prev - 1e-6:
+                # elif t_start < t_end_prev:
                     raise ValueError(f"Plan contains action with start time prior to its previous action's end time.")
 
             # save current action start and endtimes for comparison with the following action
