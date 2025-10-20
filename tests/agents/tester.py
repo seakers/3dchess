@@ -1,11 +1,8 @@
 from abc import ABC, abstractmethod
-import copy
 import os
 from typing import List
 import pandas as pd
 
-from chess3d.simulation import Simulation
-from chess3d.utils import print_welcome
 
 class AgentTester(ABC):
     def setUp(self):
