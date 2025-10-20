@@ -1,7 +1,7 @@
 from typing import Any
 from dmas.utils import runtime_tracker
 
-from chess3d.agents.planning.preplanners.decentralized.heuristic import HeuristicInsertionPlanner
+from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
 from chess3d.agents.planning.tasks import SpecificObservationTask
 
 class EarliestAccessPlanner(HeuristicInsertionPlanner):

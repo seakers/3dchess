@@ -8,17 +8,17 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 # from chess3d.agents.planning.rewards import GridPoint, RewardGrid
-from chess3d.agents.planning.replanners.replanner import AbstractReplanner
+from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.planning.plan import Plan, Preplan, Replan
-from chess3d.agents.planning.replanners.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
+from chess3d.agents.planning.decentralized.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
 from chess3d.agents.science.reward import *
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.science.requests import *
 from chess3d.agents.states import *
 from chess3d.messages import *
 
-class AbstractConsensusReplanner(AbstractReplanner):    
+class AbstractConsensusReplanner(AbstractReactivePlanner):    
     def __init__(self, 
                  replan_threshold : int = 1,
                  debug : bool = False,

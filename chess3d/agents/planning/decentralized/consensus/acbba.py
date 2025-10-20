@@ -8,8 +8,8 @@ from dmas.utils import runtime_tracker
 
 from chess3d.agents.actions import ObservationAction
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.replanners.consensus.bids import Bid
-from chess3d.agents.planning.replanners.consensus.consensus import AbstractConsensusReplanner
+from chess3d.agents.planning.decentralized.consensus.bids import Bid
+from chess3d.agents.planning.decentralized.consensus.consensus import AbstractConsensusReplanner
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 

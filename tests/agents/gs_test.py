@@ -52,15 +52,19 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
         # setup scenario parameters
         duration = 2.0 / 24.0
 
-        # grid_name = 'toy_points'
-        grid_name = 'lake_event_points'
+        grid_name = 'toy_points'
+        # grid_name = 'lake_event_points'
         
-        # scenario_name = 'toy_scenario_gs'
-        scenario_name = 'lake_scenario_gs'        
+        scenario_name = 'toy_scenario_gs'
+        # scenario_name = 'lake_scenario_gs'        
+
+        event_name = 'toy_events'
+        # event_name = 'lake_events_seed-1000'
         
-        connectivity = 'LOS' 
-        event_name = 'lake_events_seed-1000'
-        mission_name = 'lake_missions'
+        connectivity = 'LOS'      
+
+        mission_name = 'toy_missions'   
+        # mission_name = 'lake_missions'
         
         # ground station networks
         toy_1 = 'gs_toy_1'
@@ -68,20 +72,20 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
         lake_gs = 'gs_lakes'
 
         # select network to test
-        gs_network = lake_gs
+        gs_network = toy_2
 
         # set toy satellites to equatorial orbit
         spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         spacecraft_1['name'] = 'sat-1'
         spacecraft_1['@id'] = 'sat-1'
-        # spacecraft_1['orbitState']['state']['inc'] = 0.0
+        if 'toy' in gs_network: spacecraft_1['orbitState']['state']['inc'] = 0.0
         spacecraft_1['groundStationNetwork'] = gs_network
         spacecraft_1['planner']['replanner'] = {"@type": "worker", "dealerName" : gs_network}
 
         spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
         spacecraft_2['name'] = 'sat-2'
         spacecraft_2['@id'] = 'sat-2'
-        # spacecraft_2['orbitState']['state']['inc'] = 0.0
+        if 'toy' in gs_network: spacecraft_2['orbitState']['state']['inc'] = 0.0
         spacecraft_2['orbitState']['state']['ta'] = 94.5
         spacecraft_2['groundStationNetwork'] = gs_network
         spacecraft_2['planner']['replanner'] = {"@type": "worker", "dealerName" : gs_network}

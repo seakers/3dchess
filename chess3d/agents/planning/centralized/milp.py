@@ -11,8 +11,7 @@ import numpy as np
 from tqdm import tqdm
 
 from chess3d.agents.actions import ObservationAction
-from chess3d.agents.planning import tasks
-from chess3d.agents.planning.preplanners.centralized.dealer import DealerPreplanner
+from chess3d.agents.planning.centralized.dealer import DealerPlanner
 from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
@@ -21,7 +20,7 @@ from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
 
-class DealerMILPPreplanner(DealerPreplanner):
+class DealerMILPPlanner(DealerPlanner):
     """
     A preplanner that generates plans for other agents using MILP models.
 

@@ -9,7 +9,7 @@ from dmas.clocks import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
-from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.tasks import SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import *
@@ -21,7 +21,7 @@ from chess3d.orbitdata import OrbitData
 from chess3d.messages import *
 from chess3d.utils import Interval
 
-class DynamicProgrammingPlanner(AbstractPreplanner):
+class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
     def __init__(self, 
                 #  sharing : bool = False,
                  horizon: float = np.Inf, 

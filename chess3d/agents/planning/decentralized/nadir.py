@@ -3,7 +3,7 @@ import numpy as np
 from orbitpy.util import Spacecraft
 
 from chess3d.agents.actions import ObservationAction
-from chess3d.agents.planning.preplanners.decentralized.earliest import EarliestAccessPlanner
+from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
 from chess3d.agents.states import SimulationAgentState, SatelliteAgentState
 
 class NadirPointingPlanner(EarliestAccessPlanner):

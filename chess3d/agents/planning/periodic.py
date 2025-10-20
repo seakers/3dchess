@@ -22,7 +22,7 @@ from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
 
-class AbstractPreplanner(AbstractPlanner):
+class AbstractPeriodicPlanner(AbstractPlanner):
     """
     # Preplanner
 

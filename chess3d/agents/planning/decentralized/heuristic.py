@@ -1,12 +1,10 @@
-from logging import Logger
-from typing import Dict
 from orbitpy.util import Spacecraft
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import *
 from tqdm import tqdm
 
-from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
@@ -17,9 +15,8 @@ from chess3d.agents.science.requests import *
 from chess3d.agents.states import SimulationAgentState
 from chess3d.orbitdata import OrbitData
 from chess3d.messages import *
-from chess3d.utils import Interval
 
-class HeuristicInsertionPlanner(AbstractPreplanner):
+class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
     """ Schedules observations iteratively based on the highest heuristic-scoring and feasible access point """
 
     @runtime_tracker

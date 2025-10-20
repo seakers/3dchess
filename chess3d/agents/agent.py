@@ -15,10 +15,9 @@ from dmas.utils import runtime_tracker
 from zmq import SocketType
 
 from chess3d.agents.planning.plan import Replan, Plan, Preplan
-from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
-from chess3d.agents.planning.replanners.broadcaster import BroadcasterReplanner
-from chess3d.agents.planning.replanners.replanner import AbstractReplanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
+from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
+from chess3d.agents.planning.reactive import AbstractReactivePlanner
+from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
@@ -686,8 +685,8 @@ class SimulatedAgent(AbstractAgent):
                  mission : Mission,
                  orbitdata : OrbitData = None,
                  processor : DataProcessor = None, 
-                 preplanner : AbstractPreplanner = None,
-                 replanner : AbstractReplanner = None,
+                 preplanner : AbstractPeriodicPlanner = None,
+                 replanner : AbstractReactivePlanner = None,
                  level=logging.INFO, 
                  logger=None):
         
@@ -704,8 +703,8 @@ class SimulatedAgent(AbstractAgent):
         
         # set parameters
         self.processor : DataProcessor = processor
-        self.preplanner : AbstractPreplanner = preplanner
-        self.replanner : AbstractReplanner = replanner
+        self.preplanner : AbstractPeriodicPlanner = preplanner
+        self.replanner : AbstractReactivePlanner = replanner
 
         # initialize parameters
         self.plan : Plan = Preplan(t=-1.0)
@@ -1292,7 +1291,7 @@ class SimulatedAgent(AbstractAgent):
                 routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-planner_{routine}.csv")
                 routine_df.to_csv(routine_dir,index=False)
 
-            if isinstance(self.preplanner, AbstractPreplanner):
+            if isinstance(self.preplanner, AbstractPeriodicPlanner):
                 for routine in self.preplanner.stats:
                     n = len(self.preplanner.stats[routine])
                     t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
@@ -1320,7 +1319,7 @@ class SimulatedAgent(AbstractAgent):
                     routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-preplanner_{routine}.csv")
                     routine_df.to_csv(routine_dir,index=False)
 
-            if isinstance(self.replanner, AbstractReplanner):
+            if isinstance(self.replanner, AbstractReactivePlanner):
                 for routine in self.replanner.stats:
                     n = len(self.replanner.stats[routine])
                     t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1

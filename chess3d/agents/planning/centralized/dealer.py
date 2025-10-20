@@ -1,14 +1,9 @@
 from collections import defaultdict
-import logging
-import os
 from typing import Dict, List, Tuple
 from abc import abstractmethod
 
 import numpy as np
 
-from datetime import datetime
-
-from orbitpy.util import OrbitState, StateType
 from orbitpy.util import Spacecraft
 
 from dmas.modules import ClockConfig
@@ -16,10 +11,9 @@ from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
 import pandas as pd
 
-from chess3d.agents import states
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
@@ -27,13 +21,13 @@ from chess3d.messages import  AgentStateMessage, PlanMessage
 from chess3d.mission.mission import Mission
 from chess3d.mission.objectives import DefaultMissionObjective
 from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
-from chess3d.orbitdata import IntervalData, OrbitData
-from chess3d.utils import EmptyInterval, Interval
+from chess3d.orbitdata import OrbitData
+from chess3d.utils import Interval
 
 
-class DealerPreplanner(AbstractPreplanner):
+class DealerPlanner(AbstractPeriodicPlanner):
     """
-    A preplanner that generates plans for other agents.
+    Generates plans for other agents at a fixed interval.
     """
     def __init__(self, 
                  client_orbitdata : Dict[str, OrbitData], 
@@ -503,7 +497,7 @@ class DealerPreplanner(AbstractPreplanner):
         """ Boilerplate method for scheduling observations for dealer agent. """
         return [] # dealer does not schedule its own observations, only its clients'
 
-class TestingDealer(DealerPreplanner):
+class TestingDealer(DealerPlanner):
     """
     A preplanner that generates plans for testing purposes.
     """

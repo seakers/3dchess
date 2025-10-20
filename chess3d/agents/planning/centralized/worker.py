@@ -2,12 +2,12 @@ from dmas.agents import AgentAction
 
 from chess3d.agents.actions import action_from_dict
 from chess3d.agents.planning.plan import Plan, Replan
-from chess3d.agents.planning.replanners.replanner import AbstractReplanner
+from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import PlanMessage
 
 
-class WorkerReplanner(AbstractReplanner):
+class WorkerReplanner(AbstractReactivePlanner):
     """
     Worker Replanner class that handles replanning tasks for agents.
     It processes the replanning requests and updates the agent's plan accordingly.

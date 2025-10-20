@@ -1,11 +1,11 @@
 import os
 from chess3d.agents.planning.planner import *
-from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
+from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 
 import gurobipy as gp
 import numpy as np
 
-class SingleSatMILP(AbstractPreplanner):
+class SingleSatMILP(AbstractPeriodicPlanner):
     EARLIEST = 'earliest'
     BEST = 'best'
     REOBSERVATION = 'reobservation'

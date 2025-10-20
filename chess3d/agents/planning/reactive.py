@@ -11,8 +11,8 @@ from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
 
 
-class AbstractReplanner(AbstractPlanner):
-    """ Repairs plans previously constructed by another planner """
+class AbstractReactivePlanner(AbstractPlanner):
+    """ Repairs previously constructed plans according to external inputs and changes in state. """
 
     def __init__(self, debug: bool = False, logger: Logger = None) -> None:
         super().__init__(debug, logger)

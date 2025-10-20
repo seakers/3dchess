@@ -1,21 +1,17 @@
-from abc import abstractmethod
-from os import times
 from typing import Dict
 import numpy as np
 
 from dmas.modules import ClockConfig
 
-from chess3d.agents.planning.replanners.replanner import AbstractReplanner
-from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
-from chess3d.agents.science.requests import TaskRequest
-from chess3d.messages import AgentStateMessage, BusMessage, MeasurementRequestMessage, ObservationResultsMessage
+from chess3d.agents.planning.reactive import AbstractReactivePlanner
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.orbitdata import IntervalData, OrbitData
 from chess3d.agents.planning.plan import *
 from chess3d.agents.states import SimulationAgentState
 from chess3d.mission.mission import Mission
 from chess3d.utils import Interval
 
-class BroadcasterReplanner(AbstractReplanner):
+class BroadcasterReplanner(AbstractReactivePlanner):
     def update_percepts(self, 
                         state, 
                         current_plan, 

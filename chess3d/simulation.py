@@ -24,12 +24,12 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
-from chess3d.agents.planning.preplanners.centralized.dealer import TestingDealer
-from chess3d.agents.planning.preplanners.centralized.milp import DealerMILPPreplanner
-from chess3d.agents.planning.preplanners.decentralized.milp import SingleSatMILP
-from chess3d.agents.planning.preplanners.decentralized.nadir import NadirPointingPlanner
-from chess3d.agents.planning.replanners.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
-from chess3d.agents.planning.preplanners.centralized.worker import WorkerReplanner
+from chess3d.agents.planning.centralized.dealer import TestingDealer
+from chess3d.agents.planning.centralized.milp import DealerMILPPlanner
+from chess3d.agents.planning.decentralized.milp import SingleSatMILP
+from chess3d.agents.planning.decentralized.nadir import NadirPointingPlanner
+from chess3d.agents.planning.decentralized.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
+from chess3d.agents.planning.centralized.worker import WorkerReplanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -39,10 +39,10 @@ from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule
-from chess3d.agents.planning.preplanners.decentralized.heuristic import HeuristicInsertionPlanner
-from chess3d.agents.planning.preplanners.decentralized.earliest import EarliestAccessPlanner
-from chess3d.agents.planning.preplanners.decentralized.dynamic import DynamicProgrammingPlanner
-from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
+from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
+from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
+from chess3d.agents.planning.decentralized.dynamic import DynamicProgrammingPlanner
+from chess3d.agents.planning.decentralized.consensus.acbba import ACBBAPlanner
 from chess3d.agents.science.module import *
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes
 from chess3d.agents.agent import SimulatedAgent
@@ -1672,12 +1672,12 @@ class SimulationElementFactory:
                 if mode == 'test':                   
                     preplanner = TestingDealer(client_orbitdata, client_specs, horizon, period)
                 elif mode in ['milp', 'mixed-integer-linear-programming']:
-                    model = preplanner_dict.get('model', DealerMILPPreplanner.STATIC).lower()
+                    model = preplanner_dict.get('model', DealerMILPPlanner.STATIC).lower()
                     license_path = preplanner_dict.get('licensePath', None)
                     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
                     max_observations = preplanner_dict.get('maxObservations', 10)
 
-                    preplanner = DealerMILPPreplanner(client_orbitdata, client_specs, client_missions, model, license_path, horizon, period, max_tasks, max_observations, debug, logger)
+                    preplanner = DealerMILPPlanner(client_orbitdata, client_specs, client_missions, model, license_path, horizon, period, max_tasks, max_observations, debug, logger)
 
             elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
                 # unpack preplanner parameters

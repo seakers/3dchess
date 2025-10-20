@@ -8,8 +8,8 @@ from dmas.modules import *
 from dmas.utils import runtime_tracker
 
 from chess3d.agents.planning.plan import Plan, Preplan
-from chess3d.agents.planning.preplanners.preplanner import AbstractPreplanner
-from chess3d.agents.planning.replanners.replanner import AbstractReplanner
+from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
+from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
@@ -20,8 +20,8 @@ class PlanningModule(InternalModule):
                 results_path : str, 
                 parent_agent_specs : object,
                 parent_network_config: NetworkConfig, 
-                preplanner : AbstractPreplanner = None,
-                replanner : AbstractReplanner = None,
+                preplanner : AbstractPeriodicPlanner = None,
+                replanner : AbstractReactivePlanner = None,
                 orbitdata : OrbitData = None,
                 level: int = logging.INFO, 
                 logger: logging.Logger = None
@@ -56,8 +56,8 @@ class PlanningModule(InternalModule):
         self.results_path = results_path
         self.parent_agent_specs = parent_agent_specs
         self.parent_name = parent_name
-        self.preplanner : AbstractPreplanner = preplanner
-        self.replanner : AbstractReplanner = replanner
+        self.preplanner : AbstractPeriodicPlanner = preplanner
+        self.replanner : AbstractReactivePlanner = replanner
         self.orbitdata : OrbitData = orbitdata
 
     def _setup_planner_network_config(self, parent_name : str, parent_network_config : NetworkConfig) -> dict:
@@ -682,7 +682,7 @@ class PlanningModule(InternalModule):
             routine_dir = os.path.join(f"{self.results_path}/{self.get_parent_name()}/runtime", f"time_series-planner_{routine}.csv")
             routine_df.to_csv(routine_dir,index=False)
 
-        if isinstance(self.preplanner, AbstractPreplanner):
+        if isinstance(self.preplanner, AbstractPeriodicPlanner):
             for routine in self.preplanner.stats:
                 n = len(self.preplanner.stats[routine])
                 t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
@@ -710,7 +710,7 @@ class PlanningModule(InternalModule):
                 routine_dir = os.path.join(f"{self.results_path}/{self.get_parent_name()}/runtime", f"time_series-preplanner_{routine}.csv")
                 routine_df.to_csv(routine_dir,index=False)
 
-        if isinstance(self.replanner, AbstractReplanner):
+        if isinstance(self.replanner, AbstractReactivePlanner):
             for routine in self.replanner.stats:
                 n = len(self.replanner.stats[routine])
                 t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
