@@ -3,7 +3,7 @@ from logging import Logger
 
 from dmas.modules import ClockConfig
 
-from chess3d.agents.planning.plan import Plan, Preplan
+from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
@@ -17,7 +17,7 @@ class AbstractReactivePlanner(AbstractPlanner):
     def __init__(self, debug: bool = False, logger: Logger = None) -> None:
         super().__init__(debug, logger)
 
-        self.preplan : Preplan = None
+        self.preplan : PeriodicPlan = None
 
     @abstractmethod
     def update_percepts(self, 
@@ -34,8 +34,8 @@ class AbstractReactivePlanner(AbstractPlanner):
         super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
         
         # update latest preplan
-        if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, Preplan): 
-            self.preplan : Preplan = current_plan.copy() 
+        if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, PeriodicPlan): 
+            self.preplan : PeriodicPlan = current_plan.copy() 
 
     @abstractmethod
     def generate_plan(  self, 

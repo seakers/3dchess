@@ -14,7 +14,7 @@ from dmas.modules import InternalModule
 from dmas.utils import runtime_tracker
 from zmq import SocketType
 
-from chess3d.agents.planning.plan import Replan, Plan, Preplan
+from chess3d.agents.planning.plan import ReactivePlan, Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
@@ -707,7 +707,7 @@ class SimulatedAgent(AbstractAgent):
         self.replanner : AbstractReactivePlanner = replanner
 
         # initialize parameters
-        self.plan : Plan = Preplan(t=-1.0)
+        self.plan : Plan = PeriodicPlan(t=-1.0)
         self.orbitdata = orbitdata
         self.plan_history = []
         self.tasks : list[GenericObservationTask] = []
@@ -870,7 +870,7 @@ class SimulatedAgent(AbstractAgent):
                 # -------------------------------------
 
                 # Modify current Plan      
-                self.plan : Replan = self.replanner.generate_plan(state, 
+                self.plan : ReactivePlan = self.replanner.generate_plan(state, 
                                                                 self.specs,
                                                                 self.plan,
                                                                 self._clock_config,

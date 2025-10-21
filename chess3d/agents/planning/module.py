@@ -7,7 +7,7 @@ from orbitpy.util import Spacecraft
 from dmas.modules import *
 from dmas.utils import runtime_tracker
 
-from chess3d.agents.planning.plan import Plan, Preplan
+from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.orbitdata import OrbitData
@@ -269,7 +269,7 @@ class PlanningModule(InternalModule):
         """
         try:
             # initialize plan
-            plan : Plan = Preplan(t=-1.0)
+            plan : Plan = PeriodicPlan(t=-1.0)
 
             # level = logging.WARNING
             level = logging.DEBUG

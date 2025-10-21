@@ -381,20 +381,20 @@ class Plan(ABC):
     def __len__(self) -> int:
         return len(self.actions)    
 
-class Preplan(Plan):
+class PeriodicPlan(Plan):
     def __init__(self, 
                  *actions, 
                  t: float = 0,
                  horizon : float = np.Inf,
                  t_next : float = np.Inf
                  ) -> None:
-        
+        """ Describes a plan to be performed by an agent that is generated periodically over a fixed period and horizon. """
         self.horizon = horizon
 
         super().__init__(*actions, t=t, t_next=t_next)
 
     def copy(self) -> object:
-        return Preplan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
+        return PeriodicPlan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
     
     def add(self, action: AgentAction, t: float) -> None:
         if self.t + self.horizon < action.t_end:
@@ -402,11 +402,15 @@ class Preplan(Plan):
 
         super().add(action, t)
 
-class Replan(Plan):
+class ReactivePlan(Plan):
+    def __init__(self, *actions, t = 0, t_next = np.Inf):
+        """ Describes a plan to be performed by an agent that is generated reactively based on external and internal knowledge. """
+        super().__init__(*actions, t=t, t_next=t_next)
+
     def copy(self) -> object:
-        return Replan(self.actions, t=self.t, t_next=self.t_next)
+        return ReactivePlan(self.actions, t=self.t, t_next=self.t_next)
     
-    def from_preplan(preplan : Preplan, *actions, t : float) -> object:
-        """ creates a modified plan from an existing preplan and a set of new actions to be added to said plan """
-        return Replan(preplan.actions, *actions, t=t, t_next=preplan.t_next)
+    def from_periodic_plan(periodic_plan : PeriodicPlan, *actions, t : float) -> object:
+        """ creates a modified plan from an existing periodic plan and a set of new actions to be added to said plan """
+        return ReactivePlan(periodic_plan.actions, *actions, t=t, t_next=periodic_plan.t_next)
     

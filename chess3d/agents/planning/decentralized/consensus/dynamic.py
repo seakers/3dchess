@@ -7,7 +7,7 @@ from dmas.clocks import *
 
 from chess3d.agents.actions import ObservationAction
 from chess3d.orbitdata import OrbitData 
-from chess3d.agents.planning.plan import Plan, Replan
+from chess3d.agents.planning.plan import Plan, ReactivePlan
 from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
 from chess3d.agents.planning.replanners.consensus.bids import Bid
 # from chess3d.agents.planning.rewards import RewardGrid
@@ -73,7 +73,7 @@ class DynamicProgrammingACBBAReplanner(ACBBAPlanner):
         waits : list = self._schedule_waits(state)
         
         # compile and generate plan
-        self.plan = Replan(maneuvers, waits, observations, broadcasts, t=state.t, t_next=self.preplan.t_next)
+        self.plan = ReactivePlan(maneuvers, waits, observations, broadcasts, t=state.t, t_next=self.preplan.t_next)
 
         # return copy
         return self.plan.copy()

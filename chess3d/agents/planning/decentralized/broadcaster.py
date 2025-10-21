@@ -48,7 +48,7 @@ class PeriodicBroadcasterReplanner(BroadcasterReplanner):
                        ) -> bool:
 
         # check if a new preplan was just generated
-        if isinstance(current_plan, Preplan): return True
+        if isinstance(current_plan, PeriodicPlan): return True
             
         # check if the broadcast time has been reached 
         return state.t >= self.t_next
@@ -72,7 +72,7 @@ class PeriodicBroadcasterReplanner(BroadcasterReplanner):
                         FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS,self.t_next)]
         
         # return modified plan
-        return Replan.from_preplan(current_plan, broadcasts, t=state.t)
+        return ReactivePlan.from_periodic_plan(current_plan, broadcasts, t=state.t)
  
 
 class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
@@ -92,7 +92,7 @@ class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
                        ) -> bool:
 
         # check if a new preplan was just generated
-        return isinstance(current_plan, Preplan)
+        return isinstance(current_plan, PeriodicPlan)
     
     def generate_plan(  self, 
                         state : SimulationAgentState,
@@ -109,7 +109,7 @@ class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
 
         # determine the next acceptable broadcast times
         t_start = state.t
-        t_end = current_plan.t_next if isinstance(current_plan, Preplan) else np.Inf
+        t_end = current_plan.t_next if isinstance(current_plan, PeriodicPlan) else np.Inf
 
         # gather the access opportunities per agent
         access_opportunities : Dict[str, list] = self._calculate_broadcast_opportunities(orbitdata, t_start, t_end)
@@ -135,7 +135,7 @@ class OpportunisticBroadcasterReplanner(BroadcasterReplanner):
                         broadcasts.append(FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t))
         
         # return modified plan
-        return Replan.from_preplan(current_plan, broadcasts, t=state.t)
+        return ReactivePlan.from_periodic_plan(current_plan, broadcasts, t=state.t)
 
     def _calculate_broadcast_opportunities(self, orbitdata: OrbitData, t_start : float, t_end : float) -> dict:
         """ calculates future broadcast times based on inter-agent access opportunities """

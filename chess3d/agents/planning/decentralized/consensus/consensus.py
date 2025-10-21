@@ -11,7 +11,7 @@ from dmas.clocks import *
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
-from chess3d.agents.planning.plan import Plan, Preplan, Replan
+from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
 from chess3d.agents.planning.decentralized.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
 from chess3d.agents.science.reward import *
 from chess3d.mission.mission import Mission
@@ -41,7 +41,7 @@ class AbstractConsensusReplanner(AbstractReactivePlanner):
         self.planner_changes = []
         self.ignored_requests = set()
         self.agent_orbitdata : OrbitData = None
-        self.preplan : Preplan = None
+        self.preplan : PeriodicPlan = None
         self.plan : Plan = None
 
         # set paremeters
@@ -76,7 +76,7 @@ class AbstractConsensusReplanner(AbstractReactivePlanner):
                                 if req.t_start <= state.t <= req.t_end}
 
         # check if new preplan was received
-        if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, Preplan): 
+        if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, PeriodicPlan): 
             # set latest preplan as current plan 
             self.plan = current_plan.copy()
             
@@ -229,7 +229,7 @@ class AbstractConsensusReplanner(AbstractReactivePlanner):
             self.bids_to_rebroadcast                    # there is bid information to broadcast
             #TODO or pending_information_broadcast       # there is relevant information to broadcast
             or (abs(state.t - current_plan.t) <= 1e-3 
-                and isinstance(current_plan, Preplan))  # a new preplan was just generated
+                and isinstance(current_plan, PeriodicPlan))  # a new preplan was just generated
             ):
             return True
         
@@ -292,7 +292,7 @@ class AbstractConsensusReplanner(AbstractReactivePlanner):
         waits : list = self._schedule_waits(state)
         
         # compile and generate plan
-        self.plan = Replan(maneuvers, waits, observations, broadcasts, t=state.t, t_next=self.preplan.t_next)
+        self.plan = ReactivePlan(maneuvers, waits, observations, broadcasts, t=state.t, t_next=self.preplan.t_next)
 
         return self.plan.copy()
     
@@ -961,7 +961,7 @@ class AbstractConsensusReplanner(AbstractReactivePlanner):
             reset_reqs = []
 
             # if preplan was just generated, extract bundle from preplan
-            if isinstance(self.plan, Preplan):
+            if isinstance(self.plan, PeriodicPlan):
                 results, bundle, changes = self._get_bundle_from_preplan(state, reward_grid, results, bundle, changes)
                         
             # -------------------------------------

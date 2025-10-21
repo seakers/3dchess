@@ -11,7 +11,7 @@ from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
 
 from chess3d.agents.actions import ObservationAction, WaitForMessages
-from chess3d.agents.planning.plan import Plan, Preplan
+from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
 from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
@@ -52,7 +52,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
         self.horizon = horizon                                                      # planning horizon
         self.period = period                                                        # replanning period         
         # self.sharing = sharing                                                      # toggle for sharing plans
-        self.plan = Preplan(t=-1,horizon=horizon,t_next=0.0)                        # initialized empty plan
+        self.plan = PeriodicPlan(t=-1,horizon=horizon,t_next=0.0)                        # initialized empty plan
                 
         # initialize attributes
         self.pending_reqs_to_broadcast : set[TaskRequest] = set()            # set of observation requests that have not been broadcasted
@@ -132,7 +132,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
         maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
         
         # generate plan from actions
-        self.plan : Preplan = Preplan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
+        self.plan : PeriodicPlan = PeriodicPlan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
         
         # wait for next planning period to start
         replan : list = self._schedule_periodic_replan(state, self.plan, state.t+self.period)

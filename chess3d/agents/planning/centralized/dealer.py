@@ -12,7 +12,7 @@ from dmas.agents import AgentAction
 import pandas as pd
 
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
-from chess3d.agents.planning.plan import Plan, Preplan
+from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
@@ -68,7 +68,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
         self.client_missions : Dict[str, Mission] = {client.lower(): client_missions[client] for client in client_missions}
         self.cross_track_fovs : Dict[str, Dict[str, float]] = self._collect_client_cross_track_fovs(client_specs)
         self.client_states : Dict[str, SatelliteAgentState] = self.__initiate_client_states(client_orbitdata, client_specs)
-        self.client_plans : Dict[str, Preplan] = {client : Preplan([], t=0.0, horizon=self.horizon, t_next=np.Inf) 
+        self.client_plans : Dict[str, PeriodicPlan] = {client : PeriodicPlan([], t=0.0, horizon=self.horizon, t_next=np.Inf) 
                                            for client in self.client_orbitdata}
         self.client_tasks : Dict[Mission, List[GenericObservationTask]] = self.__generate_default_client_tasks(client_missions, client_orbitdata)
 
@@ -163,13 +163,13 @@ class DealerPlanner(AbstractPeriodicPlanner):
                         observation_history : ObservationHistory,
                     ) -> Plan:
         # generate plans for all client agents
-        client_plans : Dict[str, Preplan] = self._generate_client_plans(state, specs, clock_config, orbitdata, mission, tasks, observation_history)
+        client_plans : Dict[str, PeriodicPlan] = self._generate_client_plans(state, specs, clock_config, orbitdata, mission, tasks, observation_history)
 
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, client_plans, orbitdata)
         
         # generate plan from actions
-        self.plan : Preplan = Preplan(broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
+        self.plan : PeriodicPlan = PeriodicPlan(broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
         
         # wait for next planning period to start
         replan : list = self._schedule_periodic_replan(state, self.plan, state.t+self.period)
@@ -196,7 +196,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
         # check if there are clients reachable in the planning horizon
         if all([orbitdata.get_next_agent_access(client, state.t, state.t+self.period, True) is None 
                 for client in self.client_orbitdata.keys()]):
-            client_plans : Dict[str, Preplan] = {client: Preplan([], 
+            client_plans : Dict[str, PeriodicPlan] = {client: PeriodicPlan([], 
                                                             t=state.t, 
                                                             horizon=planning_horizons[client].right, 
                                                             t_next=state.t+self.period)
@@ -256,7 +256,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
 
 
         # combine scheduled actions to create plans for each client
-        client_plans : Dict[str, Preplan] = {client: Preplan(client_observations[client], 
+        client_plans : Dict[str, PeriodicPlan] = {client: PeriodicPlan(client_observations[client], 
                                                             client_maneuvers[client], 
                                                             client_broadcasts[client], 
                                                             t=state.t, horizon=planning_horizons[client].right, t_next=state.t+self.horizon)
@@ -464,7 +464,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
 
         return client_broadcasts
 
-    def _schedule_broadcasts(self, state : SimulationAgentState, client_plans : Dict[str, Preplan], orbitdata : OrbitData):
+    def _schedule_broadcasts(self, state : SimulationAgentState, client_plans : Dict[str, PeriodicPlan], orbitdata : OrbitData):
         """
         Schedules broadcasts to be performed based on the generated plans for each agent.
         """

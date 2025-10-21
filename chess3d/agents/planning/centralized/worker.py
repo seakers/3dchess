@@ -1,7 +1,7 @@
 from dmas.agents import AgentAction
 
 from chess3d.agents.actions import action_from_dict
-from chess3d.agents.planning.plan import Plan, Replan
+from chess3d.agents.planning.plan import Plan, ReactivePlan
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import PlanMessage
@@ -49,7 +49,7 @@ class WorkerReplanner(AbstractReactivePlanner):
         actions = [action for action in actions if action.t_start >= state.t]
 
         # create a plan from plan message actions
-        self.plan = Replan(actions, t=self.plan_message.t_plan)
+        self.plan = ReactivePlan(actions, t=self.plan_message.t_plan)
 
         # remove the plan message after processing
         del self.plan_message
