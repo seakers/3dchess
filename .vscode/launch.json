@@ -175,7 +175,7 @@
             "name": "TEST: ACBBA Replanner",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/PLANNERS/acbba_test.py",
+            "program": "${workspaceRoot}/tests/planners/acbba_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -183,18 +183,6 @@
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             }
         },
-        // {
-        //     "name": "TEST: Ground Station Agent",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "${workspaceRoot}/tests/gstat/ground_station_test.py",
-        //     "console": "integratedTerminal",
-        //     "justMyCode": true,
-        //     "cwd": "${workspaceRoot}",
-        //     "env": {
-        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
-        //     }
-        // },
         // {
         //     "name": "SCENARIO: Algal Blooms",
         //     "type": "debugpy",

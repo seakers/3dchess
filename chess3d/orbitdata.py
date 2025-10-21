@@ -560,8 +560,8 @@ class OrbitData:
             
             # get spacecraft and ground station specifications
             spacecraft_list : List[dict] = mission_dict.get('spacecraft', None)
-            ground_station_list : List[dict] = mission_dict.get('groundStation', None)
-            ground_ops_list : List[dict] = mission_dict.get('groundOperator', None)
+            ground_station_list : List[dict] = mission_dict.get('groundStation', [])
+            ground_ops_list : List[dict] = mission_dict.get('groundOperator', [])
             
             # load orbit data for the specified agent
             if agent_name in [spacecraft.get('name') for spacecraft in spacecraft_list]:
@@ -707,14 +707,15 @@ class OrbitData:
                 else:
                     gs_access_data = pd.concat([gs_access_data, gndStn_access_data])
 
-            # load ground station access to ground point data
+            # load agent access to ground operator if one exists
             ground_operator_link_data : Dict[str,pd.DataFrame] = {ground_operator.get('name'): pd.DataFrame(columns=['start index', 'end index'])
-                                                                  for ground_operator in ground_ops_list}
-            ground_operator_link_data[gs_network_name] = pd.concat([ground_operator_link_data[gs_network_name], gs_access_data])
-            for col in ground_operator_link_data[gs_network_name].columns:
-                if col not in ['start index', 'end index']:
-                    ground_operator_link_data[gs_network_name].drop(columns=[col], inplace=True)
-            ground_operator_link_data[gs_network_name] = ground_operator_link_data[gs_network_name].drop_duplicates().reset_index(drop=True)
+                                                                for ground_operator in ground_ops_list}
+            if gs_network_name: 
+                ground_operator_link_data[gs_network_name] = pd.concat([ground_operator_link_data[gs_network_name], gs_access_data])
+                for col in ground_operator_link_data[gs_network_name].columns:
+                    if col not in ['start index', 'end index']:
+                        ground_operator_link_data[gs_network_name].drop(columns=[col], inplace=True)
+                ground_operator_link_data[gs_network_name] = ground_operator_link_data[gs_network_name].drop_duplicates().reset_index(drop=True)
 
             # land coverage data metrics data
             payload = spacecraft.get('instrument', None)
