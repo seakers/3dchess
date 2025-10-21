@@ -21,8 +21,10 @@ monitoring system.
 
 ## Directory structure
 ```
-├───.temp (To be determined, temporary folder with old files)
 ├───docs (sphinx and other project-related documentation)
+|   └───diagrams (figures used for documentation)
+|       ├───architecture (simulation architecture diagrams)
+|       └───sequence diagrams (simulation sequence)
 ├───scenarios (folder with the input and results files for simulations)
 ├───tests (unit tests)
 └───chess3d (folder with main source code)
