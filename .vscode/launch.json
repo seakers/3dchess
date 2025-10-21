@@ -15,47 +15,6 @@
             "args": [
             ]
         },
-        // {
-        //     "name": "VISUALIZER TESTER - Plane",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "${workspaceRoot}/chess3d/visualizer.py",
-        //     "console": "integratedTerminal",
-        //     "justMyCode": true,
-        //     "cwd": "${workspaceRoot}/chess3d",
-        //     "env": {
-        //         "PYTHONPATH": "${workspaceRoot}"
-        //     }
-        // },
-        // {
-        //     "name": "VISUALIZER TESTER - Earth",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "${workspaceRoot}/visualizer.py",
-        //     "console": "integratedTerminal",
-        //     "justMyCode": true,
-        //     "cwd": "${workspaceRoot}/chess3d",
-        //     "env": {
-        //         "PYTHONPATH": "${workspaceRoot}"
-        //     },
-        //     "args": [
-        //         "acbba_test_sats",
-        //         "earth"
-        //     ]
-        // },
-        // {
-        //     "name": "VISUALIZER TEST - SAT SIM",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "${workspaceRoot}/chess3d/main.py",
-        //     "console": "integratedTerminal",
-        //     "justMyCode": true,
-        //     "cwd": "${workspaceRoot}/chess3d/",
-        //     "env": {
-        //         "PYTHONPATH": "${workspaceRoot}"
-        //     },
-        //     "args": "visualizer_test"
-        // },
         {
             "name": "TEST: Event Generation",
             "type": "debugpy",
@@ -212,18 +171,18 @@
                 "PYTHONPATH": "${workspaceRoot}/chess3d"
             }
         },
-        // {
-        //     "name": "TEST: ACBBA Replanner",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "${workspaceRoot}/tests/replanners/acbba/acbba_replanner_test.py",
-        //     "console": "integratedTerminal",
-        //     "justMyCode": true,
-        //     "cwd": "${workspaceRoot}",
-        //     "env": {
-        //         "PYTHONPATH": "${workspaceRoot}/chess3d"
-        //     }
-        // },
+        {
+            "name": "TEST: ACBBA Replanner",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/PLANNERS/acbba_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}/chess3d"
+            }
+        },
         // {
         //     "name": "TEST: Ground Station Agent",
         //     "type": "debugpy",
@@ -261,7 +220,7 @@
         //     }
         // },
         // {
-        //     "name": "TEST: Replanner Study",
+        //     "name": "STUDY: Replanner Study",
         //     "type": "debugpy",
         //     "request": "launch",
         //     "program": "${workspaceRoot}/scenarios/replanner_study/main.py",
@@ -279,7 +238,7 @@
         //     ]
         // },
         // {
-        //     "name": "Preplanner Study",
+        //     "name": "STUDY: Preplanner Study",
         //     "type": "debugpy",
         //     "request": "launch",
         //     "program": "${workspaceRoot}/scenarios/preplanner_study/main.py",
@@ -291,7 +250,7 @@
         //     }
         // }
         // {
-        //     "name": "Federated Mission Case",
+        //     "name": "SCENARIO: Federated Mission Case",
         //     "type": "debugpy",
         //     "request": "launch",
         //     "program": "${workspaceRoot}/scenarios/federated_mission/test.py",
