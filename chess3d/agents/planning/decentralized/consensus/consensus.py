@@ -9,10 +9,12 @@ from dmas.clocks import *
 
 # from chess3d.agents.planning.rewards import GridPoint, RewardGrid
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.planning.plan import Plan, Preplan, Replan
 from chess3d.agents.planning.decentralized.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
 from chess3d.agents.science.reward import *
+from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.science.requests import *
 from chess3d.agents.states import *
@@ -248,11 +250,13 @@ class AbstractConsensusReplanner(AbstractReactivePlanner):
     def generate_plan(  self, 
                         state : SimulationAgentState,
                         specs : object,
-                        reward_grid ,
                         current_plan : Plan,
                         clock_config : ClockConfig,
-                        orbitdata : dict = None
-                    ) -> list:
+                        orbitdata : OrbitData,
+                        mission : Mission,
+                        tasks : list,
+                        observation_history : ObservationHistory,
+                    ) -> Plan:
         
         # -------------------------------
         # DEBUG PRINTOUTS
@@ -261,7 +265,7 @@ class AbstractConsensusReplanner(AbstractReactivePlanner):
 
         # perform bidding phase
         self.results, self.bundle, self.planner_changes = \
-            self.planning_phase(state, specs, self.results, self.bundle, reward_grid, orbitdata)
+            self.planning_phase(state, specs, self.results, self.bundle, observation_history, orbitdata)
         
         # -------------------------------
         # DEBUG PRINTOUTS
@@ -282,7 +286,7 @@ class AbstractConsensusReplanner(AbstractReactivePlanner):
         maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
 
         # schedule broadcasts
-        broadcasts : list = self._schedule_broadcasts(state, current_plan, reward_grid, orbitdata)       
+        broadcasts : list = self._schedule_broadcasts(state, current_plan, observation_history, orbitdata)       
 
         # generate wait actions 
         waits : list = self._schedule_waits(state)
