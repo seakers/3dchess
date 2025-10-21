@@ -26,13 +26,14 @@ monitoring system.
 ├───scenarios (folder with the input and results files for simulations)
 ├───tests (unit tests)
 └───chess3d (folder with main source code)
-    ├───nodes (dmas network nodes)
+    ├───mission (mission objetive and requirement definitions)
+    ├───nodes (`dmas` simulation nodes)
     └───agents (implementations for all agents)
-        ├───engineering (engineering module files)
         ├───science (science module files)
         └───planning (planning module files)
             ├───.backup (To be determined, temporary folder with old files)
-            └───planners (planner implementation files)
+            ├───centralized (centralied planning strategies)
+            └───decentralized (decentralied planning strategies)
                 └───conseunsus (consensus-based planners)
 ```
 
@@ -51,7 +52,7 @@ make runtest
 ```
 
 ## Creating and Running a 3D-CHESS Simulation
-See [`scenarios`](./scenarios/README.md) directory for further details.
+See [`scenarios`](./scenarios/README.md) directory for further details. (NOTE: README might be outdated as of 10/20/25)
 
 ## Acknowledgments
 This work has been funded by grants from the National Aeronautics and Space Administration (NASA) Earth Science Technology Office (ESTO) through the Advanced Information Systems Technology (AIST) Program.
