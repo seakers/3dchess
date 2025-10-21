@@ -8,8 +8,8 @@ from dmas.clocks import *
 from chess3d.agents.actions import ObservationAction
 from chess3d.orbitdata import OrbitData 
 from chess3d.agents.planning.plan import Plan, ReactivePlan
-from chess3d.agents.planning.replanners.consensus.acbba import ACBBAPlanner
-from chess3d.agents.planning.replanners.consensus.bids import Bid
+from chess3d.agents.planning.decentralized.consensus.acbba import ACBBAPlanner
+from chess3d.agents.planning.decentralized.consensus.bids import Bid
 # from chess3d.agents.planning.rewards import RewardGrid
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState

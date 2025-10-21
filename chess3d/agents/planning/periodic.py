@@ -4,8 +4,6 @@ import numpy as np
 from tqdm import tqdm
 from abc import abstractmethod
 
-from orbitpy.util import Spacecraft
-
 from dmas.modules import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction

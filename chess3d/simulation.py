@@ -29,7 +29,7 @@ from chess3d.agents.planning.centralized.milp import DealerMILPPlanner
 from chess3d.agents.planning.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.decentralized.nadir import NadirPointingPlanner
 from chess3d.agents.planning.decentralized.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
-from chess3d.agents.planning.centralized.worker import WorkerReplanner
+from chess3d.agents.planning.centralized.worker import WorkerPlanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -42,7 +42,7 @@ from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
 from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
 from chess3d.agents.planning.decentralized.dynamic import DynamicProgrammingPlanner
-from chess3d.agents.planning.decentralized.consensus.acbba import ACBBAPlanner
+# from chess3d.agents.planning.decentralized.consensus.acbba import ACBBAPlanner
 from chess3d.agents.science.module import *
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes
 from chess3d.agents.agent import SimulatedAgent
@@ -1720,16 +1720,16 @@ class SimulationElementFactory:
 
             elif replanner_type.lower() == 'worker':
                 dealer_name = replanner_dict.get('dealerName', None)
-                replanner = WorkerReplanner(dealer_name, debug, logger)
+                replanner = WorkerPlanner(dealer_name, debug, logger)
 
-            elif replanner_type.lower() == 'acbba': 
-                threshold = replanner_dict.get('threshold', 1)
+            # elif replanner_type.lower() == 'acbba': 
+            #     threshold = replanner_dict.get('threshold', 1)
 
-                replanner = ACBBAPlanner(
-                                            threshold, 
-                                            debug,
-                                            logger
-                                            )
+            #     replanner = ACBBAPlanner(
+            #                                 threshold, 
+            #                                 debug,
+            #                                 logger
+            #                                 )
                 
             # elif replanner_type.lower() == 'acbba-dp': 
             #     max_bundle_size = replanner_dict.get('bundle size', 3)

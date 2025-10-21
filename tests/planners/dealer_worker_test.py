@@ -5,7 +5,7 @@ import numpy as np
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
-from tests.planners.tester import PlannerTester
+from tester import PlannerTester
 
 
 class TestDealerWorker(PlannerTester, unittest.TestCase):
@@ -72,7 +72,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         worker_spacecraft_1['name'] = 'worker_sat_1'
         worker_spacecraft_1['@id'] = 'worker-sat_1'
         worker_spacecraft_1['planner'] = {}
-        worker_spacecraft_1['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_1['planner']['replanner'] = {"@type": "worker", "dealerName": "dealer-sat"}
         worker_spacecraft_1['orbitState']['state']['inc'] = 0.0         # equatorial
         worker_spacecraft_1['instrument'] = self.instruments['TIR']  # thermal infrared instrument
 
@@ -80,7 +80,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         worker_spacecraft_2['name'] = 'worker_sat_2'
         worker_spacecraft_2['@id'] = 'worker-sat_2'
         worker_spacecraft_2['planner'] = {}
-        worker_spacecraft_2['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_2['planner']['replanner'] = {"@type": "worker", "dealerName": "dealer-sat"}
         worker_spacecraft_2['orbitState']['state']['inc'] = 0.0     # equatorial
         worker_spacecraft_2['orbitState']['state']['ta'] = 90.0     # 5 deg before worker 1
         worker_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # hyperspectral imager instrument
@@ -134,7 +134,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         worker_spacecraft_1['name'] = 'worker_sat_1'
         worker_spacecraft_1['@id'] = 'worker-sat_1'
         worker_spacecraft_1['planner'] = {}
-        worker_spacecraft_1['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_1['planner']['replanner'] = {"@type": "worker", "dealerName": "dealer-sat"}
         worker_spacecraft_1['orbitState']['state']['ta'] = 95.0     
         worker_spacecraft_1['instrument'] = self.instruments['TIR']  # thermal infrared instrument
         
@@ -142,7 +142,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         worker_spacecraft_2['name'] = 'worker_sat_2'
         worker_spacecraft_2['@id'] = 'worker-sat_2'
         worker_spacecraft_2['planner'] = {}
-        worker_spacecraft_2['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_2['planner']['replanner'] = {"@type": "worker", "dealerName": "dealer-sat"}
         worker_spacecraft_2['orbitState']['state']['ta'] = 93.0     # 3 [deg] before worker 1
         worker_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # hyperspectral imager instrument
         

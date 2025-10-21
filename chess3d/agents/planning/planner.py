@@ -15,7 +15,7 @@ from pyparsing import List
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan
-from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
