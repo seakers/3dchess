@@ -24,7 +24,7 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["VNIR hyper", "TIR"]
-                        }
+                        }                        
                     ]
                 },
 

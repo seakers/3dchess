@@ -1,6 +1,6 @@
 import unittest
 
-from tests.planners.tester import PlannerTester
+from tester import PlannerTester
 
 class TestDynamicProgramming(PlannerTester, unittest.TestCase):
     def planner_name(self) -> str:
@@ -11,8 +11,10 @@ class TestDynamicProgramming(PlannerTester, unittest.TestCase):
             "preplanner": {
                 "@type": "dynamic",
                 "debug": "False",
-                "horizon": 500,
-                "period" : 500,
+                # "model" : "continuous",
+                # "sharing": "none",
+                # "horizon": 500,
+                "period" : 100,
             }
         }
 

@@ -1,6 +1,8 @@
+from collections import defaultdict
 from itertools import repeat
 from logging import Logger
 import math
+from typing import List, Dict
 from tqdm import tqdm
 
 from orbitpy.util import Spacecraft
@@ -22,19 +24,34 @@ from chess3d.messages import *
 from chess3d.utils import Interval
 
 class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
+    # models
+    DISCRETE = 'discrete'
+    CONTINUOUS = 'continuous'
+
+    # sharing modes #TODO move to parent class later
+    PERIODIC = 'periodic'
+    OPPORTUNISTIC = 'opportunistic'
+
     def __init__(self, 
-                #  sharing : bool = False,
-                 horizon: float = np.Inf, 
-                 period : float = np.Inf, 
-                #  points : float = np.Inf,
+                 horizon: float, 
+                 period : float, 
+                 model : str = CONTINUOUS,
+                 sharing : str = None,
                  debug : bool = False,
                  logger: Logger = None
                  ) -> None:
         super().__init__(horizon, 
                          period, 
-                        #  sharing, 
                          debug, 
                          logger)
+        
+        # validate inputs
+        assert model in [self.DISCRETE, self.CONTINUOUS], f'Invalid `model` type `{model}`. Must be one of {[self.DISCRETE, self.CONTINUOUS]}.'
+        assert sharing in [None, self.PERIODIC, self.OPPORTUNISTIC], f'Invalid `sharing` type `{sharing}`. Must be one of {[None, self.PERIODIC, self.OPPORTUNISTIC]}.'
+
+        # set planner parameters
+        self.model = model
+        self.sharing = sharing
         
     @runtime_tracker
     def _schedule_observations(self, 
@@ -45,7 +62,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                                schedulable_tasks : list,
                                mission : Mission,
                                observation_history : ObservationHistory
-                               ) -> list:
+                               ) -> List[ObservationAction]:
         
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Naive planner not yet implemented for agents of type `{type(state)}.`')
@@ -66,11 +83,217 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
         # sort tasks by start time
         schedulable_tasks : list[SpecificObservationTask] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -t.get_priority(), -len(t.parent_tasks)))
 
+        # call appropriate model to generate observation schedule
+        if self.model == self.DISCRETE:
+            return self.__discrete_model(state, 
+                                         schedulable_tasks, 
+                                         orbitdata, 
+                                         mission, 
+                                         observation_history, 
+                                         specs, 
+                                         payload,
+                                         cross_track_fovs, 
+                                         max_slew_rate, 
+                                         max_torque)
+        
+        elif self.model == self.CONTINUOUS:
+            return self.__continuous_model(state, 
+                                          schedulable_tasks, 
+                                          orbitdata, 
+                                          mission, 
+                                          observation_history, 
+                                          specs, 
+                                          payload,
+                                          cross_track_fovs, 
+                                          max_slew_rate, 
+                                          max_torque)
+        else:
+            raise ValueError(f'Invalid `model` type `{self.model}`. Must be one of {[self.DISCRETE, self.CONTINUOUS]}.')
+
+    def __discrete_model(self, 
+                         state : SatelliteAgentState, 
+                         schedulable_tasks : List[SpecificObservationTask], 
+                         orbitdata : OrbitData,
+                         mission : Mission, 
+                         observation_history : ObservationHistory,
+                         specs : Spacecraft, 
+                         payload : dict,
+                         cross_track_fovs : Dict[str, float],
+                         max_slew_rate : float, 
+                         max_torque : float,
+                        ) -> List[ObservationAction]:
+        """ schedules observations using a discrete-time dynamic programming approach """
+        # remove dummy task from schedulable tasks #TODO needed?
+        # schedulable_tasks.pop(0)
+        
+        # initiate constants
+        d_imgs : list[float]        = [task.min_duration for task in schedulable_tasks]
+        th_imgs : list[float]       = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in schedulable_tasks]
+        slew_times : list[float]    = [[abs(th_imgs[i] - th_imgs[j]) / max_slew_rate if max_slew_rate else np.Inf
+                                        for j,_ in enumerate(schedulable_tasks)]
+                                        for i,_ in enumerate(schedulable_tasks)
+                                        ]        
+
+        # create time discretization pairs
+        task_pairs : list[tuple] = [] # of the form (task_index, t_img, reward)
+        for i,task_i in tqdm(enumerate(schedulable_tasks), desc=f'{state.agent_name}-PLANNER: Generating Task-Time Pairs', leave=False):
+            # set initial imaging time
+            t_img = task_i.accessibility.left
+
+            # iterate through all possible imaging times for task i with time step of orbitdata
+            while t_img + task_i.min_duration <= min(task_i.accessibility.right, state.t + self.horizon):
+                # estimate reward for task i at time t_img
+                reward = self.estimate_task_value(task_i, 
+                                                        t_img, 
+                                                        d_imgs[i], 
+                                                        specs, 
+                                                        cross_track_fovs, 
+                                                        orbitdata, 
+                                                        mission, 
+                                                        observation_history)
+
+                # add pair to list                
+                task_pairs.append((i, t_img, reward))
+
+                # update imaging time
+                t_img += orbitdata.time_step
+        
+        # sort pairs by start time, reward, task index
+        task_pairs.sort(key=lambda x: (x[1], -x[2], x[0]))
+
+        # initiate results lists
+        cumulative_rewards : list[float]    = [0.0 for _ in task_pairs]
+        preceeding_observations : list[int] = [np.NAN for _ in task_pairs]
+
+        # initialize adjacency matrix
+        adjacency_dict : Dict[tuple,list] = defaultdict(list)
+
+        # populate adjacency matrix
+        for i,pair_i in tqdm(enumerate(task_pairs), 
+                                desc=f'{state.agent_name}-PLANNER: Generating Adjacency Matrix',
+                                leave=False,
+                                total=len(task_pairs)
+                                ):
+            
+            # unpack task-time pair i
+            idx_i,t_img_i,_ = pair_i
+            task_i : SpecificObservationTask = schedulable_tasks[idx_i]
+
+            # find pairs that can preceed i
+            idx_prev = max(0, i-1)
+            # idx_prev = i-1
+            preceeding_task_pairs = [(j+i,(idx_j,t_img_j,reward_j) )
+                                   for j,(idx_j,t_img_j,reward_j) in enumerate(task_pairs[:idx_prev])
+                                   if idx_i != idx_j
+                                   and not task_i.is_mutually_exclusive(schedulable_tasks[idx_j])
+                                   and t_img_j + d_imgs[idx_j] + slew_times[idx_j][idx_i] <= t_img_i
+                                ]   
+            
+            # add to adjacency dict
+            if preceeding_task_pairs: adjacency_dict[(i,pair_i)] = preceeding_task_pairs
+            
+        # calculate optimal path and update results
+        for j,pair_j in tqdm(enumerate(task_pairs), 
+                              desc=f'{state.agent_name}-PLANNER: Evaluating Path Reward',
+                              leave=False,
+                              total=len(task_pairs)
+                              ):
+            # unpack task-time pair j
+            idx_j,_,reward_j = pair_j
+            task_j : SpecificObservationTask = schedulable_tasks[idx_j]
+
+            # get feasible next task-time pairs
+            preceeding_pairs = adjacency_dict.get((j,pair_j), [])
+
+            # update cumulative rewards
+            for i,pair_i in preceeding_pairs:
+                # unpack task-time pair i
+                idx_i,*_ = pair_i
+
+                # reconstruct path leading to i
+                path_i = [idx_i]
+                k = idx_i
+                while not np.isnan(preceeding_observations[k]):
+                    k = preceeding_observations[k]
+                    path_i.insert(0,int(k))
+
+                # check if new task j conflicts with any in path leading to i
+                if any(task_j.is_mutually_exclusive(schedulable_tasks[k]) or idx_j == k for k in path_i):
+                    continue  # skip this candidate extension
+
+                # calculate cumulative reward for path i->j
+                if cumulative_rewards[idx_i] + reward_j > cumulative_rewards[idx_j]:
+                    # update cumulative reward
+                    cumulative_rewards[idx_j] = cumulative_rewards[idx_i] + reward_j
+
+                    # update preceeding observation
+                    preceeding_observations[idx_j] = idx_i
+
+        # get task with highest cummulative reward
+        best_task_index = self.argmax(cumulative_rewards)
+
+        # extract sequence of observations from results
+        visited_observation_opportunities = set()
+        observation_sequence = [best_task_index] if preceeding_observations else []
+
+        while (preceeding_observations 
+               and not np.isnan(preceeding_observations[observation_sequence[-1]])):
+            prev_observation_index = preceeding_observations[observation_sequence[-1]]
+            
+            if prev_observation_index in visited_observation_opportunities:
+                raise AssertionError('invalid sequence of observations generated by DP. Cycle detected.')
+            
+            visited_observation_opportunities.add(prev_observation_index)
+            observation_sequence.append(prev_observation_index)
+
+        # assert 0 in observation_sequence, 'Invalid observation sequence generated by DP. No starting point found.'
+        
+        # reverse the sequence to start from the first observation
+        observation_sequence.reverse()
+
+        # # remove dummy observation from sequence
+        # observation_sequence.remove(0)
+
+        # get matching observation actions
+        observations : list[ObservationAction] = [ObservationAction(schedulable_tasks[task_pairs[k][0]].instrument_name,
+                                                                    th_imgs[task_pairs[k][0]],
+                                                                    task_pairs[k][1],
+                                                                    d_imgs[task_pairs[k][0]],
+                                                                    schedulable_tasks[task_pairs[k][0]]
+                                                                    )
+                                                  for k in observation_sequence]
+
+        # check if all observation was scheduled are valid
+        assert all([obs is not None for obs in observations]), 'Invalid observation sequence generated by DP. No observations scheduled.'
+
+        # sort by start time
+        observations.sort(key=lambda o: o.t_start)      
+
+        # return observations
+        return observations  
+
+        x = 1 # DEBUG BREAKPOINT
+
+        raise NotImplementedError('Discrete DP model not yet implemented.')
+
+    def __continuous_model(self, 
+                           state : SatelliteAgentState, 
+                           schedulable_tasks : List[SpecificObservationTask], 
+                           orbitdata : OrbitData,
+                           mission : Mission, 
+                           observation_history : ObservationHistory,
+                           specs : Spacecraft, 
+                           payload : dict,
+                           cross_track_fovs : Dict[str, float],
+                           max_slew_rate : float, 
+                           max_torque : float,
+                        ) -> List[ObservationAction]:
+        """ schedules observations using a continuous-time dynamic programming approach """
         # add dummy task to represent initial state
         instrument_names = list(payload.keys())
         dummy_task = SpecificObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), 0.0, Interval(state.attitude[0],state.attitude[0]))
         schedulable_tasks.insert(0,dummy_task)
-
+        
         # initiate results arrays
         t_imgs : list[Interval]             = [max(task.accessibility.left, state.t) for task in schedulable_tasks]
         d_imgs : list[float]                = [task.min_duration for task in schedulable_tasks]
@@ -151,12 +374,11 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
             # update cumulative reward
             for i in prev_indices:
                 # reconstruct path leading to i
-                path_i = []
+                path_i = [i]
                 k = i
                 while not np.isnan(preceeding_observations[k]):
-                    path_i.append(int(k))
                     k = preceeding_observations[k]
-                path_i.append(int(k))  # include the final element i
+                    path_i.insert(0,int(k))
 
                 # check if new task j conflicts with any in path leading to i
                 if any(schedulable_tasks[j].is_mutually_exclusive(schedulable_tasks[k]) for k in path_i):

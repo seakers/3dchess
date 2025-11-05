@@ -115,7 +115,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         duration = 1.0 / 24.0
         grid_name = 'lake_event_points'
         scenario_name = f'multiple_sat_lake_scenario-{self.planner_name()}'
-        connectivity = 'FULL'
+        connectivity = 'LOS'
         event_name = 'lake_events_seed-1000'
         mission_name = 'lake_missions'
 

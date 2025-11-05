@@ -375,9 +375,20 @@ class SpecificObservationTask:
 
     def is_mutually_exclusive(self, other_task : 'SpecificObservationTask') -> bool:
         """ Check if two tasks are mutually exclusive. """
-        if other_task == self: return False
-        common_parents : set = self.parent_tasks.intersection(other_task.parent_tasks)
-        return len(common_parents) > 0
+        # validate inputs
+        assert isinstance(other_task, SpecificObservationTask), "The other task must be an instance of `SpecificObservationTask`."
+
+        # check if they are the same task        
+        same_task : bool = other_task == self
+
+        # check if they have the same parent tasks
+        common_parents : bool = len(self.parent_tasks.intersection(other_task.parent_tasks)) > 0
+        
+        # check if they refer to the same access opportunity
+        common_access : bool = self.accessibility.overlaps(other_task.accessibility)
+        
+        # return true if all conditions are met
+        return (not same_task) and common_parents and common_access
 
     def _calc_time_requirements(self, other_task : 'SpecificObservationTask', must_overlap : bool = False) -> Tuple[Interval,float]:
         """
