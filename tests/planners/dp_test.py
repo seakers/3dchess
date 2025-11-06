@@ -11,10 +11,10 @@ class TestDynamicProgramming(PlannerTester, unittest.TestCase):
             "preplanner": {
                 "@type": "dynamic",
                 "debug": "False",
-                # "model" : "continuous",
+                "model" : "earliest",
                 # "sharing": "none",
                 # "horizon": 500,
-                "period" : 100,
+                "period" : 250,
             }
         }
 
