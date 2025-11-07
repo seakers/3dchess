@@ -1624,7 +1624,7 @@ class SimulationElementFactory:
                 preplanner = NadirPointingPlanner(horizon, period, debug, logger)
 
             elif preplanner_type.lower() in ["dynamic", "dp"]:
-                model = preplanner_dict.get('model', 'discrete').lower()
+                model = preplanner_dict.get('model', 'earliest').lower()
                 sharing = preplanner_dict.get('sharing', None)
                 preplanner = DynamicProgrammingPlanner(horizon, period, model, sharing, debug, logger)
             

@@ -1,8 +1,8 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 from itertools import repeat
 from logging import Logger
 import math
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from tqdm import tqdm
 
 from orbitpy.util import Spacecraft
@@ -150,75 +150,155 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
         # # create time discretization pairs
         task_pairs : list[tuple] = self.__generate_discret_time_pairs(state, schedulable_tasks, orbitdata)
 
-        # generate adjacency list 
+        # generate predecessor list
         adjacency_dict : Dict[tuple,list] = self.__create_adjacency_dict(state, 
                                                                         schedulable_tasks, 
                                                                         task_pairs, 
                                                                         d_imgs, 
                                                                         slew_times)
 
-        # initiate results lists
-        rewards : list[float]               = [np.NAN for _ in task_pairs]  
-        cumulative_rewards : list[float]    = [0.0 for _ in task_pairs]
-        preceeding_observations : list[int] = [np.NAN for _ in task_pairs]
+        # compute rewards for all task-time pairs
+        rewards : Dict[tuple, float] = {(j,pair_j): self.estimate_task_value(schedulable_tasks[j], 
+                                                            pair_j[1], 
+                                                            d_imgs[pair_j[0]], 
+                                                            specs, 
+                                                            cross_track_fovs, 
+                                                            orbitdata, 
+                                                            mission, 
+                                                            observation_history)
+                                    for j,pair_j in tqdm(enumerate(task_pairs), 
+                                                        desc=f'{state.agent_name}-PLANNER: Estimating Task Rewards',
+                                                        leave=False,
+                                                        total=len(task_pairs))
+        }
 
-        # calculate optimal path and update results
-        for j,pair_j in tqdm(enumerate(task_pairs), 
-                              desc=f'{state.agent_name}-PLANNER: Evaluating Path Reward',
-                              leave=False,
-                              total=len(task_pairs)
-                              ):
-            # unpack task-time pair j
-            idx_j,t_img_j = pair_j
-            task_j : SpecificObservationTask = schedulable_tasks[idx_j]
+        # perform DAG DP pull to get optimal path
+        observation_sequence, _ = self.__dag_dp_pull(state, schedulable_tasks, adjacency_dict, rewards, (0,task_pairs[0]))
 
-            # get feasible next task-time pairs
-            preceeding_pairs = adjacency_dict.get((j,pair_j), [])
+        # return observations matching observation actions
+        return [ObservationAction(schedulable_tasks[pair_k[0]].instrument_name,
+                                                    th_imgs[pair_k[0]],
+                                                    pair_k[1],
+                                                    d_imgs[pair_k[0]],
+                                                    schedulable_tasks[pair_k[0]]
+                                                    )
+                                    for _,pair_k in observation_sequence]
 
-            # update cumulative rewards
-            for i,_ in preceeding_pairs:
+    def __get_graph_topography(self, preds_map : Dict[tuple, list] ) -> Tuple[list, dict]:
+        """Return a topological order given a predecessor map {v: [u1,u2,...]}."""
+        
+        # Collect all nodes
+        nodes = set(preds_map.keys())
+        for ps in preds_map.values():
+            nodes.update(ps)
+        
+        # Normalize nodes in predecessor map
+        preds = {v: list(preds_map.get(v, [])) for v in nodes}
 
-                # reconstruct path leading to i
-                path_i = self.__get_path_to_index(preceeding_observations, i)
-            
-                # check if new task j conflicts with any in path leading to i
-                if any(schedulable_tasks[task_pairs[k][0]].is_mutually_exclusive(task_j) for k in path_i):
-                    continue  # skip this candidate extension
-                
-                # estimate task value of task j if done after i if it hasn't been estimated yet
-                if np.isnan(rewards[j]):
-                    rewards[j] = self.estimate_task_value(task_j, 
-                                                        t_img_j, 
-                                                        d_imgs[idx_j], 
-                                                        specs, 
-                                                        cross_track_fovs, 
-                                                        orbitdata, 
-                                                        mission, 
-                                                        observation_history)
+        # Build indegree and successors map
+        indeg = {v: len(ps) for v, ps in preds.items()}
+        succs = defaultdict(list)
+        for v, ps in preds.items():
+            for u in ps:
+                succs[u].append(v)
 
-                # calculate cumulative reward for path i->j
-                if cumulative_rewards[i] + rewards[j] > cumulative_rewards[j]:
-                    # update cumulative reward
-                    cumulative_rewards[j] = cumulative_rewards[i] + rewards[j]
+        # Find topological order
+        q = deque([v for v, d in indeg.items() if d == 0])
+        order = []
+        while q:
+            u = q.popleft()
+            order.append(u)
+            for v in succs.get(u, []):
+                indeg[v] -= 1
+                if indeg[v] == 0:
+                    q.append(v)
+        
+        # Check for cycles
+        assert len(order) == len(nodes), \
+            'Graph has a cycle'
 
-                    # update preceeding observation
-                    preceeding_observations[j] = i
-
-        # extract sequence of observations from results
-        observation_sequence : List[int] = self.__extract_observation_sequence(preceeding_observations, cumulative_rewards)
-
-        # create matching observation actions
-        observations : list[ObservationAction] = [ObservationAction(schedulable_tasks[task_pairs[k][0]].instrument_name,
-                                                                    th_imgs[task_pairs[k][0]],
-                                                                    task_pairs[k][1],
-                                                                    d_imgs[task_pairs[k][0]],
-                                                                    schedulable_tasks[task_pairs[k][0]]
-                                                                    )
-                                                  for k in observation_sequence]
-
-        # return observations
-        return observations  
+        # Return topological order and normalized predecessor map
+        return order, preds
     
+    def __dag_dp_pull(self, 
+                      state : SimulationAgentState, 
+                      schedulable_tasks : List[SpecificObservationTask], 
+                      preds_map : Dict[tuple, list], 
+                      rewards : Dict[tuple, float], 
+                      src : tuple
+                    ) -> Tuple[list, float]:
+        """
+            preds_map: {node: [pred1, pred2, ...]}
+            rewards:    {node: float}  (precomputed once)
+            src:       node that must be included (your first task-time pair)
+        """
+        # get topographical order and normalized predecessor map
+        topography_order, preds = self.__get_graph_topography(preds_map)
+
+        # initialize DP tables
+        cummulative_rewards : Dict[tuple, float] = {v: np.NINF  for v in preds}
+        cummulative_rewards[src] = rewards[src]  # only source is initialized; forces paths to include src
+        
+        preceeding_observations : Dict[tuple, list] = {v: None for v in preds}
+        
+        preceeding_observation_paths  = {}  # node -> frozenset of chosen nodes on best path to node
+        preceeding_observation_paths[src] = frozenset({src})
+
+        # process nodes in topographical order
+        for v in tqdm(topography_order, 
+                      desc=f'{state.agent_name}-PLANNER: Finding best path',
+                      leave=False):
+            
+            # skip source
+            if v == src: continue
+
+            # get task for v
+            tv : SpecificObservationTask = schedulable_tasks[v[1][0]]
+
+            # initialize values for best predecessor search
+            best_val = np.NINF
+            best_u = None
+            best_sig = None
+            
+            # find best predecessor
+            for u in preds[v]:
+                # check if unreachable from src
+                if np.isneginf(cummulative_rewards[u]): 
+                    continue
+
+                # check if mutually exclusive with any in path to u
+                if any([tv.is_mutually_exclusive(schedulable_tasks[k[1][0]]) 
+                        for k in preceeding_observation_paths[u]]): continue
+
+                # calculate new cumulative reward
+                val = cummulative_rewards[u] + rewards[v]
+
+                # update if best predecessor
+                if val > best_val: 
+                    best_val = val
+                    best_u = u
+                    best_sig = preceeding_observation_paths[u] | {v}
+
+            # update DP tables if best predecessor was found
+            if best_u is not None:
+                cummulative_rewards[v] = best_val
+                preceeding_observations[v] = best_u
+                preceeding_observation_paths[v]  = best_sig
+
+        # pick best terminal
+        end = max(cummulative_rewards, key=cummulative_rewards.get)
+        if np.isneginf(cummulative_rewards[end]): return [], 0.0  # nothing reachable from src
+        
+        # recover path
+        path, cur = [], end
+        while cur is not None:
+            path.append(cur)
+            cur = preceeding_observations.get(cur,None)
+        path.reverse()
+
+        # return path and reward
+        return path, cummulative_rewards[end]
+
     def __continuous_model(self, 
                            state : SatelliteAgentState, 
                            schedulable_tasks : List[SpecificObservationTask], 
