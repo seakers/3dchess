@@ -1701,18 +1701,18 @@ class SimulationElementFactory:
             if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
             debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
 
-            if replanner_type.lower() == 'broadcaster':
-                mode = replanner_dict.get('mode', 'periodic').lower()
-                period = replanner_dict.get('period', np.Inf)
+            # if replanner_type.lower() == 'broadcaster':
+            #     mode = replanner_dict.get('mode', 'periodic').lower()
+            #     period = replanner_dict.get('period', np.Inf)
 
-                if mode == 'opportunistic':
-                    replanner = OpportunisticBroadcasterReplanner(period, debug, logger)
-                elif mode == 'periodic':
-                    replanner = PeriodicBroadcasterReplanner(period, debug, logger)
-                else:
-                    raise ValueError(f'`mode` of type `{mode}` not supported for broadcaster replanner.')
+            #     if mode == 'opportunistic':
+            #         replanner = OpportunisticBroadcasterReplanner(period, debug, logger)
+            #     elif mode == 'periodic':
+            #         replanner = PeriodicBroadcasterReplanner(period, debug, logger)
+            #     else:
+            #         raise ValueError(f'`mode` of type `{mode}` not supported for broadcaster replanner.')
 
-            elif replanner_type.lower() == 'worker':
+            if replanner_type.lower() == 'worker':
                 dealer_name = replanner_dict.get('dealerName', None)
                 replanner = WorkerPlanner(dealer_name, debug, logger)
 

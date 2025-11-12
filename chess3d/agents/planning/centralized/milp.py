@@ -47,11 +47,13 @@ class DealerMILPPlanner(DealerPlanner):
                  licence_path : str = None, 
                  horizon : float = np.Inf,
                  period : float = np.Inf,
+                 sharing : str = DealerPlanner.OPPORTUNISTIC,
                  max_tasks : float = np.Inf,
                  max_observations : int = 10, 
                  debug : bool = False,
                  logger : logging.Logger = None):
-        super().__init__(client_orbitdata, client_specs, client_missions, horizon, period, debug, logger)
+        
+        super().__init__(client_orbitdata, client_specs, client_missions, horizon, period, sharing, debug, logger)
 
         if not debug or licence_path is not None:
             # Check for Gurobi license

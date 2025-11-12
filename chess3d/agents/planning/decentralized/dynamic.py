@@ -29,10 +29,6 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
     CONTINUOUS = 'continuous'
     EARLIEST = 'earliest'
 
-    # sharing modes #TODO move to parent class later
-    PERIODIC = 'periodic'
-    OPPORTUNISTIC = 'opportunistic'
-
     def __init__(self, 
                  horizon: float, 
                  period : float, 
@@ -43,6 +39,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                  ) -> None:
         super().__init__(horizon, 
                          period, 
+                         sharing,
                          debug, 
                          logger)
         
@@ -52,7 +49,6 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
 
         # set planner parameters
         self.model = model
-        self.sharing = sharing
         
     @runtime_tracker
     def _schedule_observations(self, 

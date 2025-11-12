@@ -1,3 +1,4 @@
+from ast import List
 from collections import defaultdict
 import logging
 import numpy as np
@@ -8,7 +9,7 @@ from dmas.modules import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
 
-from chess3d.agents.actions import ObservationAction, WaitForMessages
+from chess3d.agents.actions import FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
 from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
@@ -26,10 +27,16 @@ class AbstractPeriodicPlanner(AbstractPlanner):
 
     Conducts operations planning for an agent at the beginning of a planning period. 
     """
+    
+    # sharing modes
+    NONE = 'none'                   # no information sharing
+    PERIODIC = 'periodic'           # periodic information sharing  
+    OPPORTUNISTIC = 'opportunistic' # opportunistic information sharing based on access opportunities
+
     def __init__(   self, 
                     horizon : float = np.Inf,
                     period : float = np.Inf,
-                    # sharing : bool = False,
+                    sharing : str = OPPORTUNISTIC,
                     debug : bool = False,
                     logger: logging.Logger = None
                 ) -> None:
@@ -46,11 +53,17 @@ class AbstractPeriodicPlanner(AbstractPlanner):
         # initialize planner
         super().__init__(debug, logger)    
 
+        # validate inputs
+        assert isinstance(horizon, (int, float)) and horizon > 0, "Planning horizon must be a positive number."
+        assert isinstance(period, (int, float)) and period > 0, "Replanning period must be a positive number."
+        assert horizon >= period, "Planning horizon must be greater than or equal to the replanning period."
+        assert sharing in {self.NONE, self.PERIODIC, self.OPPORTUNISTIC}, f"Sharing mode `{sharing}` not recognized."
+
         # set parameters
-        self.horizon = horizon                                                      # planning horizon
-        self.period = period                                                        # replanning period         
-        # self.sharing = sharing                                                      # toggle for sharing plans
-        self.plan = PeriodicPlan(t=-1,horizon=horizon,t_next=0.0)                        # initialized empty plan
+        self.horizon = horizon                                      # planning horizon
+        self.period = period                                        # replanning period         
+        self.sharing = sharing                                      # toggle for sharing plans
+        self.plan = PeriodicPlan(t=-1,horizon=horizon,t_next=0.0)   # initialized empty plan
                 
         # initialize attributes
         self.pending_reqs_to_broadcast : set[TaskRequest] = set()            # set of observation requests that have not been broadcasted
@@ -216,44 +229,74 @@ class AbstractPeriodicPlanner(AbstractPlanner):
     @abstractmethod
     def _schedule_broadcasts(self, state: SimulationAgentState, observations : list, orbitdata: OrbitData, t : float = None) -> list:
         """ Schedules broadcasts to be done by this agent """
-        if not isinstance(state, SatelliteAgentState):
-            raise NotImplementedError(f'Broadcast scheduling for agents of type `{type(state)}` not yet implemented.')
-        elif orbitdata is None:
-            raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+        try:
+            if not isinstance(state, SatelliteAgentState):
+                raise NotImplementedError(f'Broadcast scheduling for agents of type `{type(state)}` not yet implemented.')
+            elif orbitdata is None:
+                raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
 
-        # initialize list of broadcasts to be done
-        broadcasts = []       
+            # initialize list of broadcasts to be done
 
-        # # schedule generated measurement request broadcasts
-        # if self.sharing and self.pending_reqs_to_broadcast:
-        #     # sort requests based on their start time
-        #     pending_reqs_to_broadcast : list[MeasurementRequest] = list(self.pending_reqs_to_broadcast) 
-        #     pending_reqs_to_broadcast.sort(key=lambda a : a.t_start)
+            if self.sharing == self.NONE: 
+                broadcasts = []       
 
-        #     # find best path for broadcasts at the current time
-        #     t = state.t if t is None else t
-        #     path, t_start = self._create_broadcast_path(state, orbitdata, t)
+            elif self.sharing == self.PERIODIC:                
+                # calculate broadcast time
+                t_broadcast  : float = t + self.period if t is not None else state.t + self.period
 
-        #     for req in tqdm(pending_reqs_to_broadcast,
-        #                     desc=f'{state.agent_name}-PLANNER: Scheduling Measurement Request Broadcasts', 
-        #                     leave=False):
-                
-        #         # calculate broadcast start time
-        #         if req.t_start > t_start:
-        #             path, t_start = self._create_broadcast_path(state, orbitdata, req.t_start)
-                    
-        #         # check broadcast feasibility
-        #         if t_start < 0: continue
+                # generate plan message to share state
+                state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
 
-        #         # create broadcast action
-        #         msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-        #         broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-                
-        #         # add to list of broadcasts
-        #         broadcasts.append(broadcast_action) 
-                        
-        # return scheduled broadcasts
-        return broadcasts 
+                # generate plan message to share completed observations
+                observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+
+                # generate plan message to share any task requests generated
+                task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+
+                # add to client broadcast list
+                broadcasts = [state_msg, observations_msg, task_requests_msg]
+
+            elif self.sharing == self.OPPORTUNISTIC:
+                # get access intervals with the client agent within the planning horizon
+                broadcasts = []
+                for target in orbitdata.comms_links.keys():
+                    access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, state.t, include_current=True)
+
+                    # create broadcast actions for each access interval
+                    for next_access in access_intervals:
+                        next_access : Interval
+
+                        # if no access opportunities in this planning horizon, skip scheduling
+                        if next_access.is_empty(): continue
+
+                        # if access opportunity is beyond the next planning period, skip scheduling    
+                        if next_access.right <= state.t + self.period: continue
+
+                        # get last access interval and calculate broadcast time
+                        t_broadcast : float = max(next_access.left, state.t+self.period-5e-3) # ensure broadcast happens before the end of the planning period
+
+                        # generate plan message to share state
+                        state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
+
+                        # generate plan message to share completed observations
+                        observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+
+                        # generate plan message to share any task requests generated
+                        task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+
+                        # add to client broadcast list
+                        broadcasts.extend([state_msg, observations_msg, task_requests_msg])
+
+                raise NotImplementedError('Opportunistic sharing mode not yet implemented.')
+
+            else:
+                raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')
+
+            # return scheduled broadcasts
+            return broadcasts 
+        
+        finally:
+            assert isinstance(broadcasts, list)
 
     @runtime_tracker
     def _schedule_periodic_replan(self, state : SimulationAgentState, prelim_plan : Plan, t_next : float) -> list:

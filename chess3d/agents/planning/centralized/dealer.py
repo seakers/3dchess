@@ -35,9 +35,10 @@ class DealerPlanner(AbstractPeriodicPlanner):
                  client_missions : Dict[str, Mission],
                  horizon = np.Inf, 
                  period = np.Inf, 
+                 sharing = AbstractPeriodicPlanner.OPPORTUNISTIC,
                  debug = False, 
                  logger = None):
-        super().__init__(horizon, period, debug, logger)
+        super().__init__(horizon, period, sharing, debug, logger)
 
         # check parameters
         assert isinstance(client_orbitdata, dict), "Clients must be a dictionary mapping agent names to OrbitData instances."
@@ -61,6 +62,8 @@ class DealerPlanner(AbstractPeriodicPlanner):
             "Clients and client_specs must have the same keys."
         assert all(client in client_missions for client in client_orbitdata), \
             "Clients and client_missions must have the same keys."
+        assert sharing in [self.OPPORTUNISTIC, self.PERIODIC], \
+            f"Sharing mode `{sharing}` is not recognized. Supported modes are: `{self.OPPORTUNISTIC}`, `{self.PERIODIC}`."
 
         # store client information
         self.client_orbitdata : Dict[str, OrbitData] = {client.lower(): client_orbitdata[client] for client in client_orbitdata}
@@ -218,8 +221,6 @@ class DealerPlanner(AbstractPeriodicPlanner):
                                          t_next=state.t+self.period)
                         for client in self.client_orbitdata
                     }
-        else:
-            x = 1
 
         # collect only available tasks
         available_client_tasks : Dict[Mission, GenericObservationTask] = \
@@ -452,21 +453,38 @@ class DealerPlanner(AbstractPeriodicPlanner):
 
         # create future state broadcast action for each client
         for client in self.client_orbitdata.keys():
+            
+            if self.sharing == self.OPPORTUNISTIC:
+                # get access intervals with the client agent within the planning horizon
+                access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(client, state.t, include_current=True)
 
-            # get access intervals with the client agent within the planning horizon
-            access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(client, state.t, include_current=True)
+                # create broadcast actions for each access interval
+                for next_access in access_intervals:
 
-            # create broadcast actions for each access interval
-            for next_access in access_intervals:
+                    # if no access opportunities in this planning horizon, skip scheduling
+                    if next_access.is_empty(): continue
 
-                # if no access opportunities in this planning horizon, skip scheduling
-                if next_access.is_empty(): continue
+                    # if access opportunity is beyond the next planning period, skip scheduling    
+                    if next_access.right <= state.t + self.period: continue
 
-                # if access opportunity is beyond the next planning period, skip scheduling    
-                if next_access.right <= state.t + self.period: continue
+                    # get last access interval and calculate broadcast time
+                    t_broadcast : float = max(next_access.left, state.t+self.period-5e-3) # ensure broadcast happens before the end of the planning period
 
-                # get last access interval and calculate broadcast time
-                t_broadcast : float = max(next_access.left, state.t+self.period-5e-3) # ensure broadcast happens before the end of the planning period
+                    # generate plan message to share state
+                    state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
+
+                    # generate plan message to share completed observations
+                    observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+
+                    # generate plan message to share any task requests generated
+                    task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+
+                    # add to client broadcast list
+                    client_broadcasts[client].extend([state_msg, observations_msg, task_requests_msg])
+
+            elif self.sharing == self.PERIODIC:
+                # schedule a single broadcast at the end of the planning period
+                t_broadcast : float = state.t + self.period - 5e-3 # ensure broadcast happens before the end of the planning period
 
                 # generate plan message to share state
                 state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
@@ -480,6 +498,9 @@ class DealerPlanner(AbstractPeriodicPlanner):
                 # add to client broadcast list
                 client_broadcasts[client].extend([state_msg, observations_msg, task_requests_msg])
 
+            else:
+                raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')
+
         return client_broadcasts
 
     def _schedule_broadcasts(self, state : SimulationAgentState, orbitdata : OrbitData):
@@ -488,19 +509,27 @@ class DealerPlanner(AbstractPeriodicPlanner):
         """
         broadcasts : list[BroadcastMessageAction] = []
         for client,client_plan in self.client_plans.items():
-            # get next access interval
-            next_access : Interval = orbitdata.get_next_agent_access(client, state.t, include_current=True)
+            if self.sharing == self.OPPORTUNISTIC:
+                # get next access interval
+                next_access : Interval = orbitdata.get_next_agent_access(client, state.t, include_current=True)
 
-            # if no access opportunities in this planning horizon, skip scheduling
-            if not next_access: continue
+                # if no access opportunities in this planning horizon, skip scheduling
+                if not next_access: continue
 
-            # calculate broadcast time
-            t_broadcast : float = max(next_access.left, state.t)
-            # t_broadcast : float = max(next_access.left+5e-3, state.t)
+                # calculate broadcast time
+                t_broadcast : float = max(next_access.left, state.t)
+                # t_broadcast : float = max(next_access.left+5e-3, state.t)
 
-            # if broadcast time is beyond the next planning period, skip scheduling
-            if t_broadcast >= state.t + self.period: continue
+                # if broadcast time is beyond the next planning period, skip scheduling
+                if t_broadcast >= state.t + self.period: continue
 
+            elif self.sharing == self.PERIODIC:
+                # schedule a single broadcast at the end of the planning period
+                t_broadcast : float = state.t + self.period - 5e-3 # ensure broadcast happens before the end of the planning period
+
+            else:
+                raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')
+            
             # schedule broadcasts for the client
             plan_msg = PlanMessage(state.agent_name, client, [action.to_dict() for action in client_plan.actions], state.t)
 

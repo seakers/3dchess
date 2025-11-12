@@ -54,6 +54,8 @@ class SingleSatMILP(AbstractPeriodicPlanner):
         self.model = model
         self.max_tasks = max_tasks
 
+        raise NotImplementedError("This planner is under development and not yet ready for use.")
+
     @runtime_tracker
     def _schedule_observations(self, 
                                state : SimulationAgentState, 
