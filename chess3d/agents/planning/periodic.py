@@ -46,9 +46,9 @@ class AbstractPeriodicPlanner(AbstractPlanner):
         Creates an instance of a preplanner class object.
 
         #### Arguments:
-            - horizon (`float`) : planning horizon in seconds [s]
-            - period (`float`) : period of replanning in seconds [s]
-            - logger (`logging.Logger`) : debugging logger
+        - horizon (`float`) : planning horizon in seconds [s]
+        - period (`float`) : period of replanning in seconds [s]
+        - logger (`logging.Logger`) : debugging logger
         """
         # initialize planner
         super().__init__(debug, logger)    
@@ -236,29 +236,37 @@ class AbstractPeriodicPlanner(AbstractPlanner):
                 raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
 
             # initialize list of broadcasts to be done
+            broadcasts = []       
 
             if self.sharing == self.NONE: 
-                broadcasts = []       
+                pass # no broadcasts scheduled
 
-            elif self.sharing == self.PERIODIC:                
-                # calculate broadcast time
-                t_broadcast  : float = t + self.period if t is not None else state.t + self.period
+            elif self.sharing == self.PERIODIC:        
+                # determine current time        
+                t_curr : float  = state.t if t is None else t                
 
-                # generate plan message to share state
-                state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
+                # determine number of periods within the planning horizon
+                n_periods = int(self.horizon // self.period)
 
-                # generate plan message to share completed observations
-                observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+                # schedule broadcasts at the end of each period
+                for i in range(n_periods):
+                    # calculate broadcast time
+                    t_broadcast : float = t_curr + self.period * (i + 1) - 5e-3  # ensure broadcast happens before the end of the planning period
 
-                # generate plan message to share any task requests generated
-                task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+                    # generate plan message to share state
+                    state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
 
-                # add to client broadcast list
-                broadcasts = [state_msg, observations_msg, task_requests_msg]
+                    # generate plan message to share completed observations
+                    observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+
+                    # generate plan message to share any task requests generated
+                    task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+
+                    # add to client broadcast list
+                    broadcasts.extend([state_msg, observations_msg, task_requests_msg])
 
             elif self.sharing == self.OPPORTUNISTIC:
                 # get access intervals with the client agent within the planning horizon
-                broadcasts = []
                 for target in orbitdata.comms_links.keys():
                     access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, state.t, include_current=True)
 
@@ -287,7 +295,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
                         # add to client broadcast list
                         broadcasts.extend([state_msg, observations_msg, task_requests_msg])
 
-                raise NotImplementedError('Opportunistic sharing mode not yet implemented.')
+                # raise NotImplementedError('Opportunistic sharing mode not yet implemented.')
 
             else:
                 raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')

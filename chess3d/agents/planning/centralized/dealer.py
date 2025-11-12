@@ -483,20 +483,28 @@ class DealerPlanner(AbstractPeriodicPlanner):
                     client_broadcasts[client].extend([state_msg, observations_msg, task_requests_msg])
 
             elif self.sharing == self.PERIODIC:
-                # schedule a single broadcast at the end of the planning period
-                t_broadcast : float = state.t + self.period - 5e-3 # ensure broadcast happens before the end of the planning period
+                # determine current time        
+                t_curr : float  = state.t
 
-                # generate plan message to share state
-                state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
+                # determine number of periods within the planning horizon
+                n_periods = int(self.horizon // self.period)
 
-                # generate plan message to share completed observations
-                observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+                # schedule broadcasts at the end of each period
+                for i in range(n_periods):
+                    # calculate broadcast time
+                    t_broadcast : float = t_curr + self.period * (i + 1) - 5e-3  # ensure broadcast happens before the end of the planning period
+                
+                    # generate plan message to share state
+                    state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
 
-                # generate plan message to share any task requests generated
-                task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+                    # generate plan message to share completed observations
+                    observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
 
-                # add to client broadcast list
-                client_broadcasts[client].extend([state_msg, observations_msg, task_requests_msg])
+                    # generate plan message to share any task requests generated
+                    task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+
+                    # add to client broadcast list
+                    client_broadcasts[client].extend([state_msg, observations_msg, task_requests_msg])
 
             else:
                 raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')
@@ -523,20 +531,35 @@ class DealerPlanner(AbstractPeriodicPlanner):
                 # if broadcast time is beyond the next planning period, skip scheduling
                 if t_broadcast >= state.t + self.period: continue
 
+                # schedule broadcasts for the client
+                plan_msg = PlanMessage(state.agent_name, client, [action.to_dict() for action in client_plan.actions], state.t)
+
+                # create broadcast action
+                plan_broadcast = BroadcastMessageAction(plan_msg.to_dict(), t_broadcast)
+                broadcasts.append(plan_broadcast)
+
             elif self.sharing == self.PERIODIC:
-                # schedule a single broadcast at the end of the planning period
-                t_broadcast : float = state.t + self.period - 5e-3 # ensure broadcast happens before the end of the planning period
+                # determine current time        
+                t_curr : float  = state.t 
+
+                # determine number of periods within the planning horizon
+                n_periods = int(self.horizon // self.period)
+
+                # schedule broadcasts at the end of each period
+                for i in range(n_periods):
+                    # calculate broadcast time
+                    t_broadcast : float = t_curr + self.period * (i + 1) - 5e-3  # ensure broadcast happens before the end of the planning period
+
+                    # schedule broadcasts for the client
+                    plan_msg = PlanMessage(state.agent_name, client, [action.to_dict() for action in client_plan.actions], state.t)
+
+                    # create broadcast action
+                    plan_broadcast = BroadcastMessageAction(plan_msg.to_dict(), t_broadcast)
+                    broadcasts.append(plan_broadcast)
 
             else:
-                raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')
-            
-            # schedule broadcasts for the client
-            plan_msg = PlanMessage(state.agent_name, client, [action.to_dict() for action in client_plan.actions], state.t)
-
-            # create broadcast action
-            plan_broadcast = BroadcastMessageAction(plan_msg.to_dict(), t_broadcast)
-            broadcasts.append(plan_broadcast)
-
+                raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')          
+           
         # return sorted broadcasts by broadcast start time
         return sorted(broadcasts, key=lambda x: x.t_start)
     

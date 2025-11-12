@@ -786,8 +786,8 @@ class SimulatedAgent(AbstractAgent):
         states.sort(key = lambda a : a.state['t'])
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
-        if state.t < self.get_current_time():
-            x = 1 # breakpoint
+        # if state.t < self.get_current_time():
+        #     x = 1 # breakpoint
 
         # update plan completion
         self.update_plan_completion(completed_actions, 

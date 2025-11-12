@@ -45,7 +45,6 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
         
         # validate inputs
         assert model in [self.DISCRETE, self.CONTINUOUS, self.EARLIEST], f'Invalid `model` type `{model}`. Must be one of {[self.DISCRETE, self.CONTINUOUS, self.EARLIEST]}.'
-        assert sharing in [None, self.PERIODIC, self.OPPORTUNISTIC], f'Invalid `sharing` type `{sharing}`. Must be one of {[None, self.PERIODIC, self.OPPORTUNISTIC]}.'
 
         # set planner parameters
         self.model = model
