@@ -571,7 +571,6 @@ class TestingDealer(DealerPlanner):
     """
     A preplanner that generates plans for testing purposes.
     """
-
     @runtime_tracker
     def _generate_client_plans(self, state, specs, clock_config, orbitdata, mission, tasks, observation_history):
         """
