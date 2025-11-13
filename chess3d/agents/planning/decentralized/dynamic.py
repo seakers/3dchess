@@ -289,6 +289,11 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
         while cur is not None:
             path.append(cur)
             cur = preceeding_observations.get(cur,None)
+        
+        # remove dummy task from path
+        path.pop()  
+        
+        # reverse path to get correct order
         path.reverse()
 
         # return path and reward
