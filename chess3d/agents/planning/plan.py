@@ -372,7 +372,10 @@ class Plan(ABC):
                 if isinstance(action, AgentAction):
 
                     if isinstance(action, WaitForMessages):
-                        out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}"
+                        if abs(action.t_end - self.t_next) < 1e-3:
+                            out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\ttrigger periodic replanning"
+                        else:
+                            out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\t-"
                     else:
                         out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}"
 

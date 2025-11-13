@@ -429,7 +429,7 @@ class AbstractPlanner(ABC):
                             mission : Mission,
                             observation_history : ObservationHistory,
                             n_obs : int = 0,
-                            t_prev : float = None
+                            t_prev : float = np.NINF 
                             ) -> float:
         """ Estimates task value based on predicted observation performance. """
 
@@ -439,8 +439,11 @@ class AbstractPlanner(ABC):
         # check if measurement performance is valid
         if measurement_performance_metrics is None: return 0.0
 
-        # calculate and return total task reward
-        return mission.calc_specific_task_value(task, measurement_performance_metrics)
+        # calculate task reward per target observed
+        rewards = {loc : mission.calc_specific_task_value(task, measurement) for loc,measurement in measurement_performance_metrics.items()}
+        
+        # return total reward
+        return sum(rewards.values())
 
     @runtime_tracker    
     def estimate_observation_performance_metrics(self, 
@@ -451,8 +454,8 @@ class AbstractPlanner(ABC):
                                          cross_track_fovs : dict,
                                          orbitdata : OrbitData,
                                          observation_history : ObservationHistory,
-                                         n_obs : int = 0,
-                                         t_prev : float = None   
+                                         n_obs : int,
+                                         t_prev : float,  
                                         ) -> dict:
 
         # get available access metrics
@@ -465,45 +468,65 @@ class AbstractPlanner(ABC):
                                 })
 
         # check if there are no valid observations for this task
-        if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
+        if any([len(observation_performances[col]) == 0 
+                for col in observation_performances]): 
             # no valid accesses; no reward added
             return None
+        
+        # group observations by location
+        observed_location_groups : dict[tuple[int,int], list[int]] = defaultdict(list)
+        for i in range(len(observation_performances['time [s]'])):
+            # get location indices
+            lat = observation_performances['lat [deg]'][i]
+            lon = observation_performances['lon [deg]'][i]
+            grid_index = observation_performances['grid index'][i]
+            gp_index = observation_performances['GP index'][i]
+            loc = (lat,lon,grid_index,gp_index)
 
+            # add to location group
+            observed_location_groups[loc].append({col.lower() : observation_performances[col][i] 
+                                                                    for col in observation_performances})
+        
+        # sort groups by measurement time 
+        for loc in observed_location_groups: observed_location_groups[loc].sort(key=lambda a : a['time [s]'])
+
+        # keep only one of the observations per location group
+        observation_performance_metrics : Dict[tuple[int,int], dict] = {loc : observed_location_groups[loc][0] # keep only first observation
+                                                 for loc in observed_location_groups}
+        
+        # get previous observation hisotry for observed locations
+        obs_histories : dict[tuple[int,int], ObservationTracker] \
+            = {(*_,grid_index,gp_index) : observation_history.get_observation_history(grid_index, gp_index)
+                for *_,grid_index,gp_index in observed_locations}
+        
         # get instrument specifications
         instrument_spec : BasicSensorModel = next(instr 
                                                   for instr in specs.instrument
                                                   if instr.name.lower() == task.instrument_name.lower()).mode[0]
-                
-        # get previous observation information
-        prev_obs : list[ObservationTracker] = [observation_history.get_observation_history(grid_index, gp_index)
-                    for *_,grid_index,gp_index in observed_locations]
-        prev_t_imgs = [obs.t_last for obs in prev_obs]
-        if t_prev is not None: prev_t_imgs.append(t_prev)
 
-        # get current observation information 
-        observation_performance_metrics = {col.lower() : observation_performances[col][-1] 
-                                    for col in observation_performances}
-        observation_performance_metrics.update({ 
-                "location" : observed_locations,
+        # include additional observation information 
+        for loc,obs in observation_performance_metrics.items():
+            obs.update({ 
+                "location" : [loc],
                 "t_start" : t_img,
                 "t_end" : t_img + d_img,
                 "duration" : d_img,
-                "n_obs" : sum(obs.n_obs for obs in prev_obs) + n_obs,
-                "revisit_time" : min(t_img - t_prev for t_prev in prev_t_imgs),
-                "horizontal_spatial_resolution" : observation_performance_metrics['ground pixel cross-track resolution [m]'],
+                "n_obs" : obs_histories[loc].n_obs + n_obs,
+                "revisit_time" : max(obs_histories[loc].t_last, t_prev),
+                "horizontal_spatial_resolution" : observation_performance_metrics[loc]['ground pixel cross-track resolution [m]'],
             })
 
-        # package observation performance information
-        if 'vnir' in task.instrument_name.lower() or 'tir' in task.instrument_name.lower():
-            observation_performance_metrics.update({
-                'spectral_resolution' : instrument_spec.spectral_resolution
-            })
-        elif 'altimeter' in task.instrument_name.lower():
-            observation_performance_metrics.update({
-                "accuracy" : observation_performance_metrics['accuracy [m]'],
-            })
-        else:
-            raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
+            # package observation performance information
+            if 'vnir' in task.instrument_name.lower() or 'tir' in task.instrument_name.lower():
+                obs.update({
+                    'spectral_resolution' : instrument_spec.spectral_resolution.lower()
+                })
+            elif 'altimeter' in task.instrument_name.lower():
+                obs.update({
+                    "accuracy" : observation_performance_metrics[loc]['accuracy [m]'],
+                })
+            else:
+                raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
 
         return observation_performance_metrics
 
