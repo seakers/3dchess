@@ -13,8 +13,8 @@ class TestDynamicProgramming(PlannerTester, unittest.TestCase):
                 "debug": "False",
                 "model" : "earliest",
                 "sharing": "periodic",
-                "horizon": 250,
-                "period" : 100,
+                # "horizon": 250,
+                "period" : 250,
             }
         }
 

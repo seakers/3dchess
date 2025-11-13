@@ -457,47 +457,46 @@ class AbstractPlanner(ABC):
                                          n_obs : int,
                                          t_prev : float,  
                                         ) -> dict:
+        # get unique task targets
+        task_targets : List[tuple] = list({(grid_idx,gp_idx) for *_,grid_idx,gp_idx in task.get_location()})
 
         # get available access metrics
         observation_performances = self.get_available_accesses(task, t_img, d_img, orbitdata, cross_track_fovs)
-        observed_locations = list({(observation_performances['lat [deg]'][i], 
-                                    observation_performances['lon [deg]'][i],
-                                    observation_performances['grid index'][i], 
-                                    observation_performances['GP index'][i]) 
-                                    for i in range(len(observation_performances['time [s]']))
-                                })
 
         # check if there are no valid observations for this task
-        if any([len(observation_performances[col]) == 0 
-                for col in observation_performances]): 
+        if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
             # no valid accesses; no reward added
             return None
         
         # group observations by location
         observed_location_groups : dict[tuple[int,int], list[int]] = defaultdict(list)
         for i in range(len(observation_performances['time [s]'])):
-            # get location indices
+            # unpack observed target location information
             lat = observation_performances['lat [deg]'][i]
             lon = observation_performances['lon [deg]'][i]
             grid_index = observation_performances['grid index'][i]
             gp_index = observation_performances['GP index'][i]
+
+            # define location indices
             loc = (lat,lon,grid_index,gp_index)
 
             # add to location group
             observed_location_groups[loc].append({col.lower() : observation_performances[col][i] 
-                                                                    for col in observation_performances})
+                                                    for col in observation_performances})
         
         # sort groups by measurement time 
         for loc in observed_location_groups: observed_location_groups[loc].sort(key=lambda a : a['time [s]'])
 
-        # keep only one of the observations per location group
+        # keep only one of the observations per location group that matches the task target
         observation_performance_metrics : Dict[tuple[int,int], dict] = {loc : observed_location_groups[loc][0] # keep only first observation
-                                                 for loc in observed_location_groups}
+                                                 for loc in observed_location_groups
+                                                 if (loc[2],loc[3]) in task_targets
+                                                 }
         
         # get previous observation hisotry for observed locations
         obs_histories : dict[tuple[int,int], ObservationTracker] \
             = {(*_,grid_index,gp_index) : observation_history.get_observation_history(grid_index, gp_index)
-                for *_,grid_index,gp_index in observed_locations}
+                for *_,grid_index,gp_index in observation_performance_metrics}
         
         # get instrument specifications
         instrument_spec : BasicSensorModel = next(instr 
