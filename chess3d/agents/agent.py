@@ -786,9 +786,6 @@ class SimulatedAgent(AbstractAgent):
         states.sort(key = lambda a : a.state['t'])
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
-        # if state.t < self.get_current_time():
-        #     x = 1 # breakpoint
-
         # update plan completion
         self.update_plan_completion(completed_actions, 
                                     aborted_actions, 
@@ -799,7 +796,7 @@ class SimulatedAgent(AbstractAgent):
         generated_reqs : list[TaskRequest] = self.process_observations(incoming_reqs, observations)
         incoming_reqs.extend(generated_reqs)
         
-        # compile measurements performed by myself or other agents TODO do we still need this feature?
+        # compile measurements performed by myself or other agents NOTE do we still need this feature?
         # completed_observations = self.compile_completed_observations(completed_actions, misc_messages)
                 
         # TODO update mission objectives from requests
@@ -1074,7 +1071,7 @@ class SimulatedAgent(AbstractAgent):
     def update_observation_history(self, observations : list) -> None:
         """
         Updates the observation history with the completed observations.
-        """        
+        """
         # update observation history
         self.observation_history.update(observations)
 
@@ -1193,9 +1190,9 @@ class SimulatedAgent(AbstractAgent):
                 for action in plan:
                     if isinstance(action, AgentAction):
                         out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+
                     elif isinstance(action, dict):
-                        out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
-            
+                        out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"           
 
             self.log(out, level)
         except Exception as e:

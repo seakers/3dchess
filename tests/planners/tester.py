@@ -307,11 +307,11 @@ class PlannerTester(ABC):
         # initialize mission
         self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
-        # execute mission
-        self.simulation.execute()
+        # # execute mission
+        # self.simulation.execute()
 
-        # print results
-        self.simulation.print_results()
+        # # print results
+        # self.simulation.print_results()
 
         print('DONE')
 
@@ -349,6 +349,56 @@ class PlannerTester(ABC):
         # initialize mission
         self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
+        # # execute mission
+        # self.simulation.execute()
+
+        # # print results
+        # self.simulation.print_results()
+
+        print('DONE')
+
+    def test_multiple_sats_lakes(self):
+        """ Test case for multiple satellites in a lake-monitoring scenario. """
+        
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'lake_event_points'
+        scenario_name = f'multiple_sat_lake_scenario-{self.planner_name()}'
+        connectivity = 'FULL'
+        event_name = 'lake_events_seed-1000'
+        mission_name = 'lake_missions'
+
+        spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        spacecraft_1['planner'] = self.toy_planner_config()
+        spacecraft_1['@id'] = 'sat_1'
+        spacecraft_1['name'] = 'sat_1'
+
+        spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        spacecraft_2['planner'] = self.toy_planner_config()
+        spacecraft_2['orbitState']['state']['ta'] = 90.0
+        spacecraft_2['@id'] = 'sat_2'
+        spacecraft_2['name'] = 'sat_2'
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       spacecraft_1, 
+                                                       spacecraft_2
+                                                    ]
+                                                   )
+
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
         # execute mission
         self.simulation.execute()
 
@@ -357,6 +407,3 @@ class PlannerTester(ABC):
 
         print('DONE')
 
-    def test_multiple_sats_lakes(self):
-        """ Test case for multiple satellites in a lake-monitoring scenario. """
-        pass

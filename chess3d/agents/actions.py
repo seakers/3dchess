@@ -210,12 +210,12 @@ class FutureBroadcastMessageAction(BroadcastMessageAction):
         - status (`str`): completion status of the task
         - id (`str`) : identifying number for this task in uuid format
     """
-    PLAN = 'PLAN'                   # broadcast latest planner information
-    BIDS = 'BIDS'                   # broadcast latest bids for a task
-    REQUESTS = 'REQUESTS'           # broadcast latest known active measurement requests 
-    OBSERVATIONS = 'OBSERVATIONS'   # broadcast latest observation info
-    REWARD = 'REWARD'               # broadcast latest reward grid information
-    STATE = 'STATE'                 # broadcast latest agent state information
+    PLAN = 'PLAN'                           # broadcast latest planner information
+    BIDS = 'BIDS'                           # broadcast latest bids for a task
+    REQUESTS = 'measurement requests'       # broadcast latest known active measurement requests
+    OBSERVATIONS = 'observation results'    # broadcast latest observation info
+    REWARD = 'REWARD'                       # broadcast latest reward grid information
+    STATE = 'agent state'                   # broadcast latest agent state information
     FUTURE_BROADCAST_TYPES = [PLAN, BIDS, REQUESTS, OBSERVATIONS, REWARD, STATE]
         
     def __init__(self, 

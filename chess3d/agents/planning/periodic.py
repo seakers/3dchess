@@ -109,7 +109,11 @@ class AbstractPeriodicPlanner(AbstractPlanner):
                         tasks : list,
                         observation_history : ObservationHistory,
                     ) -> Plan:
-        
+        """ Generates a new plan for the agent """
+                
+        if state.t % 100 < 1e-3:
+            x = 1 # breakpoint
+
         # compile instrument field of view specifications   
         cross_track_fovs : dict = self._collect_fov_specs(specs)
 

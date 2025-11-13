@@ -184,21 +184,22 @@ class Plan(ABC):
                     if isinstance(earliest_interrupted_action, TravelAction):
                         # change start and end positions TODO
                         pass
+                    
                     elif isinstance(earliest_interrupted_action, ManeuverAction):
-                        # change start and end orientations
+                        # ensure only one angular rate component is non-zero TODO improve kinematic model
                         assert sum([abs(param) > 0 for param in earliest_interrupted_action.attitude_rates]) <= 1, \
                             "Maneuvers with only one angular rate component are supported for splitting."
                         
+                        # calculate duration of interrupted action
                         duration_interrupted = earliest_interrupted_action.t_end - earliest_interrupted_action.t_start
 
+                        # change start and end orientations
                         for i in range(3):
                             if abs(earliest_interrupted_action.attitude_rates[i]) > 1e-6:
                                 # interrupted action changes this attitude component
                                 delta_angle = earliest_interrupted_action.attitude_rates[i] * duration_interrupted
                                 earliest_interrupted_action.final_attitude[i] = earliest_interrupted_action.initial_attitude[i] + delta_angle
                                 continued_action.initial_attitude[i] += delta_angle
-
-                        x = 1 # debug
 
                     # place action in between the two split parts
                     self.actions[i_plan] = earliest_interrupted_action
@@ -362,14 +363,38 @@ class Plan(ABC):
 
     def __str__(self) -> str:
         out = f't_plan = {self.t}[s]\n'
-        out += f'id\t  action type\tt_start\tt_end\n'
+        out += f'id\t  action type\tt_start\tt_end\tdetails\n'
 
         if self.is_empty():
             out += 'EMPTY\n\n'
         else:
             for action in self.actions:
                 if isinstance(action, AgentAction):
-                    out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}\n"
+
+                    if isinstance(action, WaitForMessages):
+                        out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}"
+                    else:
+                        out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}"
+
+                    if isinstance(action, ObservationAction):
+                        locations = {int(gp_idx) for *_,gp_idx in action.task.get_location()}
+                        locations = sorted(list(locations))
+                        n_locations = len(locations)
+
+                        if n_locations > 3:
+                            locations = locations[:3]
+                            locations.append('...')
+
+                        out += f"\t{action.instrument_name}, targets: {n_locations} {locations}"
+                    
+                    elif isinstance(action, ManeuverAction):
+                        # TODO increase dimensionality of maneuver description
+                        out += f"\t{round(action.initial_attitude[0],1)}° -> {round(action.final_attitude[0],1)}°"
+
+                    elif isinstance(action, FutureBroadcastMessageAction):
+                        out += f"\t{action.broadcast_type.lower()} broadcast"
+
+                    out += '\n'    
         out += f'\nn actions in plan: {len(self)}'
         out += f'\nn measurements in plan: {len([action for action in self if isinstance(action, ObservationAction)])}'
         out += f'\nn broadcasts in plan: {len([action for action in self if isinstance(action, BroadcastMessageAction)])}'
