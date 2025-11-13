@@ -136,15 +136,11 @@ class Plan(ABC):
         
     def add(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
-
-        if action.t_end < t:
-            x =1
-
-        # check argument types
-        if not isinstance(action, AgentAction):
-            raise ValueError(f"Cannot place action of type `{type(action)}` in plan. Must be of type `{AgentAction}`.")
-
         try:
+            # check argument types
+            if not isinstance(action, AgentAction):
+                raise ValueError(f"Cannot place action of type `{type(action)}` in plan. Must be of type `{AgentAction}`.")
+
             # check if action is scheduled to occur during while another action is being performed
             interrupted_actions = [interrupted_action 
                                    for interrupted_action in self.actions
@@ -180,14 +176,29 @@ class Plan(ABC):
                     continued_action.t_end = earliest_interrupted_action.t_end
                     continued_action.id = str(uuid.uuid1())
 
-                    # modify interrupted action
-                    if isinstance(earliest_interrupted_action, TravelAction):
-                        ## change start and end positions TODO
-                        pass
-
                     ## change start and end times for the interrupted and continued actions
                     earliest_interrupted_action.t_end = action.t_start
                     continued_action.t_start = action.t_end
+
+                    # modify interrupted action
+                    if isinstance(earliest_interrupted_action, TravelAction):
+                        # change start and end positions TODO
+                        pass
+                    elif isinstance(earliest_interrupted_action, ManeuverAction):
+                        # change start and end orientations
+                        assert sum([abs(param) > 0 for param in earliest_interrupted_action.attitude_rates]) <= 1, \
+                            "Maneuvers with only one angular rate component are supported for splitting."
+                        
+                        duration_interrupted = earliest_interrupted_action.t_end - earliest_interrupted_action.t_start
+
+                        for i in range(3):
+                            if abs(earliest_interrupted_action.attitude_rates[i]) > 1e-6:
+                                # interrupted action changes this attitude component
+                                delta_angle = earliest_interrupted_action.attitude_rates[i] * duration_interrupted
+                                earliest_interrupted_action.final_attitude[i] = earliest_interrupted_action.initial_attitude[i] + delta_angle
+                                continued_action.initial_attitude[i] += delta_angle
+
+                        x = 1 # debug
 
                     # place action in between the two split parts
                     self.actions[i_plan] = earliest_interrupted_action
