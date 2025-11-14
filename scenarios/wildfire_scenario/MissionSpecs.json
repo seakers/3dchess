@@ -1,0 +1,210 @@
+{
+    "epoch": {
+      "@type": "GREGORIAN_UT1",
+      "year": 2025,
+      "month": 7,
+      "day": 1,
+      "hour": 0,
+      "minute": 0,
+      "second": 0
+    },
+    "duration": 1,
+    "propagator": {
+      "@type": "J2 ANALYTICAL PROPAGATOR",
+      "stepSize": 10
+    },
+  
+    "spacecraft": [
+      {
+        "@id": "thermal_sat_1",
+        "name": "thermal_sat",
+        "spacecraftBus": {
+          "name": "BlueCanyon",
+          "mass": 20,
+          "volume": 0.5,
+          "orientation": {
+            "referenceFrame": "NADIR_POINTING",
+            "convention": "REF_FRAME_ALIGNED"
+          },
+          "components": {
+            "adcs": {
+              "maxTorque": 1000,
+              "maxRate": 1.0
+            }
+          }
+        },
+          "instrument": {
+            "name": "TIR_FIRE",
+            "mass": 275,
+            "volume": 25.0,
+            "dataRate": 6.0,
+            "bitsPerPixel": 12,
+            "power": 200,
+            "snr": 50,
+            "spatial_res": 375,
+            "spectral_res": 1e-05,
+            "orientation": {
+              "referenceFrame": "NADIR_POINTING",
+              "convention": "REF_FRAME_ALIGNED"
+            },
+            "fieldOfViewGeometry": {
+              "shape": "RECTANGULAR",
+              "angleHeight": 5,
+              "angleWidth": 10
+            },
+            "maneuver": {
+              "maneuverType": "SINGLE_ROLL_ONLY",
+              "A_rollMin": -70,
+              "A_rollMax": 70
+            },
+            "@id": "tir_real",
+            "@type": "Basic Sensor"
+          },        
+        "orbitState": {
+          "date": {
+            "@type": "GREGORIAN_UT1",
+            "year": 2025,
+            "month": 7,
+            "day": 1,
+            "hour": 0,
+            "minute": 0,
+            "second": 0
+          },
+          "state": {
+            "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+            "sma": 7078,
+            "ecc": 0.01,
+            "inc": 67,
+            "raan": 0.0,
+            "aop": 0.0,
+            "ta": 0.0
+          }
+        },
+        "planner": {
+          "preplanner": { "@type": "naive" },
+          "replanner": { "@type": "broadcaster" },
+          "rewardGrid": {
+            "reward_function": "event",
+            "initial_reward": 1.0,
+            "min_reward": 1.0,
+            "unobserved_reward_rate": 2.0,
+            "max_unobserved_reward": 10.0,
+            "event_reward": 10.0
+          }
+        },
+        "science": {
+          "@type": "lookup",
+          "eventsPath": "./scenarios/wildfire_response/resources/wildfire_events.csv"
+        }
+      },
+  
+      {
+        "@id": "vnir_sat_1",
+        "name": "vnir_sat",
+        "spacecraftBus": {
+          "name": "BlueCanyon",
+          "mass": 20,
+          "volume": 0.5,
+          "orientation": {
+            "referenceFrame": "NADIR_POINTING",
+            "convention": "REF_FRAME_ALIGNED"
+          },
+          "components": {
+            "adcs": {
+              "maxTorque": 1000,
+              "maxRate": 1.0
+            }
+          }
+        },
+          "instrument": {
+            "name": "VNIR_OPTICAL",
+            "mass": 275,
+            "volume": 30.0,
+            "dataRate": 50.0,
+            "bitsPerPixel": 12,
+            "power": 100,
+            "snr": 80,
+            "spatial_res": 20,
+            "spectral_res": 3e-07,
+            "orientation": {
+              "referenceFrame": "NADIR_POINTING",
+              "convention": "REF_FRAME_ALIGNED"
+            },
+            "fieldOfViewGeometry": {
+              "shape": "RECTANGULAR",
+              "angleHeight": 5,
+              "angleWidth": 10
+            },
+            "maneuver": {
+              "maneuverType": "SINGLE_ROLL_ONLY",
+              "A_rollMin": -70,
+              "A_rollMax": 70
+            },
+            "@id": "vnir_real",
+            "@type": "Basic Sensor"
+          },
+        
+        "orbitState": {
+          "date": {
+            "@type": "GREGORIAN_UT1",
+            "year": 2025,
+            "month": 7,
+            "day": 1,
+            "hour": 0,
+            "minute": 0,
+            "second": 0
+          },
+          "state": {
+            "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+            "sma": 7078,
+            "ecc": 0.01,
+            "inc": 67,
+            "raan": 180.0,
+            "aop": 0.0,
+            "ta": 0.0
+          }
+        },
+        "planner": {
+          "preplanner": { "@type": "naive" },
+          "replanner": { "@type": "broadcaster" },
+          "rewardGrid": {
+            "reward_function": "event",
+            "initial_reward": 1.0,
+            "min_reward": 1.0,
+            "unobserved_reward_rate": 2.0,
+            "max_unobserved_reward": 10.0,
+            "event_reward": 10.0
+          }
+        },
+        "science": {
+          "@type": "lookup",
+          "eventsPath": "./scenarios/wildfire_response/resources/wildfire_events.csv"
+        }
+      }
+    ],
+  
+    "scenario": {
+      "connectivity": "LOS",
+      "utility": "LINEAR",
+      "events": {
+        "@type": "file",
+        "path": "./scenarios/wildfire_response/resources/wildfire_events.csv"
+      },
+      "clock": { "@type": "EVENT" },
+      "scenarioPath": "./scenarios/wildfire_response/",
+      "name": "wildfire_response"
+    },
+  
+    "settings": {
+      "coverageType": "GRID COVERAGE",
+      "outDir": "./scenarios/wildfire_response/orbit_data"
+    },
+  
+    "grid": [
+      {
+        "@type": "customGrid",
+        "covGridFilePath": "./scenarios/wildfire_response/resources/wildfire_points.csv"
+      }
+    ]
+  }
+  

@@ -1,0 +1,354 @@
+{
+    "MODIS": {
+      "name": "MODIS",
+      "@id": "modis_imager",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 110.0
+      },
+      "maneuver": {
+        "maneuverType": "SINGLE_ROLL_ONLY",
+        "A_rollMin": -50,
+        "A_rollMax": 50
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "VIIRS": {
+      "name": "VIIRS",
+      "@id": "viirs_imager",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 120.0
+      },
+      "maneuver": {
+        "maneuverType": "SINGLE_ROLL_ONLY",
+        "A_rollMin": -50,
+        "A_rollMax": 50
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "AVHRR-3": {
+      "name": "AVHRR/3",
+      "@id": "avhrr3_imager",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 120.0
+      },
+      "maneuver": {
+        "maneuverType": "SINGLE_ROLL_ONLY",
+        "A_rollMin": -50,
+        "A_rollMax": 50
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "Sentinel-3_SLSTR": {
+      "name": "Sentinel-3 SLSTR",
+      "@id": "slstr_radiometer",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 100.0
+      },
+      "maneuver": {
+        "maneuverType": "SINGLE_ROLL_ONLY",
+        "A_rollMin": -50,
+        "A_rollMax": 50
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "GOES-ABI": {
+      "name": "GOES ABI",
+      "@id": "abi_geostationary_imager",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "EARTH_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 17.0,
+        "angleWidth": 17.0
+      },
+      "maneuver": {
+        "maneuverType": "NONE",
+        "A_rollMin": 0,
+        "A_rollMax": 0
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "Sentinel-2_MSI": {
+      "name": "Sentinel-2 MSI",
+      "@id": "s2_msi_imager",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 15.0
+      },
+      "maneuver": {
+        "maneuverType": "SINGLE_ROLL_ONLY",
+        "A_rollMin": -15,
+        "A_rollMax": 15
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "Landsat-8_OLI": {
+      "name": "Landsat-8 OLI",
+      "@id": "landsat8_oli_imager",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 15.0
+      },
+      "maneuver": {
+        "maneuverType": "NONE",
+        "A_rollMin": 0,
+        "A_rollMax": 0
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "Landsat-8_TIRS": {
+      "name": "Landsat-8 TIRS",
+      "@id": "landsat8_tirs_sensor",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 15.0
+      },
+      "maneuver": {
+        "maneuverType": "NONE",
+        "A_rollMin": 0,
+        "A_rollMax": 0
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "DLR_BIRD_HSRS": {
+      "name": "BIRD HSRS",
+      "@id": "bird_hsrs_sensor",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 21.0
+      },
+      "maneuver": {
+        "maneuverType": "NONE",
+        "A_rollMin": 0,
+        "A_rollMax": 0
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "DLR_FireBIRD_TET": {
+      "name": "FireBIRD IR Camera",
+      "@id": "firebird_ir_cam",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 18.0
+      },
+      "maneuver": {
+        "maneuverType": "NONE",
+        "A_rollMin": 0,
+        "A_rollMax": 0
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "Kanopus-V-IK_MSU": {
+      "name": "Kanopus-V IK MSU-IK",
+      "@id": "kanopus_fire_msu",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 50.0
+      },
+      "maneuver": {
+        "maneuverType": "NONE",
+        "A_rollMin": 0,
+        "A_rollMax": 0
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "OroraTech_FOREST-1": {
+      "name": "OroraTech FOREST-1 IR Camera",
+      "@id": "forestone_ir_camera",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 22.5
+      },
+      "maneuver": {
+        "maneuverType": "NONE",
+        "A_rollMin": 0,
+        "A_rollMax": 0
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "FireSat_6-band_IR": {
+      "name": "FireSat 6-band IR",
+      "@id": "firesat_multispec_ir",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 40.0
+      },
+      "maneuver": {
+        "maneuverType": "SINGLE_ROLL_ONLY",
+        "A_rollMin": -45,
+        "A_rollMax": 45
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "WildFireSat_CWFMS": {
+      "name": "WildFireSat CWFMS",
+      "@id": "cwfms_radiometer",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 40.0
+      },
+      "maneuver": {
+        "maneuverType": "NONE",
+        "A_rollMin": 0,
+        "A_rollMax": 0
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "SACFF": {
+      "name": "SACFF (ISRO)",
+      "@id": "sacff_fire_imager",
+      "@type": "VNIR",
+      "detectorWidth": 6.6e-6,
+      "focalLength": 3.6,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 110.0
+      },
+      "maneuver": {
+        "maneuverType": "SINGLE_ROLL_ONLY",
+        "A_rollMin": -50,
+        "A_rollMax": 50
+      },
+      "spectral_resolution": "Multispectral"
+    },
+    "Altimeter": {
+      "name": "Altimeter",
+      "@id": "altimeter",
+      "@type": "Altimeter",
+      "chirpBandwidth": 150000000.0,
+      "pulseWidth": 0.00005,
+      "orientation": {
+        "referenceFrame": "NADIR_POINTING",
+        "convention": "REF_FRAME_ALIGNED"
+      },
+      "fieldOfViewGeometry": {
+        "shape": "RECTANGULAR",
+        "angleHeight": 2.5,
+        "angleWidth": 45.0
+      },
+      "maneuver": {
+        "maneuverType": "SINGLE_ROLL_ONLY",
+        "A_rollMin": -50,
+        "A_rollMax": 50
+      }
+    }
+  }
+  
