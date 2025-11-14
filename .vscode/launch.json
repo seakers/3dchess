@@ -103,7 +103,7 @@
             "name": "TEST: Heuristic Preplanner",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/planners/earliest_test.py",
+            "program": "${workspaceRoot}/tests/planners/heuristic_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",

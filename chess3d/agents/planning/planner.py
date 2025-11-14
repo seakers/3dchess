@@ -511,7 +511,7 @@ class AbstractPlanner(ABC):
                 "t_end" : t_img + d_img,
                 "duration" : d_img,
                 "n_obs" : obs_histories[loc].n_obs + n_obs,
-                "revisit_time" : max(obs_histories[loc].t_last, t_prev),
+                "revisit_time" : max(obs_histories[loc].t_last, t_prev) if t_prev > np.NINF else obs_histories[loc].t_last,
                 "horizontal_spatial_resolution" : observation_performance_metrics[loc]['ground pixel cross-track resolution [m]'],
             })
 

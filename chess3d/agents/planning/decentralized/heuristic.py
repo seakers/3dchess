@@ -1,3 +1,4 @@
+from typing import List
 from orbitpy.util import Spacecraft
 
 from dmas.utils import runtime_tracker
@@ -61,8 +62,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
                          leave=False):
             
             # check if agent has the payload to peform observation
-            if task.instrument_name not in payload:
-                continue
+            if task.instrument_name not in payload: continue
 
             # get previous and future observation actions' info
             th_prev,t_prev,d_prev,th_next,t_next,d_next \
@@ -75,8 +75,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
             m_prev = abs(th_prev - th_img) / max_slew_rate if max_slew_rate else 0.0
             m_next = abs(th_img - th_next) / max_slew_rate if max_slew_rate else 0.0
             
-            # set task imaging time and duration
-            # TODO improve selection? Currently aims for earliest and shortest observation possible
+            # select task imaging time and duration # TODO room for improvement? Currently aims for earliest and shortest observation possible
             t_img = max(t_prev + d_prev + m_prev, task.accessibility.left)
             d_img = task.min_duration
             
@@ -166,31 +165,31 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
     @runtime_tracker
     def __sort_tasks_by_heuristic(self, 
                                 state : SimulationAgentState, 
-                                tasks : list, 
+                                tasks : List[SpecificObservationTask], 
                                 specs : Spacecraft, 
                                 cross_track_fovs : dict, 
                                 orbitdata : OrbitData, 
                                 mission : Mission, 
                                 observation_history : ObservationHistory) -> list:
         """ Sorts tasks by heuristic value """
-        tasks : list[SpecificObservationTask] = tasks
         
-        if tasks:
-            # estimate maximum number of tasks in the planning horizon
-            min_task_duration = min([task.accessibility.span() for task in tasks])
-            max_number_tasks = int(self.horizon / min_task_duration) if min_task_duration > 0 else -1
-            
-            # reduce number of tasks to be scheduled by using estimated max number of tasks 
-            tasks.sort(key=lambda x: x.accessibility.span(),reverse=True)
-            tasks = tasks[:max_number_tasks]
+        # return if no tasks to schedule
+        if not tasks: return tasks
 
-        # calculate heuristic value for each task
-        heuristic_vals = [[self._calc_heuristic(task, specs, cross_track_fovs, orbitdata, mission, observation_history)] 
-                          for task in tqdm(tasks, desc=f"{state.agent_name}-PREPLANNER: Calculating heuristic values", leave=False)]
+        # estimate maximum number of tasks in the planning horizon
+        min_task_duration = min([task.accessibility.span() for task in tasks])
+        max_number_tasks = int(self.horizon / min_task_duration) if min_task_duration > 0 else -1
         
-        # insert task into heuristic values list for sorting
-        for i in range(len(heuristic_vals)): heuristic_vals[i].insert(0,tasks[i])
-        
+        # reduce number of tasks to be scheduled by using estimated max number of tasks 
+        tasks.sort(key=lambda x: x.accessibility.span(),reverse=True)
+
+        # calculate heuristic value for each task up to the maximum number of tasks
+        heuristic_vals = [(task, self._calc_heuristic(task, specs, cross_track_fovs, orbitdata, mission, observation_history)) 
+                          for task in tqdm(tasks[:max_number_tasks], 
+                                           desc=f"{state.agent_name}-PREPLANNER: Calculating heuristic values", 
+                                           leave=False)
+                            ]
+                
         # sort tasks by heuristic value
         sorted_data = sorted(heuristic_vals, key=lambda x: x[1:])
         
@@ -208,8 +207,8 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
                         ) -> tuple:
         """ Heuristic function to sort tasks by their heuristic value. """
         # calculate task priority
-        priority = np.sum([parent_task.priority  
-                           for parent_task in task.parent_tasks])
+        priority = task.get_priority()
+        
         # calculate task duration
         duration = task.accessibility.span()
         

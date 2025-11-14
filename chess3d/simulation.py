@@ -1609,23 +1609,22 @@ class SimulationElementFactory:
             horizon = preplanner_dict.get('horizon', period)
             horizon = np.Inf if isinstance(horizon, str) and 'inf' in horizon.lower() else horizon
             debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
-            # sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
+            sharing = preplanner_dict.get('sharing', 'none').lower()
 
             if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
 
             # initialize preplanner
             if preplanner_type.lower() in ["heuristic"]:
-                preplanner = HeuristicInsertionPlanner(horizon, period, debug, logger)
+                preplanner = HeuristicInsertionPlanner(horizon, period, sharing, debug, logger)
 
             elif preplanner_type.lower() in ["naive", "fifo", "earliest"]:
-                preplanner = EarliestAccessPlanner(horizon, period, debug, logger)
+                preplanner = EarliestAccessPlanner(horizon, period, sharing, debug, logger)
 
             elif preplanner_type.lower() == 'nadir':
-                preplanner = NadirPointingPlanner(horizon, period, debug, logger)
+                preplanner = NadirPointingPlanner(horizon, period, sharing, debug, logger)
 
             elif preplanner_type.lower() in ["dynamic", "dp"]:
                 model = preplanner_dict.get('model', 'earliest').lower()
-                sharing = preplanner_dict.get('sharing', None)
                 preplanner = DynamicProgrammingPlanner(horizon, period, model, sharing, debug, logger)
             
             elif preplanner_type.lower() == 'dealer':

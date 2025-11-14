@@ -35,7 +35,7 @@ class Mission:
         # Validate inputs
         assert isinstance(task, SpecificObservationTask), "Task must be an instance of `SpecificObservationTask`"
         assert isinstance(measurement, dict), "Measurement must be a dictionary"        
-    
+
         # Calculate the value of a specific task by summing the value of parent tasks
         return sum([self.calc_task_value(gen_task, measurement) for gen_task in task.parent_tasks])
 
