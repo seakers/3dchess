@@ -1,0 +1,47 @@
+{
+    "missions" : [
+        {
+            "name": "Wildfire monitoring",
+            "objectives" : [
+                {
+                    "objective_type" : "default_mission",
+                    "parameter": "Fire Radiative Power",
+                    "weight": 1,
+                    "requirements" : [
+                        {
+                            "attribute": "horizontal_spatial_resolution",
+                            "requirement_type": "continuous",
+                            "thresholds": [100, 500, 1000],
+                            "scores": [1.0, 0.7, 0.1]
+                        },
+                        {
+                            "requirement_type": "capability",
+                            "attribute": "instrument",
+                            "valid_values": ["TIR_FIRE", "VNIR_OPTICAL"]
+                        }
+                    ]
+                },
+                {
+                    "objective_type" : "event_driven",
+                    "parameter": "Fire Radiative Power",
+                    "weight": 10,
+                    "requirements" : [
+                        {
+                            "requirement_type": "continuous",
+                            "attribute": "horizontal_spatial_resolution",
+                            "thresholds": [100, 500, 1000],
+                            "scores": [1.0, 0.7, 0.1]
+                        },
+                        {
+                            "requirement_type": "capability",
+                            "attribute": "instrument",
+                            "valid_values": ["TIR_FIRE", "VNIR_OPTICAL"]
+                        }
+                    ],
+                    "event_type" : "wildfire"
+                }
+            ]
+        }
+    ]
+}
+

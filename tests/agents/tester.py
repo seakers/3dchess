@@ -157,6 +157,50 @@ class AgentTester(ABC):
                                 },
                                 "spectral_resolution" : "Multispectral"
                             },
+                            "TIR_FIRE": {
+                                "name": "TIR_FIRE",
+                                "@id" : "tir_fire_imager",
+                                "@type" : "VNIR",
+                                "detectorWidth": 6.6e-6,
+                                "focalLength": 3.6,  
+                                "orientation": {
+                                    "referenceFrame": "NADIR_POINTING",
+                                    "convention": "REF_FRAME_ALIGNED"
+                                },
+                                "fieldOfViewGeometry": { 
+                                    "shape": "RECTANGULAR", 
+                                    "angleHeight": 5.0, 
+                                    "angleWidth": 10.0
+                                },
+                                "maneuver" : {
+                                    "maneuverType":"SINGLE_ROLL_ONLY",
+                                    "A_rollMin": -70,
+                                    "A_rollMax": 70
+                                },
+                                "spectral_resolution" : "Multispectral"
+                            },
+                            "VNIR_OPTICAL": {
+                                "name": "VNIR_OPTICAL",
+                                "@id" : "vnir_optical_imager",
+                                "@type" : "VNIR",
+                                "detectorWidth": 6.6e-6,
+                                "focalLength": 3.6,  
+                                "orientation": {
+                                    "referenceFrame": "NADIR_POINTING",
+                                    "convention": "REF_FRAME_ALIGNED"
+                                },
+                                "fieldOfViewGeometry": { 
+                                    "shape": "RECTANGULAR", 
+                                    "angleHeight": 5.0, 
+                                    "angleWidth": 10.0
+                                },
+                                "maneuver" : {
+                                    "maneuverType":"SINGLE_ROLL_ONLY",
+                                    "A_rollMin": -70,
+                                    "A_rollMax": 70
+                                },
+                                "spectral_resolution" : "Multispectral"
+                            },
                             "Altimeter": {
                                 "name": "Altimeter",
                                 "@id" : "altimeter",
@@ -217,7 +261,7 @@ class AgentTester(ABC):
         scenario_specs['spacecraft'] = spacecraft
         scenario_specs['groundStation'] = self.compile_ground_stations(gs_network_names)
                 
-        if gs_network_names is not None:
+        if gs_network_names is not None and len(gs_network_names) > 0:
             scenario_specs['groundOperator'] = self.setup_ground_operators(gs_network_names, spacecraft)
 
         # return scenario specifications
