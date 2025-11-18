@@ -23,6 +23,7 @@ class GenericObservationTask(ABC):
                 ):
         """
         Generic observation task to be scheduled by an agent.
+        - :`task_type`: The type of the task, either 'default_mission_task' or 'event_driven_task'.
         - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
         - :`location`: Location or list of locations to be observed, each represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
         - :`availability`: The time interval during which the task is available.
@@ -114,6 +115,11 @@ class GenericObservationTask(ABC):
 
         return ValueError(f"Unknown task type: {task_type}")
         
+    def __eq__(self, other: object) -> bool:
+        """ Check if two tasks are equal. """
+        if not isinstance(other, GenericObservationTask): return False
+        return self.to_dict() == other.to_dict()
+
 class DefaultMissionTask(GenericObservationTask):
     def __init__(self,
                  parameter : str,

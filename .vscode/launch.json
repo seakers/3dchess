@@ -175,7 +175,7 @@
             "name": "TEST: Consensus Bids",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceRoot}/tests/planners/bid_test.py",
+            "program": "${workspaceRoot}/tests/tasks/bid_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",

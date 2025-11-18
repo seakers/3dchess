@@ -1,8 +1,4 @@
-from abc import ABC
-from ast import Tuple
-import asyncio
-from enum import Enum
-from typing import Any, Union
+from typing import Any, Union, Tuple
 
 import numpy as np
 
@@ -65,6 +61,7 @@ class Bid:
         assert isinstance(winning_bidder, str), f'`winning_bidder` must be of type `str`, got `{type(winning_bidder)}`'
         assert isinstance(winning_bid, (float, int)), f'`winning_bid` must be of type `float` or `int`, got `{type(winning_bid)}`'
         assert isinstance(t_img, (float, int)), f'`t_img` must be of type `float` or `int`, got `{type(t_img)}`'
+        assert t_img in task.availability or t_img == np.NINF, f'`t_img` value `{t_img}` not in task availability interval `{task.availability}`'
         assert isinstance(t_update, (float, int)), f'`t_update` must be of type `float` or `int`, got `{type(t_update)}`'
         assert isinstance(performed, bool), f'`performed` must be of type `bool`, got `{type(performed)}`'
 
@@ -217,7 +214,7 @@ class Bid:
             return bid1
 
         ## Compare bidders alphabetically
-        return max(bid1, bid2, key=lambda b: b.bidder)
+        return min(bid1, bid2, key=lambda b: b.bidder)
 
     def __compare(self, other : Any) -> Tuple[str,str]:
         """
@@ -480,7 +477,6 @@ class Bid:
         self.winning_bid = other.winning_bid
         self.winning_bidder = other.winning_bidder
         self.t_img = other.t_img
-        self.th_img = other.th_img
 
         self.t_update = t
         self.performed = other.performed if not self.performed else True # Check if this hold true for all values
@@ -492,7 +488,6 @@ class Bid:
         self.winning_bid = 0
         self.winning_bidder = self.NONE
         self.t_img = -1
-        self.th_img = np.NAN
         self.t_update = t_update
 
     def _leave(self, _, **__) -> None:
@@ -512,7 +507,6 @@ class Bid:
     def set(self, 
             new_bid : Union[int, float], 
             t_img : Union[int, float], 
-            th_img : Union[int, float], 
             t_update : Union[int, float]
         ) -> None:
         """
@@ -526,7 +520,6 @@ class Bid:
         self.winning_bid = new_bid
         self.winning_bidder = self.bidder
         self.t_img = t_img
-        self.th_img = th_img
         self.t_update = t_update
     
     def has_winner(self) -> bool:
@@ -564,7 +557,7 @@ class Bid:
         split_id = self.task.id.split('-')
         line_data = {   "task_id" : split_id[0], 
                         "main_measurement" : self.main_measurement, 
-                        "target" : self.task.location(), 
+                        "target" : self.task.location, 
                         "bidder" : self.bidder, 
                         "bid" : round(self.winning_bid, 3), 
                         "winner" : self.winning_bidder, 
