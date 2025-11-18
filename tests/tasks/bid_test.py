@@ -1,12 +1,7 @@
 
-from chess3d.utils import print_welcome
 import unittest
-import math
 
-# TODO: replace these with your real imports
-# from chess3d.agents.planning.tasks import GenericObservationTask
-# from chess3d.agents.planning.consensus import Bid
-
+from chess3d.utils import print_welcome
 from chess3d.agents.planning.decentralized.consensus.bids import Bid
 from chess3d.agents.planning.tasks import DefaultMissionTask
 
@@ -223,6 +218,44 @@ class TestBids(unittest.TestCase):
         self.assertIsInstance(h, int)
         self.assertIn("Bid_", r)
         self.assertIn("sat-A", r)
+
+    # ---------- Compare Method ----------
+
+    def test_compare_when_other_performed_updates(self):
+        """If other is marked performed and self is not, compare() should request UPDATE."""
+        base = self.bid_a.copy()
+        other = self.bid_a.copy()
+        self.assertFalse(base.performed)
+        other.performed = True
+
+        comp, reb = base.compare(other)
+
+        self.assertEqual(comp, Bid.UPDATE)
+        self.assertEqual(reb, Bid.REBROADCAST_OTHER)
+
+    def test_compare_same_bidder_newer_timestamp(self):
+        """Same bidder + newer t_update => UPDATE + REBROADCAST_OTHER."""
+        a_newer = self.bid_a.copy()
+        a_older = self.bid_a.copy()
+        a_newer.t_update = 10.0
+        a_older.t_update = 5.0
+
+        comp, reb = a_older.compare(a_newer)
+
+        self.assertEqual(comp, Bid.UPDATE)
+        self.assertEqual(reb, Bid.REBROADCAST_OTHER)
+
+    def test_compare_same_bidder_older_timestamp(self):
+        """Same bidder + older t_update => LEAVE + NO_REBROADCAST."""
+        a_newer = self.bid_a.copy()
+        a_older = self.bid_a.copy()
+        a_newer.t_update = 5.0
+        a_older.t_update = 10.0
+
+        comp, reb = a_older.compare(a_newer)
+
+        self.assertEqual(comp, Bid.LEAVE)
+        self.assertEqual(reb, Bid.NO_REBROADCAST)
 
 
 if __name__ == '__main__':
