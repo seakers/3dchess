@@ -120,6 +120,9 @@ class GenericObservationTask(ABC):
         if not isinstance(other, GenericObservationTask): return False
         return self.to_dict() == other.to_dict()
 
+    def __hash__(self):
+        return hash(self.id)
+
 class DefaultMissionTask(GenericObservationTask):
     def __init__(self,
                  parameter : str,
@@ -519,10 +522,7 @@ class SpecificObservationTask:
 
     def __repr__(self):
         return f"SpecificObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
-    
-    def __hash__(self):
-        return hash(self.id)
-    
+        
     def to_dict(self) -> dict:
         return {
             "id": self.id,

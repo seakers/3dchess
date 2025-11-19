@@ -24,12 +24,6 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
-from chess3d.agents.planning.centralized.dealer import TestingDealer
-from chess3d.agents.planning.centralized.milp import DealerMILPPlanner
-from chess3d.agents.planning.decentralized.milp import SingleSatMILP
-from chess3d.agents.planning.decentralized.nadir import NadirPointingPlanner
-from chess3d.agents.planning.decentralized.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
-from chess3d.agents.planning.centralized.worker import WorkerPlanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -39,10 +33,15 @@ from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
 from chess3d.agents.planning.module import PlanningModule
-from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
+from chess3d.agents.planning.centralized.dealer import TestingDealer
+from chess3d.agents.planning.centralized.milp import DealerMILPPlanner
+from chess3d.agents.planning.centralized.worker import WorkerPlanner
+from chess3d.agents.planning.decentralized.nadir import NadirPointingPlanner
 from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
+from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
+from chess3d.agents.planning.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.decentralized.dynamic import DynamicProgrammingPlanner
-# from chess3d.agents.planning.decentralized.consensus.acbba import ACBBAPlanner
+from chess3d.agents.planning.decentralized.consensus.consensus import ConsensusReplanner
 from chess3d.agents.science.module import *
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes
 from chess3d.agents.agent import SimulatedAgent
@@ -1664,25 +1663,40 @@ class SimulationElementFactory:
                 
                 if mode == 'test':                   
                     preplanner = TestingDealer(client_orbitdata, client_specs, horizon, period)
+
                 elif mode in ['milp', 'mixed-integer-linear-programming']:
                     model = preplanner_dict.get('model', DealerMILPPlanner.STATIC).lower()
                     license_path = preplanner_dict.get('licensePath', None)
                     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
                     max_observations = preplanner_dict.get('maxObservations', 10)
 
-                    preplanner = DealerMILPPlanner(client_orbitdata, client_specs, client_missions, model, license_path, horizon, period, max_tasks, max_observations, debug, logger)
+                    preplanner = DealerMILPPlanner(client_orbitdata, 
+                                                   client_specs, 
+                                                   client_missions, 
+                                                   model, 
+                                                   license_path, 
+                                                   horizon, 
+                                                   period, 
+                                                   max_tasks=max_tasks, 
+                                                   max_observations=max_observations, 
+                                                   debug=debug,
+                                                   logger=logger)
 
-            elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
-                # unpack preplanner parameters
-                obj = preplanner_dict.get('objective', 'reward').lower()
-                model = preplanner_dict.get('model', 'earliest').lower()
-                license_path = preplanner_dict.get('licensePath', None)
-                max_tasks = preplanner_dict.get('maxTasks', np.Inf)
+            elif preplanner_type.lower() == 'worker':
+                dealer_name = preplanner_dict.get('dealerName', None)
+                preplanner = WorkerPlanner(dealer_name, debug, logger)
 
-                if license_path is None and not debug: 
-                    raise ValueError('license path for Gurobi MILP preplanner not specified. Set `debug` to true to run with limited functionality or specify a valid license path to `licensePath`.')        
+            # elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
+            #     # unpack preplanner parameters
+            #     obj = preplanner_dict.get('objective', 'reward').lower()
+            #     model = preplanner_dict.get('model', 'earliest').lower()
+            #     license_path = preplanner_dict.get('licensePath', None)
+            #     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
 
-                preplanner = SingleSatMILP(obj, model, license_path, horizon, period, max_tasks, debug, logger)
+            #     if license_path is None and not debug: 
+            #         raise ValueError('license path for Gurobi MILP preplanner not specified. Set `debug` to true to run with limited functionality or specify a valid license path to `licensePath`.')        
+
+            #     preplanner = SingleSatMILP(obj, model, license_path, horizon, period, max_tasks, debug, logger)
 
             # elif... # add more preplanners here
             
@@ -1699,41 +1713,12 @@ class SimulationElementFactory:
             replanner_type : str = replanner_dict.get('@type', None)
             if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
             debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
+            
+            if replanner_type.lower() in ['consensus', 'cbba']:
+                model = replanner_dict.get('model', 'earliest_access').lower()
+                replan_threshold = replanner_dict.get('replanThreshold', 1)
 
-            # if replanner_type.lower() == 'broadcaster':
-            #     mode = replanner_dict.get('mode', 'periodic').lower()
-            #     period = replanner_dict.get('period', np.Inf)
-
-            #     if mode == 'opportunistic':
-            #         replanner = OpportunisticBroadcasterReplanner(period, debug, logger)
-            #     elif mode == 'periodic':
-            #         replanner = PeriodicBroadcasterReplanner(period, debug, logger)
-            #     else:
-            #         raise ValueError(f'`mode` of type `{mode}` not supported for broadcaster replanner.')
-
-            if replanner_type.lower() == 'worker':
-                dealer_name = replanner_dict.get('dealerName', None)
-                replanner = WorkerPlanner(dealer_name, debug, logger)
-
-            # elif replanner_type.lower() == 'acbba': 
-            #     threshold = replanner_dict.get('threshold', 1)
-
-            #     replanner = ACBBAPlanner(
-            #                                 threshold, 
-            #                                 debug,
-            #                                 logger
-            #                                 )
-                
-            # elif replanner_type.lower() == 'acbba-dp': 
-            #     max_bundle_size = replanner_dict.get('bundle size', 3)
-            #     threshold = replanner_dict.get('threshold', 1)
-            #     horizon = replanner_dict.get('horizon', np.Inf)
-
-            #     replanner = DynamicProgrammingACBBAReplanner(max_bundle_size, 
-            #                                                 threshold, 
-            #                                                 horizon,
-            #                                                 debug,
-            #                                                 logger)
+                replanner = ConsensusReplanner(model=model, replan_threshold=replan_threshold, debug=debug, logger=logger)
             
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')

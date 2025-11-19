@@ -349,11 +349,11 @@ class PlannerTester(ABC):
         # initialize mission
         self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
-        # # execute mission
-        # self.simulation.execute()
+        # execute mission
+        self.simulation.execute()
 
-        # # print results
-        # self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
         print('DONE')
 

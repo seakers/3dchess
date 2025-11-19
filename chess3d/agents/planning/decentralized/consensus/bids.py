@@ -47,8 +47,8 @@ class Bid:
 
     def __init__(self,
                  task : GenericObservationTask,
-                 main_measurement : str,
                  bidder: str,
+                 main_measurement : str = NONE,
                  bid_value: Union[float, int] = 0,
                  winning_bidder: str = NONE,
                  winning_bid: Union[float, int] = 0,
@@ -64,8 +64,8 @@ class Bid:
 
         ### Attributes:
             - task (`GenericObservationTask`): observation task being bid on
-            - main_measurement (`str`): name of the main measurement assigned by this subtask bid
             - bidder (`bidder`): name of the agent keeping track of this bid information
+            - main_measurement (`str`): name of the main measurement assigned by this subtask bid
             - bid_value (`float` or `int`): latest bid value from bidder
             - winning_bidder (`str`): name of current the winning agent
             - winning_bid (`float` or `int`): current winning bid value
@@ -420,9 +420,23 @@ class Bid:
         if self.is_other_winning(other):
             # update and rebroadcast other's bid
             return self.UPDATE, self.REBROADCAST_OTHER
+
+        # 3. Receiving agent also believes some 3rd party is winner.
+        if self.is_same_winner(other):
+            if self.is_same_timestamp(other):
+                # same time stamp →  leave & do not rebroadcast
+                return self.LEAVE, self.NO_REBROADCAST
+            
+            elif other.t_stamp > self.t_stamp:
+                # other bid is newer → update bid & rebroadcast other's bid
+                return self.UPDATE, self.REBROADCAST_OTHER
+
+            elif other.t_stamp < self.t_stamp:
+                # my bid is newer → update bid time & rebroadcast my bid
+                return self.LEAVE, self.REBROADCAST_SELF
         
         # 4. Receiving agent believes some 4th party is winner.
-        if self.is_fourth_party_winning(other):
+        if self.is_third_party_winning(other):
             if self.is_tie(other):
                 # cannot agree on winner → leave & do not rebroadcast
                 # NOTE : rebroadcasting here may cause oscillations
@@ -442,24 +456,9 @@ class Bid:
                     # my bid is higher & same/newer time → leave & rebroadcast my bid
                     return self.LEAVE, self.REBROADCAST_SELF
 
-                elif other.t_stamp < self.t_stamp:
+                elif other.t_stamp > self.t_stamp:
                     # other bid is newer → update bid & rebroadcast other's bid
                     return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 3. Receiving agent believes some 3rd party is winner.
-        if self.is_third_party_winning(other):
-            if self.is_same_timestamp(other):
-                # same time stamp →  leave & do not rebroadcast
-                return self.LEAVE, self.NO_REBROADCAST
-            
-            elif other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid & rebroadcast other's bid
-                return self.UPDATE, self.REBROADCAST_OTHER
-
-            elif other.t_stamp < self.t_stamp:
-                # my bid is newer → update bid time & rebroadcast my bid
-                return self.LEAVE, self.REBROADCAST_SELF
-
 
         # 5. Receiving agent bid has no winner.
         if self.has_no_winner():
@@ -510,24 +509,24 @@ class Bid:
         return self.winning_bidder == other.bidder
 
     def is_third_party_winning(self, other: 'Bid') -> bool:
-        return self.winning_bidder not in (self.bidder, other.bidder, self.NONE)
-
-    def is_fourth_party_winning(self, other: 'Bid') -> bool:
-        return self.winning_bidder not in (self.bidder, other.bidder, other.winning_bidder, self.NONE)
+        return self.winning_bidder not in {self.bidder, other.bidder, self.NONE}
 
     def has_no_winner(self) -> bool:
         return self.winning_bidder == self.NONE
+    
+    def is_same_winner(self, other: 'Bid') -> bool:
+        return self.winning_bidder == other.winning_bidder
 
     def is_tie(self, other: 'Bid') -> bool:
         return abs(self.winning_bid - other.winning_bid) < self.EPS
-    
-    def is_same_timestamp(self, other: 'Bid') -> bool:
-        return abs(self.t_stamp - other.t_stamp) < self.EPS
 
     def wins_tie_breaker(self, other: 'Bid') -> bool:
         """ Returns True if, when bids are tied, we should prefer `self` over `other`. """
         larger_name_bid = self.__tie_breaker(self, other)
         return larger_name_bid is not self
+    
+    def is_same_timestamp(self, other: 'Bid') -> bool:
+        return abs(self.t_stamp - other.t_stamp) < self.EPS
     
     """
     ---------------------------
@@ -577,6 +576,7 @@ class Bid:
         # update bid information
         self.winning_bid = other.winning_bid
         self.winning_bidder = other.winning_bidder
+        self.main_measurement = other.main_measurement
         self.t_img = other.t_img
 
         self.t_stamp = t
@@ -588,6 +588,7 @@ class Bid:
         """
         self.winning_bid = 0
         self.winning_bidder = self.NONE
+        self.main_measurement = self.NONE
         self.t_img = -1
         self.t_stamp = t_update
 
@@ -606,21 +607,27 @@ class Bid:
         self.t_stamp = t_update
         
     def set(self, 
+            main_instrument : str,
             new_bid : Union[int, float], 
             t_img : Union[int, float], 
+            n_img : int,
             t_update : Union[int, float]
         ) -> None:
         """
         Sets new values for this bid
 
         ### Arguments: 
+            - main_instrument (`str`): main measurement set to perform this bid
             - new_bid (`int` or `float`): new bid value
             - t_img (`int` or `float`): new imaging time
+            - n_img (`int`): image number
             - t_update (`int` or `float`): update time
         """
+        self.main_instrument = main_instrument
         self.winning_bid = new_bid
         self.winning_bidder = self.bidder
         self.t_img = t_img
+        self.n_img = n_img
         self.t_stamp = t_update
     
     def has_winner(self) -> bool:
@@ -674,7 +681,7 @@ class Bid:
     
     def __repr__(self):
         task_id = self.task.id.split('-')
-        return f'Bid_{task_id[0]}_{self.bidder}_{self.main_measurement}_{round(self.winning_bid,1)}'
+        return f'Bid_{task_id[0]}_{self.n_img}_{self.bidder}_{round(self.winning_bid,1)}'
 
     def __hash__(self) -> int:
         return hash(repr(self))       

@@ -1050,9 +1050,6 @@ class SimulatedAgent(AbstractAgent):
             self.known_reqs = {req for req in self.known_reqs 
                                if req.task.is_available(self.get_current_time())
                                }
-            
-        if self.known_reqs:
-            x = 1 # breakpoint
 
     @runtime_tracker
     def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
@@ -1124,7 +1121,7 @@ class SimulatedAgent(AbstractAgent):
                 elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.REQUESTS:
                     msgs.extend([MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
                             for req in self.known_reqs
-                            if req.event.is_available(state.t)     # only active or future events
+                            if req.task.is_available(state.t)       # only active or future events
                             and req.requester == state.agent_name   # only requests created by myself
                             ])
 

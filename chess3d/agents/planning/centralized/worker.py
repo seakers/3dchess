@@ -1,19 +1,19 @@
 from dmas.agents import AgentAction
 
 from chess3d.agents.actions import ObservationAction, action_from_dict
-from chess3d.agents.planning.plan import Plan, ReactivePlan
-from chess3d.agents.planning.reactive import AbstractReactivePlanner
+from chess3d.agents.planning.plan import PeriodicPlan, Plan
+from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.states import SimulationAgentState
 from chess3d.messages import PlanMessage
 
 
-class WorkerPlanner(AbstractReactivePlanner):
+class WorkerPlanner(AbstractPeriodicPlanner):
     """
     Worker planner class that handles replanning tasks for agents.
     It processes the replanning requests and updates the agent's plan accordingly.
     """
     def __init__(self, dealer_name : str, debug = False, logger = None):
-        super().__init__(debug, logger)
+        super().__init__(debug=debug, logger=logger, sharing=AbstractPeriodicPlanner.NONE)
         
         # validate inputs
         assert isinstance(dealer_name, str), "dealer_name must of type `str`"
@@ -59,7 +59,7 @@ class WorkerPlanner(AbstractReactivePlanner):
         #--------------------
 
         # create a plan from plan message actions
-        self.plan = ReactivePlan(actions, t=self.plan_message.t_plan)
+        self.plan = PeriodicPlan(actions, t=self.plan_message.t_plan)
 
         # remove the plan message after processing
         del self.plan_message
@@ -70,6 +70,11 @@ class WorkerPlanner(AbstractReactivePlanner):
 
     def _schedule_observations(self, *_):
         """ Boilerplate method for scheduling observations."""
-        # does not schedule observations for parent agent
+        # does not schedule observations for worker agent
+        return []
+    
+    def _schedule_broadcasts(self, *_):
+        """ Boilerplate method for scheduling broadcasts."""
+        # does not schedule broadcasts for worker agent
         return []
     
