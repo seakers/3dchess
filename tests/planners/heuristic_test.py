@@ -4,6 +4,14 @@ from tester import PlannerTester
 
 
 class TestHeuristic(PlannerTester, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+
+        self.single_sat_toy : bool = False
+        self.multiple_sat_toy : bool = False
+        self.single_sat_lakes : bool = True
+        self.multiple_sat_lakes : bool = False
+    
     def planner_name(self) -> str:
         return "heuristic"
 

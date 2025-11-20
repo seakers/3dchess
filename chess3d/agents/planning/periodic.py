@@ -190,7 +190,8 @@ class AbstractPeriodicPlanner(AbstractPlanner):
             grid_index = raw_coverage_data['grid index'][i]
             gp_index = raw_coverage_data['GP index'][i]
             instrument = raw_coverage_data['instrument'][i]
-            look_angle = raw_coverage_data['look angle [deg]'][i]
+            # look_angle = raw_coverage_data['look angle [deg]'][i]
+            off_nadir_angle = raw_coverage_data['off-nadir axis angle [deg]'][i]
             
             # initialize dictionaries if needed
             if grid_index not in access_opportunities:
@@ -212,12 +213,12 @@ class AbstractPeriodicPlanner(AbstractPlanner):
                 if overlap_interval.overlaps(interval):
                     interval.extend(t_img)
                     t.append(t_img)
-                    th.append(look_angle)
+                    th.append(off_nadir_angle)
                     found = True
                     break      
 
             if not found:
-                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [look_angle]])
+                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [off_nadir_angle]])
                 
         # return access times and grid information
         return access_opportunities

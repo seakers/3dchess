@@ -14,7 +14,7 @@ from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
-from chess3d.agents.planning.decentralized.consensus.bids import Bid
+from chess3d.agents.planning.decentralized.consensus.bids import AsynchronousBid, Bid
 from chess3d.agents.science.reward import *
 from chess3d.messages import MeasurementBidMessage
 from chess3d.mission.mission import Mission
@@ -125,7 +125,9 @@ class ConsensusReplanner(AbstractReactivePlanner):
     def __generate_bids_from_reqs(self, state : SimulationAgentState, incoming_reqs : List[TaskRequest]) -> None:
         """ Generate bids from incoming task requests. """
         # extract bids from incoming requests
-        bids_from_reqs = [Bid(req.task, state.agent_name) for req in incoming_reqs]
+        # TODO make this an abstract method that can be overridden by subclasses that distinguish between
+        # synchronous and asynchronous bidding strategies
+        bids_from_reqs = [AsynchronousBid(req.task, state.agent_name) for req in incoming_reqs]
         
         # update bid inbox
         self.bid_inbox.extend(bids_from_reqs)

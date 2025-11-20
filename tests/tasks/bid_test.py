@@ -5,7 +5,7 @@ import numpy as np
 
 # Adjust this import path to wherever your Bid class lives
 from chess3d.utils import print_welcome
-from chess3d.agents.planning.decentralized.consensus.bids import Bid
+from chess3d.agents.planning.decentralized.consensus.bids import AsynchronousBid, Bid
 from chess3d.agents.planning.tasks import DefaultMissionTask
 
 
@@ -45,7 +45,7 @@ class TestBids(unittest.TestCase):
         if bid_value is None:
             bid_value = winning_bid
 
-        return Bid(
+        return AsynchronousBid(
             task=task,
             main_measurement=main_measurement,
             bidder=bidder,
@@ -73,7 +73,7 @@ class TestBids(unittest.TestCase):
         )
 
         bid_dict = bid.to_dict()
-        reconstructed = Bid.from_dict(bid_dict)
+        reconstructed = AsynchronousBid.from_dict(bid_dict)
 
         self.assertEqual(bid.task.id, reconstructed.task.id)
         self.assertEqual(bid.main_measurement, reconstructed.main_measurement)
@@ -848,6 +848,7 @@ class TestBids(unittest.TestCase):
         self.assertAlmostEqual(bid.t_img, 50.0)
         self.assertAlmostEqual(bid.t_stamp, 50.0)
 
+# TODO Test SynchronousBid implementation
 
 if __name__ == '__main__':
     # terminal welcome message

@@ -8,6 +8,12 @@ from chess3d.utils import print_welcome
 
 class PlannerTester(ABC):
     def setUp(self) -> None:        
+        # test case toggles
+        self.single_sat_toy : bool = False
+        self.multiple_sat_toy : bool = False
+        self.single_sat_lakes : bool = False
+        self.multiple_sat_lakes : bool = False
+
         # load scenario json file
         self.spacecraft_template = {
                     "@id": "thermal_sat_0_0",
@@ -66,7 +72,7 @@ class PlannerTester(ABC):
                             "inc": 60.0,
                             "raan": 0.0,
                             "aop": 0.0,
-                            "ta": 95.0
+                            "ta": 98.0
                         }
                     },
                     "planner" : {
@@ -98,7 +104,7 @@ class PlannerTester(ABC):
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
                                     "angleHeight": 2.5, 
-                                    "angleWidth": 45.0
+                                    "angleWidth": 2.5
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
@@ -120,7 +126,7 @@ class PlannerTester(ABC):
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
                                     "angleHeight": 2.5, 
-                                    "angleWidth": 45.0
+                                    "angleWidth": 2.5
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
@@ -142,7 +148,7 @@ class PlannerTester(ABC):
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
                                     "angleHeight": 2.5, 
-                                    "angleWidth": 45.0
+                                    "angleWidth": 20.0
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
@@ -173,6 +179,19 @@ class PlannerTester(ABC):
                                 }
                             }
                         }
+        
+    def setup_science_config(self, event_name : str) -> dict:
+        """ Setup science configuration for the scenario. """
+
+        assert isinstance(event_name, str), "event_name must be a string"
+
+        assert os.path.isfile(f"./tests/planners/resources/events/{event_name}.csv"), \
+            f"Event file not found: {event_name}.csv"
+        
+        return {
+                    "@type": "lookup", 
+                    f"eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
+                }
         
     def setup_scenario_specs(self, 
                              duration : float, 
@@ -278,6 +297,9 @@ class PlannerTester(ABC):
 
     def test_single_sat_toy(self):
         """ Test case for a single satellite with toy events. """
+        # check for case toggle 
+        if not self.single_sat_toy: return
+
         # setup scenario parameters
         duration = 1.0 / 24.0
         grid_name = 'toy_points'
@@ -307,20 +329,78 @@ class PlannerTester(ABC):
         # initialize mission
         self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
-        # # execute mission
-        # self.simulation.execute()
+        # execute mission
+        self.simulation.execute()
 
-        # # print results
-        # self.simulation.print_results()
+        # print results
+        self.simulation.print_results()
 
         print('DONE')
 
     def test_multiple_sats_toy(self):
         """ Test case for multiple satellites with toy events. """
-        pass
+        # check for case toggle 
+        if not self.multiple_sat_toy: return
+
+        # setup scenario parameters
+        duration = 1.0 / 24.0
+        grid_name = 'toy_points'
+        scenario_name = f'multiple_sat_toy_scenario-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_events'
+        mission_name = 'toy_missions'
+
+        # SAT1 : announcer satellite with wide swath instrument
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_tir'
+        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['planner'] = self.toy_planner_config()
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['science'] = self.setup_science_config('toy_events')
+
+        # SAT2 : reactive satellite with narrow swath instrument
+        reactive_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        reactive_spacecraft['@id'] = 'sat1_vnir'
+        reactive_spacecraft['name'] = 'SAT1'
+        reactive_spacecraft['planner'] = self.toy_planner_config()
+        reactive_spacecraft['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        reactive_spacecraft['orbitState']['state']['inc'] = 0.0
+        reactive_spacecraft['orbitState']['state']['ta'] = announcer_spacecraft['orbitState']['state']['ta'] - 2.0 # phase offset by 2 degrees
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                       reactive_spacecraft
+                                                    ]
+                                                   )
+
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print('DONE')
 
     def test_single_sat_lakes(self):
         """ Test case for a single satellite in a lake-monitoring scenario. """
+        # check for case toggle 
+        if not self.single_sat_lakes: return
+
         # setup scenario parameters
         duration = 2.0 / 24.0
         grid_name = 'lake_event_points'
@@ -359,6 +439,8 @@ class PlannerTester(ABC):
 
     def test_multiple_sats_lakes(self):
         """ Test case for multiple satellites in a lake-monitoring scenario. """
+        # check for case toggle 
+        if not self.multiple_sat_lakes: return
         
         # setup scenario parameters
         duration = 2.0 / 24.0
