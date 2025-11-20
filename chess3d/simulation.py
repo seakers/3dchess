@@ -763,7 +763,7 @@ class Simulation:
                                 and abs(lat - lat_req) < 1e-3 
                                 and abs(lon - lon_req) < 1e-3
                                 and event_type == detected_event_type
-                            ] if event_detections is not None else []
+                            ] # if event_detections is not None else []
         matching_detections.sort(key= lambda a : a[5])
 
         # TODO find measurement requests that match this event

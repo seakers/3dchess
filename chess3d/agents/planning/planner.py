@@ -505,6 +505,10 @@ class AbstractPlanner(ABC):
 
         # include additional observation information 
         for loc,obs in observation_performance_metrics.items():
+            if obs_histories[loc].n_obs > 0:
+                x = 1 # dummy line for breakpoint
+            
+            # update observation information
             obs.update({ 
                 "location" : [loc],
                 "t_start" : t_img,

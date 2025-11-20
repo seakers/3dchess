@@ -9,8 +9,8 @@
                     "weight": 1,
                     "requirements" : [
                         {
-                            "attribute": "horizontal_spatial_resolution",
                             "requirement_type": "continuous",
+                            "attribute": "horizontal_spatial_resolution",
                             "thresholds": [10, 30, 100],
                             "scores": [1.0, 0.7, 0.1]
                         },
@@ -24,6 +24,18 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["VNIR hyper", "TIR"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [60, 100, 1000],
+                            "scores": [0.0, 0.7, 1.0]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "n_observations",
+                            "strategy" : "exp_saturation",
+                            "saturation_rate" : 0.5
                         }
                     ]
                 },
@@ -49,6 +61,18 @@
                             "requirement_type": "capability",
                             "attribute": "instrument",
                             "valid_values": ["VNIR hyper", "TIR"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [60, 100, 1000],
+                            "scores": [0.0, 0.7, 1.0]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "n_observations",
+                            "strategy" : "exp_saturation",
+                            "saturation_rate" : 0.5
                         }
                     ],
                     "event_type" : "algal bloom"

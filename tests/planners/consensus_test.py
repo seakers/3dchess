@@ -23,7 +23,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             },
             "replanner": {
                 "@type": "consensus",
-                "model": "heuristic_insertion",
+                "model": "earliest_access",
                 "replanThreshold": 1,
                 "debug": "False"
             }

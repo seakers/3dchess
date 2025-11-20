@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from tqdm import tqdm
 
 import logging
@@ -46,6 +46,8 @@ class ConsensusReplanner(AbstractReactivePlanner):
         assert isinstance(replan_threshold, int) and replan_threshold > 0, "Replan threshold must be positive integer."
 
         # initialize results
+        self.bundle : list[GenericObservationTask] = list()
+        self.path : list[GenericObservationTask] = list()
         self.results : Dict[GenericObservationTask, List[Bid]] = defaultdict(list)
         self.preplan : PeriodicPlan = None
         self.plan : Plan = None
@@ -173,6 +175,63 @@ class ConsensusReplanner(AbstractReactivePlanner):
                       observation_history : ObservationHistory,
                     ) -> Plan:               
     
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        # self.log_results('PRE-PLANNING PHASE', state, self.results)
+        # -------------------------------
+
+        # update bundle
+        new_bundle, new_path = self.bundle_building_phase(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
+        
+        # update results
+        # TODO 
+
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        # self.log_results('PLANNING PHASE', state, self.results)
+        # print(f'bundle:')
+        # for req, subtask_index, bid in self.bundle:
+        #     req : MeasurementRequest
+        #     bid : Bid
+        #     req_id_short = req.id.split('-')[0]
+        #     print(f'\t{req_id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
+        # print('')
+        # -------------------------------
+    
+        return ReactivePlan.from_periodic_plan(current_plan, t=state.t) # Placeholder implementation; no changes to plan
+
+        # schedule observations from bids
+        observations : list = self._schedule_observations(state, specs, self.bundle, orbitdata)
+
+        # generate maneuver and travel actions from observations
+        maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
+
+        # schedule broadcasts
+        broadcasts : list = self._schedule_broadcasts(state, current_plan, observation_history, orbitdata)       
+
+        # generate wait actions 
+        waits : list = self._schedule_waits(state)
+        
+        # compile and generate plan
+        self.plan = ReactivePlan(maneuvers, waits, observations, broadcasts, t=state.t, t_next=self.preplan.t_next)
+
+        # clear new urgent tasks
+        self.new_urgent_tasks = set()
+
+        return self.plan.copy()
+
+
+    
+    def bundle_building_phase(self,
+                       state : SimulationAgentState,
+                       specs : object,
+                       current_plan : Plan,
+                       clock_config : ClockConfig,
+                       orbitdata : OrbitData,
+                       mission : Mission,
+                       observation_history : ObservationHistory
+                    ) -> tuple:
+        
         # compile instrument field of view specifications   
         cross_track_fovs : dict = self._collect_fov_specs(specs)
 
@@ -182,37 +241,32 @@ class ConsensusReplanner(AbstractReactivePlanner):
         # Outline planning horizon interval
         planning_horizon = Interval(state.t, self.preplan.t_next)
 
-        # get only available tasks
+        # get only available tasks from existing plan and urgent tasks
         available_tasks : list[GenericObservationTask] = self.get_available_tasks(planning_horizon)
         
-        # calculate coverage opportunities for tasks
+        # calculate coverage opportunities for available tasks
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 
         # create schedulable tasks from known tasks and future access opportunities
         schedulable_tasks : list[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
-        # filter for only schedulable tasks with urgent parent tasks
+        # filter for only schedulable tasks with urgent parent tasks        
         schedulable_urgent_tasks : list[SpecificObservationTask] = [task for task in schedulable_tasks 
                                                                     if any(parent_task in self.known_urgent_tasks 
                                                                             for parent_task in task.parent_tasks)]
 
         # generate new plan according to selected model
         if self.model == self.EARLIEST_ACCESS:
-            foo = self.earliest_access_planner(state, specs, current_plan, clock_config, orbitdata, mission, tasks, observation_history)
+            return self.earliest_access_bundle_builder(state, specs, current_plan, schedulable_urgent_tasks, orbitdata, mission, observation_history)
         elif self.model == self.HEURISTIC_INSERTION:
-            pass
+            raise NotImplementedError("Heuristic-insertion consensus planner not yet implemented.")
         elif self.model == self.DYNAMIC_PROGRAMMING:
-            pass
+            raise NotImplementedError("Dynamic-programming consensus planner not yet implemented.")
         elif self.model == self.MILP:
-            pass
+            raise NotImplementedError("Mixed-integer-linear-programming consensus planner not yet implemented.")
         else:
-            raise NotImplementedError(f"Model '{self.model}' not implemented.")
-        
-        # clear new urgent tasks
-        self.new_urgent_tasks = set()
+            raise NotImplementedError(f"Model '{self.model}' not implemented.")            
 
-        return ReactivePlan.from_periodic_plan(current_plan, t=state.t) # Placeholder implementation; no changes to plan
-    
     def get_available_tasks(self, planning_horizon : Interval) -> list:
         """ Get only tasks that are available within the planning horizon. """
         # get tasks present in current preplan
@@ -223,14 +277,15 @@ class ConsensusReplanner(AbstractReactivePlanner):
                          }
 
         # get urgent tasks that are available within planning horizon
-        available_tasks = {task 
+        urgent_tasks = {task 
                            for task in self.known_urgent_tasks 
                             if task.availability.overlaps(planning_horizon)}
         
-        # include planned tasks
+        # merge task sets
+        available_tasks = {task for task in urgent_tasks}
         available_tasks.update(planned_tasks)
 
-        # return tasks as a list
+        # return tasks as a merged list
         return list(available_tasks)
 
     @runtime_tracker
@@ -290,20 +345,61 @@ class ConsensusReplanner(AbstractReactivePlanner):
         # return access times and grid information
         return access_opportunities
 
-    def earliest_access_planner(self,
-                                state : SimulationAgentState,
-                                specs : object,
-                                current_plan : Plan,
-                                clock_config : ClockConfig,
-                                orbitdata : OrbitData,
-                                mission : Mission,
-                                tasks : list,
-                                observation_history : ObservationHistory
-                            ) -> List:
+    def earliest_access_bundle_builder(self,
+                                       state : SimulationAgentState,
+                                       specs : object,
+                                       current_plan : Plan,
+                                       schedulable_urgent_tasks : List[SpecificObservationTask],
+                                       orbitdata : OrbitData,
+                                       mission : Mission,
+                                       observation_history : ObservationHistory
+                                    ) -> List:
+        """ 
+        Build bundle using earliest-access heuristic. 
+
+        #### Returns
+        - bundle : List[Tuple[GenericObservationTask, int, float, float]]
+            List of tuples containing (task, observation number, observation time, expected utility).
+        
+        """
         # initialized bundle
-        bundle = []
+        if isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS:
+            raise NotImplementedError("Earliest-access bundle builder initializing for new preplans not yet implemented.")
+        else:
+            bundle : List[Tuple[GenericObservationTask, int, float, float]] = \
+                 [task_tuple for task_tuple in self.bundle]
+            
+        # get current path from existing plan
+        current_path = [action
+                for action in current_plan
+                if isinstance(action, ObservationAction)]
 
         # select an observation time for each urgent task
-        t_imgs = [np.NINF for _ in self.new_urgent_tasks]
-        for urgent_task in self.new_urgent_tasks:
-            x = 1
+        for urgent_task in sorted(schedulable_urgent_tasks, key=lambda task: task.accessibility.left):
+            # Find best placement in path
+            # Option 1: Direct Insertion into existing path
+            new_path = self._direct_insertion_into_path(state, specs, current_path, urgent_task, orbitdata, mission, observation_history, bundle)
+
+            # Option 2: Right-shifting existing path to accommodate new task
+            if new_path is None:
+                new_path = self._right_shift_path_for_new_task(state, specs, current_path, urgent_task, orbitdata, mission, observation_history, bundle)
+            # Option 3: Replace conflicting tasks with new urgent task
+            if new_path is None:
+                new_path = self._replace_conflicting_tasks_with_new_task(state, specs, current_path, urgent_task, orbitdata, mission, observation_history, bundle)
+
+            # ignore new urgent task if cannot be scheduled           
+            if new_path is None: continue
+
+            # calculate expected utility of new task observation
+            x = 1    
+
+            # estimate observation number and revistit time 
+
+            # estimate expected utility of new task observation
+
+            # check if bid can be improved
+            # if yes, update bundle
+
+            # else, continue
+
+        return bundle
