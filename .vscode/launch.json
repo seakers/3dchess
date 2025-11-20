@@ -24,7 +24,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -36,7 +36,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -48,7 +48,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -60,7 +60,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -72,7 +72,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -84,19 +84,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
-            }
-        },
-        {
-            "name": "TEST: Ground Station Agent Definition",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/tests/agents/gs_test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -108,7 +96,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -120,7 +108,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -132,7 +120,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -144,7 +132,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -156,7 +144,19 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
+            }
+        },
+        {
+            "name": "TEST: Ground Station Agent Definition",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/agents/gs_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -168,7 +168,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -180,7 +180,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         {
@@ -192,7 +192,7 @@
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/chess3d"
+                "PYTHONPATH": "${workspaceRoot}"
             }
         },
         // {

@@ -5,7 +5,6 @@ import copy
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
-
 class PlannerTester(ABC):
     def setUp(self) -> None:        
         # test case toggles

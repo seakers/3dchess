@@ -5,10 +5,17 @@ import numpy as np
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
-from tester import PlannerTester
-
+from tests.planners.tester import PlannerTester
 
 class TestDealerWorker(PlannerTester, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+
+        self.single_sat_toy : bool = False
+        self.multiple_sat_toy : bool = True
+        self.single_sat_lakes : bool = False
+        self.multiple_sat_lakes : bool = True
+
     def planner_name(self) -> str:
         return "dealer-worker"
 
@@ -42,11 +49,11 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
     
     def test_single_sat_toy(self):
         # do nothing, cannot test only one sat for these planners
-        return
+        raise unittest.SkipTest("Skipping single sat test for dealer-worker planners")
 
     def test_single_sat_lakes(self):
         # do nothing, cannot test only one sat for these planners
-        return
+        raise unittest.SkipTest("Skipping single sat test for dealer-worker planners")
 
     def test_multiple_sats_toy(self):
         # setup scenario parameters

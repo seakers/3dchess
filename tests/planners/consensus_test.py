@@ -3,7 +3,7 @@ import unittest
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
-from tester import PlannerTester
+from tests.planners.tester import PlannerTester
 
 
 class TestConsensusPlanner(PlannerTester, unittest.TestCase):

@@ -951,7 +951,7 @@ class AbstractPlanner(ABC):
     def is_observation_pair_valid(self, 
                                   t_i, d_i, th_i, 
                                   t_j, d_j, th_j,
-                                  max_slew_rate):
+                                  max_slew_rate) -> bool:
         # check inputs
         assert not np.isnan(th_j) and not np.isnan(th_i) # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
 

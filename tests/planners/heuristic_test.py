@@ -1,7 +1,6 @@
 import unittest
 
-from tester import PlannerTester
-
+from tests.planners.tester import PlannerTester
 
 class TestHeuristic(PlannerTester, unittest.TestCase):
     def setUp(self):

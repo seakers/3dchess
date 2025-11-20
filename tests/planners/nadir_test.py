@@ -2,8 +2,15 @@ import unittest
 
 from tests.planners.tester import PlannerTester
 
-
 class TestNadir(PlannerTester, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+
+        self.single_sat_toy : bool = True
+        self.multiple_sat_toy : bool = False
+        self.single_sat_lakes : bool = True
+        self.multiple_sat_lakes : bool = False
+    
     def planner_name(self) -> str:
         return "nadir"
 

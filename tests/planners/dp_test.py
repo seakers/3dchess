@@ -1,8 +1,16 @@
 import unittest
 
-from tester import PlannerTester
+from tests.planners.tester import PlannerTester
 
 class TestDynamicProgramming(PlannerTester, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+
+        self.single_sat_toy : bool = True
+        self.multiple_sat_toy : bool = False
+        self.single_sat_lakes : bool = True
+        self.multiple_sat_lakes : bool = False
+    
     def planner_name(self) -> str:
         return "dynamic-programming"
 

@@ -2,7 +2,7 @@ from typing import List
 from orbitpy.util import Spacecraft
 
 from dmas.utils import runtime_tracker
-from dmas.clocks import *
+from dmas.clocks import ClockConfig
 from tqdm import tqdm
 
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
@@ -42,7 +42,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         cross_track_fovs : dict = self._collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        schedulable_tasks : list[SpecificObservationTask] = self.__sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
+        schedulable_tasks : list[SpecificObservationTask] = self._sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -66,7 +66,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
 
             # get previous and future observation actions' info
             th_prev,t_prev,d_prev,th_next,t_next,d_next \
-                = self.__get_previous_and_future_observation_info(state, task, plan_sequence, max_slew_rate)
+                = self._get_previous_and_future_observation_info(state, task, plan_sequence, max_slew_rate)
             
             # set task observation angle
             th_img = np.average((task.slew_angles.left, task.slew_angles.right))
@@ -102,7 +102,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         # return sorted by start time
         return sorted([action for _,action in plan_sequence], key=lambda a : a.t_start)
     
-    def __get_previous_and_future_observation_info(self, 
+    def _get_previous_and_future_observation_info(self, 
                                                  state : SimulationAgentState, 
                                                  task : SpecificObservationTask, 
                                                  plan_sequence : list, 
@@ -163,7 +163,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         return min(actions_next, key=lambda a: a.t_start) if actions_next else None
 
     @runtime_tracker
-    def __sort_tasks_by_heuristic(self, 
+    def _sort_tasks_by_heuristic(self, 
                                 state : SimulationAgentState, 
                                 tasks : List[SpecificObservationTask], 
                                 specs : Spacecraft, 
