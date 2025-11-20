@@ -28,9 +28,13 @@ class NadirPointingPlanner(EarliestAccessPlanner):
                             ) -> list:
         # Nadir pointing planner does not schedule maneuvers
         
-        # TODO check if state is nadir pointing throughout the simulation, if not schedule maneuvers to return to nadir pointing
         # TEMPORARY ASSERTION
         assert state.attitude[0] <= 1e-3, f'Agent `{state.agent_name}` is not nadir pointing at time {state.t}. Current attitude: {state.attitude}'
+
+        # Check if state is nadir pointing throughout the simulation
+        if state.attitude[0] > 1e-3:
+            # TODO if not schedule maneuvers to return to nadir pointing
+            raise NotImplementedError('Nadir pointing planner can only be used with nadir pointing agents. Correction to nadir pointing not yet implemented.')
 
         return []
     
