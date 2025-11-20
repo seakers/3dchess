@@ -1,3 +1,4 @@
+from typing import List
 from tqdm import tqdm
 import numpy as np
 
@@ -18,8 +19,19 @@ class NadirPointingPlanner(EarliestAccessPlanner):
     """ Only points agents in the downward direction """
     
     @runtime_tracker
-    def _schedule_maneuvers(self, *args) -> list:
+    def _schedule_maneuvers(    self, 
+                                state : SimulationAgentState, 
+                                specs : object,
+                                observations : List[ObservationAction],
+                                _ : ClockConfig,
+                                orbitdata : OrbitData = None
+                            ) -> list:
         # Nadir pointing planner does not schedule maneuvers
+        
+        # TODO check if state is nadir pointing throughout the simulation, if not schedule maneuvers to return to nadir pointing
+        # TEMPORARY ASSERTION
+        assert state.attitude[0] <= 1e-3, f'Agent `{state.agent_name}` is not nadir pointing at time {state.t}. Current attitude: {state.attitude}'
+
         return []
     
     @runtime_tracker
@@ -155,8 +167,7 @@ class NadirPointingPlanner(EarliestAccessPlanner):
                 else: # there was prior measurement
                     # use agent's current state as previous state
                     t_i = state.t                
-
-                
+               
                 # check if desired instrument is contained within the satellite's specifications
                 if observation_j.instrument_name not in instruments:
                     return False 
