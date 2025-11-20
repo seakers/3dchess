@@ -124,8 +124,7 @@ class NadirPointingPlanner(EarliestAccessPlanner):
                                   observations : list,
                                   max_slew_rate : float = None,
                                   max_torque : float = None,
-                                  specs : object = None,
-                                  cross_track_fovs : dict = None
+                                  specs : object = None
                                 ) -> bool:
         """ Checks if a given sequence of observations can be performed by a given agent """
         # return True

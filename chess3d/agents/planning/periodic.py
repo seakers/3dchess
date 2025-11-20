@@ -133,7 +133,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
 
         assert isinstance(observations, list) and all([isinstance(obs, ObservationAction) for obs in observations]), \
             f'Observation actions not generated correctly. Is of type `{type(observations)}` with elements of type `{type(observations[0])}`.'
-        assert self.is_observation_path_valid(state, observations, max_slew_rate, max_torque, specs, cross_track_fovs), \
+        assert self.is_observation_path_valid(state, observations, max_slew_rate, max_torque, specs), \
             f'Generated observation path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
 
         # schedule broadcasts to be perfomed

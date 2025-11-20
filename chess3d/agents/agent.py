@@ -61,7 +61,7 @@ class AbstractAgent(Agent):
         self.state_history : list = []
         
         # setup results folder:
-        self.results_path = os.path.join(results_path, self.get_element_name())
+        self.results_path = os.path.join(results_path, self.get_element_name().lower())
     
     """
     --------------------
