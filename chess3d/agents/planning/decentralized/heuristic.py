@@ -191,7 +191,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
                             ]
                 
         # sort tasks by heuristic value
-        sorted_data = sorted(heuristic_vals, key=lambda x: x[1:])
+        sorted_data = sorted(heuristic_vals, key=lambda x: x[1])
         
         # return sorted tasks
         return [task for task,*_ in sorted_data]
@@ -224,7 +224,6 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
         return -task_reward, -priority, -duration, t_start
     
-
     @runtime_tracker
     def _schedule_broadcasts(self, 
                              state: SimulationAgentState, 
