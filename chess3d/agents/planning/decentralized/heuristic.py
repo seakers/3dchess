@@ -219,7 +219,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         duration = task.min_duration 
 
         # calculate task reward
-        task_reward = self.estimate_task_value(task, t_start, duration, specs, cross_track_fovs, orbitdata, mission, observation_history)
+        task_reward = self.estimate_specific_task_value(task, t_start, duration, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # return to sort using: highest task reward >> highest priority >> longest duration >> earliest start time
         return -task_reward, -priority, -duration, t_start

@@ -270,7 +270,7 @@ class SingleSatMILP(AbstractPeriodicPlanner):
         task_indices = [j for j,_ in indexed_tasks]
 
         # Define constants
-        rewards = np.array([self.estimate_task_value(task, 
+        rewards = np.array([self.estimate_specific_task_value(task, 
                                                      task.accessibility.left, 
                                                      task.min_duration, 
                                                      specs, cross_track_fovs, orbitdata, 
@@ -374,7 +374,7 @@ class SingleSatMILP(AbstractPeriodicPlanner):
         task_indices = [j for j,_ in indexed_tasks]
 
         # Define constants
-        rewards = np.array([self.estimate_task_value(task, 
+        rewards = np.array([self.estimate_specific_task_value(task, 
                                                      task.accessibility.left, 
                                                      task.min_duration, 
                                                      specs, cross_track_fovs, orbitdata, 

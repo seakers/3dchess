@@ -1,9 +1,10 @@
+import numpy as np
 import pandas as pd
 from chess3d.orbitdata import OrbitData
 
 
 class ObservationTracker:
-    def __init__(self, lat : float, lon : float, grid_index : int, gp_index : int, t_last : str = -1, n_obs : int = 0, latest_observation : dict = None):
+    def __init__(self, lat : float, lon : float, grid_index : int, gp_index : int, t_last : float = np.NINF, n_obs : int = 0, latest_observation : dict = None):
         """ 
         Class to track the observation tasks and their history.
         """
@@ -28,7 +29,7 @@ class ObservationTracker:
         self.t_last = t_last
         self.n_obs = n_obs
         self.latest_observation = latest_observation
-        self.observations : list[dict] = []
+        self.observations : list[dict] = [latest_observation] if latest_observation is not None else []
     
     def update(self, observation : dict) -> None:
         """ Update the observation tracker with a new observation."""        

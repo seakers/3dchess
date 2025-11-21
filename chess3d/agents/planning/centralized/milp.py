@@ -383,7 +383,7 @@ class DealerMILPPlanner(DealerPlanner):
                                        observation_history: ObservationHistory) -> list:
         """ Estimate static task rewards for each client and task based on parent tasks """
         
-        return [[self.estimate_task_value(task, 
+        return [[self.estimate_specific_task_value(task, 
                                                       task.accessibility.left, 
                                                       task.min_duration, 
                                                       self.client_specs[client], 
@@ -500,7 +500,7 @@ class DealerMILPPlanner(DealerPlanner):
                                        observation_history: ObservationHistory) -> List[List[List[float]]]:
         """ Estimate linear task rewards for each client and task based on parent tasks """
 
-        return [[[self.estimate_task_value(task, 
+        return [[[self.estimate_specific_task_value(task, 
                                                       task.accessibility.left, 
                                                       task.min_duration, 
                                                       self.client_specs[client], 
@@ -508,7 +508,7 @@ class DealerMILPPlanner(DealerPlanner):
                                                       self.client_orbitdata[client], 
                                                       self.client_missions[client], 
                                                      observation_history),
-                            self.estimate_task_value(task, 
+                            self.estimate_specific_task_value(task, 
                                                       task.accessibility.right, 
                                                       task.min_duration, 
                                                       self.client_specs[client], 

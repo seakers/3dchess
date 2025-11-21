@@ -153,7 +153,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                                                                         slew_times)
 
         # compute rewards for all task-time pairs
-        rewards : Dict[tuple, float] = {(j,pair_j): self.estimate_task_value(schedulable_tasks[j], 
+        rewards : Dict[tuple, float] = {(j,pair_j): self.estimate_specific_task_value(schedulable_tasks[j], 
                                                             pair_j[1], 
                                                             d_imgs[pair_j[0]], 
                                                             specs, 
@@ -414,7 +414,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                     continue
 
                 # estimate task value of task j if done after i
-                reward_j = self.estimate_task_value(schedulable_tasks[j], 
+                reward_j = self.estimate_specific_task_value(schedulable_tasks[j], 
                                                     t_img_j, 
                                                     d_imgs[j], 
                                                     specs, 
