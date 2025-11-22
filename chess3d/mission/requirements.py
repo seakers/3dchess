@@ -498,17 +498,6 @@ class ReobservationStrategyRequirement(TemporalRequirement):
     GAUSSIAN_THRESHOLD = 'gaussian_threshold'
     TRIANGLE_THRESHOLD = 'triangle_threshold'
 
-    # RO = {
-    #     # Reobservation Strategies
-    #     "linear_increase" : lambda n_obs : n_obs,
-    #     "linear_decrease" : lambda n_obs : max((4 - n_obs)/4, 0),
-    #     "decaying_increase" : lambda n_obs : np.log(n_obs) + 1,
-    #     "decaying_decrease" : lambda n_obs : np.exp(1 - n_obs),
-    #     "immediate_decrease" : lambda n_obs : 0.0 if n_obs > 0 else 1.0,
-    #     "no_change" : lambda _ : 1.0,
-    #     # "monitoring" : monitoring,
-    # }
-
     def __init__(self, strategy : str, id : str = None, **_):
         """
         ### Reobservation Strategy Requirement
@@ -552,12 +541,14 @@ class ReobservationStrategyRequirement(TemporalRequirement):
             return LogThresholdReobservationsStrategy.from_dict(dict)
         elif strategy == cls.EXP_DECAY:
             return ExpDecayReobservationStrategy.from_dict(dict)
-        # elif strategy == cls.STEP_THRESHOLD:
-        #     TODO
-        #     return StepThresholdReobservationsStrategy.from_dict(dict)
-        # elif strategy == cls.LINEAR_THRESHOLD:
-        #     TODO
-        #     return LinearThresholdReobservationsStrategy.from_dict(dict)
+        elif strategy == cls.STEP_THRESHOLD:
+            # TODO
+            raise NotImplementedError("StepThresholdReobservationsStrategy is not yet implemented.")
+            # return StepThresholdReobservationsStrategy.from_dict(dict)
+        elif strategy == cls.LINEAR_THRESHOLD:
+            # TODO
+            raise NotImplementedError("LinearThresholdReobservationsStrategy is not yet implemented.")
+            # return LinearThresholdReobservationsStrategy.from_dict(dict)
         elif strategy == cls.GAUSSIAN_THRESHOLD:
             return GaussianThresholdReobservationsStrategy.from_dict(dict)
         elif strategy == cls.TRIANGLE_THRESHOLD:

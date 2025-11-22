@@ -28,8 +28,8 @@
                         {
                             "requirement_type": "temporal",
                             "attribute": "revisit_time",
-                            "thresholds": [60, 100, 1000],
-                            "scores": [0.0, 0.7, 1.0]
+                            "thresholds": [30, 100, 1000],
+                            "scores": [0.1, 0.7, 1.0]
                         },
                         {
                             "requirement_type": "temporal",

@@ -12,7 +12,7 @@ from dmas.clocks import ClockConfig
 from chess3d.agents.actions import FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.planning.tasks import GenericObservationTask, EventObservationTask, SpecificObservationTask
-from chess3d.agents.planning.tracker import ObservationHistory
+from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
 from chess3d.agents.planning.decentralized.consensus.bids import AsynchronousBid, Bid
 from chess3d.agents.science.reward import *
@@ -373,22 +373,27 @@ class ConsensusReplanner(AbstractReactivePlanner):
 
         # Find best placement in path
         for urgent_task in sorted(schedulable_urgent_tasks, key=lambda task: task.accessibility.left):
+            # TODO check if parent tasks have already been considered in bundle?
+            
             # Option 1: Direct Insertion into existing path
             new_path, t_img = self._direct_insertion_into_path(current_path, urgent_task, max_slew_rate)
 
-            # Option 2: Right-shifting existing path to accommodate new task
-            if new_path is None:
-                new_path, t_img = self._right_shift_path_for_new_task(state, specs, current_path, urgent_task, max_slew_rate, max_torque, orbitdata, mission, observation_history)
+            # TODO
+            # # Option 2: Right-shifting existing path to accommodate new task
+            # if new_path is None:
+            #     new_path, t_img = self._right_shift_path_for_new_task(state, specs, current_path, urgent_task, max_slew_rate, max_torque, orbitdata, mission, observation_history)
             
-            # Option 3: Replace conflicting tasks with new urgent task
-            if new_path is None:
-                new_path, t_img = self._replace_conflicting_tasks_with_new_task(state, specs, current_path, urgent_task, max_slew_rate, max_torque, orbitdata, mission, observation_history)
+            # TODO
+            # # Option 3: Replace conflicting tasks with new urgent task
+            # if new_path is None:
+            #     new_path, t_img = self._replace_conflicting_tasks_with_new_task(state, specs, current_path, urgent_task, max_slew_rate, max_torque, orbitdata, mission, observation_history)
+                
             # if no feasible path was found, ignore new urgent task
             if new_path is None: continue
             
             # calculate bids for new path
-            new_path_value : float = self._calculate_path_value(specs, new_path, observation_history, orbitdata, mission)
-            old_path_value : float = self._calculate_path_value(specs, current_path, observation_history, orbitdata, mission)
+            new_path_value : float = self._calculate_path_value(specs, cross_track_fovs, new_path, observation_history, orbitdata, mission)
+            old_path_value : float = self._calculate_path_value(specs, cross_track_fovs, current_path, observation_history, orbitdata, mission)
             bid_value : float = new_path_value - old_path_value
 
             # if bid is negative do NOT add to bundle
@@ -401,13 +406,46 @@ class ConsensusReplanner(AbstractReactivePlanner):
             ## create bid for each parent task
             new_bids = []
             for parent_task in parent_tasks:
-                # create new bid
-                bid = AsynchronousBid(parent_task, state.agent_name, n_img, bid_value, state.agent_name, bid_value, t_img, state.t, urgent_task.instrument_name)
                 
-                # if bid beats existing bids for parent task, add to `new_bids`
-                new_bids.append((parent_task, bid))
-            
-            # update bundle and current path                    
+                # count prevous obsevations already in history
+                n_obs = 0
+                for *_,grid_idx,gp_idx in parent_task.location:
+                    # get observation tracker for location
+                    obs_tracker : ObservationTracker = observation_history.get_observation_history(grid_idx,gp_idx)
+
+                    # update previous observation counts
+                    n_obs += obs_tracker.n_obs if obs_tracker is not None else 0
+                
+                # count previous observations along current path
+                for action in current_path:
+                    if action.t_start < t_img and action.task != urgent_task and parent_task in action.task.parent_tasks:
+                        n_obs += 1
+                
+                # create new bid
+                proposed_bid = AsynchronousBid(parent_task, state.agent_name, n_obs, bid_value, state.agent_name, bid_value, t_img, state.t, urgent_task.instrument_name)
+                
+                # compare to existing bids and add to new bids if better
+                if parent_task not in self.results:
+                    # no bids exist for parent task yet; add to `new_bids`
+                    new_bids.append((parent_task, urgent_task, proposed_bid))
+
+                elif len(self.results[parent_task]) <= n_obs:
+                    # bid for this observation number exists; add to `new_bids` 
+                    new_bids.append((parent_task, urgent_task, proposed_bid))
+                else:
+                    # compare to existing bid for this observation number
+                    existing_bid = self.results[parent_task][n_obs]
+                    if proposed_bid > existing_bid:
+                        new_bids.append((parent_task, urgent_task, proposed_bid))
+                
+            # check if new bids were generated
+            if new_bids:
+                # bids are only generated if outbidting existing bids
+                # add to bundle
+                bundle.extend([(parent_task, urgent_task, bid) for parent_task, urgent_task, bid in new_bids])
+
+                # update current path                    
+                current_path = [action for action in new_path]
 
         return bundle
     
@@ -420,26 +458,51 @@ class ConsensusReplanner(AbstractReactivePlanner):
                               mission : Mission
                             ) -> float:
         """ Calculate total expected value of observation path. """
+        # initialize path value
         total_value = 0.0
 
-        for i_obs,obs in enumerate(path):
-            # get all previous observations with the same parent tasks
+        # initialize observation counters and previous observation time trackers
+        # for tasks to be observed in the given path
+        n_obs_in_path = defaultdict(int)
+        t_prev_in_path = defaultdict(lambda: np.NINF)
 
-            # calculate number of previous observations for this task
+        # iterate through observations in path
+        for obs in path:           
+            # initialize counters for every parent task
+            n_obs = defaultdict(int)
+            t_prev = defaultdict(lambda: np.NINF)
 
-            # estimate previous observation time
+            # compile previous observation counts and times for parent tasks
+            for parent_task in obs.task.parent_tasks:
+                # count previous observations and times along path
+                n_obs[parent_task] += n_obs_in_path[parent_task]
+                t_prev[parent_task] = t_prev_in_path[parent_task]
+                
+                # count prevous obsevations already in history
+                for *_,grid_idx,gp_idx in parent_task.location:
+                    # get observation tracker for location
+                    obs_tracker : ObservationTracker = observation_history.get_observation_history(grid_idx,gp_idx)
 
+                    # update previous observation counts
+                    n_obs[parent_task] += obs_tracker.n_obs if obs_tracker is not None else 0
+                    t_prev[parent_task] = max(t_prev[parent_task], obs_tracker.t_last if obs_tracker is not None else np.NINF)
+            
             # calculate expected value of observation
             obs_value = self.estimate_specific_task_value(obs.task,
                                                  obs.t_start,
                                                  obs.task.min_duration,
                                                  specs,
-                                                 cross_track_fovs[obs.instrument_name],
+                                                 cross_track_fovs,
                                                  orbitdata,
                                                  mission,
                                                  observation_history,
                                                  n_obs,
                                                  t_prev)
+
+            # increment observation counter for task
+            for parent_task in obs.task.parent_tasks:
+                n_obs_in_path[parent_task] += 1
+                t_prev_in_path[parent_task] = obs.t_end
 
             # accumulate total value
             total_value += obs_value
@@ -541,7 +604,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
         new_path = sorted(new_path, key=lambda action: action.t_start)
         
         # return new path 
-        return new_path
+        return new_path, t_img
 
     def _right_shift_path_for_new_task(self,
                                         current_path : List[ObservationAction],
@@ -549,6 +612,9 @@ class ConsensusReplanner(AbstractReactivePlanner):
                                         max_slew_rate : float
                                     ) -> List[ObservationAction]:
         """ Try to right-shift existing path to accommodate new task. """
+        # TODO Requires Testing
+        raise NotImplementedError("Replace conflicting tasks with new task method not yet implemented.")
+
         # select observation loook angle for new task
         th_img = np.average([new_task.slew_angles.left, new_task.slew_angles.right])
 
@@ -561,7 +627,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
                                     key=lambda action: action.t_end,
                                     reverse=True)
 
-        i_insert = 0
+        i_insert = None
         for i_obs,prev_obs in enumerate(prev_observations):
             # check maneuver time between new task and current observation
             m_prev = abs(prev_obs.look_angle - th_img) / max_slew_rate
@@ -583,6 +649,15 @@ class ConsensusReplanner(AbstractReactivePlanner):
 
                 # stop searching
                 break
+
+        # no previous observations were found
+        if not prev_observations:
+            # set insertion index at start of path
+            i_insert = 0
+            # schedule at earliest access time
+            t_img = new_task.accessibility.left
+
+        if i_insert is None: return None, None # no time found; cannot right-shift path to accommodate new task
 
         # create new observation action
         new_observation = ObservationAction(new_task.instrument_name, th_img, t_img, new_task.min_duration, new_task)
@@ -626,7 +701,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
                 new_path.append(shifted_observation)
 
         # return new path
-        return new_path
+        return new_path, t_img
     
     def _replace_conflicting_tasks_with_new_task(self,
                                     current_path : List[ObservationAction],

@@ -428,8 +428,8 @@ class AbstractPlanner(ABC):
                                      orbitdata : OrbitData,
                                      mission : Mission,
                                      observation_history : ObservationHistory,
-                                     n_obs_in_plan : int = 0,
-                                     t_prev_in_plan : float = np.NINF 
+                                     n_obs_in_plan : Dict[GenericObservationTask,int] = defaultdict(int),
+                                     t_prev_in_plan : Dict[GenericObservationTask,int] = defaultdict(lambda: np.NINF)
                                 ) -> float:
         """ Estimates task value based on predicted observation performance. """
         # estimate measurment look angle 
@@ -437,7 +437,17 @@ class AbstractPlanner(ABC):
 
         # estimate measurement performance metrics
         task_performance_metrics : Dict[GenericObservationTask, Dict[tuple, dict]] = \
-                {parent_task : self.__estimate_task_performance_metrics(parent_task, task.instrument_name, th_img, t_img, d_img, specs, cross_track_fovs, orbitdata, observation_history, n_obs_in_plan, t_prev_in_plan)
+                {parent_task : self.__estimate_task_performance_metrics(parent_task, 
+                                                                        task.instrument_name, 
+                                                                        th_img, 
+                                                                        t_img, 
+                                                                        d_img, 
+                                                                        specs, 
+                                                                        cross_track_fovs, 
+                                                                        orbitdata, 
+                                                                        observation_history, 
+                                                                        n_obs_in_plan[parent_task], 
+                                                                        t_prev_in_plan[parent_task])
                  for parent_task in task.parent_tasks}
 
         # calculate task reward per target observed
@@ -517,6 +527,9 @@ class AbstractPlanner(ABC):
         t_last = max([obs_histories[loc].t_last for loc in observation_performance_metrics])
         t_last = max(t_last, t_prev_in_plan)
 
+        assert n_obs >= 0, "Number of observations must be non-negative."
+        assert t_last <= t_img, "Last observation time must be before the current image time."
+
         # include additional observation information 
         for loc,obs in observation_performance_metrics.items():
             if obs_histories[loc].n_obs > 0:
@@ -528,8 +541,8 @@ class AbstractPlanner(ABC):
                 "t_start" : t_img,
                 "t_end" : t_img + d_img,
                 "duration" : d_img,
-                "n_obs" : n_obs,
-                "revisit_time" : t_last,
+                "n_observations" : n_obs,
+                "revisit_time" : t_img - t_last,
                 "horizontal_spatial_resolution" : observation_performance_metrics[loc]['ground pixel cross-track resolution [m]'],
             })
 
