@@ -24,17 +24,23 @@ from chess3d.utils import Interval
 
 class ConsensusReplanner(AbstractReactivePlanner):    
     # Replanning models
-    EARLIEST_ACCESS = 'earliest_access'
-    HEURISTIC_INSERTION = 'heuristic_insertion'
-    DYNAMIC_PROGRAMMING = 'dynamic_programming'
-    MILP = 'mixed-integer_linear_programming'
-    MODELS = [EARLIEST_ACCESS, HEURISTIC_INSERTION, DYNAMIC_PROGRAMMING, MILP]
+    # NOTE break down into separate replanner classes that use this class as the parent class?
+    HEURISTIC_INSERTION = 'heuristicInsertion'
+    DYNAMIC_PROGRAMMING = 'dynamicProgramming'
+    MILP = 'mixedIntegerLinearProgramming'
+    MODELS = [HEURISTIC_INSERTION, DYNAMIC_PROGRAMMING, MILP]
+    
+    # Heuristic types for insertion model
+    EARLIEST_ACCESS = 'earliestAccess'
+    TASK_VALUE = 'taskValue'
+    HEURISTICS = [EARLIEST_ACCESS, TASK_VALUE]
 
     # Constants
     EPS = 1e-6
 
     def __init__(self, 
                  model : str = HEURISTIC_INSERTION,
+                 heuristic : str = EARLIEST_ACCESS,
                  replan_threshold : int = 1,
                  debug : bool = False,
                  logger: logging.Logger = None
@@ -43,6 +49,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
 
         # validate inputs
         assert model in self.MODELS, f"Invalid model '{model}'. Must be one of {self.MODELS}."
+        assert heuristic in self.HEURISTICS, f"Invalid heuristic '{heuristic}'. Must be one of {self.HEURISTICS}."
         assert isinstance(replan_threshold, int) and replan_threshold > 0, "Replan threshold must be positive integer."
 
         # initialize results
@@ -57,9 +64,9 @@ class ConsensusReplanner(AbstractReactivePlanner):
 
         # set parameters
         self.model = model
+        self.heuristic = heuristic
         self.replan_threshold = replan_threshold
         self.t_share = -1
-
 
     """
     ---------------------------
@@ -251,14 +258,19 @@ class ConsensusReplanner(AbstractReactivePlanner):
                                                                             for parent_task in task.parent_tasks)]
 
         # generate new plan according to selected model
-        if self.model == self.EARLIEST_ACCESS:
-            return self.earliest_access_bundle_builder(state, specs, cross_track_fovs, current_plan, schedulable_urgent_tasks, orbitdata, mission, observation_history)
-        elif self.model == self.HEURISTIC_INSERTION:
-            raise NotImplementedError("Heuristic-insertion consensus planner not yet implemented.")
+        if self.model == self.HEURISTIC_INSERTION:
+            if self.heuristic == self.EARLIEST_ACCESS:
+                return self.earliest_access_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, schedulable_urgent_tasks, orbitdata, mission, observation_history)
+            
+            elif self.heuristic == self.TASK_VALUE:
+                return self.task_value_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, schedulable_urgent_tasks, orbitdata, mission, observation_history)
+            
         elif self.model == self.DYNAMIC_PROGRAMMING:
             raise NotImplementedError("Dynamic-programming consensus planner not yet implemented.")
+        
         elif self.model == self.MILP:
             raise NotImplementedError("Mixed-integer-linear-programming consensus planner not yet implemented.")
+        
         else:
             raise NotImplementedError(f"Model '{self.model}' not implemented.")            
 
@@ -340,7 +352,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
         # return access times and grid information
         return access_opportunities
 
-    def earliest_access_bundle_builder(self,
+    def earliest_access_heuristic_bundle_builder(self,
                                        state : SimulationAgentState,
                                        specs : object,
                                        cross_track_fovs : dict,
@@ -352,6 +364,70 @@ class ConsensusReplanner(AbstractReactivePlanner):
                                     ) -> List:
         """ 
         Build bundle using earliest-access heuristic. 
+
+        #### Returns
+        - bundle : List[Tuple[GenericObservationTask, int, float, float]]
+            List of tuples containing (task, observation number, observation time, expected utility).
+        
+        """ 
+        # sort urgent tasks by earliest access time
+        sorted_schedulable_urgent_tasks = sorted(schedulable_urgent_tasks, key=lambda task: task.accessibility.left)
+    
+        # build bundle using heuristic insertion method
+        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_schedulable_urgent_tasks, orbitdata, mission, observation_history, heuristic_evaluator=lambda task: task.accessibility.left)
+
+    def task_value_heuristic_bundle_builder(self,
+                                       state : SimulationAgentState,
+                                       specs : object,
+                                       cross_track_fovs : dict,
+                                       current_plan : Plan,
+                                       schedulable_urgent_tasks : List[SpecificObservationTask],
+                                       orbitdata : OrbitData,
+                                       mission : Mission,
+                                       observation_history : ObservationHistory
+                                    ) -> List:
+        """ 
+        Build bundle using task-value as main heuristic for order of task addition in bundle building process. 
+         Considers the value of performing the task in isolation. Does not take into account any possible changes 
+         in value due to in-schedule interactions.
+
+        #### Returns
+        - bundle : List[Tuple[GenericObservationTask, int, float, float]]
+            List of tuples containing (task, observation number, observation time, expected utility).
+        
+        """ 
+        # sort urgent tasks by expected task value
+        task_values = [(task, self.estimate_specific_task_value(task,
+                                                               task.accessibility.left,
+                                                               task.min_duration,
+                                                               specs,
+                                                               cross_track_fovs,
+                                                               orbitdata,
+                                                               mission,
+                                                               observation_history)) for task in schedulable_urgent_tasks]
+        sorted_schedulable_urgent_tasks = [task for task, _ in sorted(task_values, key=lambda item: item[1], reverse=True)]
+    
+        # build bundle using heuristic insertion method
+        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_schedulable_urgent_tasks, orbitdata, mission, observation_history)
+
+    def _is_task_mutually_exclusive_with_path(self, task : SpecificObservationTask, path : List[ObservationAction]):
+        """ Check if task is mutually exclusive with any observations in the given path. """
+        return any([task.is_mutually_exclusive(action.task) for action in path])
+
+    def __heuristic_insertion_bundle_builder(self,
+                                       state : SimulationAgentState,
+                                       specs : object,
+                                       cross_track_fovs : dict,
+                                       current_plan : Plan,
+                                       sorted_schedulable_urgent_tasks : List[SpecificObservationTask],
+                                       orbitdata : OrbitData,
+                                       mission : Mission,
+                                       observation_history : ObservationHistory
+                                    ) -> List:
+        """ 
+        Build bundle using a given heuristic. Attempts to insert tasks into existing path, right-shift existing tasks to accommodate for new 
+         tasks or replaces tasks in the current plan if it leads to a feasible plan that can increase overall plan utility.  Tasks are added 
+         according to heuristic evaluator. 
 
         #### Returns
         - bundle : List[Tuple[GenericObservationTask, int, float, float]]
@@ -372,16 +448,19 @@ class ConsensusReplanner(AbstractReactivePlanner):
                                    key=lambda action: action.t_start)
 
         # Find best placement in path
-        for urgent_task in sorted(schedulable_urgent_tasks, key=lambda task: task.accessibility.left):
+        for urgent_task in tqdm(sorted_schedulable_urgent_tasks, desc=f'{state.agent_name}-REPLANNER: Building bundle', leave=False):
             # TODO check if parent tasks have already been considered in bundle?
+
+            # check if task is mutually exclusive with other observations in the plan
+            if self._is_task_mutually_exclusive_with_path(urgent_task, current_path): 
+                continue
             
             # Option 1: Direct Insertion into existing path
-            new_path, t_img = self._direct_insertion_into_path(current_path, urgent_task, max_slew_rate)
+            new_path, t_img = self._direct_insertion_into_path(state, current_path, urgent_task, max_slew_rate)
 
-            # TODO
-            # # Option 2: Right-shifting existing path to accommodate new task
-            # if new_path is None:
-            #     new_path, t_img = self._right_shift_path_for_new_task(state, specs, current_path, urgent_task, max_slew_rate, max_torque, orbitdata, mission, observation_history)
+            # Option 2: Right-shifting existing path to accommodate new task
+            if new_path is None:
+                new_path, t_img = self._right_shift_path_for_new_task(state, specs, current_path, urgent_task, max_slew_rate, max_torque, orbitdata, mission, observation_history)
             
             # TODO
             # # Option 3: Replace conflicting tasks with new urgent task
@@ -389,7 +468,8 @@ class ConsensusReplanner(AbstractReactivePlanner):
             #     new_path, t_img = self._replace_conflicting_tasks_with_new_task(state, specs, current_path, urgent_task, max_slew_rate, max_torque, orbitdata, mission, observation_history)
                 
             # if no feasible path was found, ignore new urgent task
-            if new_path is None: continue
+            if new_path is None: 
+                continue
             
             # calculate bids for new path
             new_path_value : float = self._calculate_path_value(specs, cross_track_fovs, new_path, observation_history, orbitdata, mission)
@@ -513,6 +593,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
     BUNDLE-BUILDING PHASE - Path Insertion Methods
     """
     def _direct_insertion_into_path(self,
+                                    state : SimulationAgentState,
                                     current_path : List[ObservationAction],
                                     new_task : SpecificObservationTask,
                                     max_slew_rate : float
@@ -546,14 +627,11 @@ class ConsensusReplanner(AbstractReactivePlanner):
         conflicting_observations = sorted([obs for obs in conflicting_observations 
                                            if obs is not None], key=lambda obs: obs.t_start)
 
+        # set current state as a dummy previous observation
+        obs_prev = ObservationAction(new_task.instrument_name,  state.attitude[0], state.t)
+
         # check if gaps between observations can accommodate new task
-        obs_prev = None
-        for obs_next in conflicting_observations:
-            # set previous observation
-            if obs_prev is None: 
-                obs_prev = obs_next
-                continue
-            
+        for obs_next in conflicting_observations: 
             # check maneuver time between new task and current observations
             m_prev = abs(obs_prev.look_angle - th_img) / max_slew_rate
             m_next = abs(obs_next.look_angle - th_img) / max_slew_rate        
@@ -586,6 +664,9 @@ class ConsensusReplanner(AbstractReactivePlanner):
             # if feasible time found, break
             if earliest_is_feasible or latest_is_feasible: break    
 
+            # else; update previous observation
+            obs_prev = obs_next
+
         # no conflicting observations were found
         if not conflicting_observations:
             # schedule at earliest access time
@@ -613,51 +694,54 @@ class ConsensusReplanner(AbstractReactivePlanner):
                                     ) -> List[ObservationAction]:
         """ Try to right-shift existing path to accommodate new task. """
         # TODO Requires Testing
-        raise NotImplementedError("Replace conflicting tasks with new task method not yet implemented.")
+        # raise NotImplementedError("Replace conflicting tasks with new task method not yet implemented.")
 
-        # select observation loook angle for new task
+        # check if path is empty
+        assert len(current_path) > 0, "Current path is empty; cannot right-shift path for new task."
+        # check if path is sorted by start time
+        assert all(current_path[i].t_start <= current_path[i+1].t_start for i in range(len(current_path)-1)), "Current path is not sorted by start time."
+
+        # find current path observations taht occurr during the new task's accessibility
+        conflicting_observations = [(path_idx,action) for path_idx,action in enumerate(current_path)
+                                    if action.t_start in new_task.accessibility
+                                    or action.t_end in new_task.accessibility
+                                    or (action.t_start <= new_task.accessibility.left and action.t_end >= new_task)
+                                ]
+
+        # select observation look angle for new task
         th_img = np.average([new_task.slew_angles.left, new_task.slew_angles.right])
 
-        # initialize feasible observation time
-        t_img = None 
+        # initialize feasible path insertion index and observation time
+        i_insert, t_img = None, None
 
-        # find previous observations before new task accessibility
-        prev_observations = sorted([action for action in current_path
-                                    if action.t_end <= (new_task.accessibility.right - new_task.min_duration)],
-                                    key=lambda action: action.t_end,
-                                    reverse=True)
-
-        i_insert = None
-        for i_obs,prev_obs in enumerate(prev_observations):
+        # iterate through previous observations to find insertion point
+        for i_obs,prev_obs in conflicting_observations:
             # check maneuver time between new task and current observation
             m_prev = abs(prev_obs.look_angle - th_img) / max_slew_rate
 
-            # get earliest feasible observation time
+            # calculate earliest feasible observation time
             t_earliest = max(new_task.accessibility.left, prev_obs.t_end + m_prev)
 
-            # check if feasible observation time exists
+            # calculate observation feasibility
             ## 1) must be able to maneuver from previous observation to new task
             ## 2) must fit within new task accessibility window
             is_feasible = (prev_obs.t_end + m_prev <= t_earliest
                            and new_task.accessibility.left <= t_earliest
                            and t_earliest + new_task.min_duration <= new_task.accessibility.right)
-            if is_feasible:     
-                # set insertion index after current observation
-                i_insert = len(prev_observations) - i_obs
-                # choose earliest feasible time
+            
+            # check feasibility
+            if is_feasible:
+                # update insertion index to next location
+                i_insert = i_obs + 1
+                # update observation time
                 t_img = t_earliest
-
+                
+            else:
                 # stop searching
                 break
-
-        # no previous observations were found
-        if not prev_observations:
-            # set insertion index at start of path
-            i_insert = 0
-            # schedule at earliest access time
-            t_img = new_task.accessibility.left
-
-        if i_insert is None: return None, None # no time found; cannot right-shift path to accommodate new task
+        
+        # check if insertion index was found
+        if i_insert is None: return None, None # no insertion point found; cannot right-shift path for new task
 
         # create new observation action
         new_observation = ObservationAction(new_task.instrument_name, th_img, t_img, new_task.min_duration, new_task)
@@ -667,7 +751,8 @@ class ConsensusReplanner(AbstractReactivePlanner):
         new_path.append(new_observation)
 
         # right-shift remaining observations
-        for i_curr,obs_curr in enumerate(current_path[i_insert:]):
+        task_to_shift = [action for action in current_path[i_insert:]]
+        for i_curr,obs_curr in enumerate(task_to_shift):
             # check previous observation in path
             prev_obs = new_path[-1]
 
@@ -684,22 +769,20 @@ class ConsensusReplanner(AbstractReactivePlanner):
 
             # check of new observation time is earlier the or the same as original
             if t_earliest < obs_curr.t_start or abs(t_earliest - obs_curr.t_start) <= self.EPS:
-                # new task starts earlier, do not modify remaining plan
-                new_path.extend(current_path[i_insert + i_curr:])
+                # new task starts earlier, do not modify remaining plan and add to new path
+                new_path.extend(task_to_shift[i_curr:])
                 break
 
-            # if later start time and not feasible, do not add to new path
-            elif not is_feasible: 
-                continue
-                
-            # else, add shifted observation to new path
-            else:
+            # else if new observation time is feasible, add shifted observation to new path
+            elif is_feasible: 
                 # create shifted observation action
                 shifted_observation = ObservationAction(obs_curr.instrument_name, obs_curr.look_angle, t_earliest, obs_curr.task.min_duration, obs_curr.task)
 
                 # add shifted observation to new path
                 new_path.append(shifted_observation)
-
+                
+            # else, task needs a later start time but is not feasible; do not add to new path
+            
         # return new path
         return new_path, t_img
     

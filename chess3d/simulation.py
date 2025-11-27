@@ -1715,10 +1715,11 @@ class SimulationElementFactory:
             debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
             
             if replanner_type.lower() in ['consensus', 'cbba']:
-                model = replanner_dict.get('model', 'earliest_access').lower()
+                model = replanner_dict.get('model', 'heuristicInsertion')
+                heuristic = replanner_dict.get('heuristic', 'earliestAccess')
                 replan_threshold = replanner_dict.get('replanThreshold', 1)
 
-                replanner = ConsensusReplanner(model=model, replan_threshold=replan_threshold, debug=debug, logger=logger)
+                replanner = ConsensusReplanner(model=model, heuristic=heuristic, replan_threshold=replan_threshold, debug=debug, logger=logger)
             
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
