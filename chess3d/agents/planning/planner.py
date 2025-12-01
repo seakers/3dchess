@@ -813,8 +813,8 @@ class AbstractPlanner(ABC):
     def is_maneuver_path_valid(self, 
                                state : SimulationAgentState, 
                                specs : object, 
-                               observations : list, 
-                               maneuvers : list,
+                               observations : List[ObservationAction], 
+                               maneuvers : List[ManeuverAction],
                                max_slew_rate : float,
                                cross_track_fovs : dict
                                ) -> bool:

@@ -302,7 +302,7 @@ class Simulation:
         event_detections = None
         for agent in self.agents:
             _,agent_name = agent.name.split('/')
-            events_detected_path = os.path.join(self.results_path, agent_name, 'events_detected.csv')
+            events_detected_path = os.path.join(self.results_path, agent_name.lower(), 'events_detected.csv')
             if not os.path.isfile(events_detected_path): continue
             
             events_detected_temp = pd.read_csv(events_detected_path)

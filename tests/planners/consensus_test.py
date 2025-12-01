@@ -11,8 +11,9 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         super().setUp()
 
         # test case toggles
-        self.multiple_sat_toy = True
-        self.multiple_sat_lakes : bool = False
+        self.single_sat_toy = True
+        self.multiple_sat_toy = False
+        self.multiple_sat_lakes = False
 
     def toy_planner_config(self):
         return {

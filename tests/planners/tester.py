@@ -303,13 +303,19 @@ class PlannerTester(ABC):
         duration = 1.0 / 24.0
         grid_name = 'toy_points'
         scenario_name = f'single_sat_toy_scenario-{self.planner_name()}'
-        connectivity = 'FULL'
+        connectivity = 'LOS'
         event_name = 'toy_events'
         mission_name = 'toy_missions'
 
-        spacecraft : dict = copy.deepcopy(self.spacecraft_template)
-        spacecraft['planner'] = self.toy_planner_config()
-        spacecraft['orbitState']['state']['inc'] = 0.0
+        # SAT0 : announcer satellite with wide swath instrument
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_tir'
+        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['planner'] = self.toy_planner_config()
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['science'] = self.setup_science_config(event_name)
+        # if 'replanner' in announcer_spacecraft['planner']: announcer_spacecraft["planner"].pop('replanner') # make announcer purely preplanner
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` PLANNER TEST')
@@ -321,7 +327,9 @@ class PlannerTester(ABC):
                                                    connectivity,
                                                    event_name,
                                                    mission_name,
-                                                   spacecraft=[spacecraft]
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                    ]
                                                    )
 
 
@@ -349,7 +357,7 @@ class PlannerTester(ABC):
         event_name = 'toy_events'
         mission_name = 'toy_missions'
 
-        # SAT1 : announcer satellite with wide swath instrument
+        # SAT0 : announcer satellite with wide swath instrument
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_tir'
         announcer_spacecraft['name'] = 'SAT0'
@@ -359,7 +367,7 @@ class PlannerTester(ABC):
         announcer_spacecraft['science'] = self.setup_science_config(event_name)
         # if 'replanner' in announcer_spacecraft['planner']: announcer_spacecraft["planner"].pop('replanner') # make announcer purely preplanner
 
-        # SAT2 : reactive satellite with narrow swath instrument
+        # SAT1 : reactive satellite with narrow swath instrument
         reactive_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         reactive_spacecraft['@id'] = 'sat1_vnir'
         reactive_spacecraft['name'] = 'SAT1'
