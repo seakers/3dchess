@@ -353,7 +353,7 @@ class Bid(ABC):
         elif comp_result is self.UPDATE:
             new_bid._update_info(other, t)
         elif comp_result is self.RESET:
-            new_bid._reset(t)
+            new_bid.reset(t)
         elif comp_result is self.LEAVE:
             new_bid._leave(t)
         elif comp_result is self.COMPLETED:
@@ -388,10 +388,13 @@ class Bid(ABC):
         self.t_stamp = t
         self.performed = other.performed if not self.performed else True # Check if this hold true for all values
 
-    def _reset(self, t_update) -> None:
+    def reset(self, t_update : float) -> None:
         """
         Resets the values of this bid while keeping track of lates update time
         """
+        assert isinstance(t_update, (float, int)), f'`t_update` must be of type `float` or `int`, got `{type(t_update)}`'
+        assert t_update >= 0, f'`t_update` must be non-negative, got `{t_update}`'
+
         self.winning_bid = 0
         self.winning_bidder = self.NONE
         self.main_measurement = self.NONE

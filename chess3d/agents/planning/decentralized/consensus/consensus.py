@@ -167,6 +167,93 @@ class ConsensusReplanner(AbstractReactivePlanner):
         # otherwise, no replanning needed
         return False 
 
+    def consensus_phase(self,
+                        state : SimulationAgentState,
+                        specs : object,
+                        current_plan : Plan,
+                        clock_config : ClockConfig,
+                        orbitdata : OrbitData,
+                        mission : Mission,
+                        observation_history : ObservationHistory
+                    ) -> None:
+        """ Perform consensus phase to update bids and bundle. """
+        # check if tasks were performed
+        # self.check_bid_completion()
+
+        # check if tasks expired
+        # self.check_task_end_time()
+
+        # compare results with incoming bids and update bundle
+        comp_changes, comp_rebroadcasts = self.update_results(state)
+
+        x = 1 # Placeholder implementation
+
+    def update_results(self,
+                       state : SimulationAgentState,
+                       ) -> Tuple[List[Bid], List[Bid]]:
+        """ Update results from incoming bids. """
+        # initialize bundle changes and rebroadcast lists
+        changes = []
+        rebroadcasts = []
+
+        # process incoming bids
+        for incoming_bid in self.bid_inbox:
+            # check bids are for new requests
+            if incoming_bid.task not in self.results:
+                # add empty bid list for new task
+                for n_obs in range(incoming_bid.n_obs+1):
+                    empty_bid = AsynchronousBid(incoming_bid.task, state.agent_name, n_obs=n_obs)
+                    self.results[incoming_bid.task].append(empty_bid)
+
+            # compare incoming bid with existing bids for the same task
+            current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
+
+            _, rebroadcast_result = current_bid.compare(incoming_bid)
+            updated_bid : Bid = current_bid.update(incoming_bid, state.t)
+            bid_changed = current_bid != updated_bid
+
+            # update results with modified bid
+            self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
+
+            # if bid was changed, add to changes list
+            if bid_changed: changes.append(updated_bid)
+
+            # if relevant changes were made, add appropriate bid to rebroadcast list
+            if (rebroadcast_result == Bid.REBROADCAST_SELF
+                or rebroadcast_result == Bid.REBROADCAST_SELF):
+                rebroadcasts.append(updated_bid)
+            elif rebroadcast_result == Bid.REBROADCAST_OTHER:
+                rebroadcasts.append(updated_bid)
+
+            # check if bundle was changed
+            outbid_index = None
+            for bid_idx,bids in enumerate(self.bundle):
+                if current_bid in bids and updated_bid.winning_bidder != state.agent_name:
+                    outbid_index = bid_idx
+                    break
+            
+            if outbid_index is not None:
+                # remove all subsequent bids
+                for bundle_index in range(outbid_index, len(self.bundle)):
+                    # remove bid from bundle
+                    current_bids = self.bundle.pop(bundle_index)
+
+                    # reset results for removed bids
+                    if bundle_index > outbid_index:
+                        # get current bid
+                        for current_bid in current_bids:
+                            # reset bid
+                            current_bid.reset(state.t)
+
+                            # assign to results
+                            self.results[current_bid.task][current_bid.n_obs] = current_bid
+
+                            # add to changes and rebroadcast lists
+                            changes.append(current_bid)
+                            rebroadcasts.append(current_bid)
+        
+        return changes, rebroadcasts
+
     """
     ---------------------------
     BUNDLE-BUILDING PHASE
