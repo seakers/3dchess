@@ -102,8 +102,8 @@ class PlannerTester(ABC):
                                 },
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
-                                    "angleHeight": 2.5, 
-                                    "angleWidth": 2.5
+                                    "angleHeight": 0.5, 
+                                    "angleWidth": 0.5
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
@@ -124,8 +124,8 @@ class PlannerTester(ABC):
                                 },
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
-                                    "angleHeight": 2.5, 
-                                    "angleWidth": 2.5
+                                    "angleHeight": 0.5, 
+                                    "angleWidth": 0.5
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
@@ -146,7 +146,7 @@ class PlannerTester(ABC):
                                 },
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
-                                    "angleHeight": 2.5, 
+                                    "angleHeight": 0.5, 
                                     "angleWidth": 20.0
                                 },
                                 "maneuver" : {
@@ -360,7 +360,7 @@ class PlannerTester(ABC):
         # SAT0 : announcer satellite with wide swath instrument
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_tir'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.toy_planner_config()
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -368,13 +368,22 @@ class PlannerTester(ABC):
         # if 'replanner' in announcer_spacecraft['planner']: announcer_spacecraft["planner"].pop('replanner') # make announcer purely preplanner
 
         # SAT1 : reactive satellite with narrow swath instrument
-        reactive_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
-        reactive_spacecraft['@id'] = 'sat1_vnir'
-        reactive_spacecraft['name'] = 'SAT1'
-        reactive_spacecraft['planner'] = self.toy_planner_config()
-        reactive_spacecraft['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
-        reactive_spacecraft['orbitState']['state']['inc'] = 0.0
-        reactive_spacecraft['orbitState']['state']['ta'] = announcer_spacecraft['orbitState']['state']['ta'] - 2.0 # phase offset by 2 degrees
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config()
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = announcer_spacecraft['orbitState']['state']['ta'] - 2.0 # phase offset by 2.0[deg]
+
+        # SAT2 : reactive satellite with narrow swath instrument and lagging behind announcer
+        ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_2['@id'] = 'sat2_vnir'
+        ractive_spacecraft_2['name'] = 'sat2'
+        ractive_spacecraft_2['planner'] = self.toy_planner_config()
+        ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_2['orbitState']['state']['ta'] = announcer_spacecraft['orbitState']['state']['ta'] - 2.5 # phase offset by 2.5[deg]
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` PLANNER TEST')
@@ -388,7 +397,8 @@ class PlannerTester(ABC):
                                                    mission_name,
                                                    spacecraft=[
                                                        announcer_spacecraft,
-                                                       reactive_spacecraft
+                                                       ractive_spacecraft_1,
+                                                    #    ractive_spacecraft_2
                                                     ]
                                                    )
 
