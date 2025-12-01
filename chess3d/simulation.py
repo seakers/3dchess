@@ -705,7 +705,7 @@ class Simulation:
         event = tuple(event) 
 
         # event format: gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
-        gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,id = event
+        gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,event_id = event
 
         # get matching objectives
         observations_reqs = set()
@@ -766,16 +766,12 @@ class Simulation:
                             ] # if event_detections is not None else []
         matching_detections.sort(key= lambda a : a[5])
 
-        # TODO find measurement requests that match this event
-        matching_requests = []
-        # matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
-        #                         for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
-        #                         if  t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
-        #                         and abs(lat - lat_req) < 1e-3 
-        #                         and abs(lon - lon_req) < 1e-3
-        #                         and all([instrument in observations_req for instrument in str_to_list(observation_types)])
-        #                     ]       
-        # matching_requests.sort(key= lambda a : a[5])
+        # find measurement requests that match this event
+        matching_requests = [(req_id, requester, event_req_id, mission_name, t_req)
+                             for req_id, requester, event_req_id, mission_name, t_req in measurement_reqs.values
+                             if event_req_id == event_id
+                             ]
+        matching_requests.sort(key= lambda a : a[4])
 
         # find observations that overlooked a given event's location
         matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)

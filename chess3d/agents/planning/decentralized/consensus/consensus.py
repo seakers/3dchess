@@ -179,10 +179,13 @@ class ConsensusReplanner(AbstractReactivePlanner):
                       clock_config : ClockConfig,
                       orbitdata : OrbitData,
                       mission : Mission,
-                      tasks : list,
+                      tasks : List[GenericObservationTask],
                       observation_history : ObservationHistory,
-                    ) -> Plan:               
-    
+                    ) -> Plan:  
+        """ Generate new plan according to consensus replanning model. """             
+        # DEBUG return original preplan
+        # return ReactivePlan.from_periodic_plan(self.preplan,t=state.t)
+
         # -------------------------------
         # DEBUG PRINTOUTS
         self.log_results('PLANNING PHASE (BEFORE)', state, self.results)
@@ -211,11 +214,9 @@ class ConsensusReplanner(AbstractReactivePlanner):
         maneuvers : list = self._schedule_maneuvers(state, specs, new_path, clock_config, orbitdata)
 
         # schedule broadcasts
+        # TODO decide on broadcast scheduling strategy
         broadcasts : list = self._schedule_broadcasts(state, orbitdata)
-        
-        # # TEMP return preplan
-        # return ReactivePlan.from_periodic_plan(self.preplan,t=state.t)
-        
+                
         # compile and generate plan
         self.plan = ReactivePlan(maneuvers, new_path, broadcasts, t=state.t, t_next=self.preplan.t_next)
 
@@ -252,10 +253,10 @@ class ConsensusReplanner(AbstractReactivePlanner):
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 
         # create specific and merged tasks from scheduled tasks and urgent tasks
-        schedulable_tasks : list[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
+        schedulable_tasks : List[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
         # filter for only schedulable tasks with urgent parent tasks        
-        schedulable_urgent_tasks : list[SpecificObservationTask] = [task for task in schedulable_tasks 
+        schedulable_urgent_tasks : List[SpecificObservationTask] = [task for task in schedulable_tasks 
                                                                     if any(parent_task in self.known_urgent_tasks 
                                                                             for parent_task in task.parent_tasks)]
 
@@ -1006,6 +1007,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
                     # add to client broadcast list
                     broadcasts.extend([state_msg, observations_msg, task_requests_msg])
                     
+                    # TODO create a bus message instead of individual messages?
                     # generate bid messages to share bids in results
                     for bids in self.bid_outbox.values():
                         for bid in bids.values():
@@ -1013,11 +1015,22 @@ class ConsensusReplanner(AbstractReactivePlanner):
                             bid_msg_action = BroadcastMessageAction(bid_msg.to_dict(), t_broadcast)
                             broadcasts.append(bid_msg_action)
 
+            if not orbitdata.comms_links:
+                # no communication links available, broadcast task requests for future planning horizons
+                t_broadcast : float = state.t
+
+                # generate plan message to share any task requests generated
+                task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+
+                # add to client broadcast list
+                broadcasts.append(task_requests_msg)
+
             # return scheduled broadcasts
             return broadcasts 
         
         finally:
             assert isinstance(broadcasts, list), "Scheduled broadcasts is not a list."
+            assert all(isinstance(broadcast, BroadcastMessageAction) for broadcast in broadcasts), "Not all scheduled broadcasts are of type `BroadcastMessageAction`."
 
     """
     LOGGING

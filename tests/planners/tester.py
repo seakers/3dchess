@@ -300,7 +300,7 @@ class PlannerTester(ABC):
         if not self.single_sat_toy: return
 
         # setup scenario parameters
-        duration = 1.0 / 24.0
+        duration = 2.0 / 24.0
         grid_name = 'toy_points'
         scenario_name = f'single_sat_toy_scenario-{self.planner_name()}'
         connectivity = 'LOS'

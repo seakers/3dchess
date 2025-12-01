@@ -721,7 +721,7 @@ class SimulationEnvironment(EnvironmentNode):
         columns = ['request ID', 'Requester', 'event ID', 'mission name', 't_req']
         data = [[req.id,
                  req.requester,
-                 req.event.id,
+                 req.task.event.id,
                  req.mission_name,
                  req.t_req] 
                  for req in self.measurement_reqs]

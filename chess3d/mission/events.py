@@ -102,4 +102,5 @@ class GeophysicalEvent:
     
     def __hash__(self) -> int:
         """Hash the event for use in sets and dictionaries."""
-        return hash((self.event_type, self.severity, self.t_detect, self.d_exp, self.t_start, self.id))
+        # return hash((self.event_type, self.severity, self.t_detect, self.d_exp, self.t_start, self.id))
+        return hash(self.id)

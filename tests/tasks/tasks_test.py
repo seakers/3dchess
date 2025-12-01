@@ -914,9 +914,9 @@ class TestTaskRequests(unittest.TestCase):
             t_req=0.0
         )
 
-        self.assertRaises(ValueError, event_request.same_event, other_req="invalid_request")
-        self.assertRaises(ValueError, event_request.same_event, other_req=self.default_request)
-        self.assertTrue(event_request.same_event(event_request))
+        self.assertRaises(ValueError, event_request.__eq__, other_req="invalid_request")
+        self.assertRaises(ValueError, event_request.__eq__, other_req=self.default_request)
+        self.assertTrue(event_request.__eq__(event_request))
 
 if __name__ == '__main__':
     # terminal welcome message
