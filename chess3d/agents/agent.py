@@ -930,7 +930,8 @@ class SimulatedAgent(AbstractAgent):
         incoming_reqs : list[TaskRequest] = [TaskRequest.from_dict(msg.req) 
                                                     for msg in senses 
                                                     if isinstance(msg, MeasurementRequestMessage)
-                                                    and msg.req['severity'] > 0.0]
+                                                    # and msg.req['severity'] > 0.0
+                                                    ]
         
         observation_msgs : list [ObservationResultsMessage] = [sense for sense in senses 
                                                                 if isinstance(sense, ObservationResultsMessage)]

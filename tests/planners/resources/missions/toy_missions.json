@@ -34,8 +34,7 @@
                         {
                             "requirement_type": "temporal",
                             "attribute": "n_observations",
-                            "strategy" : "exp_saturation",
-                            "saturation_rate" : 0.5
+                            "strategy" : "no_change"
                         }
                     ]
                 },

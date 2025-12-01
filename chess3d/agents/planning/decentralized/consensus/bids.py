@@ -13,7 +13,7 @@ def bid_comparison_input_checks( func : Callable ) -> Callable:
         # validate inputs
         assert isinstance(self, Bid) and isinstance(other, Bid), f'can only compare bids to other bids.'
         assert self.task == other.task, f'cannot compare bids intended for different tasks (expected task id: {self.task.id}, given id: {other.task.id})'
-        assert self.n_img == other.n_img, f'cannot compare bids intended for different image numbers (expected image number: {self.n_img}, given image number: {other.n_img})'
+        assert self.n_obs == other.n_obs, f'cannot compare bids intended for different image numbers (expected image number: {self.n_obs}, given image number: {other.n_obs})'
 
         # perform comparison
         return func(self, other, *args)
@@ -49,7 +49,7 @@ class Bid(ABC):
     def __init__(self,
                  task : GenericObservationTask,
                  bidder: str,
-                 n_img: int = 0,
+                 n_obs: int = 0,
                  bid_value: Union[float, int] = 0,
                  winning_bidder: str = NONE,
                  winning_bid: Union[float, int] = 0,
@@ -66,7 +66,7 @@ class Bid(ABC):
         ### Attributes:
             - task (`GenericObservationTask`): observation task being bid on
             - bidder (`bidder`): name of the agent keeping track of this bid information
-            - n_img (`int`): image number associated with this bid
+            - n_obs (`int`): image number associated with this bid
             - main_measurement (`str`): name of the main measurement assigned by this subtask bid
             - bid_value (`float` or `int`): latest bid value from bidder
             - winning_bidder (`str`): name of current the winning agent
@@ -79,7 +79,7 @@ class Bid(ABC):
         # Validate inputs
         assert isinstance(task, GenericObservationTask), f'`task` must be of type `GenericObservationTask`, got `{type(task)}`'
         assert isinstance(bidder, str), f'`bidder` must be of type `str`, got `{type(bidder)}`'
-        assert isinstance(n_img, int) and n_img >= 0, f'`n_img` must be positive `int`, got `{type(n_img)}-{n_img}`'
+        assert isinstance(n_obs, int) and n_obs >= 0, f'`n_img` must be positive `int`, got `{type(n_obs)}-{n_obs}`'
         assert isinstance(bid_value, (float, int)), f'`bid_value` must be of type `float` or `int`, got `{type(bid_value)}`'
         assert isinstance(winning_bidder, str), f'`winning_bidder` must be of type `str`, got `{type(winning_bidder)}`'
         assert isinstance(winning_bid, (float, int)), f'`winning_bid` must be of type `float` or `int`, got `{type(winning_bid)}`'
@@ -92,7 +92,7 @@ class Bid(ABC):
         # Assign attributes
         self.task = task
         self.bidder = bidder
-        self.n_img = n_img
+        self.n_obs = n_obs
         self.bid_value = bid_value
         self.winning_bidder = winning_bidder
         self.winning_bid = winning_bid
@@ -120,7 +120,7 @@ class Bid(ABC):
                 'winning_bidder': self.winning_bidder,
                 'winning_bid': self.winning_bid,
                 't_img': self.t_img,
-                'n_img': self.n_img,
+                'n_img': self.n_obs,
                 't_stamp': self.t_stamp,
                 'performed': self.performed
             }
@@ -157,7 +157,7 @@ class Bid(ABC):
             winning_bidder=bid_dict['winning_bidder'],
             winning_bid=bid_dict['winning_bid'],
             t_img=bid_dict['t_img'],
-            n_img=bid_dict.get('n_img', 0),
+            n_obs=bid_dict.get('n_obs', 0),
             t_stamp=bid_dict['t_stamp'],
             performed=bid_dict['performed']
         )
@@ -433,7 +433,7 @@ class Bid(ABC):
         self.winning_bid = new_bid
         self.winning_bidder = self.bidder
         self.t_img = t_img
-        self.n_img = n_img
+        self.n_obs = n_img
         self.t_stamp = t_update
     
     def has_winner(self) -> bool:
@@ -487,18 +487,18 @@ class Bid(ABC):
     
     def __repr__(self):
         task_id = self.task.id.split('-')
-        return f'Bid_{task_id[0]}_{self.n_img}_{self.bidder}_{round(self.winning_bid,1)}'
+        return f'Bid_{task_id[0]}_{self.n_obs}_{self.bidder}_{round(self.winning_bid,1)}'
 
     def __hash__(self) -> int:
         return hash(repr(self))  
 
 
 class AsynchronousBid(Bid):
-    def __init__(self, task, bidder, n_img = 0, bid_value = 0, winning_bidder = Bid.NONE, winning_bid = 0, t_img = np.NINF, t_stamp = np.NINF, main_measurement = Bid.NONE, performed = False):
+    def __init__(self, task, bidder, n_obs = 0, bid_value = 0, winning_bidder = Bid.NONE, winning_bid = 0, t_img = np.NINF, t_stamp = np.NINF, main_measurement = Bid.NONE, performed = False):
         """ Asynchronous Bid class implementing the bid comparison method according to:
             - Luke B. Johnson, Sameera S. Ponda, Han-Lim Choi, Jonathan P. How "Asynchronous Decentralized Task Allocation for Dynamic Environments".
         """
-        super().__init__(task, bidder, n_img, bid_value, winning_bidder, winning_bid, t_img, t_stamp, main_measurement, performed)
+        super().__init__(task, bidder, n_obs, bid_value, winning_bidder, winning_bid, t_img, t_stamp, main_measurement, performed)
 
     def copy(self) -> 'Bid':
         """ Creates a deep copy of this bid object """

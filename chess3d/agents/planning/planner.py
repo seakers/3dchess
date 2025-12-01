@@ -738,12 +738,14 @@ class AbstractPlanner(ABC):
             - clock_config (:obj:`ClockConfig`): clock being used for this simulation
         """
 
+        # validate inputs
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Maneuver scheduling for agents of type `{type(state)}` not yet implemented.')
         elif not isinstance(specs, Spacecraft):
             raise ValueError(f'`specs` needs to be of type `Spacecraft` for agents of state type `{type(state)}`. Is of type `{type(specs)}`.')
         elif orbitdata is None:
             raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+        assert all([isinstance(observation, ObservationAction) for observation in observations]), "`observations` must be a list of `ObservationAction` objects."
 
         # compile instrument field of view specifications   
         cross_track_fovs = self._collect_fov_specs(specs)

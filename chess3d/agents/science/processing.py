@@ -187,8 +187,15 @@ class LookupProcessor(DataProcessor):
                             # and instrument.lower() in self.detectable_event_types[event.event_type]
                             ]
         
-        if observed_events:
-            x = 1 # DEBUG BREAKPOINT
+        # modify event to start and estimated duration to match observation times
+        for event in observed_events:
+            # calculate new start time
+            t_start = max(event.t_start, t_img_end)
+
+            # adjust start time and duration
+            assert t_start >= event.t_start, "Adjusted start time must be after original start time"
+            event.d_exp -= t_start-event.t_start
+            event.t_start = t_start
         
         # return highest severity event            
         return max(observed_events, key=lambda a: a.severity) if observed_events else None

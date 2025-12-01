@@ -53,7 +53,7 @@ class TestBids(unittest.TestCase):
             winning_bidder=winning_bidder,
             winning_bid=winning_bid,
             t_img=t_img,
-            n_img=n_img,
+            n_obs=n_img,
             t_stamp=t_stamp,
             performed=performed,
         )
@@ -82,7 +82,7 @@ class TestBids(unittest.TestCase):
         self.assertEqual(bid.winning_bidder, reconstructed.winning_bidder)
         self.assertAlmostEqual(bid.winning_bid, reconstructed.winning_bid)
         self.assertAlmostEqual(bid.t_img, reconstructed.t_img)
-        self.assertEqual(bid.n_img, reconstructed.n_img)
+        self.assertEqual(bid.n_obs, reconstructed.n_obs)
         self.assertAlmostEqual(bid.t_stamp, reconstructed.t_stamp)
         self.assertEqual(bid.performed, reconstructed.performed)
 
@@ -829,7 +829,7 @@ class TestBids(unittest.TestCase):
         self.assertEqual(bid.main_measurement, 'VNIR')
         self.assertAlmostEqual(bid.winning_bid, 7.5)
         self.assertAlmostEqual(bid.t_img, 12.0)
-        self.assertEqual(bid.n_img, 2)
+        self.assertEqual(bid.n_obs, 2)
         self.assertAlmostEqual(bid.t_stamp, 3.0)
 
     def test_set_performed_marks_performed_and_updates_time(self):

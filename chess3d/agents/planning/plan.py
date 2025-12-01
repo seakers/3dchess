@@ -396,6 +396,8 @@ class Plan(ABC):
 
                     elif isinstance(action, FutureBroadcastMessageAction):
                         out += f"\t{action.broadcast_type.lower()} broadcast"
+                    elif isinstance(action, BroadcastMessageAction):
+                        out += f"\t{action.msg['msg_type'].split('_')[-1].lower()} broadcast"
 
                     out += '\n'    
         out += f'\nn actions in plan: {len(self)}'
