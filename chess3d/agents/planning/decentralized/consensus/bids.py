@@ -459,6 +459,12 @@ class Bid(ABC):
         self.performed = performed
         self.t_img = t
 
+    def was_performed(self) -> bool:
+        """
+        Checks if the winner of this bid has performed the measurement request at hand
+        """
+        return self.performed
+
     """
     ---------------------------
     STRING REPRESENTATION

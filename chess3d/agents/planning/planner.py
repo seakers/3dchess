@@ -533,7 +533,7 @@ class AbstractPlanner(ABC):
         # include additional observation information 
         for loc,obs in observation_performance_metrics.items():
             if obs_histories[loc].n_obs > 0:
-                x = 1 # dummy line for breakpoint
+                x = 1 # breakpoint
             
             # update observation information
             obs.update({ 
@@ -541,7 +541,7 @@ class AbstractPlanner(ABC):
                 "t_start" : t_img,
                 "t_end" : t_img + d_img,
                 "duration" : d_img,
-                "n_observations" : n_obs,
+                "n_observations" : n_obs + 1, # including this observation
                 "revisit_time" : t_img - t_last,
                 "horizontal_spatial_resolution" : observation_performance_metrics[loc]['ground pixel cross-track resolution [m]'],
             })
