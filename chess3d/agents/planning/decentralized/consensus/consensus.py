@@ -723,83 +723,29 @@ class ConsensusReplanner(AbstractReactivePlanner):
             # calculate bid value
             bid_value : float = new_path_utility - old_path_utility
 
-            # check if outbids all subsequent bids
-            oubids_all = True
-            for parent_task in parent_tasks:
-                subsequent_bid_value = sum([subsequent_bid.winning_bid 
+            # calculate total subsequent bid values for competing bids
+            subsequent_bid_values = {parent_task : sum([subsequent_bid.winning_bid 
                                             for subsequent_bid in self.results[parent_task][n_obs+1:]]) \
                                             if n_obs < len(self.results[parent_task]) else 0.0
-
-                if bid_value <= subsequent_bid_value + self.EPS:
-                    oubids_all = False
-                    break
-
-            if not oubids_all: continue
+                                    for parent_task in parent_tasks}
+            
+            # check if outbids all subsequent bids
+            if any(bid_value <= subsequent_bid_value + self.EPS
+                   for subsequent_bid_value in subsequent_bid_values.values()): 
+                continue # does not outbid all subsequent bids; skip
             
             # check if bid value is best so far
             if bid_value > best_val + self.EPS:
                 best_val = bid_value
-                best_combo = {parent_task: (n_obs, t_prev) for parent_task, (n_obs, t_prev) in zip(parent_tasks, combo)}
+                best_combo = {parent_task: (n_obs, t_prev) 
+                              for parent_task, (n_obs, t_prev) in zip(parent_tasks, combo)}
         
-        # create bids for each parent task based on best (n_obs, t_revisit) combination
-        bids = []
-        for parent_task, (n_obs,_) in best_combo.items():
-            new_bid = AsynchronousBid(parent_task, 
-                                        state.agent_name, 
-                                        n_obs, 
-                                        bid_value, 
-                                        state.agent_name, 
-                                        bid_value, 
-                                        t_img, 
-                                        state.t, 
-                                        task_to_schedule.instrument_name)
-            bids.append(new_bid)
         
-        return bids if len(bids) == len(parent_tasks) else []
-    
-        # create bids for each parent task at each possible observation number
-        bids = []
-        for parent_task in parent_tasks:
-            n_obs_max = len(self.results[parent_task]) + 1
-            n_obs_min = scheduled_n_obs[parent_task]
-
-            for n_obs in range(n_obs_min, n_obs_max):
-                # calculate previous observation time based on observation number
-                t_prev = self.results[parent_task][n_obs-1].t_img if n_obs > 0 else np.NINF
-
-                # check if previous observation time is within the observation time 
-                if t_img < t_prev: continue # invalid observation time; skip
-
-                # TODO calculate expected utility of observation
-                new_path_utility : float = self._calculate_path_utility(state, specs, cross_track_fovs, proposed_path, observation_history, orbitdata, mission)
-                # new_path_utility : float = 1.0  # Placeholder implementation
-
-                # calculate bid value
-                bid_value : float = new_path_utility - old_path_utility
-
-                # check if it outbids all subsequent bids
-                subsequent_bid_value = sum([subsequent_bid.winning_bid 
-                                            for subsequent_bid in self.results[parent_task][n_obs+1:]]) \
-                                            if n_obs + 1 <= len(self.results[parent_task]) else 0.0
-
-                # if outbids subsequent bids, create new bid
-                if bid_value > subsequent_bid_value + self.EPS:
-                    new_bid = AsynchronousBid(parent_task, 
-                                              state.agent_name, 
-                                              n_obs, 
-                                              bid_value, 
-                                              state.agent_name, 
-                                              bid_value, 
-                                              t_img, 
-                                              state.t, 
-                                              task_to_schedule.instrument_name)
-                    bids.append(new_bid)
-
-                x = 1  # Placeholder implementation
-
-        # check if all parent tasks have valid bids
-        return bids if len(bids) == len(parent_tasks) else []
-
+        # create and return bids for each parent task based on best (n_obs, t_revisit) combination
+        return [AsynchronousBid(parent_task, state.agent_name, n_obs, best_val, state.agent_name, 
+                                 best_val, t_img, state.t, task_to_schedule.instrument_name) 
+                for parent_task, (n_obs,_) in best_combo.items()]
+        
     def _calculate_path_utility(self,
                                 state : SimulationAgentState,
                                 specs : object,
@@ -826,7 +772,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
                 "Proposed bid previous observation times contain parent tasks not associated with the task being scheduled."
 
         # calculate path value
-        path_value = self._calculate_path_value(specs, cross_track_fovs, path, observation_history, orbitdata, mission, task_to_schedule, n_obs_bid, t_prev_bid)
+        path_value = self._calculate_path_value(state, specs, cross_track_fovs, path, observation_history, orbitdata, mission, task_to_schedule, n_obs_bid, t_prev_bid)
         
         # calculate path cost
         path_cost = self._calculate_path_cost(state, specs, path)
@@ -835,6 +781,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
         return path_value - path_cost
 
     def _calculate_path_value(self,
+                              state : SimulationAgentState,
                               specs : object,
                               cross_track_fovs : Dict[str, float],
                               path : List[ObservationAction],
@@ -850,7 +797,7 @@ class ConsensusReplanner(AbstractReactivePlanner):
         total_value = 0.0
 
         # calculate observation number and revisit time for tasks in path
-        n_obs, t_prev = self._calculate_observation_number_and_revisit_in_path(path, observation_history)
+        n_obs, t_prev = self._calculate_observation_number_and_revisit_in_path(state, path, observation_history)
      
         # replace observation number and revisit time values for task being scheduled if provided
         if any(param is not None for param in [task_to_schedule, n_obs_bid, t_prev_bid]):            
@@ -882,61 +829,76 @@ class ConsensusReplanner(AbstractReactivePlanner):
         return total_value    
     
     def _calculate_observation_number_and_revisit_in_path(self,
+                                                          state : SimulationAgentState,
                                                           path : List[ObservationAction],
                                                           observation_history : ObservationHistory
                                                         ) -> Tuple[List[Dict[GenericObservationTask, int]],
                                                                     List[Dict[GenericObservationTask, float]]]:
-        """ Calculate observation number and revisit time for tasks in the given path. """
+        """ Calculate observation number and revisit time for tasks in the given path given the known bids. """
 
         # initialize observation counters and previous observation time trackers
         n_obs = [defaultdict(int) for _ in path]
         t_prev = [defaultdict(lambda: np.NINF) for _ in path]
 
-        # for tasks to be observed in the given path
-        n_obs_in_path = defaultdict(int)
-        t_prev_in_path = defaultdict(lambda: np.NINF)
+        # ---HISTORICAL DATA---
+        # get all parent tasks in the given path
+        parent_tasks = {parent_task for action in path 
+                        for parent_task in action.task.parent_tasks}
 
-        # iterate through observations in path
+        # initiate observation history for all parent tasks in path
+        n_obs_history = {parent_task: 0 for parent_task in parent_tasks}
+        t_prev_history = {parent_task: np.NINF for parent_task in parent_tasks}
+
+        # iterate through observation history to populate initial observation numbers and previous observation times
+        for parent_task in parent_tasks:
+            for *_,grid_idx,gp_idx in parent_task.location:                
+                # get observation tracker for location
+                obs_tracker : ObservationTracker = observation_history.get_observation_history(grid_idx,gp_idx)
+
+                # get previous matching observations for this task
+                obs_prev = [obs for obs in obs_tracker.observations 
+                                if obs['t_start'] in parent_task.availability
+                                or obs['t_end'] in parent_task.availability
+                                or (obs['t_start'] < parent_task.availability.left
+                                and obs['t_end'] > parent_task.availability.right)
+                            ] if obs_tracker else []
+
+                # update previous observation counts 
+                n_obs_history[parent_task] += len(obs_prev)                                        
+                
+                # calculate latest observation time from previous observations
+                obs_latest = max(obs_prev, key=lambda obs: obs['t_end'], default=None)
+                t_latest = obs_latest['t_end'] if obs_latest else np.NINF
+                
+                # update previous observation times 
+                t_prev_history[parent_task] = max(t_prev_history[parent_task], t_latest)
+     
+        # ---PATH DATA---
+        # initiate observation counter for all parent tasks in path
+        n_obs_in_path = {parent_task: 0 for parent_task in parent_tasks}
+        t_prev_in_path = {parent_task: np.NINF for parent_task in parent_tasks}
+
+        # initiate previous observations and times along path
         for obs_idx, obs in enumerate(path):           
             for parent_task in obs.task.parent_tasks:
-                # initiate previous observations and times along path
-                n_obs[obs_idx][parent_task] = n_obs_in_path[parent_task]
-                t_prev[obs_idx][parent_task] = t_prev_in_path[parent_task]
+                # check if parent task is being bid on
+                if parent_task in self.results: # task is part of negotiations
+                    # get previous bids for this task
+                    previous_bids = [bid for bid in self.results[parent_task]
+                                     if bid.t_img < obs.t_start and bid.has_winner()]
+
+                    # update overall observation number and revisit times along path using previous bids
+                    n_obs[obs_idx][parent_task] = len(previous_bids)
+                    t_prev[obs_idx][parent_task] = max([bid.t_img for bid in previous_bids], default=np.NINF)                    
                 
-                # check if 
+                else: # task is not part of negotiations
+                    # update overall observation number and revisit times along path using historical and path data
+                    n_obs[obs_idx][parent_task] = n_obs_history[parent_task] + n_obs_in_path[parent_task]
+                    t_prev[obs_idx][parent_task] = max(t_prev_history[parent_task], t_prev_in_path[parent_task])               
 
-                # count prevous obsevations already in history
-                for *_,grid_idx,gp_idx in parent_task.location:
-                    # get observation tracker for location
-                    obs_tracker : ObservationTracker = observation_history.get_observation_history(grid_idx,gp_idx)
-
-                    # update previous observation counts during task availability
-                    n_obs[obs_idx][parent_task] += len([obs for obs in obs_tracker.observations 
-                                                if obs['t_start'] in parent_task.availability
-                                                or obs['t_end'] in parent_task.availability
-                                                or (obs['t_start'] < parent_task.availability.left
-                                                and obs['t_end'] > parent_task.availability.right)
-                                                ]) \
-                                        if obs_tracker is not None else 0
-                    
-                    # update previous observation times during task availability
-                    t_prevs = [obs['t_end'] for obs in obs_tracker.observations
-                                   if obs['t_start'] in parent_task.availability
-                                   or obs['t_end'] in parent_task.availability
-                                   or (obs['t_start'] < parent_task.availability.left
-                                      and obs['t_end'] > parent_task.availability.right)
-                                    ] if obs_tracker is not None else []
-                    t_prev[obs_idx][parent_task] = max(t_prev[obs_idx][parent_task], max(t_prevs) if t_prevs else np.NINF)
-     
-                # check if other observations are being bid on 
-                if parent_task in self.results:
-                    for bid in self.results[parent_task]:
-                        if bid.t_img < obs.t_start:
-                            n_obs[obs_idx][parent_task] += 1
-                            t_prev[obs_idx][parent_task] = max(t_prev[obs_idx][parent_task], bid.t_img)
-
+                # update previous path observation counts 
                 n_obs_in_path[parent_task] += 1
-                t_prev_in_path[parent_task] = obs.t_end
+                t_prev_in_path[parent_task] = max(t_prev_in_path[parent_task], obs.t_end)
 
         # return observation numbers and previous observation times
         return n_obs, t_prev
