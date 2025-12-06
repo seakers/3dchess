@@ -47,17 +47,21 @@ class ConsensusPlanner(AbstractReactivePlanner):
         assert model in self.MODELS, f"Invalid model '{model}'. Must be one of {self.MODELS}."
         assert isinstance(replan_threshold, int) and replan_threshold > 0, "Replan threshold must be positive integer."
 
-        # initialize results
+        # initialize consensus results
         self.bundle : list[list[Bid]] = list()
         self.path : list[GenericObservationTask] = list()
         self.results : Dict[GenericObservationTask, List[Bid]] = defaultdict(list)
-        self.preplan : PeriodicPlan = None
-        self.plan : Plan = None
+
+        # initialize urgent tasks and bid inbox/outbox
         self.known_urgent_tasks : set[GenericObservationTask] = set()
         self.new_urgent_tasks : set[GenericObservationTask] = set()
-        self.relevant_updates : List[Bid] = list()
         self.bid_inbox : list[Bid] = list()
         self.bid_outbox : Dict[GenericObservationTask, Dict[int,Bid]] = defaultdict(dict)
+        self.relevant_updates : List[Bid] = list()
+
+        # initialize known preplan and current plan
+        self.preplan : PeriodicPlan = None
+        self.plan : Plan = None
 
         # set parameters
         self.model = model
@@ -132,7 +136,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
     def __collect_incoming_bids(self, misc_messages : List[SimulationMessage]) -> None:
         """ Collect bids from incoming messages and requests. """
-        incoming_bids = [AsynchronousBid.from_dict(msg.bid) 
+        incoming_bids = [Bid.from_dict(msg.bid) 
                             for msg in misc_messages 
                             if isinstance(msg, MeasurementBidMessage)]
         
@@ -354,10 +358,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # clear new urgent tasks
         self.new_urgent_tasks = set()
-
-        # TEMP clear bid outbox 
-        # TODO only clear bids that were successfully broadcasted?
-        # self.bid_outbox = defaultdict(dict)
 
         # return final plan
         return self.plan.copy()
