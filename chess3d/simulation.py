@@ -24,7 +24,6 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
-from chess3d.agents.planning.decentralized.announcer import EventAnnouncerPlanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -42,7 +41,8 @@ from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
 from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
 from chess3d.agents.planning.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.decentralized.dynamic import DynamicProgrammingPlanner
-from chess3d.agents.planning.decentralized.consensus.consensus import ConsensusReplanner
+from chess3d.agents.planning.decentralized.announcer import EventAnnouncerPlanner
+from chess3d.agents.planning.decentralized.consensus.heuristic import HeuristicInsertionConsensusPlanner
 from chess3d.agents.science.module import *
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes
 from chess3d.agents.agent import SimulatedAgent
@@ -1719,10 +1719,13 @@ class SimulationElementFactory:
             
             if replanner_type.lower() in ['consensus', 'cbba']:
                 model = replanner_dict.get('model', 'heuristicInsertion')
-                heuristic = replanner_dict.get('heuristic', 'earliestAccess')
                 replan_threshold = replanner_dict.get('replanThreshold', 1)
 
-                replanner = ConsensusReplanner(model=model, heuristic=heuristic, replan_threshold=replan_threshold, debug=debug, logger=logger)
+                if 'heuristic' in model:
+                    heuristic = replanner_dict.get('heuristic', 'earliestAccess')
+                    replanner = HeuristicInsertionConsensusPlanner(heuristic, replan_threshold, debug, logger)
+                else:
+                    raise NotImplementedError(f'replanner model `{model}` not yet supported.')
             
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')

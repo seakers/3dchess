@@ -1,10 +1,7 @@
-from collections import defaultdict
 import unittest
 
 import numpy as np
 
-
-# Adjust this import path to wherever your Bid class lives
 from chess3d.utils import print_welcome
 from chess3d.agents.planning.decentralized.consensus.bids import Bid, BidComparisonResults
 from chess3d.agents.planning.tasks import DefaultMissionTask

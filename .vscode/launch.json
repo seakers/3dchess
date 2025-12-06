@@ -196,6 +196,18 @@
             }
         },
         {
+            "name": "TEST: Consensus Results",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/tasks/bid_results_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            }
+        },
+        {
             "name": "TEST: Consensus Replanner",
             "type": "debugpy",
             "request": "launch",
