@@ -249,6 +249,10 @@ class Bid:
         ## Compare bidders alphabetically
         return min(bid1, bid2, key=lambda b: b.winning_bidder)
 
+    def is_different(self, other : 'Bid') -> bool:
+        """ Checks if this bid is different from another bid (i.e., any of the bid attributes differ) """
+        return self.to_dict() != other.to_dict()
+
     """
     ------------------
     BID COMPARISON AND UPDATE METHODS

@@ -1,8 +1,6 @@
 from abc import abstractmethod
-from collections import defaultdict
-from itertools import product
-from typing import Dict, List, Tuple
-from tqdm import tqdm
+from collections import defaultdict, deque
+from typing import Any, Dict, List, Tuple
 
 import logging
 
@@ -53,9 +51,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
         self.results : Dict[GenericObservationTask, List[Bid]] = defaultdict(list)
 
         # initialize urgent tasks and bid inbox/outbox
-        self.known_urgent_tasks : set[GenericObservationTask] = set()
-        self.new_urgent_tasks : set[GenericObservationTask] = set()
-        self.bid_inbox : list[Bid] = list()
+        self.known_event_tasks : set[GenericObservationTask] = set()
+        self.incoming_event_tasks : deque[GenericObservationTask] = deque()
+        self.bid_inbox : deque[Bid] = deque()
         self.bid_outbox : Dict[GenericObservationTask, Dict[int,Bid]] = defaultdict(dict)
         self.relevant_updates : List[Bid] = list()
 
@@ -66,13 +64,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # set parameters
         self.model = model
         self.replan_threshold = replan_threshold
-        self.t_share = -1
-
-    """
-    ---------------------------
-    CONSENSUS PHASE
-    ---------------------------
-    """
+        self.t_share = -1   
 
     def update_percepts(self, 
                         state : SimulationAgentState,
@@ -90,15 +82,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # check if new task requests have arrived and filter for available requests
         self.__update_urgent_tasks(state, incoming_reqs)
-        
-        # convert incoming task requests to bids and add to inbox
-        # self.__generate_bids_from_reqs(state, incoming_reqs)
 
         # collect bids from incoming messages to inbox
         self.__collect_incoming_bids(misc_messages)  
-
-        return # Placeholder implementation
-        # raise NotImplementedError("Consensus replanner not yet implemented.")
 
     def __update_preplan(self, state : SimulationAgentState, current_plan : Plan) -> None:
         """ Update latest preplan if new plan is available. """
@@ -107,32 +93,19 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
     def __update_urgent_tasks(self, state : SimulationAgentState, incoming_reqs : List[TaskRequest]) -> None:
         """ Remove completed tasks from urgent tasks set. """
-        # remove unavailable tasks
-        self.known_urgent_tasks = set([task for task in self.known_urgent_tasks 
-                                        if task.is_available(state.t)])
-        self.new_urgent_tasks = set([task for task in self.new_urgent_tasks 
-                                        if task.is_available(state.t)])
+        # # remove unavailable tasks
+        # self.known_event_tasks = set([task for task in self.known_event_tasks 
+        #                                 if task.is_available(state.t)])
+        # self.incoming_event_tasks = set([task for task in self.incoming_event_tasks 
+        #                                 if task.is_available(state.t)])
 
         # get active incoming tasks
         active_tasks = set([req.task for req in incoming_reqs 
                             if req.task.is_available(state.t)])
         
         # update urgent tasks
-        self.known_urgent_tasks.update(active_tasks)
-        self.new_urgent_tasks.update(active_tasks)
-
-    def __generate_bids_from_reqs(self, state : SimulationAgentState, incoming_reqs : List[TaskRequest]) -> None:
-        """ Generate bids from incoming task requests. """
-        # extract bids from incoming requests
-        # TODO make this an abstract method that can be overridden by subclasses that distinguish between
-        # synchronous and asynchronous bidding strategies
-        bids_from_reqs = [Bid(req.task, state.agent_name) for req in incoming_reqs]
-        
-        if bids_from_reqs: 
-            x = 1 # Placeholder implementation
-
-        # update bid inbox
-        self.bid_inbox.extend(bids_from_reqs)
+        self.known_event_tasks.update(active_tasks)
+        self.incoming_event_tasks.extend(active_tasks)
 
     def __collect_incoming_bids(self, misc_messages : List[SimulationMessage]) -> None:
         """ Collect bids from incoming messages and requests. """
@@ -144,6 +117,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
             x = 1 # Placeholder implementation
 
         self.bid_inbox.extend(incoming_bids)
+
+    """
+    ---------------------------
+    CONSENSUS PHASE
+    ---------------------------
+    """
 
     def needs_planning(self, 
                        state : SimulationAgentState,
@@ -158,26 +137,21 @@ class ConsensusPlanner(AbstractReactivePlanner):
             self.log_bundle('BUNDLE (BEFORE CONSENSUS)', state, self.bundle)
         # -------------------------------
 
-        # perform consensus phase for incoming bids and tasks
-        changes, rebroadcasts = self.consensus_phase(state, specs, current_plan, orbitData)
-        
-        # update relevant updates
-        self.relevant_updates.extend(rebroadcasts)
-
+        # perform consensus phase for incoming task bids
+        relevant_changes = self.consensus_phase(state, specs, current_plan, orbitData)
+       
         # -------------------------------
         # DEBUG PRINTOUTS
-        if self.relevant_updates:
+        if relevant_changes:
             self.log_results('CONSENSUS PHASE (AFTER)', state, self.results)
             self.log_bundle('BUNDLE (AFTER CONSENSUS)', state, self.bundle)
         # -------------------------------
 
         # replan if...
         # 1) there were relevant updates to bids/results
-        relevant_changes_received = len(self.relevant_updates) > 0
+        relevant_changes_received = len(relevant_changes) > 0
         # 2) or new periodic plan was received
         new_periodic_plan_received = isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS
-        # 3) or new urgent tasks exceed threshold
-        task_threshold_met = len(self.new_urgent_tasks) >= self.replan_threshold
         
         # -------------------------------
         # DEBUG BREAKPOINTS
@@ -185,84 +159,119 @@ class ConsensusPlanner(AbstractReactivePlanner):
             x = 1  # Placeholder implementation
         if new_periodic_plan_received:
             x = 1  # Placeholder implementation
-        if task_threshold_met:
-            x = 1  # Placeholder implementation
         # -------------------------------
 
         return (relevant_changes_received 
                 # or new_periodic_plan_received 
-                or task_threshold_met)
+                )
 
     def consensus_phase(self,
                         state : SimulationAgentState,
                         specs : object,
                         current_plan : Plan,
                         orbitdata : OrbitData
-                    ) -> None:
+                    ) -> List[Bid]:
         """ Perform consensus phase to update bids and bundle. """
-        # check if tasks were performed
-        # self.check_bid_completion()
+        # initalize list of changes
+        changes = []
 
-        # check if tasks expired
-        # self.check_task_end_time()
+        # check for new urgent tasks
+        new_task_added = self.check_incoming_urgent_tasks(state)
+        
+        # TODO check if tasks were performed
+
+        # TODO check if tasks expired        
 
         # compare results with incoming bids and update bundle
-        bid_changes, bid_rebroadcasts = self.update_results(state)
+        results_updates = self.update_results(state)
 
-        # clear bid inbox
-        self.bid_inbox = list()
+        # TODO update bundle from results if necessary        
 
         # compile changes and rebroadcasts
-        changes = []
-        changes.extend(bid_changes)
-
-        rebroadcasts = []
-        rebroadcasts.extend(bid_rebroadcasts)
+        changes.extend(new_task_added)
+        changes.extend(results_updates)
         
-        return changes, rebroadcasts
+        return changes
+
+    def check_incoming_urgent_tasks(self, state: SimulationAgentState) -> List[Bid]:
+        """ Check for new urgent tasks and update results accordingly. """
+        # initialize list of newly added bids from new tasks
+        new_task_added = []
+        
+        # identify new urgent tasks
+        new_event_tasks = [task for task in self.incoming_event_tasks 
+                           if task not in self.results]
+        
+        # check if new tasks exceed threshold
+        if len(new_event_tasks) >= self.replan_threshold:
+            # threshold met; process new tasks
+            while self.incoming_event_tasks:
+                # remove tasks from incoming queue
+                task : GenericObservationTask = self.incoming_event_tasks.popleft()
+
+                # initialize results for new event tasks
+                self.results[task] = []
+ 
+                # create empty bid for new task and add to list of changes
+                new_task_added.append(Bid(task, state.agent_name))
+
+        # return list of new task bids added to results
+        return new_task_added
 
     def update_results(self,
                        state : SimulationAgentState,
                        ) -> Tuple[List[Bid], List[Bid]]:
         """ Update results from incoming bids. """
-        # initialize bundle changes and rebroadcast lists
-        outbid = []         # bids from results that were outbid 
-        changes = []        # updated and modified bids
-        rebroadcasts = []   # bids to be rebroadcast
+        # initialize list of updates done to results
+        results_updates = []        
 
         # process incoming bids
-        for incoming_bid in self.bid_inbox:
-            # TODO check bids are for new requests
-            for task in self.new_urgent_tasks:
-                raise NotImplementedError("Processing bids for new urgent tasks not yet implemented.")
-            # if incoming_bid.task not in self.results:
-            #     # add empty bid list for new task
-            #     for n_obs in range(incoming_bid.n_obs+1):
-            #         empty_bid = AsynchronousBid(incoming_bid.task, state.agent_name, n_obs=n_obs)
-            #         self.results[incoming_bid.task].append(empty_bid)
+        while self.bid_inbox:
+            # get next incoming bid
+            incoming_bid : Bid = self.bid_inbox.popleft()
 
-            # compare incoming bid with existing bids for the same task
+            # check if bid is for a new task or higher observation number
+            new_task : bool = incoming_bid.task not in self.results
+            new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
+
+            if new_task or new_observation_number:
+                # TODO is this correct?
+                # get bounds for observation number not being conseidered up to incoming bid's `n_obs`
+                n_obs_init = len(self.results[incoming_bid.task]) if not new_task else 0
+                n_obs_max = incoming_bid.n_obs + 1
+
+                # add an empty bid for each missing observation number
+                for n_obs in range(n_obs_init, n_obs_max):
+                    empty_bid = Bid(incoming_bid.task, state.agent_name, n_obs)
+                    self.results[incoming_bid.task].append(empty_bid)
+
+            # get current bid for this task and observation number
             current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
 
-            _, rebroadcast_result = current_bid.rule_comparison(incoming_bid)
+            # compare incoming bid with existing bids for the same task
             updated_bid : Bid = current_bid.compare(incoming_bid, state.t)
-            bid_changed = current_bid != updated_bid
 
             # update results with modified bid
             self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
 
             # if bid was changed, add to changes list
-            if bid_changed: 
-                outbid.append(current_bid)
-                changes.append(updated_bid)
-
-            # if relevant changes were made, add appropriate bid to rebroadcast list
-            if (rebroadcast_result == Bid.REBROADCAST_SELF
-                or rebroadcast_result == Bid.REBROADCAST_SELF):
-                rebroadcasts.append(updated_bid)
-            elif rebroadcast_result == Bid.REBROADCAST_OTHER:
-                rebroadcasts.append(updated_bid)
-
+            if updated_bid.is_different(current_bid): results_updates.append(updated_bid)
+        
+        # return result changes and bids to rebroadcasts
+        return results_updates
+    
+    def update_bundle_from_results(self,
+                                    state : SimulationAgentState,
+                                    specs : object,
+                                    current_plan : Plan,
+                                    clock_config : ClockConfig,
+                                    orbitdata : OrbitData,
+                                    mission : Mission,
+                                    observation_history : ObservationHistory
+                                    ) -> Any:
+        """ Update bundle according to latest results. """
+        raise NotImplementedError("Updating bundle from results not yet implemented.")
+    
         # check if any bids in the bundle were modified
         if self.bundle and outbid: 
             raise NotImplementedError("Bundle update after bid comparison not yet implemented.")
@@ -295,9 +304,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
         #             # add to changes and rebroadcast lists
         #             changes.append(bundle_bid)
         #             rebroadcasts.append(bundle_bid)
-        
-        # return result changes and bids to rebroadcasts
-        return changes, rebroadcasts
 
     """
     ---------------------------
@@ -325,7 +331,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # -------------------------------
 
         # build new bundle
-        new_bundle, new_path = self.bundle_building_phase(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
+        new_bundle, new_path, new_bids = self.bundle_building_phase(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
         
         # check if new path is valid
         assert new_path is not None and len(new_path) > 0, "New observation path cannot be empty."
@@ -357,7 +363,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         self.plan = ReactivePlan(maneuvers, new_path, broadcasts, t=state.t, t_next=self.preplan.t_next)
 
         # clear new urgent tasks
-        self.new_urgent_tasks = set()
+        self.incoming_event_tasks = set()
 
         # return final plan
         return self.plan.copy()
@@ -371,13 +377,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
                        orbitdata : OrbitData,
                        mission : Mission,
                        observation_history : ObservationHistory
-                    ) -> tuple:
-        
+                    ) -> tuple:        
         """ Build bundle according to selected replanning model. """
-
     
     def __update_results_from_bundle(self, new_bundle : List[List[Bid]]) -> None:
         """ Update results dictionary from new bundle. """
+        raise NotImplementedError("Updating results from new bundle not yet implemented.")
         # iterate through bids in new bundle
         for bids in new_bundle:
             for bid in bids:
@@ -413,6 +418,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
     def __update_outbox_from_bundle(self, new_bundle : List[List[Bid]]) -> None:
         """ Update bid outbox from new bundle. """
+        raise NotImplementedError("Updating bid outbox from new bundle not yet implemented.")
+    
         # iterate through bids in new bundle
         for bids in new_bundle:
             for bid in bids:

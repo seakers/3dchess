@@ -65,7 +65,7 @@
                             "requirement_type": "temporal",
                             "attribute": "revisit_time",
                             "thresholds": [60, 100, 1000],
-                            "scores": [0.0, 0.7, 1.0]
+                            "scores": [1.0, 0.7, 0.1]
                         },
                         {
                             "requirement_type": "temporal",

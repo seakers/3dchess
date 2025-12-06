@@ -79,7 +79,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
         # filter for only schedulable tasks with urgent parent tasks        
         schedulable_urgent_tasks : List[SpecificObservationTask] = [task for task in schedulable_tasks 
-                                                                    if any(parent_task in self.known_urgent_tasks 
+                                                                    if any(parent_task in self.known_event_tasks 
                                                                             for parent_task in task.parent_tasks)]
 
         # generate new plan according to selected model
@@ -103,7 +103,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
         # get urgent tasks that are available within planning horizon
         urgent_tasks = {task 
-                           for task in self.known_urgent_tasks 
+                           for task in self.known_event_tasks 
                             if task.availability.overlaps(planning_horizon)}
         
         # merge task sets
@@ -342,7 +342,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # get relevant parent tasks from task being scheduled
         parent_tasks = [parent_task 
                         for parent_task in task_to_schedule.parent_tasks
-                        if parent_task in self.known_urgent_tasks]
+                        if parent_task in self.known_event_tasks]
 
         # get bounds for min and maximum observation numbers for each parent task
         n_obs_per_task = {parent_task : list(range(len(self.results[parent_task])+(1 if self.results[parent_task][-1].has_winner() else 0)))
