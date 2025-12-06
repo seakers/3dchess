@@ -42,7 +42,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         cross_track_fovs : dict = self._collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        schedulable_tasks : list[SpecificObservationTask] = self._sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
+        sorted_schedulable_tasks : list[SpecificObservationTask] = self._sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -57,7 +57,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         # generate plan
         plan_sequence : list[tuple[SpecificObservationTask, ObservationAction]] = []
 
-        for task in tqdm(schedulable_tasks,
+        for task in tqdm(sorted_schedulable_tasks,
                          desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 
                          leave=False):
             
@@ -176,16 +176,21 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         # return if no tasks to schedule
         if not tasks: return tasks
 
-        # estimate maximum number of tasks in the planning horizon
-        min_task_duration = min([task.accessibility.span() for task in tasks])
-        max_number_tasks = int(self.horizon / min_task_duration) if min_task_duration > 0 else -1
-        
-        # reduce number of tasks to be scheduled by using estimated max number of tasks 
-        tasks.sort(key=lambda x: x.accessibility.span(),reverse=True)
+        # check if planning horizon is set
+        if self.horizon < np.Inf:
+            # estimate maximum number of tasks in the planning horizon
+            min_task_duration = min([task.accessibility.span() for task in tasks])
+            max_number_tasks = int(self.horizon / min_task_duration) if min_task_duration > 0 else len(tasks)
+            
+            # sort tasks by accessibility duration (longest first)
+            tasks.sort(key=lambda x: x.accessibility.span(),reverse=True)
+
+            # reduce number of tasks to be scheduled by using estimated max number of tasks 
+            tasks = tasks[:max_number_tasks + 1]
 
         # calculate heuristic value for each task up to the maximum number of tasks
         heuristic_vals = [(task, self._calc_heuristic(task, specs, cross_track_fovs, orbitdata, mission, observation_history)) 
-                          for task in tqdm(tasks[:max_number_tasks], 
+                          for task in tqdm(tasks, 
                                            desc=f"{state.agent_name}-PREPLANNER: Calculating heuristic values", 
                                            leave=False)
                             ]

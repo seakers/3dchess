@@ -24,6 +24,7 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
+from chess3d.agents.planning.decentralized.announcer import EventAnnouncerPlanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission.mission import *
 from chess3d.nodes.manager import SimulationManager
@@ -1293,7 +1294,7 @@ class SimulationElementFactory:
             
             # load planners
             preplanner, replanner = \
-                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, missions, logger)               
+                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, mission, missions, logger)               
 
             # create agent
             if agent_type == SimulationAgentTypes.SATELLITE:
@@ -1588,7 +1589,7 @@ class SimulationElementFactory:
         # return nothing
         return None  
 
-    def load_planners(agent_name : str, planner_dict : dict, orbitdata_dir : str, missions : Dict[str,Mission], logger : logging.Logger) -> tuple:
+    def load_planners(agent_name : str, planner_dict : dict, orbitdata_dir : str, agent_mission : Mission, missions : Dict[str,Mission], logger : logging.Logger) -> tuple:
         # check if planner dictionary is empty
         if planner_dict is None: return None, None
 
@@ -1622,6 +1623,12 @@ class SimulationElementFactory:
                 model = preplanner_dict.get('model', 'earliest').lower()
                 preplanner = DynamicProgrammingPlanner(horizon, period, model, sharing, debug, logger)
             
+            elif preplanner_type.lower() in ["eventannouncer", "announcer"]:
+                events_path = preplanner_dict.get('eventsPath', None)
+                if events_path is None: raise ValueError(f'predefined events path not specified in input file.')
+                
+                preplanner = EventAnnouncerPlanner(events_path, agent_mission, debug, logger)
+
             elif preplanner_type.lower() == 'dealer':
                 # unpack preplanner parameters
                 mode = preplanner_dict.get('@mode', 'test').lower()
@@ -1736,16 +1743,5 @@ class SimulationElementFactory:
 
         raise NotImplementedError('`load_planner_module` requires missions argument.')
 
-        preplanner, replanner = SimulationElementFactory.load_planners(planner_dict, orbitdata_dir, missions, logger)
-
-        # create planning module
-        return PlanningModule(results_path, 
-                              agent_specs,
-                              agent_network_config, 
-                              preplanner,
-                              replanner,
-                              agent_orbitdata,
-                              level,
-                              logger
-                            )    
+        
     

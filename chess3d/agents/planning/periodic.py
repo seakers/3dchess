@@ -1,4 +1,4 @@
-from ast import List
+from typing import List
 from collections import defaultdict
 import logging
 import numpy as np
@@ -9,7 +9,7 @@ from dmas.modules import ClockConfig
 from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
 
-from chess3d.agents.actions import FutureBroadcastMessageAction, ObservationAction, WaitForMessages
+from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
 from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
@@ -228,7 +228,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
         """ Creates a list of observation actions to be performed by the agent """    
 
     @abstractmethod
-    def _schedule_broadcasts(self, state: SimulationAgentState, observations : list, orbitdata: OrbitData, t : float = None) -> list:
+    def _schedule_broadcasts(self, state: SimulationAgentState, observations : List[ObservationAction], orbitdata: OrbitData, t : float = None) -> List[BroadcastMessageAction]:
         """ Schedules broadcasts to be done by this agent """
         try:
             if not isinstance(state, SatelliteAgentState):

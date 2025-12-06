@@ -2,39 +2,34 @@ import unittest
 
 from tests.planners.tester import PlannerTester
 
-class TestDynamicProgramming(PlannerTester, unittest.TestCase):
+class TestHeuristic(PlannerTester, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
         self.single_sat_toy : bool = True
         self.multiple_sat_toy : bool = False
-        self.single_sat_lakes : bool = True
+        self.single_sat_lakes : bool = False
         self.multiple_sat_lakes : bool = False
     
     def planner_name(self) -> str:
-        return "dynamic-programming"
+        return "announcer"
 
     def toy_planner_config(self) -> dict:
         return {
             "preplanner": {
-                "@type": "dynamic",
+                "@type": "eventAnnouncer",
                 "debug": "False",
-                "model" : "earliest",
-                "sharing": "periodic",
-                # "horizon": 250,
-                "period" : 250,
+                "eventsPath" : "./tests/planners/resources/events/toy_events.csv"
+
             }
         }
-    
+
     def lakes_planner_config(self) -> dict:
         return {
             "preplanner": {
-                "@type": "dynamic",
+                "@type": "eventAnnouncer",
                 "debug": "False",
-                "model" : "earliest",
-                "sharing": "periodic",
-                # "horizon": 250,
-                "period" : 250,
+                "eventsPath" : "./tests/planners/resources/events/lake_events_seed-1000.csv"
             }
         }
 

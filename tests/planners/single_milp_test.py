@@ -27,6 +27,19 @@ class TestSingleSatMILP(PlannerTester, unittest.TestCase):
             }
         }
     
+    def lakes_planner_config(self) -> dict:
+        return {
+            "preplanner": {
+                "@type": "milp",
+                "model": "earliest",
+                "licensePath": "./gurobi.lic",
+                # "horizon": 500,
+                "period" : 250,
+                "maxTasks": 100,
+                "debug" : "False"
+            }
+        }
+    
 if __name__ == '__main__':
     # run tests
     unittest.main()

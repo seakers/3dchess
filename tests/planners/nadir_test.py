@@ -24,6 +24,16 @@ class TestNadir(PlannerTester, unittest.TestCase):
             }
         }
 
+    def lakes_planner_config(self) -> dict:
+        return {
+            "preplanner": {
+                "@type": "nadir",
+                "debug": "False",
+                "horizon": 500,
+                "period" : 500,
+            }
+        }
+
 if __name__ == '__main__':
 
     # run tests

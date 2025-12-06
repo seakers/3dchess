@@ -23,6 +23,16 @@ class TestHeuristic(PlannerTester, unittest.TestCase):
                 "period" : 500,
             }
         }
+    
+    def lakes_planner_config(self) -> dict:
+        return {
+            "preplanner": {
+                "@type": "heuristic",
+                "debug": "False",
+                # "horizon": 1000,
+                "period" : 500,
+            }
+        }
 
 if __name__ == '__main__':
 

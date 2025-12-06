@@ -33,7 +33,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
             }
         }
     
-    def lake_planner_config(self) -> dict:
+    def lakes_planner_config(self) -> dict:
         return {
             "preplanner": {
                 "@type": "dealer",
@@ -67,7 +67,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         dealer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         dealer_spacecraft['name'] = 'dealer-sat'
         dealer_spacecraft['@id'] = 'dealer-sat_0'
-        dealer_spacecraft['planner'] = self.toy_planner_config()
+        dealer_spacecraft['planner'] = self.planner_config()
         dealer_spacecraft['orbitState']['state']['inc'] = 0.0
         dealer_spacecraft['instrument'] = []
         dealer_spacecraft['science'] = {

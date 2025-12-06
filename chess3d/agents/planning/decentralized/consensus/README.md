@@ -1,4 +1,4 @@
-# Consensus-Based Bundle Algorithms
+# Couple-Constrained Bundle Algorithm 
 
 Consensus algorithms have been shown to be effective at providing effective task assignemt and coordination in a decentralized manner for a plethera of multi-agent scenarios. Implementations of these algorithm have been proposed for Earth-observing satellite missions [CITE LI HERE]. Additional expansions of this algorithm have been presented that allow for the assignment of tasks requiring only local consensus that, although suboptimal, provide rapid response in agent networks with limited communication opportunities. 
 
@@ -10,10 +10,10 @@ This section describres an expanded implementation of the Consensus-Based Bundle
 ## Limitations of Existing Implementations
 > DRAFT: Talk about limitations of existing methods for our scenario. Primeraly, the idea that a single sat to task is not the prefered output of our task assignment, but rather the coordination based on the value changing with the scheduled revisits and number of observations along with other mission-dependent objectives and requirememts.
 
-## Algorithm Description
-
-
+## Proposed Bid and Results Representation
 > Talk about results vectors and bids definitions.
+
+## Algorithm Description
 
 ### Consesus Phase
 Satellites are constantly listening for any incoming messages from other agents. These messages may include new task requests or bid sharing. 
@@ -22,8 +22,9 @@ Incoming tasks that were not known to the agent are then converted to empty bids
 
 As bids are coming in, they are compared using the following rules [CITATION NEEDED]:
 
-![Asynchronous bid comparison rules](./bid_comparison_async.png)
+![Asynchronous bid comparison rules](./bid_comparison.png)
 *Asynchronous Bid Comparison Rules*
+
 
 A set of tasks to rebroadcasts may result may result following this comparison of incoming bids. 
 

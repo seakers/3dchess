@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Union, Tuple
+from collections import defaultdict
+from enum import Enum
+from typing import Any, Callable, Dict, Union
 
 import numpy as np
 
-from chess3d.agents.science.requests import TaskRequest # TODO bids from task request method?
 from chess3d.agents.planning.tasks import GenericObservationTask
 
 
@@ -20,44 +21,36 @@ def bid_comparison_input_checks( func : Callable ) -> Callable:
         
     return checker
 
-class Bid(ABC): 
-
-    """
-    ## Measurement Task Bid for Consensus Planners
-
-    Describes a bid placed on a task by a given agent
-    """
-    # Constants
-    NONE = 'none'   # NONE value used in various bid attributes
-    EPS = 1e-6      # small epsilon value for float comparisons
-    
-    # Bid comparison results
-    UPDATE_TIME = 'update_time'
+class BidComparisonResults(Enum):
+    """ Bid comparison results """
     UPDATE = 'update'
     LEAVE = 'leave'
     RESET = 'reset'
     COMPLETED = 'completed'
-    COMPARISON_RESULTS = [UPDATE_TIME, UPDATE, LEAVE, RESET, COMPLETED]
 
-    # Rebroadcast comparison results
-    REBROADCAST_SELF = 'rebroadcast self'
-    REBROADCAST_OTHER = 'rebroadcast other'
-    REBROADCAST_EMPTY = 'rebroadcast empty'
-    NO_REBROADCAST = 'no rebroadcast'
-    REBORADCAST_RESULTS = [REBROADCAST_SELF, REBROADCAST_OTHER, REBROADCAST_EMPTY]
+class Bid: 
+    """
+    ## Bid for Consensus Planners
+
+    Describes a bid placed on a generic observation task by a given agent
+    """
+    # Constants
+    NONE = 'none'   # NONE value used in various bid attributes
+    EPS = 1e-6      # small epsilon value for float comparisons
 
     def __init__(self,
                  task : GenericObservationTask,
                  bidder: str,
                  n_obs: int = 0,
-                 bid_value: Union[float, int] = 0,
+                 bid_value: float = 0,
+                 winning_bid: float = 0,
                  winning_bidder: str = NONE,
-                 winning_bid: Union[float, int] = 0,
-                 t_img: Union[float, int] = np.NINF,
-                 t_stamp: Union[float, int] = np.NINF,
+                 t_img : float = np.NINF,
+                 t_bid : float = np.NINF,
+                 t_stamps: Dict[str,float] = None,
                  main_measurement : str = NONE,
-                 performed : bool = False,
-                 ):
+                 performed : bool = False
+                ):
         """
         ## Measurement Task Bid for Consensus Planners
 
@@ -66,39 +59,52 @@ class Bid(ABC):
         ### Attributes:
             - task (`GenericObservationTask`): observation task being bid on
             - bidder (`bidder`): name of the agent keeping track of this bid information
-            - n_obs (`int`): image number associated with this bid
-            - main_measurement (`str`): name of the main measurement assigned by this subtask bid
+            - n_obs (`int`): task performance number being bid on (e.g., image observation number for the target task)
             - bid_value (`float` or `int`): latest bid value from bidder
-            - winning_bidder (`str`): name of current the winning agent
             - winning_bid (`float` or `int`): current winning bid value
+            - winning_bidder (`str`): name of current the winning agent
             - t_img (`float` or `int`): time where the task is set to be performed by the winning agent
-            - t_stamp (`float` or `int`): latest time-stamp when this bid was updated
+            - t_bid (`float` or `int`): time where the bid was generated
+            - t_stamps (`Dict[str,float]`): latest time-stamps when this bid was updated for each agent
+            - main_measurement (`str`): name of the main measurement assigned by this subtask bid
             - performed (`bool`): indicates if the winner of this bid has performed the measurement request at hand
         """
+        # convert inputs if needed
+        t_stamps = defaultdict(lambda: np.NINF) if t_stamps is None else t_stamps
 
         # Validate inputs
         assert isinstance(task, GenericObservationTask), f'`task` must be of type `GenericObservationTask`, got `{type(task)}`'
         assert isinstance(bidder, str), f'`bidder` must be of type `str`, got `{type(bidder)}`'
         assert isinstance(n_obs, int) and n_obs >= 0, f'`n_img` must be positive `int`, got `{type(n_obs)}-{n_obs}`'
         assert isinstance(bid_value, (float, int)), f'`bid_value` must be of type `float` or `int`, got `{type(bid_value)}`'
-        assert isinstance(winning_bidder, str), f'`winning_bidder` must be of type `str`, got `{type(winning_bidder)}`'
         assert isinstance(winning_bid, (float, int)), f'`winning_bid` must be of type `float` or `int`, got `{type(winning_bid)}`'
+        assert isinstance(winning_bidder, str), f'`winning_bidder` must be of type `str`, got `{type(winning_bidder)}`'
         assert isinstance(t_img, (float, int)), f'`t_img` must be of type `float` or `int`, got `{type(t_img)}`'
         assert t_img in task.availability or t_img == np.NINF, f'`t_img` value `{t_img}` not in task availability interval `{task.availability}`'
-        assert isinstance(t_stamp, (float, int)), f'`t_update` must be of type `float` or `int`, got `{type(t_stamp)}`'
+        assert isinstance(t_bid, (float, int)), f'`t_bid` must be of type `float` or `int`, got `{type(t_bid)}`'
+        assert t_bid >= 0.0 or t_bid == np.NINF, f'`t_bid` must be non-negative, got `{t_bid}`'
+        assert isinstance(t_stamps, dict), f'`t_stamps` must be of type `dict`, got `{type(t_stamps)}`'
+        assert all(isinstance(k, str) and isinstance(v, (float, int)) for k,v in t_stamps.items()), f'`t_stamps` keys must be of type `str` and values of type `float` or `int`'
         assert isinstance(main_measurement, str), f'`main_measurement` must be of type `str`, got `{type(main_measurement)}`'
         assert isinstance(performed, bool), f'`performed` must be of type `bool`, got `{type(performed)}`'
 
-        # Assign attributes
+        # Assign task and observation attributes
         self.task = task
-        self.bidder = bidder
         self.n_obs = n_obs
+
+        # Assign bidder information
+        self.bidder = bidder
         self.bid_value = bid_value
+        self.main_measurement = main_measurement
+        
+        # Assign winning bid information
         self.winning_bidder = winning_bidder
         self.winning_bid = winning_bid
         self.t_img = t_img
-        self.t_stamp = t_stamp
-        self.main_measurement = main_measurement
+        self.t_bid = t_bid
+        self.t_stamps = t_stamps
+
+        # Other attributes
         self.performed = performed
 
     """
@@ -114,20 +120,23 @@ class Bid(ABC):
         try:
             bid_dict = {
                 'task': self.task.to_dict(),
-                'main_measurement': self.main_measurement,
                 'bidder': self.bidder,
+                'n_obs': self.n_obs,
                 'bid_value': self.bid_value,
-                'winning_bidder': self.winning_bidder,
                 'winning_bid': self.winning_bid,
+                'winning_bidder': self.winning_bidder,
                 't_img': self.t_img,
-                'n_img': self.n_obs,
-                't_stamp': self.t_stamp,
+                't_bid': self.t_bid,
+                't_stamps': {key : val for key, val in self.t_stamps.items()},
+                'main_measurement': self.main_measurement,
                 'performed': self.performed
             }
             return bid_dict
         finally:
             # check if all required keys are present
-            required_keys = ['task', 'main_measurement', 'bidder', 'bid_value', 'winning_bidder', 'winning_bid', 't_img', 'n_img', 't_stamp', 'performed']
+            required_keys = ['task', 'main_measurement', 'bidder', 'bid_value', 
+                             'winning_bidder', 'winning_bid', 't_img', 'n_obs', 
+                             't_bid', 't_stamps', 'performed']
             assert all(key in bid_dict for key in required_keys), \
                 f'Bid dictionary is missing required keys. Required keys: {required_keys}'
             
@@ -138,7 +147,9 @@ class Bid(ABC):
         Creates a bid class object from a dictionary
         """
         # check if all required keys are present
-        required_keys = ['task', 'main_measurement', 'bidder', 'bid_value', 'winning_bidder', 'winning_bid', 't_img', 'n_img', 't_stamp', 'performed']
+        required_keys = ['task', 'main_measurement', 'bidder', 'bid_value', 
+                         'winning_bidder', 'winning_bid', 't_img', 'n_obs', 
+                         't_bid','t_stamps', 'performed']
         assert all(key in bid_dict for key in required_keys), \
             f'Bid dictionary is missing required keys. Required keys: {required_keys}'
         
@@ -151,20 +162,21 @@ class Bid(ABC):
         # return bid object
         return cls(
             task=task,
-            main_measurement=bid_dict['main_measurement'],
+            n_obs=bid_dict['n_obs'],
             bidder=bid_dict['bidder'],
             bid_value=bid_dict['bid_value'],
-            winning_bidder=bid_dict['winning_bidder'],
             winning_bid=bid_dict['winning_bid'],
+            winning_bidder=bid_dict['winning_bidder'],
             t_img=bid_dict['t_img'],
-            n_obs=bid_dict.get('n_obs', 0),
-            t_stamp=bid_dict['t_stamp'],
+            t_bid=bid_dict['t_bid'],
+            t_stamps=bid_dict['t_stamps'],
+            main_measurement=bid_dict['main_measurement'],
             performed=bid_dict['performed']
         )
     
-    @abstractmethod
     def copy(self) -> 'Bid':
         """ Creates a deep copy of this bid object """
+        return Bid.from_dict(self.to_dict())
 
     """
     ------------------
@@ -179,9 +191,8 @@ class Bid(ABC):
     def __lt__(self, other : 'Bid') -> bool:       
         # check if equal
         if abs(other.bid_value - self.bid_value) < self.EPS:
-            # if there's a tie, use tie-breaker
-            largest_bid = self.__tie_breaker(self, other)
-            return self is not largest_bid
+            # if there's a tie, use tie-breaker        
+            return not self.__wins_tie_breaker(other)
 
         # compare bids
         return other.bid_value > self.bid_value
@@ -190,9 +201,8 @@ class Bid(ABC):
     def __gt__(self, other : 'Bid') -> bool:
         # check if equal
         if abs(other.bid_value - self.bid_value) < self.EPS:
-            # if there's a tie, use tie-breaker
-            largest_bid = self.__tie_breaker(self, other)
-            return self is largest_bid
+            # if there's a tie, use tie-breaker        
+            return self.__wins_tie_breaker(other)
 
         # compare bids
         return other.bid_value < self.bid_value
@@ -217,9 +227,14 @@ class Bid(ABC):
         # compare bids
         return other.bid_value <= self.bid_value or abs(other.bid_value - self.bid_value) < self.EPS
 
+    def __wins_tie_breaker(self, other: 'Bid') -> bool:
+        """ Returns True if, when bids are tied, we should prefer `self` over `other`. """
+        return self is self.__tie_breaker(self, other)
+
     def __tie_breaker(self, bid1 : 'Bid', bid2 : 'Bid') -> 'Bid':
         """
-        Tie-breaking criteria for determining which bid is GREATER in case winning bids are equal
+        Tie-breaking criteria for determining which bid is GREATER in case winning bids are equal. 
+        Uses winning bidder names to determine winner, goes by alphabetical order of winning bidder names.
         """
         # validate inputs
         assert isinstance(bid1, Bid) and isinstance(bid2, Bid), f'cannot calculate tie breaker. Both objects must be bids.'
@@ -232,7 +247,7 @@ class Bid(ABC):
             return bid1
 
         ## Compare bidders alphabetically
-        return max(bid1, bid2, key=lambda b: b.bidder)
+        return min(bid1, bid2, key=lambda b: b.winning_bidder)
 
     """
     ------------------
@@ -241,11 +256,11 @@ class Bid(ABC):
 
     Compares the values of a bid with another bid and decides to either update, reset, or leave the information contained in this bid
     along with deciding thether to broadcast the updated information to neighboring agents based on the rules specified in:
-        - Luke B. Johnson, Sameera S. Ponda, Han-Lim Choi, Jonathan P. How "Asynchronous Decentralized Task Allocation for Dynamic Environments".
+        - A. Aguilar, D. Fornos, and D. Selva, "Decentralized Task Planning and Scheduling for Multi-Agent Systems under Communication Constraints", IN PREP.
 
     """
     @abstractmethod
-    def compare(self, other : 'Bid') -> Tuple[str,str]:
+    def rule_comparison(self, other : 'Bid') -> BidComparisonResults:
         """ 
         Compares bid with another and indicates whether the bid shouls be updated, left, or reset.
         Also returns whether the bid should be rebroadcasted to neighboring agents.
@@ -253,60 +268,196 @@ class Bid(ABC):
         ### Arguments:
             - other (`Bid`): bid being compared to
 
-        ### Returns: Tuple(comparison, rebroadcast)
+        ### Returns: 
             - comparison (`str`): action to perform to this bid upon comparing this bid to the other bid
-            - rebroadcast (`str`): rebroadcast action to perform after comparing this bid to the other bid
         """
-        # convert other bid to `Bid` class type if necessary
-        other : Bid = Bid.from_dict(other) if isinstance(other, dict) else other
+        try:
+            # convert other bid to `Bid` class type if necessary
+            other : Bid = Bid.from_dict(other) if isinstance(other, dict) else other
 
-        # validate inputs
-        assert isinstance(other, Bid), f'can only compare bids to other bids.'
-        assert self.task == other.task, f'can only compare bids for the same task (expected task id: {self.task.id}, given id: {other.task.id})'
-        
-        # 1. Sending agent claims itself as winner of this bid.
-        if other.believes_i_am_winning():
-            return self._case_other_thinks_is_winner(other)
+            # validate inputs
+            assert isinstance(other, Bid), f'can only compare bids to other bids.'
+            assert self.task == other.task, f'can only compare bids for the same task (expected task id: {self.task.id}, given id: {other.task.id})'
+            
+            # 1. Sending agent claims itself as winner of this bid.
+            if other.believes_i_am_winning():
+                comp_result = self._case_other_thinks_is_winner(other)
 
-        # 2. Sending agent claims I am the winner of this bid.
-        if other.believes_is_other_winning(self):
-            return self._case_other_thinks_im_winner(other)
+            # 2. Sending agent claims I am the winner of this bid.
+            elif other.believes_other_is_winning(self):
+                comp_result = self._case_other_thinks_im_winner(other)
 
-        # 3. Sending agent claims some 3rd party as the winner of this bid.
-        if other.believes_third_party_is_winning(self):
-            return self._case_other_thinks_third_party_winner(other)
-        
-        # 4. Sending agent has no winner for this bid.
-        if other.believes_no_winner():
-            return self._case_other_has_no_winner(other)
+            # 3. Sending agent claims some 3rd party as the winner of this bid.
+            elif other.believes_third_party_is_winning(self):
+                comp_result = self._case_other_thinks_third_party_winner(other)
+            
+            # 4. Sending agent has no winner for this bid.
+            elif other.believes_no_winner():
+                comp_result = self._case_other_has_no_winner(other)
 
-        # 5. Fallback (should be unreachable)
-        raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.bidder}` and bidder `{other.bidder}`.')
+            # 5. Fallback (should be unreachable)
+            else: raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.bidder}` and bidder `{other.bidder}`.')
+
+            # return comparison result
+            return comp_result
+        except KeyError as e:
+            raise e
+        finally:
+            # check output type
+            assert isinstance(comp_result, BidComparisonResults), f'comparison result must be of type `BidComparisonResults`, got `{type(comp_result)}`'
 
     @abstractmethod
-    def _case_other_thinks_is_winner(self, other : 'Bid') -> Tuple[str, str]:
+    def _case_other_thinks_is_winner(self, other : 'Bid') -> BidComparisonResults:
         """ Case: Sending agent claims itself as winner of this bid. """
+        # 1. Receiving agent believes it is the winner too.
+        if self.believes_i_am_winning():
+            if other > self:  
+                # Sending agent's bid is higher → update info
+                return BidComparisonResults.UPDATE
+            elif other.t_img <= self.t_img:
+                # Sending agent is bidding for an earlier observation → bidder must be optimistic in its bidding; update info
+                return BidComparisonResults.UPDATE
+            
+        # 2. Receiving agent believes other is the winner already.
+        if self.believes_other_is_winning(other):
+            # Both agents agree the sending agent is the winner → update info
+            return BidComparisonResults.UPDATE
+
+        # 3. Receiving agent believes some 3rd party is winner.
+        if self.believes_third_party_is_winning(other):
+            if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+                # Sending agent has more recent info on 3rd party winner → update info
+                return BidComparisonResults.UPDATE
+            elif other > self:
+                # Sending agent's bid is higher → update info
+                return BidComparisonResults.UPDATE
+            elif other.t_img <= self.t_img:
+                # Sending agent is bidding for an earlier observation → bidder must be optimistic in its bidding; update info
+                return BidComparisonResults.UPDATE
+
+        # 4. Receiving agent bid has no winner.
+        if self.believes_no_winner():
+            # no known winner → update info
+            return BidComparisonResults.UPDATE
+
+        # 5. Fallback → leave info as is
+        return BidComparisonResults.LEAVE
 
     @abstractmethod
-    def _case_other_thinks_im_winner(self, other : 'Bid') -> Tuple[str, str]:
+    def _case_other_thinks_im_winner(self, other : 'Bid') -> BidComparisonResults:
         """ Case: Sending agent claims I am the winner of this bid. """
+        # 1. Receiving agent believes it is the winner too.
+        if self.believes_i_am_winning():
+            # Receiving agent has more updated information about itself → leave info as is
+            return BidComparisonResults.LEAVE
+        
+        # 2. Receiving agent believes other is the winner already.
+        if self.believes_other_is_winning(other):
+            # Both agents think the other is winning and are in conflict → reset info
+            return BidComparisonResults.RESET
+
+        # 3. Receiving agent believes some 3rd party is winner.
+        if self.believes_third_party_is_winning(other):
+            if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+                # Sending agent has more recent info on 3rd party winner → reset info
+                return BidComparisonResults.RESET
+
+        # 4. Receiving agent bid has no winner.
+        if self.believes_no_winner():
+            # Receiving agent would know if it was winning a bid → leave info as is
+            return BidComparisonResults.LEAVE
+
+        # 5. Fallback → leave info as is
+        return BidComparisonResults.LEAVE
 
     @abstractmethod
-    def _case_other_thinks_third_party_winner(self, other : 'Bid') -> Tuple[str, str]:        
+    def _case_other_thinks_third_party_winner(self, other : 'Bid') -> BidComparisonResults:        
         """ Handles the case where the other bid thinks a third party is the winner """
+        # 1. Receiving agent believes it is the winner too.
+        if self.believes_i_am_winning():
+            if other.t_stamps[other.winning_bidder] > self.t_stamps.get(other.winning_bidder, np.NINF):
+                if other > self:  
+                    # Sending agent's bid is higher and more updated → update info
+                    return BidComparisonResults.UPDATE
+                elif other.t_img <= self.t_img:
+                    # Sending agent is bidding for an earlier observation and is more updated → bidder must be optimistic in its bidding; update info
+                    return BidComparisonResults.UPDATE
+        
+        # 2. Receiving agent believes other is the winner already.
+        if self.believes_other_is_winning(other):
+            if other.t_stamps[other.winning_bidder] > self.t_stamps.get(other.winning_bidder, np.NINF):
+                # Sending agent has more recent info on 3rd party winner → update info
+                return BidComparisonResults.UPDATE
+            else:
+                # Receiving agent has more recent info on 3rd party winner → reset info and wait for sender to update
+                return BidComparisonResults.RESET
+        
+        # 3. Receiving agent also believes some 3rd party is winner.
+        if self.has_same_winner(other):
+            if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+                # Sending agent has more recent info on 3rd party winner → update info
+                return BidComparisonResults.UPDATE
+        
+        # 4. Receiving agent believes some 3rd party is winner.
+        if self.believes_third_party_is_winning(other):
+            if other.t_stamps[other.winning_bidder] > self.t_stamps.get(other.winning_bidder, np.NINF):
+                if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+                    # Sending agent's bids from all parties are more updated → update info
+                    return BidComparisonResults.UPDATE
+                
+                elif other > self:  
+                    # Sending agent's bid is higher and more updated → update info
+                    return BidComparisonResults.UPDATE
+                
+                elif other.t_img <= self.t_img:
+                    # Sending agent is bidding for an earlier observation and is more updated → bidder must be optimistic in its bidding; update info
+                    return BidComparisonResults.UPDATE
+
+            elif other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+                # Sending agent has older info on 3rd party winner but newer info on receiving agent's winner → reset info
+                return BidComparisonResults.RESET
+        
+        # 5. Receiving agent bid has no winner.
+        if self.believes_no_winner():
+            if other.t_stamps[other.winning_bidder] > self.t_stamps.get(other.winning_bidder, np.NINF):
+                # Sending agent has more recent info on 3rd party winner → update info
+                return BidComparisonResults.UPDATE
+
+        # 6. Fallback → leave info as is
+        return BidComparisonResults.LEAVE
 
     @abstractmethod
-    def _case_other_has_no_winner(self, other : 'Bid') -> Tuple[str, str]:
+    def _case_other_has_no_winner(self, other : 'Bid') -> BidComparisonResults:
         """ Handles the case where the other bid has no winner """
+        # 1. Receiving agent believes it is the winner too.
+        if self.believes_i_am_winning():
+            # Receiving agent would know if it was winning a bid → leave info as is
+            return BidComparisonResults.LEAVE
+        
+        # 2. Receiving agent believes other is the winner already.
+        if self.believes_other_is_winning(other):
+            # Sending agent would know if it was winning a bid → update info
+            return BidComparisonResults.UPDATE
+        
+        # 3. Receiving agent believes some 3rd party is winner.
+        if self.believes_third_party_is_winning(other):
+            if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+                # Sending agent has more recent info on 3rd party winner → update info
+                return BidComparisonResults.UPDATE
+        
+        # 4. Receiving agent bid has no winner.
+        if self.believes_no_winner():
+            # Neither bid has a winner → leave info as is
+            return BidComparisonResults.LEAVE
 
-    def is_bid_mine(self, other : 'Bid') -> bool:
-        return other.bidder == self.bidder
+        # 5. Fallback → leave info as is
+        return BidComparisonResults.LEAVE
 
     def believes_i_am_winning(self) -> bool:
         """ Checks if this bid is currently won by the bidder itself """
         return self.winning_bidder == self.bidder
 
-    def believes_is_other_winning(self, other: 'Bid') -> bool:
+    def believes_other_is_winning(self, other: 'Bid') -> bool:
         """ Checks if this bid is currently won by the other bidder """
         return self.winning_bidder == other.bidder
 
@@ -316,136 +467,61 @@ class Bid(ABC):
 
     def believes_no_winner(self) -> bool:
         """ Checks if this bid has no winner """
-        return self.winning_bidder == self.NONE
+        return not self.has_winner()
     
-    def is_same_winner(self, other: 'Bid') -> bool:
-        return self.winning_bidder == other.winning_bidder
-
-    def is_tie(self, other: 'Bid') -> bool:
-        """ Checks if this bid is tied with another bid """
-        return abs(self.winning_bid - other.winning_bid) < self.EPS
-
-    def wins_tie_breaker(self, other: 'Bid') -> bool:
-        """ Returns True if, when bids are tied, we should prefer `self` over `other`. """
-        larger_name_bid = self.__tie_breaker(self, other)
-        return larger_name_bid is not self
+    def has_same_winner(self, other: 'Bid') -> bool:
+        return self.winning_bidder == other.winning_bidder and self.has_winner() and other.has_winner()
     
-    def is_same_timestamp(self, other: 'Bid') -> bool:
-        """ Checks if this bid has the same timestamp as another bid """
-        return abs(self.t_stamp - other.t_stamp) < self.EPS
+    def has_winner(self) -> bool:    
+        """ Checks if this bid has a winner """
+        return self.winning_bidder != Bid.NONE
+
+    def was_performed(self) -> bool:
+        """ Checks if the winner of this bid has performed the measurement request at hand """
+        return self.performed
+            
+    def is_mutually_exclusive(self, other : 'Bid') -> bool:
+        """ Checks if this bid is mutually exclusive with another bid (i.e., both bids cannot be won by the same agent) """
+        raise NotImplementedError("`is_mutually_exclusive` method is not implemented yet.")
+        
+        # check time overlap?
+        if other.n_obs <= self.n_obs:
+            return other.t_img <= self.t_img
+        
     
     """
     ---------------------------
     MODIFIERS
     ---------------------------
     """
-
-    def update(self, other : object, t : float) -> 'Bid':
-        """ Returns a bid with the updated information after comparing this bid to another bid """
-        # compare bids
-        comp_result, _ = self.compare(other)
-        comp_result : str
-
-        # update accordingly 
-        new_bid : Bid = self.copy()
-        if comp_result is self.UPDATE_TIME:
-            new_bid.__update_time(t)
-        elif comp_result is self.UPDATE:
-            new_bid._update_info(other, t)
-        elif comp_result is self.RESET:
-            new_bid.reset(t)
-        elif comp_result is self.LEAVE:
-            new_bid._leave(t)
-        elif comp_result is self.COMPLETED:
-            new_bid._perform(t)
-        else:
-            raise ValueError(f'cannot perform update of type `{comp_result}`')
-        
-        # return updated bid
-        return new_bid
-    
-    def __update_time(self, t_update : float) -> None:
-        """Records the lastest time this bid was updated"""
-        self.t_stamp = t_update
-    
-    def _update_info(self, other : 'Bid', t : float) -> None:
-        """
-        Updates all of the variable bid information
-
-        ### Arguments:
-            - other (`Bid`): equivalent bid being used to update information
-        """
-        # validate inputs
-        assert isinstance(other, Bid), f'can only update bids from other bids.'
-        assert self.task == other.task, f'cannot update bid with information from another bid intended for another task (expected task id: {self.task}, given id: {other.task}).'
-
-        # update bid information
-        self.winning_bid = other.winning_bid
-        self.winning_bidder = other.winning_bidder
-        self.main_measurement = other.main_measurement
-        self.t_img = other.t_img
-
-        self.t_stamp = t
-        self.performed = other.performed if not self.performed else True # Check if this hold true for all values
-
-    def reset(self, t_update : float) -> None:
-        """
-        Resets the values of this bid while keeping track of lates update time
-        """
-        assert isinstance(t_update, (float, int)), f'`t_update` must be of type `float` or `int`, got `{type(t_update)}`'
-        assert t_update >= 0, f'`t_update` must be non-negative, got `{t_update}`'
-
-        self.winning_bid = 0
-        self.winning_bidder = self.NONE
-        self.main_measurement = self.NONE
-        self.t_img = -1
-        self.t_stamp = t_update
-
-    def _leave(self, _, **__) -> None:
-        """
-        Leaves bid as is (used for code readibility).
-
-        ### Arguments:
-            - t_update (`float` or `int`): latest time when this bid was updated
-        """
-        return
-    
-    def _perform(self, t_update : float) -> None:
-        """ Indicates that this action has been performed """
-        self.performed = True
-        self.t_stamp = t_update
-        
     def set(self, 
             main_instrument : str,
-            new_bid : Union[int, float], 
-            t_img : Union[int, float], 
-            n_img : int,
+            bid_value : Union[int, float], 
+            t_img : Union[int, float],
             t_update : Union[int, float]
         ) -> None:
         """
-        Sets new values for this bid
+        Sets new values for this bid. Assumes this bid is winning upon setting new values.
 
         ### Arguments: 
             - main_instrument (`str`): main measurement set to perform this bid
-            - new_bid (`int` or `float`): new bid value
+            - bid_value (`int` or `float`): new bid value
             - t_img (`int` or `float`): new imaging time
-            - n_img (`int`): image number
             - t_update (`int` or `float`): update time
         """
+        # update bidder information
+        self.bid_value = bid_value
         self.main_instrument = main_instrument
-        self.winning_bid = new_bid
+
+        # update winning bid information
+        self.winning_bid = bid_value
         self.winning_bidder = self.bidder
         self.t_img = t_img
-        self.n_obs = n_img
-        self.t_stamp = t_update
-    
-    def has_winner(self) -> bool:
-        """
-        Checks if this bid has a winner
-        """
-        return self.winning_bidder != Bid.NONE
 
-    def set_performed(self, t : float, performed : bool = True, performer : str = None) -> None:
+        # update timestamp for this bidder
+        self.t_stamps[self.bidder] = t_update   
+
+    def set_performed(self, t_update : float, performed : bool = True, performer : str = None) -> None:
         """
         Sets the performed status of this bid
 
@@ -454,17 +530,109 @@ class Bid(ABC):
             - performed (`bool`): indicates if the winner of this bid has performed the measurement request at hand
             - performer (`str`): name of the agent that performed the task
         """
-        self.__update_time(t)
+        # update winning bidder information
         self.winning_bidder = performer if performer is not None else self.bidder
+        
+        # update performed status
         self.performed = performed
-        self.t_img = t
 
-    def was_performed(self) -> bool:
-        """
-        Checks if the winner of this bid has performed the measurement request at hand
-        """
-        return self.performed
+        # update timestamp for this bidder
+        self.t_stamps[self.winning_bidder] = t_update
 
+    def compare(self, other : 'Bid', t_comp : float) -> 'Bid':
+        """ 
+        Compares this bid with another and returns a new bid instance with the appropriate updated information.
+
+        ### Arguments:
+            - other (`Bid`): bid being compared to
+            - t_comp (`float`): time in which the comparison is being made
+        """
+        # validate inputs
+        assert isinstance(other, Bid), f'can only compare bids to other bids.'
+        assert self.task == other.task, f'cannot compare bids intended for different tasks (expected {self.task}, got {other.task})'
+        assert self.n_obs == other.n_obs, f'cannot compare bids intended for different image numbers (expected {self.n_obs}, got {other.n_obs})'
+        assert t_comp >= 0, f'`t_comp` must be non-negative, got `{t_comp}`'
+        
+        # create a deep copy of this bid
+        new_bid : Bid = self.copy()
+        
+        # check comparison rules
+        comp_result : BidComparisonResults = self.rule_comparison(other)
+
+        # update copy according to comparison result
+        if comp_result is BidComparisonResults.UPDATE:      new_bid.__update_info(other, t_comp)
+        elif comp_result is BidComparisonResults.RESET:     new_bid.__reset(other, t_comp)
+        elif comp_result is BidComparisonResults.LEAVE:     new_bid.__leave(other, t_comp)
+        elif comp_result is BidComparisonResults.COMPLETED: new_bid.__perform(other, t_comp)
+        else: raise ValueError(f'cannot perform update of type `{comp_result}`')
+        
+        # check proper update
+        assert self.t_stamps[other.bidder] == t_comp
+
+        # return updated bid
+        return new_bid
+    
+    def __update_info(self, other : 'Bid', t_comp : float) -> None:
+        """
+        Updates all of the variable bid information
+
+        ### Arguments:
+            - other (`Bid`): equivalent bid being used to update information
+            - t_comp (`float` or `int`): latest time when this bid was updated
+        """
+        # update winning bid information
+        self.winning_bid = other.winning_bid
+        self.winning_bidder = other.winning_bidder
+        
+        # update other bid information
+        self.t_img = other.t_img
+        self.t_bid = other.t_bid
+        self.main_measurement = other.main_measurement
+        self.performed = other.performed or self.performed
+
+        # update timestamp for the other bidder       
+        self.t_stamps[other.bidder] = t_comp
+
+    def __reset(self, other : 'Bid', t_comp : float) -> None:
+        """
+        Resets the values of this bid while keeping track of lates update time
+        
+        ### Arguments:
+            - other (`Bid`): equivalent bid being used to update information
+            - t_comp (`float` or `int`): latest time when this bid was updated
+        """
+        # if own bid, update internal bid value to 0
+        if self.winning_bidder == self.bidder: self.bid_value = 0
+
+        # reset winning bid information
+        self.winning_bid = 0
+        self.winning_bidder = self.NONE
+
+        # reset other bid information
+        self.t_img = np.NINF
+        self.t_bid = np.NINF
+        self.main_measurement = self.NONE
+
+        # update timestamp for the other bidder       
+        self.t_stamps[other.bidder] = t_comp
+
+    def __leave(self, other : 'Bid', t_comp : float) -> None:
+        """
+        Leaves bid as is.
+
+        ### Arguments:
+            - other (`Bid`): equivalent bid being used to update information
+            - t_comp (`float` or `int`): latest time when this bid was updated
+        """
+        # update timestamp for the other bidder       
+        self.t_stamps[other.bidder] = t_comp
+    
+    def __perform(self, other : 'Bid', t_comp : float) -> None:
+        """ Indicates that this action has been performed """
+        raise NotImplementedError("`__perform` method is not implemented yet.")
+        # self.performed = True
+        # self.t_stamps[other.bidder] = t_comp
+    
     """
     ---------------------------
     STRING REPRESENTATION
@@ -479,13 +647,14 @@ class Bid(ABC):
         
         split_id = self.task.id.split('-')
         line_data = {   "task_id" : split_id[0], 
-                        "main_measurement" : self.main_measurement, 
-                        "target" : self.task.location, 
+                        "n_obs" : self.n_obs,
                         "bidder" : self.bidder, 
                         "bid" : round(self.winning_bid, 3), 
                         "winner" : self.winning_bidder, 
                         "t_img" : round(self.t_img, 3),
-                        "t_update" : round(self.t_stamp, 3)
+                        "t_update" : round(max(self.t_stamps.values()), 3),
+                        "main_measurement" : self.main_measurement, 
+                        "target" : self.task.location, 
                     }
         out = "Bid("
         for key, value in line_data.items():
@@ -501,503 +670,3 @@ class Bid(ABC):
     def __hash__(self) -> int:
         return hash(repr(self))  
 
-
-class AsynchronousBid(Bid):
-    def __init__(self, task, bidder, n_obs = 0, bid_value = 0, winning_bidder = Bid.NONE, winning_bid = 0, t_img = np.NINF, t_stamp = np.NINF, main_measurement = Bid.NONE, performed = False):
-        """ Asynchronous Bid class implementing the bid comparison method according to:
-            - Luke B. Johnson, Sameera S. Ponda, Han-Lim Choi, Jonathan P. How "Asynchronous Decentralized Task Allocation for Dynamic Environments".
-        """
-        super().__init__(task, bidder, n_obs, bid_value, winning_bidder, winning_bid, t_img, t_stamp, main_measurement, performed)
-
-    def copy(self) -> 'Bid':
-        """ Creates a deep copy of this bid object """
-        return AsynchronousBid.from_dict(self.to_dict())
-
-    def compare(self, other : 'Bid') -> Tuple[str,str]:
-        """
-        Compares bid with another and either updates, resets, or leaves the information contained in this bid
-        depending on the rules specified in:
-
-            - Luke B. Johnson, Sameera S. Ponda, Han-Lim Choi, Jonathan P. How "Asynchronous Decentralized Task Allocation for Dynamic Environments".
-
-        ### Arguments:
-            - other (`Bid`): bid being compared to
-
-        ### Returns: Tuple(comparison, rebroadcast)
-
-            - comparison (`self`) : action to perform to this bid upon comparing this bid to the other bid
-            - rebroadcast (`self`): rebroadcast action to perform after comparing this bid to the other bid
-        """
-        return super().compare(other)
-        
-    def _case_other_thinks_is_winner(self, other : 'Bid') -> Tuple[str, str]:
-        # 1. Receiving agent believes it is the winner too.
-        if self.believes_i_am_winning():
-            if self.is_tie(other):
-                if self.wins_tie_breaker(other):
-                    # bids tied & won tie-breaker → leave bid & do not rebroadcast
-                    # NOTE : rebroadcasting here may cause oscillations
-                    return self.LEAVE, self.NO_REBROADCAST
-                else:
-                    # bids tied & lost tie-breaker → update bid & rebroadcast other's bid
-                    return self.UPDATE, self.REBROADCAST_OTHER
-            
-            elif other.winning_bid > self.winning_bid:
-                # other bid is higher → update bid & rebroadcast other's bid
-                return self.UPDATE, self.REBROADCAST_OTHER
-            
-            elif other.winning_bid < self.winning_bid:
-                # my bid is higher → update bid time & rebroadcast my bid
-                return self.UPDATE_TIME, self.REBROADCAST_SELF            
-
-        # 2. Receiving agent other is the winner already.
-        if self.believes_is_other_winning(other):
-            if self.is_same_timestamp(other):
-                # bids are from the same time → leave bid & do not rebroadcast
-                return self.LEAVE, self.NO_REBROADCAST
-
-            elif other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid & rebroadcast other's bid
-                return self.UPDATE, self.REBROADCAST_OTHER
-            
-            elif other.t_stamp < self.t_stamp:
-                # my bid is newer → leave bid & do not rebroadcast
-                return self.LEAVE, self.NO_REBROADCAST
-
-        # 3. Receiving agent believes some 3rd party is winner.
-        if self.believes_third_party_is_winning(other):
-            if self.is_tie(other):
-                # bids tied → leave bid & rebroadcast my bid
-                return self.LEAVE, self.REBROADCAST_SELF
-
-            elif other.winning_bid > self.winning_bid:
-                if self.is_same_timestamp(other) or other.t_stamp > self.t_stamp:
-                    # other bid is higher & same/newer time → update bid & rebroadcast other's bid
-                    return self.UPDATE, self.REBROADCAST_OTHER
-                
-                elif other.t_stamp < self.t_stamp:
-                    # other bid is higher & older time → update bid & rebroadcast other's bid
-                    return self.UPDATE, self.REBROADCAST_OTHER
-
-            elif other.winning_bid < self.winning_bid:
-                if self.is_same_timestamp(other) or other.t_stamp < self.t_stamp:
-                    # my bid is higher & same/newer time → leave bid & rebroadcast my bid
-                    return self.LEAVE, self.REBROADCAST_SELF
-                
-                elif other.t_stamp > self.t_stamp:
-                    # my bid is higher & older time → update bid & rebroadcast other's bid
-                    return self.UPDATE, self.REBROADCAST_OTHER            
-
-        # 4. Receiving agent bid has no winner.
-        if self.believes_no_winner():
-            # update bid & rebroadcast other's bid
-            return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 5. Fallback (should be unreachable)
-        raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.bidder}` and bidder `{other.bidder}`.')
-
-    def _case_other_thinks_im_winner(self, other : 'Bid') -> Tuple[str, str]:
-        # 1. Receiving agent believes it is the winner too.
-        if self.believes_i_am_winning():
-            if self.is_same_timestamp(other):
-                # bids are from the same time → leave bid & do not rebroadcast
-                return self.LEAVE, self.NO_REBROADCAST 
-            
-            elif other.t_stamp > self.t_stamp:
-                # newer info from myself → adopt it & rebroadcast
-                return self.UPDATE, self.REBROADCAST_OTHER
-            
-            elif other.t_stamp < self.t_stamp:
-                # we are newer → keep own, no rebroadcast needed
-                # NOTE : rebroadcasting here may cause oscillations
-                return self.LEAVE, self.NO_REBROADCAST
-
-        # 2. Receiving agent other is the winner already.
-        if self.believes_is_other_winning(other):
-            # reset & rebroadcast empty bid with current time
-            return self.RESET, self.REBROADCAST_EMPTY
-
-        # 3. Receiving agent believes some 3rd party is winner.
-        if self.believes_third_party_is_winning(other):
-            # leave & rebroadcast own information
-            return self.LEAVE, self.REBROADCAST_SELF
-
-        # 4. Receiving agent bid has no winner.
-        if self.believes_no_winner():
-            # leave & rebroadcast empty bid with current time
-            return self.LEAVE, self.REBROADCAST_EMPTY
-
-        # 5. Fallback (should be unreachable)
-        raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.bidder}` and bidder `{other.bidder}`.')
-        # # leave & do not rebroadcast
-        # return self.LEAVE, self.NO_REBROADCAST
-
-    def _case_other_thinks_third_party_winner(self, other : 'Bid') -> Tuple[str, str]:
-        # 1. Receiving agent believes it is the winner too.
-        if self.believes_i_am_winning():
-            if self.is_tie(other):
-                if self.wins_tie_breaker(other):
-                    # bids tied & won tie-breaker → leave bid & do not rebroadcast
-                    # NOTE : rebroadcasting here may cause oscillations
-                    return self.LEAVE, self.NO_REBROADCAST
-                else:
-                    # bids tied & lost tie-breaker → update bid & rebroadcast other's bid
-                    return self.UPDATE, self.REBROADCAST_OTHER
-                
-            elif other.winning_bid > self.winning_bid:
-                # other bid is higher → update bid & rebroadcast other's bid
-                return self.UPDATE, self.REBROADCAST_OTHER
-            
-            elif other.winning_bid < self.winning_bid:
-                # my bid is higher → update bid time & rebroadcast my bid
-                return self.UPDATE_TIME, self.REBROADCAST_SELF
-
-        # 2. Receiving agent other is the winner already.
-        if self.believes_is_other_winning(other):
-            # update and rebroadcast other's bid
-            return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 3. Receiving agent also believes some 3rd party is winner.
-        if self.is_same_winner(other):
-            if self.is_same_timestamp(other):
-                # same time stamp →  leave & do not rebroadcast
-                return self.LEAVE, self.NO_REBROADCAST
-            
-            elif other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid & rebroadcast other's bid
-                return self.UPDATE, self.REBROADCAST_OTHER
-
-            elif other.t_stamp < self.t_stamp:
-                # my bid is newer → update bid time & rebroadcast my bid
-                return self.LEAVE, self.REBROADCAST_SELF
-        
-        # 4. Receiving agent believes some 4th party is winner.
-        if self.believes_third_party_is_winning(other):
-            if self.is_tie(other):
-                # cannot agree on winner → leave & do not rebroadcast
-                # NOTE : rebroadcasting here may cause oscillations
-                return self.LEAVE, self.NO_REBROADCAST
-            
-            elif other.winning_bid > self.winning_bid:
-                if self.is_same_timestamp(other) or other.t_stamp > self.t_stamp:
-                    # other bid is higher & same/newer time → update bid & rebroadcast other's bid
-                    return self.UPDATE, self.REBROADCAST_OTHER
-
-                elif other.t_stamp < self.t_stamp:
-                    # my bid is newer → leave & rebroadcast my bid
-                    return self.LEAVE, self.REBROADCAST_SELF
-
-            elif other.winning_bid < self.winning_bid:
-                if self.is_same_timestamp(other) or other.t_stamp < self.t_stamp:
-                    # my bid is higher & same/newer time → leave & rebroadcast my bid
-                    return self.LEAVE, self.REBROADCAST_SELF
-
-                elif other.t_stamp > self.t_stamp:
-                    # other bid is newer → update bid & rebroadcast other's bid
-                    return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 5. Receiving agent bid has no winner.
-        if self.believes_no_winner():
-            # update & rebroadcast other's bid
-            return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 6. Fallback (should be unreachable)
-        raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.bidder}` and bidder `{other.bidder}`.')
-
-    def _case_other_has_no_winner(self, other : 'Bid') -> Tuple[str, str]:
-        # 1. Receiving agent believes it is the winner too.
-        if self.believes_i_am_winning():
-            # leave & rebroadcast own bid
-            return self.LEAVE, self.REBROADCAST_SELF
-
-        # 2. Receiving agent other is the winner already.
-        if self.believes_is_other_winning(other):
-            # update & rebroadcast other's bid
-            return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 3. Receiving agent believes some 3rd party is winner.
-        if self.believes_third_party_is_winning(other):
-            if other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid & rebroadcast other's bid
-                return self.UPDATE, self.REBROADCAST_OTHER
-            else:
-                # my bid is newer → leave bid & rebroadcast my bid 
-                # NOTE : rebroadcasting own bid here to ensure other agents get updated info
-                return self.LEAVE, self.REBROADCAST_SELF
-
-        # 4. Receiving agent bid has no winner.
-        if self.believes_no_winner():
-            # leave & do not rebroadcast
-            return self.LEAVE, self.NO_REBROADCAST
-
-        # 5. Fallback (should be unreachable)
-        raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.bidder}` and bidder `{other.bidder}`.')
-        
-
-class SynchronousBid(Bid):
-    def __init__(self, task, bidder, n_img = 0, bid_value = 0, winning_bidder = Bid.NONE, winning_bid = 0, t_img = np.NINF, t_stamp = np.NINF, main_measurement = Bid.NONE, performed = False):
-        """ 
-        Synchronous Bid class implementing the bid comparison method according to:
-            - Li, Guoliang. "Online scheduling of distributed Earth observation satellite system under rigid communication constraints." Advances in Space Research 65.11 (2020): 2475-2496.
-
-        """
-        super().__init__(task, bidder, n_img, bid_value, winning_bidder, winning_bid, t_img, t_stamp, main_measurement, performed)
-
-    def copy(self) -> 'Bid':
-        """ Creates a deep copy of this bid object """
-        return SynchronousBid.from_dict(self.to_dict())
-
-    def compare(self, other : 'Bid') -> Tuple[str,str]:
-        """
-        Compares bid with another and either updates, resets, or leaves the information contained in this bid
-        depending on the rules specified in:
-
-            - Li, Guoliang. "Online scheduling of distributed Earth observation satellite system under rigid communication constraints." Advances in Space Research 65.11 (2020): 2475-2496.
-
-        ### Arguments:
-            - other (`Bid`): bid being compared to
-
-        ### Returns: Tuple(comparison, rebroadcast)
-
-            - comparison (`self`) : action to perform to this bid upon comparing this bid to the other bid
-            - rebroadcast (`self`): rebroadcast action to perform after comparing this bid to the other bid
-        """
-        return super().compare(other)
-    
-    def _case_other_thinks_is_winner(self, other : 'Bid') -> Tuple[str, str]:
-        # 1. Receiving agent believes it is the winner too.
-        if self.believes_i_am_winning():
-            if self.is_tie(other):
-                if not self.wins_tie_breaker(other):
-                    # bids tied & lost tie-breaker → update bid 
-                    return self.UPDATE, self.REBROADCAST_OTHER
-            
-            elif other.winning_bid > self.winning_bid:
-                # other bid is higher → update bid 
-                return self.UPDATE, self.REBROADCAST_OTHER
-            
-        # 2. Receiving agent other is the winner already.
-        if self.believes_is_other_winning(other):
-            # other bid is updated → update bid 
-            return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 3. Receiving agent believes some 3rd party is winner.
-        if self.believes_third_party_is_winning(other):
-            if other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid 
-                return self.UPDATE, self.REBROADCAST_OTHER
-            
-            elif self.is_tie(other):
-                if not self.wins_tie_breaker(other):
-                    # bids tied & lost tie-breaker → update bid 
-                    return self.UPDATE, self.REBROADCAST_OTHER
-            
-            elif other.winning_bid > self.winning_bid:
-                # other bid is higher → update bid 
-                return self.UPDATE, self.REBROADCAST_OTHER        
-        
-        # 4. Receiving agent bid has no winner.
-        if self.believes_no_winner():
-            # update bid & rebroadcast other's bid
-            return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 5. Fallback default case 
-        return self.LEAVE, self.NO_REBROADCAST
-    
-    def _case_other_thinks_im_winner(self, other : 'Bid') -> Tuple[str, str]:
-        """ Case: Sending agent claims I am the winner of this bid. """
-        # 1. Receiving agent believes it is the winner too.
-        if self.believes_i_am_winning():
-            # it is my bid → leave & do not rebroadcast
-            return self.LEAVE, self.NO_REBROADCAST
-
-        # 2. Receiving agent believes other is the winner already.
-        if self.believes_is_other_winning(other):
-            # conflict → reset & rebroadcast self
-            return self.RESET, self.REBROADCAST_SELF
-
-        # 3. Receiving agent believes some 3rd party is winner.
-        if self.believes_third_party_is_winning(other):
-            if other.t_stamp > self.t_stamp:
-                # other bid is newer → reset & rebroadcast self
-                return self.RESET, self.REBROADCAST_SELF
-
-        # 4. Receiving agent bid has no winner.
-        if self.believes_no_winner():
-            # conflict → leave & do not rebroadcast
-            return self.LEAVE, self.NO_REBROADCAST
-        
-        # 5. Fallback default case
-        return self.LEAVE, self.NO_REBROADCAST
-
-    def _case_other_thinks_third_party_winner(self, other : 'Bid') -> Tuple[str, str]:        
-        """ Handles the case where the other bid thinks a third party is the winner """
-        # 1. Receiving agent believes it is the winner too.
-        if self.believes_i_am_winning():
-            if other.t_stamp > self.t_stamp:
-                if self.is_tie(other):
-                    if not self.wins_tie_breaker(other):
-                        # other bid is newer and wins tie-braker → update bid 
-                        return self.UPDATE, self.REBROADCAST_OTHER
-                
-                elif other.winning_bid > self.winning_bid:
-                    # other bid is newer and has higher bid → update bid 
-                    return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 2. Receiving agent believes other is the winner already.
-        if self.believes_is_other_winning(other):
-            if other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid 
-                return self.UPDATE, self.REBROADCAST_OTHER
-            else:
-                # my bid is newer → reset bid & rebroadcast self
-                return self.RESET, self.REBROADCAST_SELF
-
-        # 3. Receiving agent also believes some 3rd party is winner.
-        if self.is_same_winner(other):
-            if other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid 
-                return self.UPDATE, self.REBROADCAST_OTHER
-        
-        # 4. Receiving agent believes some 4th party is winner.
-        if self.believes_third_party_is_winning(other):
-            if other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid 
-                return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 5. Receiving agent bid has no winner.
-        if self.believes_no_winner():
-            if other.t_stamp > self.t_stamp:
-                # other bid is newer → update bid 
-                return self.UPDATE, self.REBROADCAST_OTHER
-        
-        # 6. Fallback default case
-        return self.LEAVE, self.NO_REBROADCAST
-
-    def _case_other_has_no_winner(self, other : 'Bid') -> Tuple[str, str]:
-        """ Handles the case where the other bid has no winner """
-        # 1. Receiving agent believes it is the winner too.
-        if self.believes_i_am_winning():
-            # it is my bid → leave & do not rebroadcast
-            return self.LEAVE, self.NO_REBROADCAST
-
-        # 2. Receiving agent believes other is the winner already.
-        if self.believes_is_other_winning(other):
-            # they abandoned their bid → update & rebroadcast other's bid
-            return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 3. Receiving agent believes some 3rd party is winner.
-        if self.believes_third_party_is_winning(other):
-            if other.t_stamp > self.t_stamp:
-                # other bid is newer → update & rebroadcast other's bid
-                return self.UPDATE, self.REBROADCAST_OTHER
-
-        # 4. Receiving agent bid has no winner.
-        if self.believes_no_winner():
-            # no one is winning → leave & do not rebroadcast
-            return self.LEAVE, self.NO_REBROADCAST
-        
-        # 5. Fallback default case
-        return self.LEAVE, self.NO_REBROADCAST
-
-# class BidBuffer(object):
-#     """
-#     Asynchronous buffer that holds bid information for use by processes within the MACCBBA
-#     """
-#     def __init__(self) -> None:
-#         self.bid_access_lock = asyncio.Lock()
-#         self.bid_buffer = {}
-#         self.updated = asyncio.Event()             
-
-#     def __len__(self) -> int:
-#         l = 0
-#         for req_id in self.bid_buffer:
-#             for bid in self.bid_buffer[req_id]:
-#                 bid : Bid
-#                 l += 1 if bid is not None else 0
-#         return l
-
-#     async def pop_all(self) -> list:
-#         """
-#         Returns latest bids for all requests and empties buffer
-#         """
-#         await self.bid_access_lock.acquire()
-
-#         out = []
-#         for req_id in self.bid_buffer:
-#             for bid in self.bid_buffer[req_id]:
-#                 bid : Bid
-#                 if bid is not None:
-#                     # place bid in outgoing list
-#                     out.append(bid)
-
-#             # reset bids in buffer
-#             self.bid_buffer[req_id] = [None for _ in self.bid_buffer[req_id]]
-
-#         self.bid_access_lock.release()
-
-#         return out
-
-#     async def put_bid(self, new_bid : Bid) -> None:
-#         """
-#         Adds bid to the appropriate buffer if it's a more updated bid information than the one at hand
-#         """
-#         await self.bid_access_lock.acquire()
-
-#         if new_bid.req_id not in self.bid_buffer:
-#             req : TaskRequest = TaskRequest.from_dict(new_bid.req)
-#             self.bid_buffer[new_bid.req_id] = [None for _ in req.dependency_matrix]
-
-#         current_bid : Bid = self.bid_buffer[new_bid.req_id][new_bid.subtask_index]
-        
-#         if (    current_bid is None 
-#                 or new_bid.bidder == current_bid.bidder
-#                 or new_bid.t_update >= current_bid.t_update
-#             ):
-#             self.bid_buffer[new_bid.req_id][new_bid.subtask_index] = new_bid.copy()
-
-#         self.bid_access_lock.release()
-
-#         self.updated.set()
-#         self.updated.clear()
-
-#     async def put_bids(self, new_bids : list) -> None:
-#         """
-#         Adds bid to the appropriate buffer if it's a more updated bid information than the one at hand
-#         """
-#         if len(new_bids) == 0:
-#             return
-
-#         await self.bid_access_lock.acquire()
-
-#         for new_bid in new_bids:
-#             new_bid : Bid
-
-#             if new_bid.req_id not in self.bid_buffer:
-#                 req : TaskRequest = TaskRequest.from_dict(new_bid.req)
-#                 self.bid_buffer[new_bid.req_id] = [None for _ in req.dependency_matrix]
-
-#             current_bid : Bid = self.bid_buffer[new_bid.req_id][new_bid.subtask_index]
-
-#             if (    current_bid is None 
-#                  or (new_bid.bidder == current_bid.bidder and new_bid.t_update >= current_bid.t_update)
-#                  or (new_bid.bidder != new_bid.NONE and current_bid.winning_bidder == new_bid.NONE and new_bid.t_update >= current_bid.t_update)
-#                 ):
-#                 self.bid_buffer[new_bid.req_id][new_bid.subtask_index] = new_bid.copy()
-
-#         self.bid_access_lock.release()
-
-#         self.updated.set()
-#         self.updated.clear()
-
-#     async def wait_for_updates(self, min_len : int = 1) -> list:
-#         """
-#         Waits for the contents of this buffer to be updated and to contain more updates than the given minimum
-#         """
-#         while True:
-#             await self.updated.wait()
-
-#             if len(self) >= min_len:
-#                 break
-
-#         return await self.pop_all()

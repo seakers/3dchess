@@ -21,7 +21,23 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             "preplanner": {
                 "@type": "heuristic",
                 "debug": "False",
-                "period" : 250,
+                # "period" : 250,
+            },
+            "replanner": {
+                "@type": "consensus",
+                "model": "heuristicInsertion",
+                "heuristic" : "taskValue",
+                "replanThreshold": 1,
+                "debug": "False"
+            }
+        }
+    
+    def lakes_planner_config(self):
+        return {
+            "preplanner": {
+                "@type": "heuristic",
+                "debug": "False",
+                # "period" : 250,
             },
             "replanner": {
                 "@type": "consensus",

@@ -470,18 +470,26 @@ class SpecificObservationTask:
         
         # Calculate slew angles overlap
         merged_slew_angles : Interval = self.slew_angles.intersection(other_task.slew_angles) 
+        slew_angles_overlap : bool = self.slew_angles.overlaps(other_task.slew_angles)
 
         # Calculate accessibility overlap and duration requirements
         merged_accessibility, min_duration_req = self._calc_time_requirements(other_task, must_overlap)
+
+        # Gather joint observation targets
+        my_targets = set(self.get_location())
+        other_targets = set(other_task.get_location())
+        location_overlap : bool = len(my_targets.intersection(other_targets)) > 0
 
         # Check if merge can occur
         return (self.instrument_name == other_task.instrument_name  # same instrument
                 and min_duration_req <= max_duration                # duration requirements do not exceed maximum allowed duration
                 and not math.isnan(min_duration_req)                # joint minimum duration requirements is valid
                 and min_duration_req <= merged_accessibility.span() # accessibility window encompasses the duration requirements
-                and not merged_slew_angles.is_empty()               # slew angles overlap
+                # and not merged_slew_angles.is_empty()               # slew angles overlap
+                and slew_angles_overlap                             # slew angles overlap
                 and not merged_accessibility.is_empty()             # there exist a valid joint accessibility window 
                 # and not self.is_mutually_exclusive(other_task)      # TODO tasks with common parent tasks cannot be merged
+                and not location_overlap                             # tasks do not observe the same target
                 )           
         
     def merge(self, other_task : 'SpecificObservationTask', must_overlap : bool = False, max_duration : float = 2*60) -> 'SpecificObservationTask':

@@ -288,8 +288,12 @@ class PlannerTester(ABC):
 
     @abstractmethod
     def toy_planner_config(self) -> dict:
-        """ Returns the planner configuration for the test case. """
-    
+        """ Returns the planner configuration for the toy test cases. """
+
+    @abstractmethod
+    def lakes_planner_config(self) -> dict:
+        """ Returns the planner configuration for the lakes test cases. """
+
     @abstractmethod
     def planner_name(self) -> str:
         """ Returns the planner name for the test case. """
@@ -428,7 +432,7 @@ class PlannerTester(ABC):
         mission_name = 'lake_missions'
 
         spacecraft : dict = copy.deepcopy(self.spacecraft_template)
-        spacecraft['planner'] = self.toy_planner_config()
+        spacecraft['planner'] = self.lakes_planner_config()
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` PLANNER TEST')
@@ -469,12 +473,12 @@ class PlannerTester(ABC):
         mission_name = 'lake_missions'
 
         spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
-        spacecraft_1['planner'] = self.toy_planner_config()
+        spacecraft_1['planner'] = self.lakes_planner_config()
         spacecraft_1['@id'] = 'sat_1'
         spacecraft_1['name'] = 'sat_1'
 
         spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
-        spacecraft_2['planner'] = self.toy_planner_config()
+        spacecraft_2['planner'] = self.lakes_planner_config()
         spacecraft_2['orbitState']['state']['ta'] = 90.0
         spacecraft_2['@id'] = 'sat_2'
         spacecraft_2['name'] = 'sat_2'
