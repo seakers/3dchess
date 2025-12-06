@@ -495,7 +495,7 @@ class Bid:
     ---------------------------
     """
     def set(self, 
-            main_instrument : str,
+            main_measurement : str,
             bid_value : Union[int, float], 
             t_img : Union[int, float],
             t_update : Union[int, float]
@@ -511,7 +511,7 @@ class Bid:
         """
         # update bidder information
         self.bid_value = bid_value
-        self.main_instrument = main_instrument
+        self.main_measurement = main_measurement
 
         # update winning bid information
         self.winning_bid = bid_value
@@ -567,7 +567,8 @@ class Bid:
         else: raise ValueError(f'cannot perform update of type `{comp_result}`')
         
         # check proper update
-        assert self.t_stamps[other.bidder] == t_comp
+        assert new_bid.t_stamps[other.bidder] == t_comp, \
+            f'timestamp for bidder `{other.bidder}` was not properly updated to `{t_comp}`'
 
         # return updated bid
         return new_bid

@@ -50,8 +50,6 @@ class TestBids(unittest.TestCase):
         # set default values if missing
         task = task or self.task_a
         bid_value = winning_bid if bid_value is None else bid_value
-        t_stamps = t_stamps if t_stamps is not None else {bidder : t_bid}
-
 
         # return bid
         return Bid(task,
@@ -1201,59 +1199,60 @@ class TestBids(unittest.TestCase):
         self.assertEqual(action, BidComparisonResults.LEAVE)
 
 
-    # # ----------------------------------------------------------------------
-    # # Modifiers: update / set / set_performed / has_winner
-    # # ----------------------------------------------------------------------
-    # def test_update_applies_update_info(self):
-    #     """
-    #     Scenario where compare() returns UPDATE and we apply update().
-    #     """
-    #     base_bid = self.make_bid(
-    #         bidder="agentA",
-    #         winning_bidder="agentA",
-    #         winning_bid=5.0,
-    #         t_img=10.0,
-    #         t_stamp=1.0,
-    #     )
-    #     other_bid = self.make_bid(
-    #         bidder="agentB",
-    #         winning_bidder="agentB",
-    #         winning_bid=10.0,
-    #         t_img=20.0,
-    #         t_stamp=2.0,
-    #     )
+    # ----------------------------------------------------------------------
+    # Modifiers: update / set / set_performed / has_winner
+    # ----------------------------------------------------------------------
 
-    #     # sanity check: compare says UPDATE, REBROADCAST_OTHER
-    #     action, rebcast = base_bid.rule_comparison(other_bid)
-    #     self.assertEqual(action, Bid.UPDATE)
+    def test_update_applies_update_info(self):
+        """
+        Scenario where compare() returns UPDATE and we apply update().
+        """
+        base_bid = self.make_bid(
+            bidder="agentA",
+            winning_bidder="agentA",
+            winning_bid=5.0,
+            t_img=10.0,
+        )
+        other_bid = self.make_bid(
+            bidder="agentB",
+            winning_bidder="agentB",
+            winning_bid=10.0,
+            t_img=20.0,
+        )
 
-    #     updated = base_bid.compare(other_bid, t_comp=3.0)
+        # sanity check: compare says UPDATE
+        action = base_bid.rule_comparison(other_bid)
+        self.assertEqual(action, BidComparisonResults.UPDATE)
+        
+        # update bid
+        updated = base_bid.compare(other_bid, t_comp=3.0)
 
-    #     self.assertAlmostEqual(updated.winning_bid, other_bid.winning_bid)
-    #     self.assertEqual(updated.winning_bidder, other_bid.winning_bidder)
-    #     self.assertAlmostEqual(updated.t_img, other_bid.t_img)
-    #     self.assertAlmostEqual(updated.t_stamp, 3.0)
+        # check updated values
+        self.assertAlmostEqual(updated.winning_bid, other_bid.winning_bid)
+        self.assertEqual(updated.winning_bidder, other_bid.winning_bidder)
+        self.assertAlmostEqual(updated.t_img, other_bid.t_img)
+        self.assertAlmostEqual(updated.t_stamps[other_bid.bidder], 3.0)
 
-    # def test_set_and_has_winner(self):
-    #     bid = self.make_bid(
-    #         bidder="agentA",
-    #         winning_bidder=Bid.NONE,
-    #         winning_bid=0.0,
-    #         t_img=np.NINF,
-    #         t_stamp=0.0,
-    #     )
+    def test_set_and_has_winner(self):
+        bid = self.make_bid(
+            bidder="agentA",
+            winning_bidder=Bid.NONE,
+            winning_bid=0.0,
+            t_img=np.NINF,
+            n_obs=2,
+        )
 
-    #     self.assertFalse(bid.has_winner())
+        self.assertFalse(bid.has_winner())
 
-    #     bid.set(main_instrument='VNIR', bid_value=7.5, t_img=12.0, n_img=2, t_update=3.0)
+        bid.set(main_measurement='VNIR', bid_value=7.5, t_img=12.0, t_update=3.0)
 
-    #     self.assertTrue(bid.has_winner())
-    #     self.assertEqual(bid.winning_bidder, "agentA")
-    #     self.assertEqual(bid.main_measurement, 'VNIR')
-    #     self.assertAlmostEqual(bid.winning_bid, 7.5)
-    #     self.assertAlmostEqual(bid.t_img, 12.0)
-    #     self.assertEqual(bid.n_obs, 2)
-    #     self.assertAlmostEqual(bid.t_stamp, 3.0)
+        self.assertTrue(bid.has_winner())
+        self.assertEqual(bid.winning_bidder, "agentA")
+        self.assertEqual(bid.main_measurement, 'VNIR')
+        self.assertAlmostEqual(bid.winning_bid, 7.5)
+        self.assertAlmostEqual(bid.t_img, 12.0)
+        self.assertEqual(bid.n_obs, 2)
+        self.assertAlmostEqual(bid.t_stamps["agentA"], 3.0)
 
     # def test_set_performed_marks_performed_and_updates_time(self):
     #     bid = self.make_bid(
