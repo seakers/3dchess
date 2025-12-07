@@ -249,7 +249,7 @@ class Bid:
         ## Compare bidders alphabetically
         return min(bid1, bid2, key=lambda b: b.winning_bidder)
 
-    def has_different_values(self, other : 'Bid') -> bool:
+    def has_different_winner_values(self, other : 'Bid') -> bool:
         """ Checks if this bid is different from another bid (i.e., any of the winning bid attributes differ) """
         
         # validate inputs

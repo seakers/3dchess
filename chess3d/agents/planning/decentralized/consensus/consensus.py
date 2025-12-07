@@ -164,8 +164,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # perform consensus phase for incoming task bids
         results_updates = self.consensus_phase(state, specs, current_plan, orbitData)
 
-        # TODO check how the bundle needs to be updated from results
-        # new_bundle, bundle_updates = self.update_bundle_from_results()
+        # check how the bundle needs to be updated from results
+        self.bundle, bundle_updates = self.update_bundle_from_results(results_updates)
 
         # -------------------------------
         # DEBUG PRINTOUTS
@@ -177,18 +177,23 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # replan if...
         # 1) there were relevant updates to bids/results
         results_changes_performed = len(results_updates) > 0
-        # 2) or new periodic plan was received
+        # 2) incoming bids modified the bundle (TODO)
+        bundle_changes_performed = len(bundle_updates) > 0
+        # 3) or new periodic plan was received
         new_periodic_plan_received = isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS
         
         # -------------------------------
         # DEBUG BREAKPOINTS
         if results_changes_performed:
             x = 1  # Placeholder implementation
+        if bundle_changes_performed:
+            x = 1  # Placeholder implementation
         if new_periodic_plan_received:
             x = 1  # Placeholder implementation
         # -------------------------------
 
         return (results_changes_performed 
+                or bundle_changes_performed
                 # or new_periodic_plan_received 
                 )
 
@@ -270,7 +275,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             new_task : bool = incoming_bid.task not in self.results
             new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
 
-            # add task to results if new
+            # if new task or observation number, initialize in results
             if new_task or new_observation_number:
                 # assume bids are received in order of observation numbers
                 assert len(self.results[incoming_bid.task]) == incoming_bid.n_obs , \
@@ -293,7 +298,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
             self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
 
             # if bid was changed; add updated bid to results updates
-            if updated_bid.has_different_values(current_bid): results_updates.append(updated_bid)
+            if updated_bid.has_different_winner_values(current_bid): 
+                results_updates.append(updated_bid)
         
         # return result changes and bids to rebroadcasts
         return results_updates
@@ -303,54 +309,52 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # initiate list of constraint violations
         bids_in_violation = []
 
-        # TODO implement constraint checking
-
         # check every task for constraint violations
         for task, bids in self.results.items():            
             # assume the index of every bid matches their observation number
             assert all(bid.n_obs == i_obs for i_obs, bid in enumerate(bids)), \
                 "Results bids are not sorted by observation number."
 
-            if len(bids) <= 1: continue # no bid sequence to check
+            if len(bids) <= 1: continue # no observation sequence to check for constraints
             
-            # look for constraint violations
+            # initialize search for constraint violations
             invalid_bid_idx : int = None
             
             # check every bid for this task
-            for n_obs, bid in enumerate(bids[1:],start=1):
+            for n_obs_idx, bid in enumerate(bids[1:], start=1):
                 # get previous bid to compare constraints with
-                prev_bid : Bid = bids[n_obs - 1]
+                prev_bid : Bid = bids[n_obs_idx - 1]
 
                 # Constraint 0: Imaging time must be after previous imaging time
-                time_constraint = prev_bid.t_img < bid.t_img
+                time_constraint : bool = prev_bid.t_img <= bid.t_img
 
                 # Constraint 1: Observation number must be consecutive
-                consecutive_observation_constraint = bid.n_obs == prev_bid.n_obs + 1
+                consecutive_observation_constraint : bool = prev_bid.n_obs + 1 == bid.n_obs
 
-                # Constraint 2: Previous bid must have a winner
-                previous_bid_has_winner = prev_bid.has_winner()
+                # Constraint 2: Previous bid must be assigned to a winner
+                previous_bid_has_winner : bool = prev_bid.has_winner()
                     
                 # if any constraint is violated, mark bid as invalid
                 if (not time_constraint 
                     or not consecutive_observation_constraint 
                     or not previous_bid_has_winner
                     ):
-                    invalid_bid_idx = n_obs
+                    invalid_bid_idx = n_obs_idx
                     break
             
             # check if invalid bid was found
             if invalid_bid_idx is None: continue # no violations for this task; continue to next task
 
-            # check if I was the one who bid on the invalid bid
+            # check if this agent was the one who bid on the invalid bid
             if self.results[task][invalid_bid_idx].bidder == state.agent_name:
                 # decrement optimistic bidding counter for this bid (floor at 0)
                 self.optimistic_bidding_counters[task][invalid_bid_idx] = \
                     max(0, self.optimistic_bidding_counters[task][invalid_bid_idx] - 1)
             
             # reset invalid bid along with all subsequent bids
-            for bid_idx in range(invalid_bid_idx, len(bids)):
+            while len(bids) > invalid_bid_idx:
                 # get bid to reset and remove from results
-                bid_to_reset : Bid = bids.pop(bid_idx)
+                bid_to_reset : Bid = bids.pop(invalid_bid_idx)
 
                 # reset bid
                 reset_bid = bid_to_reset.reset(state.t)
@@ -362,48 +366,58 @@ class ConsensusPlanner(AbstractReactivePlanner):
     
     def update_bundle_from_results(self,
                                     state : SimulationAgentState,
-                                    specs : object,
-                                    current_plan : Plan,
-                                    clock_config : ClockConfig,
-                                    orbitdata : OrbitData,
-                                    mission : Mission,
-                                    observation_history : ObservationHistory
+                                    results_updates : List[Bid]
                                     ) -> Any:
         """ Update bundle according to latest results. """
-        raise NotImplementedError("Updating bundle from results not yet implemented.")
-    
-        # check if any bids in the bundle were modified
-        if self.bundle and outbid: 
-            raise NotImplementedError("Bundle update after bid comparison not yet implemented.")
+        # initialize revised bundle
+        revised_bundle = []
         
-        # for current_bid in changes:
-        #     # search for outbids in bundle
-        #     outbid_indices = [bid_idx for bid_idx,bundle_bids in enumerate(self.bundle)
-        #                       if current_bid in bundle_bids                         # bid is in bundle
-        #                       and current_bid.winning_bidder != state.agent_name]   # was outbid
-        #     outbid_index = min(outbid_indices) if len(outbid_indices) > 0 else None
-            
-        #     if outbid_index is None: continue # no bid in bundle was outbid; continue to next incoming bid
-            
-        #     # if bid in bundle was outbid, remove all subsequent bids from bundle
-        #     for bundle_index in range(outbid_index, len(self.bundle)):
-        #         # remove bid from bundle
-        #         bundle_bids = self.bundle.pop(bundle_index)
+        # initialize list of bundle updates
+        bundle_updates = []
 
-        #         # reset results for removed bids
-        #         for bundle_bid in bundle_bids:
-        #             # if already outbid, skip
-        #             if bundle_bid in outbid: continue
+        # compile tasks whose bids were modified
+        modified_tasks = defaultdict(list)
 
-        #             # reset bid
-        #             bundle_bid.reset(state.t)
+        # check if there are any results updates for tasks in the bundle
+        while self.bundle:
+            # get next bundle entry
+            specific_task,obs_tasks = self.bundle.pop(0)
 
-        #             # update results
-        #             self.results[bundle_bid.task][bundle_bid.n_obs] = bundle_bid
+            # see if any bids for this task were updated            
+            if any(bid.task in obs_tasks and bid.n_obs == obs_tasks[bid.task] 
+                   for bid in results_updates):
+                # updated bid exist for this particular task or for a previous observation;
+                #  do not add this and subsequent tasks to revised bundle
 
-        #             # add to changes and rebroadcast lists
-        #             changes.append(bundle_bid)
-        #             rebroadcasts.append(bundle_bid)
+                # # readd specific task back to bundle for reconsideration
+                # self.bundle.insert(0, (specific_task, obs_tasks))
+
+                # # remove outdated bids from results
+                # for specific_task, obs_tasks in self.bundle:
+                #     for task, n_obs in obs_tasks.items():
+                #         # reset invalid bid along with all subsequent bids
+                #         for bid_idx in range(n_obs, len(self.results[task])):
+                #             # get bid to reset and remove from results
+                #             bid_to_reset : Bid = self.results[task].pop(bid_idx)
+
+                #             # reset bid
+                #             reset_bid = bid_to_reset.reset(state.t)
+
+                #             # add to violations list
+                #             bundle_updates.append(reset_bid)   
+
+                raise NotImplementedError("Bundle updating from results updates not yet implemented.")
+                break
+            elif any(bid.task in obs_tasks and bid.n_obs < obs_tasks[bid.task] 
+                   for bid in results_updates):
+                # stop adding tasks to revised bundle; break to reconsider entire bundle
+                raise NotImplementedError("Bundle updating from results updates not yet implemented.")
+                break
+            else: # no updates for this task; keep as is
+                revised_bundle.append((specific_task, obs_tasks))            
+
+        # return updated bundle and list of updates
+        return revised_bundle, bundle_updates
 
     """
     ---------------------------
