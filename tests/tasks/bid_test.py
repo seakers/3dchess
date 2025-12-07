@@ -1222,7 +1222,7 @@ class TestBids(unittest.TestCase):
         self.assertEqual(action, BidComparisonResults.UPDATE)
         
         # update bid
-        updated = base_bid.compare(other_bid, t_comp=3.0)
+        updated = base_bid.update(other_bid, t_comp=3.0)
 
         # check updated values
         self.assertAlmostEqual(updated.winning_bid, other_bid.winning_bid)

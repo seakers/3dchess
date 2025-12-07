@@ -63,7 +63,7 @@ class BidResultsTracker:
         current_bid : Bid = self.bids[bid.task][bid.n_obs]
 
         # compare bids
-        updated_bid : Bid = current_bid.compare(bid, t)
+        updated_bid : Bid = current_bid.update(bid, t)
 
         # update results with modified bid
         self.bids[bid.task][bid.n_obs] = updated_bid

@@ -297,25 +297,36 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                             specs : object,
                                             current_path : List[ObservationAction],
                                             new_task : SpecificObservationTask
-                                        ) -> Tuple[List[ObservationAction], float]:
+                                        ) -> List[Tuple[List[ObservationAction], float]]:
+        """ 
+        Generates a list of proposed paths by applying the following operators to the path:
+            1. Direct Insertion into existing path
+            2. Right-shifting existing path to accommodate new task
+            3. Replace conflicting task with new urgent task
+
+        #### Returns:
+        
+            - `proposed_paths` : List[Tuple[List[ObservationAction], float]]
+        """
+        
         # compile agility specifications
         max_slew_rate, max_torque = self._collect_agility_specs(specs)
 
-        # Option 1: Direct Insertion into existing path
-        proposed_path, t_img = self._direct_insertion_into_path(state, specs, current_path, new_task, max_slew_rate, max_torque)
+        proposed_paths = [
+            # Option 1: Direct Insertion into existing path
+            self._direct_insertion_into_path(state, specs, current_path, new_task, max_slew_rate, max_torque),
 
-        # Option 2: Right-shifting existing path to accommodate new task
-        if proposed_path is None:
-            proposed_path, t_img = self._right_shift_path_for_new_task(state, specs, current_path, new_task, max_slew_rate, max_torque)
-        
-        # Option 3: Replace conflicting task with new urgent task
-        if proposed_path is None:
-            proposed_path, t_img = self._replace_conflicting_tasks_with_new_task(state, specs, current_path, new_task, max_slew_rate, max_torque)
+            # Option 2: Right-shifting existing path to accommodate new task
+            self._right_shift_path_for_new_task(state, specs, current_path, new_task, max_slew_rate, max_torque),
 
-        # TODO Option 4: Remove all conflicting tasks and insert new task
+            # Option 3: Replace conflicting task with new urgent task
+            self._replace_conflicting_tasks_with_new_task(state, specs, current_path, new_task, max_slew_rate, max_torque),
 
-        # return proposed path and observation time
-        return proposed_path, t_img
+            # TODO Option 4: Remove all conflicting tasks and insert new task
+        ]
+
+        # return proposed paths and the respective observation times for the new task in said paths
+        return proposed_paths
         
     
     def _generate_bids_for_task_in_path(self,

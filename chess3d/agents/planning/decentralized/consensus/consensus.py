@@ -36,19 +36,31 @@ class ConsensusPlanner(AbstractReactivePlanner):
     def __init__(self, 
                  model : str = HEURISTIC_INSERTION,
                  replan_threshold : int = 1,
+                 optimistic_bidding_threshold : int = 1,
                  debug : bool = False,
                  logger: logging.Logger = None
                  ) -> None:
         super().__init__(debug, logger)
+        """
+        # Consensus Couple-Constrained Planner
+        
+        ## Bundle
+        The Bundle is defined as a list of a tuple indicating the specific task that was added to the plan, 
+        and a dictionary that maps the observation number being bid on.
+        
+        """
 
         # validate inputs
         assert model in self.MODELS, f"Invalid model '{model}'. Must be one of {self.MODELS}."
         assert isinstance(replan_threshold, int) and replan_threshold > 0, "Replan threshold must be positive integer."
+        assert isinstance(optimistic_bidding_threshold, int), "Optimistic bidding threshold must be an integer"
+        assert optimistic_bidding_threshold >= 0, "Optimistic bidding threshold must be non-negative"
 
         # initialize consensus results
-        self.bundle : list[list[Bid]] = list()
-        self.path : list[GenericObservationTask] = list()
+        self.bundle : List[Tuple[SpecificObservationTask, Dict[GenericObservationTask, int]]] = list()
+        self.path : List[ObservationAction] = list()
         self.results : Dict[GenericObservationTask, List[Bid]] = defaultdict(list)
+        self.optimistic_bidding_counters : Dict[GenericObservationTask, List[int]] = defaultdict(list)
 
         # initialize urgent tasks and bid inbox/outbox
         self.known_event_tasks : set[GenericObservationTask] = set()
@@ -64,6 +76,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # set parameters
         self.model = model
         self.replan_threshold = replan_threshold
+        self.optimistic_bidding_threshold = optimistic_bidding_threshold
         self.t_share = -1   
 
     def update_percepts(self, 
@@ -99,6 +112,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # self.incoming_event_tasks = set([task for task in self.incoming_event_tasks 
         #                                 if task.is_available(state.t)])
 
+        # TODO remove unavailable tasks from task lists and results?
+        if any([not task.is_available(state.t) for task in self.known_event_tasks]):
+            raise NotImplementedError("Removal of unavailable urgent tasks not yet implemented.")
+
         # get active incoming tasks
         active_tasks = set([req.task for req in incoming_reqs 
                             if req.task.is_available(state.t)])
@@ -109,6 +126,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
     def __collect_incoming_bids(self, misc_messages : List[SimulationMessage]) -> None:
         """ Collect bids from incoming messages and requests. """
+        # TODO include support for BidResultsMessage when re-enabled
+        
+        # TEMP use only MeasurementBidMessages. Disable after `BidResultsMessage` is supported
         incoming_bids = [Bid.from_dict(msg.bid) 
                             for msg in misc_messages 
                             if isinstance(msg, MeasurementBidMessage)]
@@ -116,7 +136,11 @@ class ConsensusPlanner(AbstractReactivePlanner):
         if incoming_bids: 
             x = 1 # Placeholder implementation
 
+        # add incoming bids to inbox
         self.bid_inbox.extend(incoming_bids)
+
+        # sort bids by task id, n_obs, t_img
+        self.bid_inbox = deque(sorted(self.bid_inbox, key=lambda b: (b.task.id, b.n_obs, b.t_img)))
 
     """
     ---------------------------
@@ -138,30 +162,33 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # -------------------------------
 
         # perform consensus phase for incoming task bids
-        relevant_changes = self.consensus_phase(state, specs, current_plan, orbitData)
-       
+        results_updates = self.consensus_phase(state, specs, current_plan, orbitData)
+
+        # TODO check how the bundle needs to be updated from results
+        # new_bundle, bundle_updates = self.update_bundle_from_results()
+
         # -------------------------------
         # DEBUG PRINTOUTS
-        if relevant_changes:
+        if results_updates:
             self.log_results('CONSENSUS PHASE (AFTER)', state, self.results)
             self.log_bundle('BUNDLE (AFTER CONSENSUS)', state, self.bundle)
         # -------------------------------
 
         # replan if...
         # 1) there were relevant updates to bids/results
-        relevant_changes_received = len(relevant_changes) > 0
+        results_changes_performed = len(results_updates) > 0
         # 2) or new periodic plan was received
         new_periodic_plan_received = isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS
         
         # -------------------------------
         # DEBUG BREAKPOINTS
-        if relevant_changes_received:
+        if results_changes_performed:
             x = 1  # Placeholder implementation
         if new_periodic_plan_received:
             x = 1  # Placeholder implementation
         # -------------------------------
 
-        return (relevant_changes_received 
+        return (results_changes_performed 
                 # or new_periodic_plan_received 
                 )
 
@@ -172,29 +199,32 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         orbitdata : OrbitData
                     ) -> List[Bid]:
         """ Perform consensus phase to update bids and bundle. """
-        # initalize list of changes
-        changes = []
+        # initalize list of updates
+        updates = []
 
         # check for new urgent tasks
-        new_task_added = self.check_incoming_urgent_tasks(state)
+        new_task_added = self.process_incoming_urgent_tasks(state)
         
-        # TODO check if tasks were performed
+        # TODO check if planned tasks were performed by parent agent
 
-        # TODO check if tasks expired        
+        # TODO check if planned tasks expired
 
         # compare results with incoming bids and update bundle
-        results_updates = self.update_results(state)
+        comparison_updates = self.update_results(state)
 
-        # TODO update bundle from results if necessary        
+        # TODO propagate constraint violations
+        constraint_violations = self.check_results_constraints(state)
 
-        # compile changes and rebroadcasts
-        changes.extend(new_task_added)
-        changes.extend(results_updates)
-        
-        return changes
+        # compile updates
+        updates.extend(new_task_added)
+        updates.extend(comparison_updates)
+        updates.extend(constraint_violations)
 
-    def check_incoming_urgent_tasks(self, state: SimulationAgentState) -> List[Bid]:
-        """ Check for new urgent tasks and update results accordingly. """
+        # return list of updates
+        return updates
+
+    def process_incoming_urgent_tasks(self, state: SimulationAgentState) -> List[Bid]:
+        """ Processes new urgent tasks and updates results accordingly. """
         # initialize list of newly added bids from new tasks
         new_task_added = []
         
@@ -209,8 +239,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 # remove tasks from incoming queue
                 task : GenericObservationTask = self.incoming_event_tasks.popleft()
 
+                # check if task is already in results
+                if task in self.results: continue # already processed; skip
+
                 # initialize results for new event tasks
                 self.results[task] = []
+
+                # initialize optimistic bidding counter for new task
+                self.optimistic_bidding_counters[task] = []
  
                 # create empty bid for new task and add to list of changes
                 new_task_added.append(Bid(task, state.agent_name))
@@ -234,31 +270,95 @@ class ConsensusPlanner(AbstractReactivePlanner):
             new_task : bool = incoming_bid.task not in self.results
             new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
 
+            # add task to results if new
             if new_task or new_observation_number:
-                # TODO is this correct?
-                # get bounds for observation number not being conseidered up to incoming bid's `n_obs`
-                n_obs_init = len(self.results[incoming_bid.task]) if not new_task else 0
-                n_obs_max = incoming_bid.n_obs + 1
+                # assume bids are received in order of observation numbers
+                assert len(self.results[incoming_bid.task]) == incoming_bid.n_obs , \
+                      "Received bids for non-consecutive observation numbers."
 
                 # add an empty bid for each missing observation number
-                for n_obs in range(n_obs_init, n_obs_max):
-                    empty_bid = Bid(incoming_bid.task, state.agent_name, n_obs)
-                    self.results[incoming_bid.task].append(empty_bid)
+                empty_bid = Bid(incoming_bid.task, state.agent_name, incoming_bid.n_obs)
+                self.results[incoming_bid.task].append(empty_bid)
+
+                # initialize optimistic bidding counter for new bid
+                self.optimistic_bidding_counters[incoming_bid.task].append(self.optimistic_bidding_threshold)
 
             # get current bid for this task and observation number
             current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
 
             # compare incoming bid with existing bids for the same task
-            updated_bid : Bid = current_bid.compare(incoming_bid, state.t)
+            updated_bid : Bid = current_bid.update(incoming_bid, state.t)
 
             # update results with modified bid
             self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
 
-            # if bid was changed, add to changes list
-            if updated_bid.is_different(current_bid): results_updates.append(updated_bid)
+            # if bid was changed; add updated bid to results updates
+            if updated_bid.has_different_values(current_bid): results_updates.append(updated_bid)
         
         # return result changes and bids to rebroadcasts
         return results_updates
+    
+    def check_results_constraints(self, state : SimulationAgentState) -> List[Bid]:
+        """ Check results for constraint violations and return list of affected bids. """
+        # initiate list of constraint violations
+        bids_in_violation = []
+
+        # TODO implement constraint checking
+
+        # check every task for constraint violations
+        for task, bids in self.results.items():            
+            # assume the index of every bid matches their observation number
+            assert all(bid.n_obs == i_obs for i_obs, bid in enumerate(bids)), \
+                "Results bids are not sorted by observation number."
+
+            if len(bids) <= 1: continue # no bid sequence to check
+            
+            # look for constraint violations
+            invalid_bid_idx : int = None
+            
+            # check every bid for this task
+            for n_obs, bid in enumerate(bids[1:],start=1):
+                # get previous bid to compare constraints with
+                prev_bid : Bid = bids[n_obs - 1]
+
+                # Constraint 0: Imaging time must be after previous imaging time
+                time_constraint = prev_bid.t_img < bid.t_img
+
+                # Constraint 1: Observation number must be consecutive
+                consecutive_observation_constraint = bid.n_obs == prev_bid.n_obs + 1
+
+                # Constraint 2: Previous bid must have a winner
+                previous_bid_has_winner = prev_bid.has_winner()
+                    
+                # if any constraint is violated, mark bid as invalid
+                if (not time_constraint 
+                    or not consecutive_observation_constraint 
+                    or not previous_bid_has_winner
+                    ):
+                    invalid_bid_idx = n_obs
+                    break
+            
+            # check if invalid bid was found
+            if invalid_bid_idx is None: continue # no violations for this task; continue to next task
+
+            # check if I was the one who bid on the invalid bid
+            if self.results[task][invalid_bid_idx].bidder == state.agent_name:
+                # decrement optimistic bidding counter for this bid (floor at 0)
+                self.optimistic_bidding_counters[task][invalid_bid_idx] = \
+                    max(0, self.optimistic_bidding_counters[task][invalid_bid_idx] - 1)
+            
+            # reset invalid bid along with all subsequent bids
+            for bid_idx in range(invalid_bid_idx, len(bids)):
+                # get bid to reset and remove from results
+                bid_to_reset : Bid = bids.pop(bid_idx)
+
+                # reset bid
+                reset_bid = bid_to_reset.reset(state.t)
+
+                # add to violations list
+                bids_in_violation.append(reset_bid)                
+
+        return bids_in_violation
     
     def update_bundle_from_results(self,
                                     state : SimulationAgentState,
@@ -378,7 +478,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
                        mission : Mission,
                        observation_history : ObservationHistory
                     ) -> tuple:        
-        """ Build bundle according to selected replanning model. """
+        """ 
+        Build bundle according to selected replanning model. 
+        #### Returns:
+            - `new_bundle` : List[List[Tuple[GenericObservationTask, int]]] -- New bundle of bids
+            - `new_path` : List[GenericObservationTask] -- New observation path
+            - `new_bids` : List[Bid] -- New bids generated during bundle building
+        
+        """
     
     def __update_results_from_bundle(self, new_bundle : List[List[Bid]]) -> None:
         """ Update results dictionary from new bundle. """

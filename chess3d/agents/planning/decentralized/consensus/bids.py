@@ -249,9 +249,37 @@ class Bid:
         ## Compare bidders alphabetically
         return min(bid1, bid2, key=lambda b: b.winning_bidder)
 
-    def is_different(self, other : 'Bid') -> bool:
-        """ Checks if this bid is different from another bid (i.e., any of the bid attributes differ) """
-        return self.to_dict() != other.to_dict()
+    def has_different_values(self, other : 'Bid') -> bool:
+        """ Checks if this bid is different from another bid (i.e., any of the winning bid attributes differ) """
+        
+        # validate inputs
+        assert isinstance(other, Bid), f'can only compare bids to other bids.'
+        assert self.task == other.task and self.n_obs == other.n_obs, f'can only compare bids for the same task and observation number (expected task id: {self.task.id}, given id: {other.task.id})'
+
+        # Compare bidder information
+        # if (
+        #     self.bidder != other.bidder                         # different bidder
+        #     or abs(self.bid_value - other.bid_value) > self.EPS # different bid value
+        #     or self.main_measurement != other.main_measurement  # different main measurement
+        #     ):
+        #     return True
+                
+        # Compare winning bid information
+        if (
+            self.winning_bidder != other.winning_bidder             # different winning bidder
+            or abs(self.winning_bid - other.winning_bid) > self.EPS # different winning bid value
+            or abs(self.t_img - other.t_img) > self.EPS             # different imaging time
+            # or abs(self.t_bid - other.t_bid) > self.EPS             # different bid time
+            # or self.t_stamps != other.t_stamps                      # different time stamps
+            ):
+            return True
+
+        # Compare other attributes
+        if self.performed != other.performed:                   # different performed status
+            return True
+        
+        # Fallback → bids are the same
+        return False
 
     """
     ------------------
@@ -513,6 +541,15 @@ class Bid:
             - t_img (`int` or `float`): new imaging time
             - t_update (`int` or `float`): update time
         """
+        # validate inputs
+        assert isinstance(bid_value, (float, int)), f'`bid_value` must be of type `float` or `int`, got `{type(bid_value)}`'
+        assert bid_value > 0, f'`bid_value` must be positive, got `{bid_value}`'
+        assert isinstance(t_img, (float, int)), f'`t_img` must be of type `float` or `int`, got `{type(t_img)}`'
+        assert t_img in self.task.availability, f'`t_img` value `{t_img}` not in task availability interval `{self.task.availability}`'
+        assert isinstance(t_update, (float, int)), f'`t_update` must be of type `float` or `int`, got `{type(t_update)}`'
+        assert t_update >= 0, f'`t_update` must be non-negative, got `{t_update}`'
+        assert t_update <= t_img, f'`t_update` time `{t_update}` cannot be later than the proposed imaging time `t_img` `{t_img}`'
+
         # update bidder information
         self.bid_value = bid_value
         self.main_measurement = main_measurement
@@ -543,7 +580,7 @@ class Bid:
         # update timestamp for this bidder
         self.t_stamps[self.winning_bidder] = t_update
 
-    def compare(self, other : 'Bid', t_comp : float) -> 'Bid':
+    def update(self, other : 'Bid', t_comp : float) -> 'Bid':
         """ 
         Compares this bid with another and returns a new bid instance with the appropriate updated information.
 
@@ -565,7 +602,7 @@ class Bid:
 
         # update copy according to comparison result
         if comp_result is BidComparisonResults.UPDATE:      new_bid.__update_info(other, t_comp)
-        elif comp_result is BidComparisonResults.RESET:     new_bid.__reset(other, t_comp)
+        elif comp_result is BidComparisonResults.RESET:     new_bid.reset(other, t_comp)
         elif comp_result is BidComparisonResults.LEAVE:     new_bid.__leave(other, t_comp)
         elif comp_result is BidComparisonResults.COMPLETED: new_bid.__perform(other, t_comp)
         else: raise ValueError(f'cannot perform update of type `{comp_result}`')
@@ -585,6 +622,13 @@ class Bid:
             - other (`Bid`): equivalent bid being used to update information
             - t_comp (`float` or `int`): latest time when this bid was updated
         """
+        # check if other bid has valid values
+        assert other.winning_bidder != self.NONE, f'cannot update bid information with a bid that has no winner.'
+        assert other.winning_bid > 0, f'cannot update bid information with a bid that has non-positive winning bid value.'
+        assert other.t_img in other.task.availability, f'`t_img` value `{other.t_img}` not in task availability interval `{other.task.availability}`'
+        assert other.t_bid <= other.t_img, f'bid cannot be generated at a time `t_bid` `{other.t_bid}` later than the desired imaging time `t_img` `{other.t_img}`'
+
+
         # update winning bid information
         self.winning_bid = other.winning_bid
         self.winning_bidder = other.winning_bidder
@@ -598,7 +642,7 @@ class Bid:
         # update timestamp for the other bidder       
         self.t_stamps[other.bidder] = t_comp
 
-    def __reset(self, other : 'Bid', t_comp : float) -> None:
+    def reset(self, other : 'Bid', t_comp : float) -> None:
         """
         Resets the values of this bid while keeping track of lates update time
         
