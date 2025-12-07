@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict
+from typing import Dict, List
 from dmas.messages import *
 
 from chess3d.agents.planning.decentralized.consensus.bids import Bid
@@ -218,7 +218,7 @@ class BidResultsMessage(SimulationMessage):
     def __init__(self, 
                 src: str, 
                 dst: str, 
-                results: Dict[GenericObservationTask, list[Bid]], 
+                results: Dict[GenericObservationTask, List[Bid]], 
                 id: str = None,
                 path : list = [],
                 **_):

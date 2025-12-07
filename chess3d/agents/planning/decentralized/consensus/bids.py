@@ -26,7 +26,6 @@ class BidComparisonResults(Enum):
     UPDATE = 'update'
     LEAVE = 'leave'
     RESET = 'reset'
-    COMPLETED = 'completed'
 
 class Bid: 
     """
@@ -311,8 +310,12 @@ class Bid:
             assert isinstance(other, Bid), f'can only compare bids to other bids.'
             assert self.task == other.task, f'can only compare bids for the same task (expected task id: {self.task.id}, given id: {other.task.id})'
             
+            # 0. Sending agent claims the bid has been performed.
+            if other.was_performed():
+                comp_result = self._case_other_thinks_bid_was_performed(other)
+
             # 1. Sending agent claims itself as winner of this bid.
-            if other.believes_i_am_winning():
+            elif other.believes_i_am_winning():
                 comp_result = self._case_other_thinks_is_winner(other)
 
             # 2. Sending agent claims I am the winner of this bid.
@@ -332,13 +335,32 @@ class Bid:
 
             # return comparison result
             return comp_result
+        
         except KeyError as e:
             raise e
+        
         finally:
             # check output type
             assert isinstance(comp_result, BidComparisonResults), f'comparison result must be of type `BidComparisonResults`, got `{type(comp_result)}`'
 
-    @abstractmethod
+    def _case_other_thinks_bid_was_performed(self, other : 'Bid') -> BidComparisonResults:
+        """ Case: Sending agent claims the bid has been performed. """
+        raise NotImplementedError("`_case_other_thinks_bid_was_performed` method is not implemented yet.")
+
+        # 1. Receiving agent also believes the bid was performed.
+        if self.was_performed():
+            if self.t_img <= other.t_img:
+                # both agents agree bid was performed and receiver has the earliest known observation time → leave info as is
+                return BidComparisonResults.LEAVE
+            else:
+                # both agents agree bid was performed but sender has the earliest known observation time → update info
+                return BidComparisonResults.UPDATE
+            
+        # 0. Receiving agent does not believe the bid was performed.
+        else:
+            # receiving agent has not marked bid as performed → update info
+            return BidComparisonResults.UPDATE
+
     def _case_other_thinks_is_winner(self, other : 'Bid') -> BidComparisonResults:
         """ Case: Sending agent claims itself as winner of this bid. """
         # 1. Receiving agent believes it is the winner too.
@@ -375,7 +397,6 @@ class Bid:
         # 5. Fallback → leave info as is
         return BidComparisonResults.LEAVE
 
-    @abstractmethod
     def _case_other_thinks_im_winner(self, other : 'Bid') -> BidComparisonResults:
         """ Case: Sending agent claims I am the winner of this bid. """
         # 1. Receiving agent believes it is the winner too.
@@ -402,7 +423,6 @@ class Bid:
         # 5. Fallback → leave info as is
         return BidComparisonResults.LEAVE
 
-    @abstractmethod
     def _case_other_thinks_third_party_winner(self, other : 'Bid') -> BidComparisonResults:        
         """ Handles the case where the other bid thinks a third party is the winner """
         # 1. Receiving agent believes it is the winner too.
@@ -458,7 +478,6 @@ class Bid:
         # 6. Fallback → leave info as is
         return BidComparisonResults.LEAVE
 
-    @abstractmethod
     def _case_other_has_no_winner(self, other : 'Bid') -> BidComparisonResults:
         """ Handles the case where the other bid has no winner """
         # 1. Receiving agent believes it is the winner too.
@@ -507,6 +526,10 @@ class Bid:
     def has_winner(self) -> bool:    
         """ Checks if this bid has a winner """
         return self.winning_bidder != Bid.NONE
+
+    def is_bidder_winning(self) -> bool:
+        """ Checks if the bidder of this bid is the current winning bidder """
+        return self.bidder == self.winning_bidder
 
     def was_performed(self) -> bool:
         """ Checks if the winner of this bid has performed the measurement request at hand """
@@ -604,7 +627,6 @@ class Bid:
         if comp_result is BidComparisonResults.UPDATE:      new_bid.__update_info(other, t_comp)
         elif comp_result is BidComparisonResults.RESET:     new_bid.reset(other, t_comp)
         elif comp_result is BidComparisonResults.LEAVE:     new_bid.__leave(other, t_comp)
-        elif comp_result is BidComparisonResults.COMPLETED: new_bid.__perform(other, t_comp)
         else: raise ValueError(f'cannot perform update of type `{comp_result}`')
         
         # check proper update
@@ -676,11 +698,18 @@ class Bid:
         # update timestamp for the other bidder       
         self.t_stamps[other.bidder] = t_comp
     
-    def __perform(self, other : 'Bid', t_comp : float) -> None:
+    def set_performed(self, t_comp : float, performed : bool = True, performer : str = None) -> None:
         """ Indicates that this action has been performed """
-        raise NotImplementedError("`__perform` method is not implemented yet.")
-        # self.performed = True
-        # self.t_stamps[other.bidder] = t_comp
+        # validate inputs
+        assert isinstance(t_comp, (float, int)), f'`t_comp` must be of type `float` or `int`, got `{type(t_comp)}`'
+        assert t_comp >= 0, f'`t_comp` must be non-negative, got `{t_comp}`'
+        assert isinstance(performed, bool), f'`performed` must be of type `bool`, got `{type(performed)}`'
+        # assert self.is_bidder_winning(), f'only the winning bidder can set the performed status of this bid (current winning bidder: `{self.winning_bidder}`, current bidder: `{self.bidder}`)'
+
+        # update performed status
+        self.performed = performed
+        performed = self.bidder if performer is None else performer
+        self.t_stamps[performed] = t_comp
     
     """
     ---------------------------
