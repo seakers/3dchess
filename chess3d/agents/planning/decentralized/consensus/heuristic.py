@@ -257,41 +257,60 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         """
 
         # initialized bundle
-        if isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS:
-            raise NotImplementedError("Earliest-access bundle builder initializing for new preplans not yet implemented.")
-        else:
-            bundle : List[Tuple[GenericObservationTask, int, SpecificObservationTask, Bid]] = \
+        # TEMP IMPLEMENTATION: copy existing bundle and path
+        bundle : List[Tuple[GenericObservationTask, int, SpecificObservationTask, Bid]] = \
                 [task_tuple for task_tuple in self.bundle]
-            path = sorted([action for action in current_plan
-                                if isinstance(action, ObservationAction)], 
-                                key=lambda action: action.t_start)
+        path = sorted([action for action in current_plan
+                        if isinstance(action, ObservationAction)], 
+                            key=lambda action: action.t_start)
+        new_bids = []
+        # if isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS:
+        #     if sorted_schedulable_urgent_tasks:
+        #         raise NotImplementedError("Earliest-access bundle builder initializing for new preplans not yet implemented.")
+        #     bundle : List[Tuple[GenericObservationTask, int, SpecificObservationTask, Bid]] = []
+        #     path = sorted([action for action in current_plan
+        #                     if isinstance(action, ObservationAction)], 
+        #                     key=lambda action: action.t_start)
+        # else:
+        #     bundle : List[Tuple[GenericObservationTask, int, SpecificObservationTask, Bid]] = \
+        #         [task_tuple for task_tuple in self.bundle]
+        #     path = sorted([action for action in current_plan
+        #                         if isinstance(action, ObservationAction)], 
+        #                         key=lambda action: action.t_start)
 
         # iterate through urgent tasks and attempt to add to bundle
         for new_task in tqdm(sorted_schedulable_urgent_tasks, desc=f'{state.agent_name}-REPLANNER: Building bundle', leave=False):
-            # Find best placement in path   
-            proposed_path, t_img = self.__heuristic_insertion_path_builder(state, specs, path, new_task)
-                
-            # if no feasible path was found, ignore new urgent task
-            if proposed_path is None: continue
+            # Generate proposed paths using heuristic insertion path builder
+            proposed_paths = self.__heuristic_insertion_path_builder(state, specs, path, new_task)
             
-            if len(new_task.parent_tasks) > 1:
-                x = 1  # Placeholder implementation
-
-            # create bids for relevant parent tasks
-            new_bids : List[Bid] = self._generate_bids_for_task_in_path(state, specs, path, proposed_path, new_task, 
-                                                                        t_img, cross_track_fovs, orbitdata, mission, observation_history)
+            # Find best placement in path   
+            for proposed_path, t_img in proposed_paths:
                 
-            # if no new bids were generated, skip to next urgent task
-            if not new_bids: continue
+                # if no feasible path was found, ignore new urgent task
+                if proposed_path is None: continue
+                
+                if len(new_task.parent_tasks) > 1:
+                    x = 1  # Placeholder implementation
 
-            # add bids to bundle
-            bundle.append(new_bids)
+                # create bids for relevant parent tasks
+                new_bids : List[Bid] = self._generate_bids_for_task_in_path(state, specs, path, proposed_path, new_task, 
+                                                                            t_img, cross_track_fovs, orbitdata, mission, observation_history)
+                    
+                # if no new bids were generated, skip to next urgent task
+                if not new_bids: continue
 
-            # update current path                    
-            path = [action for action in proposed_path]
+                # add bids to bundle
+                bundle.append(new_bids)
 
-        return bundle, path
-    
+                # update current path                    
+                path = [action for action in proposed_path]
+
+        # temp return
+        return bundle, path, new_bids
+        
+    """
+    BUNDLE-BUILDING PHASE - Path Insertion Methods
+    """
     def __heuristic_insertion_path_builder(self,
                                             state : SimulationAgentState,
                                             specs : object,
@@ -305,7 +324,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             3. Replace conflicting task with new urgent task
 
         #### Returns:
-        
+
             - `proposed_paths` : List[Tuple[List[ObservationAction], float]]
         """
         
@@ -323,12 +342,320 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             self._replace_conflicting_tasks_with_new_task(state, specs, current_path, new_task, max_slew_rate, max_torque),
 
             # TODO Option 4: Remove all conflicting tasks and insert new task
+            # self._remove_conflicting_tasks_and_insert_new_task(state, specs, current_path, new_task, max_slew_rate, max_torque),
         ]
 
         # return proposed paths and the respective observation times for the new task in said paths
         return proposed_paths
         
+    def _direct_insertion_into_path(self,
+                                    state : SimulationAgentState,
+                                    specs : object,
+                                    current_path : List[ObservationAction],
+                                    new_task : SpecificObservationTask,
+                                    max_slew_rate : float,
+                                    max_torque : float
+                                ) -> Tuple[List[ObservationAction], float]:
+        """ Try to directly insert new task into existing path. """
+        # initialize feasible observation time and select observation loook angle for new task
+        t_img, th_img = None, np.average([new_task.slew_angles.left, new_task.slew_angles.right])
+
+        # find possible conflicts in current path
+        ## find observations that are being performed during new task accessibility
+        observations_during_task_access = [action for action in current_path
+                                           if action.t_start in new_task.accessibility
+                                           or action.t_end in new_task.accessibility]
+        ## get latest observation before new task accessibility
+        prev_observations = [action for action in current_path
+                             if action.t_end <= new_task.accessibility.left]
+        prev_observation = max(prev_observations, key=lambda action: action.t_end) if prev_observations else None
+        ## get earliest observation after new task accessibility
+        next_observations = [action for action in current_path
+                             if action.t_start >= new_task.accessibility.right]
+        next_observation = min(next_observations, key=lambda action: action.t_start) if next_observations else None
+
+        # compile conflicting observations        
+        conflicting_observations = {prev_observation, next_observation} if prev_observation else {next_observation} if next_observation else set()
+        ## get unique observations during new task access
+        conflicting_observations.update(observations_during_task_access)
+        ## sort conflicting observations by start time
+        conflicting_observations = sorted([obs for obs in conflicting_observations 
+                                           if obs is not None], key=lambda obs: obs.t_start)
+
+        # set current state as a dummy previous observation
+        obs_prev = ObservationAction(new_task.instrument_name,  state.attitude[0], state.t)
+
+        # check if gaps between observations can accommodate new task
+        for obs_next in conflicting_observations: 
+            # check maneuver time between new task and current observations
+            m_prev = abs(obs_prev.look_angle - th_img) / max_slew_rate
+            m_next = abs(obs_next.look_angle - th_img) / max_slew_rate        
+            
+            # get earliest and latest feasible observation time
+            t_earliest = max(new_task.accessibility.left, obs_prev.t_end + m_prev)
+            t_latest = min(new_task.accessibility.right, obs_next.t_start - m_next) - new_task.min_duration
+
+            # check if feasible observation time exists
+            ## 1) must be able to maneuver from previous observation to new task
+            ## 2) must be able to maneuver from new task to next observation
+            ## 3) must fit within new task accessibility window
+            earliest_is_feasible = (t_earliest + new_task.min_duration + m_next <= obs_next.t_start
+                                    and obs_prev.t_end + m_prev <= t_earliest
+                                    and new_task.accessibility.left <= t_earliest
+                                    and t_earliest + new_task.min_duration <= new_task.accessibility.right)
+            latest_is_feasible = (t_latest + new_task.min_duration + m_next <= obs_next.t_start
+                                    and obs_prev.t_end + m_prev <= t_latest
+                                    and new_task.accessibility.left <= t_latest 
+                                    and t_latest + new_task.min_duration <= new_task.accessibility.right)
+            
+            # if feasible, select observation time
+            if earliest_is_feasible:
+                # choose earliest feasible time
+                t_img = t_earliest
+            elif latest_is_feasible:
+                # choose latest feasible time
+                t_img = t_latest
+
+            # if feasible time found, break
+            if earliest_is_feasible or latest_is_feasible: break    
+
+            # else; update previous observation
+            obs_prev = obs_next
+
+        # no conflicting observations were found
+        if not conflicting_observations:
+            # schedule at earliest access time
+            t_img = new_task.accessibility.left
+
+        # check if observation time was found
+        if t_img is None: return None, None # no time found; cannot insert new task into path
+
+        # insert new observation into path
+        ## create observation action for new task
+        new_observation = ObservationAction(new_task.instrument_name, th_img, t_img, new_task.min_duration, new_task)
+
+        ## create new path with inserted observation
+        new_path = [action for action in current_path]
+        new_path.append(new_observation)
+        new_path = sorted(new_path, key=lambda action: action.t_start)
+        
+        # return new path if valid
+        return (new_path, t_img) if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs) else (None, None)
+
+    def _right_shift_path_for_new_task(self,
+                                        state : SimulationAgentState,
+                                        specs : object,
+                                        current_path : List[ObservationAction],
+                                        new_task : SpecificObservationTask,
+                                        max_slew_rate : float,
+                                        max_torque : float
+                                    ) -> Tuple[List[ObservationAction], float]:
+        """ Try to right-shift existing path to accommodate new task. """
+        # TODO Requires Testing
+        # raise NotImplementedError("Replace conflicting tasks with new task method not yet implemented.")
+
+        # check if path is empty
+        assert len(current_path) > 0, "Current path is empty; cannot right-shift path for new task."
+        # check if path is sorted by start time
+        assert all(current_path[i].t_start <= current_path[i+1].t_start for i in range(len(current_path)-1)), "Current path is not sorted by start time."
+
+        # select observation look angle for new task
+        th_img = np.average([new_task.slew_angles.left, new_task.slew_angles.right])
+
+        # find current path observations that occur before the end of the new task's accessibility
+        preceeding_observations = [(path_idx,action) for path_idx,action in enumerate(current_path)
+                                    if action.t_start <= new_task.accessibility.right]
+
+        # add a dummy observation at the initial state
+        preceeding_observations.insert(0, (-1, ObservationAction(new_task.instrument_name, state.attitude[0], state.t)))
+
+        # initialize feasible path insertion index and observation time
+        i_insert, t_img = None, None
+
+        # iterate through previous observations to find insertion point
+        for i_obs,obs_prev in preceeding_observations:
+            # check maneuver time between new task and current observation
+            m_prev = abs(obs_prev.look_angle - th_img) / max_slew_rate
+
+            # calculate earliest feasible observation time
+            t_earliest = max(new_task.accessibility.left, obs_prev.t_end + m_prev)
+
+            # calculate observation feasibility
+            ## 1) must be able to maneuver from previous observation to new task
+            ## 2) must fit within new task accessibility window
+            is_feasible = (obs_prev.t_end + m_prev <= t_earliest
+                           and t_earliest in new_task.accessibility
+                           and t_earliest + new_task.min_duration in new_task.accessibility)
+            
+            # check feasibility
+            if not is_feasible: 
+                break # cannot insert at this point; stop searching
+            
+            # update insertion index to next location
+            i_insert = i_obs + 1
+            # update observation time
+            t_img = t_earliest
+        
+        # check if insertion index was found
+        if i_insert is None: return None, None # no insertion point found; cannot right-shift path for new task
+
+        # initiate new path
+        new_path = [action for action in current_path[:i_insert]]
+        
+        # create new observation action
+        new_observation = ObservationAction(new_task.instrument_name, th_img, t_img, new_task.min_duration, new_task)
+        
+        # add new observation to new path
+        new_path.append(new_observation)
+
+        # right-shift remaining observations
+        path_to_shift = [action for action in current_path[i_insert:]]
+        for i_curr,obs_curr in enumerate(path_to_shift):
+            # check previous observation in path
+            obs_prev = new_path[-1]
+
+            # compute maneuver time from previous observation
+            m = abs(obs_prev.look_angle - obs_curr.look_angle) / max_slew_rate
+
+            # calculate earliest start time for current observation
+            t_earliest = max(obs_prev.t_end + m, obs_curr.task.accessibility.left)
+
+            # check earliest time if feasible
+            is_feasible = (obs_prev.t_end + m <= t_earliest
+                           and t_earliest in obs_curr.task.accessibility
+                           and t_earliest + obs_curr.task.min_duration in obs_curr.task.accessibility)
+
+            # check of new observation time is earlier the or the same as original
+            if t_earliest < obs_curr.t_start or abs(t_earliest - obs_curr.t_start) <= self.EPS:
+                # new task start time is earlier than original; 
+                #  do not modify remaining plan and add to new path
+                new_path.extend(path_to_shift[i_curr:])
+
+                # stop shifting process
+                break
+
+            # else if new observation time is feasible, add shifted observation to new path
+            elif is_feasible: 
+                # create shifted observation action
+                shifted_observation = ObservationAction(obs_curr.instrument_name, obs_curr.look_angle, t_earliest, obs_curr.task.min_duration, obs_curr.task)
+
+                # add shifted observation to new path
+                new_path.append(shifted_observation)
+                
+            # else, task needs a later start time but is not feasible
+            else: 
+                # do not add this task and try to shift remaining tasks
+                continue
+                # return None, None # cannot right-shift path for new task
+            
+        # return new path if valid
+        return (new_path, t_img) if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs) else (None, None)
     
+    def _replace_conflicting_tasks_with_new_task(self,
+                                                 state : SimulationAgentState,
+                                                 specs : object,
+                                                 current_path : List[ObservationAction],
+                                                 new_task : SpecificObservationTask,
+                                                 max_slew_rate : float,
+                                                 max_torque : float
+                                            ) -> Tuple[List[ObservationAction], float]:
+        """ Try to replace conflicting tasks in existing path with new task. """
+        # check if path is empty
+        assert len(current_path) > 0, "Current path is empty; cannot replace conflicting tasks with new task."
+
+        # find possible conflicts in current path
+        ## find observations that are being performed during new task accessibility
+        observations_during_task_access = [(obs_idx,obs) for obs_idx,obs in enumerate(current_path)
+                                           if obs.t_start in new_task.accessibility
+                                           or obs.t_end in new_task.accessibility
+                                           or (obs.t_start < new_task.accessibility.left
+                                               and obs.t_end > new_task.accessibility.right)]
+
+        conflicting_observations = [obs_tup for obs_tup in observations_during_task_access]
+
+        # check if conflicting observations were found
+        assert conflicting_observations, "No conflicting observations found; direct insertion should have been possible."
+        
+        # select observation loook angle for new task
+        th_img = np.average([new_task.slew_angles.left, new_task.slew_angles.right])
+
+        # check if removing conflicting observations can accommodate new task
+        for conflict_idx,conflicting_observation in conflicting_observations: 
+            # create new proposed path
+            new_path = [action for action in current_path]
+
+            # remove conflicting observation
+            new_path.pop(conflict_idx) 
+
+            # get preceeding observation action
+            if conflict_idx == 0:
+                # set previous observation as dummy action at current state
+                obs_prev = ObservationAction(new_task.instrument_name, state.attitude[0], state.t)
+            else:
+                # select previous observation from path
+                obs_prev = new_path[conflict_idx-1]
+
+            # calculate maneuver time between previous observation and new task
+            m_prev = abs(obs_prev.look_angle - th_img) / max_slew_rate
+
+            # estimate earliest feasible observation time
+            t_img = max(new_task.accessibility.left, obs_prev.t_end + m_prev)
+
+            # check if there is a succeeding observation action
+            if conflict_idx < len(new_path):
+                # there is a succeeding observation action
+                obs_next = new_path[conflict_idx]
+
+                # calculate maneuver time between new task and next observation
+                m_next = abs(obs_next.look_angle - th_img) / max_slew_rate
+
+                # check if earliest observation time is feasible
+                feasibility_constraints = [
+                    # 1) must be able to maneuver from previous observation to new task
+                    obs_prev.t_end + m_prev <= t_img,   
+                    # 2) must be able to maneuver from new task to next observation
+                    t_img + new_task.min_duration + m_next <= obs_next.t_start, 
+                    # 3) must fit within new task accessibility window
+                    t_img in new_task.accessibility,
+                    t_img + new_task.min_duration in new_task.accessibility
+                ]
+                
+            else:
+                # conflict was last observation in path; only consider previous observation constraints
+
+                # check if earliest observation time is feasible
+                feasibility_constraints = [
+                    # 1) must be able to maneuver from previous observation to new task
+                    obs_prev.t_end + m_prev <= t_img,   
+                    # 2) must fit within new task accessibility window
+                    t_img in new_task.accessibility,
+                    t_img + new_task.min_duration in new_task.accessibility
+                ]
+
+            # check if new task cannot be scheduled even when removing this conflicting observation
+            if not all(feasibility_constraints): 
+                continue 
+            
+            # create new observation action for new task
+            new_observation = ObservationAction(new_task.instrument_name, th_img, t_img, new_task.min_duration, new_task)
+            
+            # replace conflicting observation with new task
+            new_path = [action for action in current_path]
+            new_path[conflict_idx] = new_observation
+
+            # ensure conflicting observation was replaced
+            assert conflicting_observation not in new_path, "Conflicting observation was not replaced in new path."
+
+            # return new path if valid
+            if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs):
+                return new_path, t_img
+
+        # unable to accommodate new task by replacing conflicting observations
+        return None, None
+
+    """
+    BUNDLE-BUILDING PHASE - Bid Generation Methods
+    """
     def _generate_bids_for_task_in_path(self,
                                         state : SimulationAgentState,
                                         specs : object,
@@ -633,291 +960,4 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # compute cost from total angle change
         return self.EPS * total_angle_change  # Placeholder implementation        
     
-    """
-    BUNDLE-BUILDING PHASE - Path Insertion Methods
-    """
-    def _direct_insertion_into_path(self,
-                                    state : SimulationAgentState,
-                                    specs : object,
-                                    current_path : List[ObservationAction],
-                                    new_task : SpecificObservationTask,
-                                    max_slew_rate : float,
-                                    max_torque : float
-                                ) -> Tuple[List[ObservationAction], float]:
-        """ Try to directly insert new task into existing path. """
-        # select observation loook angle for new task
-        th_img = np.average([new_task.slew_angles.left, new_task.slew_angles.right])
-
-        # initialize feasible observation time
-        t_img = None 
-
-        # find possible conflicts in current path
-        ## find observations that are being performed during new task accessibility
-        observations_during_task_access = [action for action in current_path
-                                           if action.t_start in new_task.accessibility
-                                           or action.t_end in new_task.accessibility]
-        ## get latest observation before new task accessibility
-        prev_observations = [action for action in current_path
-                             if action.t_end <= new_task.accessibility.left]
-        prev_observation = max(prev_observations, key=lambda action: action.t_end) if prev_observations else None
-        ## get earliest observation after new task accessibility
-        next_observations = [action for action in current_path
-                             if action.t_start >= new_task.accessibility.right]
-        next_observation = min(next_observations, key=lambda action: action.t_start) if next_observations else None
-
-        # compile conflicting observations
-        conflicting_observations = {prev_observation, next_observation} if prev_observation else {next_observation} if next_observation else set()
-        ## get unique observations during new task access
-        conflicting_observations.update(observations_during_task_access)
-        ## sort conflicting observations by start time
-        conflicting_observations = sorted([obs for obs in conflicting_observations 
-                                           if obs is not None], key=lambda obs: obs.t_start)
-
-        # set current state as a dummy previous observation
-        obs_prev = ObservationAction(new_task.instrument_name,  state.attitude[0], state.t)
-
-        # check if gaps between observations can accommodate new task
-        for obs_next in conflicting_observations: 
-            # check maneuver time between new task and current observations
-            m_prev = abs(obs_prev.look_angle - th_img) / max_slew_rate
-            m_next = abs(obs_next.look_angle - th_img) / max_slew_rate        
-            
-            # get earliest and latest feasible observation time
-            t_earliest = max(new_task.accessibility.left, obs_prev.t_end + m_prev)
-            t_latest = min(new_task.accessibility.right, obs_next.t_start - m_next) - new_task.min_duration
-
-            # check if feasible observation time exists
-            ## 1) must be able to maneuver from previous observation to new task
-            ## 2) must be able to maneuver from new task to next observation
-            ## 3) must fit within new task accessibility window
-            earliest_is_feasible = (t_earliest + new_task.min_duration + m_next <= obs_next.t_start
-                                    and obs_prev.t_end + m_prev <= t_earliest
-                                    and new_task.accessibility.left <= t_earliest
-                                    and t_earliest + new_task.min_duration <= new_task.accessibility.right)
-            latest_is_feasible = (t_latest + new_task.min_duration + m_next <= obs_next.t_start
-                                    and obs_prev.t_end + m_prev <= t_latest
-                                    and new_task.accessibility.left <= t_latest 
-                                    and t_latest + new_task.min_duration <= new_task.accessibility.right)
-            
-            # if feasible, select observation time
-            if earliest_is_feasible:
-                # choose earliest feasible time
-                t_img = t_earliest
-            elif latest_is_feasible:
-                # choose latest feasible time
-                t_img = t_latest
-
-            # if feasible time found, break
-            if earliest_is_feasible or latest_is_feasible: break    
-
-            # else; update previous observation
-            obs_prev = obs_next
-
-        # no conflicting observations were found
-        if not conflicting_observations:
-            # schedule at earliest access time
-            t_img = new_task.accessibility.left
-
-        # check if observation time was found
-        if t_img is None: return None, None # no time found; cannot insert new task into path
-
-        # insert new observation into path
-        ## create observation action for new task
-        new_observation = ObservationAction(new_task.instrument_name, th_img, t_img, new_task.min_duration, new_task)
-
-        ## create new path with inserted observation
-        new_path = [action for action in current_path]
-        new_path.append(new_observation)
-        new_path = sorted(new_path, key=lambda action: action.t_start)
-        
-        # return new path if valid
-        return (new_path, t_img) if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs) else (None, None)
-
-    def _right_shift_path_for_new_task(self,
-                                        state : SimulationAgentState,
-                                        specs : object,
-                                        current_path : List[ObservationAction],
-                                        new_task : SpecificObservationTask,
-                                        max_slew_rate : float,
-                                        max_torque : float
-                                    ) -> Tuple[List[ObservationAction], float]:
-        """ Try to right-shift existing path to accommodate new task. """
-        # TODO Requires Testing
-        # raise NotImplementedError("Replace conflicting tasks with new task method not yet implemented.")
-
-        # check if path is empty
-        assert len(current_path) > 0, "Current path is empty; cannot right-shift path for new task."
-        # check if path is sorted by start time
-        assert all(current_path[i].t_start <= current_path[i+1].t_start for i in range(len(current_path)-1)), "Current path is not sorted by start time."
-
-        # select observation look angle for new task
-        th_img = np.average([new_task.slew_angles.left, new_task.slew_angles.right])
-
-        # find current path observations that occur before the end of the new task's accessibility
-        preceeding_observations = [(path_idx,action) for path_idx,action in enumerate(current_path)
-                                    if action.t_start <= new_task.accessibility.right]
-
-        # add a dummy observation at the initial state
-        preceeding_observations.insert(0, (-1, ObservationAction(new_task.instrument_name, state.attitude[0], state.t)))
-
-        # initialize feasible path insertion index and observation time
-        i_insert, t_img = None, None
-
-        # iterate through previous observations to find insertion point
-        for i_obs,obs_prev in preceeding_observations:
-            # check maneuver time between new task and current observation
-            m_prev = abs(obs_prev.look_angle - th_img) / max_slew_rate
-
-            # calculate earliest feasible observation time
-            t_earliest = max(new_task.accessibility.left, obs_prev.t_end + m_prev)
-
-            # calculate observation feasibility
-            ## 1) must be able to maneuver from previous observation to new task
-            ## 2) must fit within new task accessibility window
-            is_feasible = (obs_prev.t_end + m_prev <= t_earliest
-                           and new_task.accessibility.left <= t_earliest
-                           and t_earliest + new_task.min_duration <= new_task.accessibility.right)
-            
-            # check feasibility
-            if is_feasible:
-                # update insertion index to next location
-                i_insert = i_obs + 1
-                # update observation time
-                t_img = t_earliest
-                
-            else:
-                # stop searching
-                break
-        
-        # check if insertion index was found
-        if i_insert is None: return None, None # no insertion point found; cannot right-shift path for new task
-
-        # initiate new path
-        new_path = [action for action in current_path[:i_insert]]
-        
-        # create new observation action
-        new_observation = ObservationAction(new_task.instrument_name, th_img, t_img, new_task.min_duration, new_task)
-        
-        # add new observation to new path
-        new_path.append(new_observation)
-
-        # right-shift remaining observations
-        path_to_shift = [action for action in current_path[i_insert:]]
-        for i_curr,obs_curr in enumerate(path_to_shift):
-            # check previous observation in path
-            obs_prev = new_path[-1]
-
-            # compute maneuver time from previous observation
-            m = abs(obs_prev.look_angle - obs_curr.look_angle) / max_slew_rate
-
-            # calculate earliest start time for current observation
-            t_earliest = max(obs_prev.t_end + m, obs_curr.task.accessibility.left)
-
-            # check earliest time if feasible
-            is_feasible = (obs_prev.t_end + m_prev <= t_earliest
-                           and new_task.accessibility.left <= t_earliest
-                           and t_earliest + new_task.min_duration <= new_task.accessibility.right)
-
-            # check of new observation time is earlier the or the same as original
-            if t_earliest < obs_curr.t_start or abs(t_earliest - obs_curr.t_start) <= self.EPS:
-                # new task starts earlier, do not modify remaining plan and add to new path
-                new_path.extend(path_to_shift[i_curr:])
-                break
-
-            # else if new observation time is feasible, add shifted observation to new path
-            elif is_feasible: 
-                # create shifted observation action
-                shifted_observation = ObservationAction(obs_curr.instrument_name, obs_curr.look_angle, t_earliest, obs_curr.task.min_duration, obs_curr.task)
-
-                # add shifted observation to new path
-                new_path.append(shifted_observation)
-                
-            # else, task needs a later start time but is not feasible
-            else: return None, None # cannot right-shift path for new task
-            
-        # return new path if valid
-        return (new_path, t_img) if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs) else (None, None)
     
-    def _replace_conflicting_tasks_with_new_task(self,
-                                                 state : SimulationAgentState,
-                                                 specs : object,
-                                                 current_path : List[ObservationAction],
-                                                 new_task : SpecificObservationTask,
-                                                 max_slew_rate : float,
-                                                 max_torque : float
-                                            ) -> Tuple[List[ObservationAction], float]:
-        """ Try to replace conflicting tasks in existing path with new task. """
-        # check if path is empty
-        assert len(current_path) > 0, "Current path is empty; cannot replace conflicting tasks with new task."
-
-        # find possible conflicts in current path
-        ## find observations that are being performed during new task accessibility
-        observations_during_task_access = [(obs_idx,obs) for obs_idx,obs in enumerate(current_path)
-                                           if obs.t_start in new_task.accessibility
-                                           or obs.t_end in new_task.accessibility
-                                           or (obs.t_start < new_task.accessibility.left
-                                               and obs.t_end > new_task.accessibility.right)]
-
-        conflicting_observations = [obs_tup for obs_tup in observations_during_task_access]
-
-        # check if conflicting observations were found
-        assert conflicting_observations, "No conflicting observations found; direct insertion should have been possible."
-        
-        # select observation loook angle for new task
-        th_img = np.average([new_task.slew_angles.left, new_task.slew_angles.right])
-
-        # check if removing conflicting observations can accommodate new task
-        for conflict_idx,conflicting_observation in conflicting_observations:                      
-            # get preceeding observation action
-            if conflict_idx == 0:
-                # set previous observation as dummy action at current state
-                obs_prev = ObservationAction(new_task.instrument_name, state.attitude[0], state.t)
-            else:
-                # select previous observation from path
-                obs_prev = current_path[conflict_idx-1]
-
-            # get succeeding observation action
-            if conflict_idx == len(current_path) - 1:
-                # set next observation as last action on the path
-                obs_next = current_path[-1] 
-            else:
-                # select next observation from path
-                obs_next = current_path[conflict_idx+1]
-
-            # calculate maneuver time between new task and current observations
-            m_prev = abs(obs_prev.look_angle - th_img) / max_slew_rate
-            m_next = abs(obs_next.look_angle - th_img) / max_slew_rate
-
-            # set earliest feasible observation time
-            t_img = max(new_task.accessibility.left, obs_prev.t_end + m_prev)
-
-            # check if earlist observation time is feasible
-            ## 1) must be able to maneuver from previous observation to new task
-            prev_to_earliest_can_maneuver = obs_prev.t_end + m_prev <= t_img
-            ## 2) must be able to maneuver from new task to next observation
-            earliest_to_next_can_maneuver = t_img + new_task.min_duration + m_next <= obs_next.t_start
-            ## 3) must fit within new task accessibility window            
-            earliest_in_access = (new_task.accessibility.left <= t_img
-                                  and t_img + new_task.min_duration <= new_task.accessibility.right)
-            is_observation_feasible : bool = (prev_to_earliest_can_maneuver and earliest_to_next_can_maneuver and earliest_in_access)
-
-            # check if new task cannot be scheduled even when removing this conflicting observation
-            if not is_observation_feasible: 
-                continue 
-            
-            # create new observation action for new task
-            new_observation = ObservationAction(new_task.instrument_name, th_img, t_img, new_task.min_duration, new_task)
-            
-            # replace conflicting observation with new task
-            new_path = [action for action in current_path]
-            new_path[conflict_idx] = new_observation
-
-            # ensure conflicting observation was replaced
-            assert conflicting_observation not in new_path, "Conflicting observation was not replaced in new path."
-
-            # return new path if valid
-            if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs):
-                return new_path, t_img
-
-        # unable to accommodate new task by replacing conflicting observations
-        return None, None

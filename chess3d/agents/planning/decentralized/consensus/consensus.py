@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from collections import defaultdict, deque
 from itertools import chain
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 import logging
 
@@ -12,8 +12,8 @@ from dmas.clocks import ClockConfig
 
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.planning.tasks import GenericObservationTask, EventObservationTask, SpecificObservationTask
-from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
+from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
 from chess3d.agents.planning.decentralized.consensus.bids import Bid
 from chess3d.agents.science.reward import *
@@ -66,8 +66,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # initialize urgent tasks and bid inbox/outbox
         self.known_event_tasks : set[GenericObservationTask] = set()
         self.incoming_event_tasks : deque[GenericObservationTask] = deque()
-        self.bid_inbox : deque[Bid] = deque()
-        self.bid_outbox : Dict[GenericObservationTask, Dict[int,Bid]] = defaultdict(dict)
         self.relevant_updates : List[Bid] = list()
 
         # initialize known preplan and current plan
@@ -90,7 +88,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
     CONSENSUS PHASE
     ---------------------------
     """
-
     def update_percepts(self, 
                         state : SimulationAgentState,
                         current_plan : Plan,
@@ -113,9 +110,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if self.bid_inbox:
-            self.__log_results('CONSENSUS PHASE (BEFORE)', state, self.results)
-            self.__log_bundle('BUNDLE (BEFORE CONSENSUS)', state, self.bundle)
+        if incoming_bids and self._debug:
+            self.__log_results('RESULTS (BEFORE CONSENSUS PHASE)', state, self.results)
+            self.__log_bundle('BUNDLE (BEFORE CONSENSUS PHASE)', state, self.bundle)
         # -------------------------------
 
         # perform consensus phase for incoming task bids
@@ -123,9 +120,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if results_updates or bundle_updates:
-            self.__log_results('CONSENSUS PHASE (AFTER)', state, self.results)
-            self.__log_bundle('BUNDLE (AFTER CONSENSUS)', state, self.bundle)
+        if (results_updates or bundle_updates) and self._debug:
+            self.__log_results('RESULTS (AFTER CONSENSUS PHASE)', state, self.results)
+            self.__log_bundle('BUNDLE (AFTER CONSENSUS PHASE)', state, self.bundle)
         # -------------------------------
 
         # set replanning flags
@@ -515,7 +512,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             return (                    
                     self.results_changes_performed      # 1) there were relevant updates to bids/results
                     or self.bundle_changes_performed    # 2) incoming bids modified the bundle
-                    or self.new_periodic_plan_received  # 3) new periodic plan was received
+                    # or self.new_periodic_plan_received  # 3) new periodic plan was received
                     )
         
         finally:
@@ -545,41 +542,36 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        self.__log_results('PLANNING PHASE (BEFORE)', state, self.results)
-        self.__log_bundle('BUNDLE (BEFORE PLANNING)', state, self.bundle)
+        if self._debug:
+            self.__log_results('RESULTS (BEFORE PLANNING PHASE)', state, self.results)
+            self.__log_bundle('BUNDLE (BEFORE PLANNING PHASE)', state, self.bundle)
         # -------------------------------
 
-        # build new bundle
-        new_bundle, new_path, new_bids = self.bundle_building_phase(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
+        # build new bundle and path according to replanning model
+        self.bundle, self.path, new_bids = self.bundle_building_phase(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
         
         # check if new path is valid
-        assert new_path is not None and len(new_path) > 0, "New observation path cannot be empty."
-        assert self.is_observation_path_valid(state, new_path, None, None, specs), "New observation path is not valid."   
+        assert self.path is not None and len(self.path) > 0, "New observation path cannot be empty."
+        assert self.is_observation_path_valid(state, self.path, None, None, specs), "New observation path is not valid."   
 
-        # update bundle and path
-        self.bundle, self.path = new_bundle, new_path
-
-        # update results
-        self.__update_results_from_bundle(new_bundle)
-
-        # update bid outbox
-        self.__update_outbox_from_bundle(new_bundle)
+        # TODO update results
+        self.__update_results_from_bundle(new_bids)
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        self.__log_results('PLANNING PHASE', state, self.results)
-        self.__log_bundle('BUNDLE (AFTER PLANNING)', state, self.bundle)
+        if self._debug:
+            self.__log_results('RESULTS (AFTER PLANNING PHASE)', state, self.results)
+            self.__log_bundle('BUNDLE (AFTER PLANNING PHASE)', state, self.bundle)
         # -------------------------------
     
         # generate maneuver and travel actions from observations
-        maneuvers : list = self._schedule_maneuvers(state, specs, new_path, clock_config, orbitdata)
+        maneuvers : list = self._schedule_maneuvers(state, specs, self.path, clock_config, orbitdata)
 
         # schedule broadcasts
-        # TODO decide on broadcast scheduling strategy
         broadcasts : list = self._schedule_broadcasts(state, orbitdata)
                 
         # compile and generate plan
-        self.plan = ReactivePlan(maneuvers, new_path, broadcasts, t=state.t, t_next=self.preplan.t_next)
+        self.plan = ReactivePlan(maneuvers, self.path, broadcasts, t=state.t, t_next=self.preplan.t_next)
 
         # clear new urgent tasks
         self.incoming_event_tasks = set()
@@ -650,24 +642,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
             for bids in self.results.values()
         ), "Bids are not sorted in consecutive n_obs values."
 
-    def __update_outbox_from_bundle(self, new_bundle : List[List[Bid]]) -> None:
-        """ Update bid outbox from new bundle. """
-        raise NotImplementedError("Updating bid outbox from new bundle not yet implemented.")
-    
-        # iterate through bids in new bundle
-        for bids in new_bundle:
-            for bid in bids:
-                # check if bid for this task and observation number already exists in outbox
-                if bid.n_obs not in self.bid_outbox[bid.task]:
-                    # add new bid to outbox
-                    self.bid_outbox[bid.task][bid.n_obs] = bid
-                else:
-                    # get existing bid
-                    existing_bid = self.bid_outbox[bid.task][bid.n_obs]
-                    
-                    # update outbox with newest bid
-                    self.bid_outbox[bid.task][bid.n_obs] = max(existing_bid, bid, key=lambda b: (b.t_stamp, b.bid_value))
-       
     """
     BROADCAST SCHEDULING
     """
@@ -681,6 +655,17 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
             # initialize list of broadcasts to be done
             broadcasts = []       
+
+            # generate bid messages to share bids in results
+            compiled_bid_msgs = [
+                MeasurementBidMessage(state.agent_name, state.agent_name, bid.to_dict())
+                for _,bids in self.results.items()
+                for bid in bids
+            ]
+            compiled_results_msg = BusMessage(state.agent_name, 
+                                              state.agent_name, 
+                                              [bid_msg.to_dict() for bid_msg in compiled_bid_msgs])
+            compiled_results_msg_dict = compiled_results_msg.to_dict()
             
             # iterate through communication targets
             for target in orbitdata.comms_links.keys():
@@ -703,14 +688,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
                     # generate plan message to share any task requests generated
                     task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
-
-                    # generate bid messages to share bids in results
-                    bid_msgs : List[MeasurementBidMessage]= []
-                    for bids in self.bid_outbox.values():
-                        for bid in bids.values():
-                            bid_msgs.append(MeasurementBidMessage(state.agent_name, state.agent_name, bid.to_dict()))
-                    bid_bus_msg = BusMessage(state.agent_name, state.agent_name, [bid_msg.to_dict() for bid_msg in bid_msgs])
-                    bid_msg_action = BroadcastMessageAction(bid_bus_msg.to_dict(), t_broadcast)
+                    
+                    # generate results broadcast action
+                    bid_msg_action = BroadcastMessageAction(compiled_results_msg_dict, t_broadcast)
                     
                     # add to client broadcast list
                     broadcasts.extend([state_msg, observations_msg, task_requests_msg, bid_msg_action])
@@ -741,12 +721,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
         
         # count characters in line for formatting
         L_LINE = len(line)
+        L_LINE_PADding = 20
 
         # header
         out += line 
 
         # divider 
-        for _ in range(L_LINE + 25): out += '='
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
 
         n = 15
@@ -773,13 +754,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 out += line
                 i +=1
 
-            for _ in range(L_LINE + 25):
+            for _ in range(L_LINE + L_LINE_PADding):
                 out += '-'
             out += '\n'
 
             if i > n:
                 out += '\t\t\t...\n'
-                for _ in range(L_LINE + 25):
+                for _ in range(L_LINE + L_LINE_PADding):
                     out += '-'
                 out += '\n'
                 break
@@ -792,17 +773,18 @@ class ConsensusPlanner(AbstractReactivePlanner):
         
         # count characters in line for formatting
         L_LINE = len(line)
+        L_LINE_PADding = 20
 
         # header
         out += line 
 
         # divider 
-        for _ in range(L_LINE + 20): out += '='
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
 
         if not self.bundle:
             out += '\t<empty bundle>\n'
-            for _ in range(L_LINE + 25): out += '-'
+            for _ in range(L_LINE + L_LINE_PADding): out += '-'
             out += '\n'
 
         n = 15
@@ -814,13 +796,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
             line = line[:-1] + ']\n'
             out += line
 
-            for _ in range(L_LINE + 25):
+            for _ in range(L_LINE + L_LINE_PADding):
                 out += '-'
             out += '\n'
 
             if i > n:
                 out += '\t\t\t...\n'
-                for _ in range(L_LINE + 25):
+                for _ in range(L_LINE + L_LINE_PADding):
                     out += '-'
                 out += '\n'
                 break

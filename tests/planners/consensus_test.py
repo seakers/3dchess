@@ -30,7 +30,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                 "model": "heuristicInsertion",
                 "heuristic" : "taskValue",
                 "replanThreshold": 2,
-                "debug": "False"
+                "debug": "True"
             }
         }
     
