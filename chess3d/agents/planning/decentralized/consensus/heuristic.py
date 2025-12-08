@@ -285,13 +285,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             
             # Find best placement in path   
             for proposed_path, t_img in proposed_paths:
-                
                 # if no feasible path was found, ignore new urgent task
                 if proposed_path is None: continue
                 
-                if len(new_task.parent_tasks) > 1:
-                    x = 1  # Placeholder implementation
-
                 # create bids for relevant parent tasks
                 new_bids : List[Bid] = self._generate_bids_for_task_in_path(state, specs, path, proposed_path, new_task, 
                                                                             t_img, cross_track_fovs, orbitdata, mission, observation_history)
@@ -299,11 +295,14 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 # if no new bids were generated, skip to next urgent task
                 if not new_bids: continue
 
-                # add bids to bundle
-                bundle.append(new_bids)
+            
+            raise NotImplementedError("Heuristic insertion bundle builder finalization not yet implemented.")
+        
+            # add bids to bundle
+            bundle.append([(bid.task, bid.n_obs) for bid in new_bids])
 
-                # update current path                    
-                path = [action for action in proposed_path]
+            # update current path                    
+            path = [action for action in proposed_path]
 
         # temp return
         return bundle, path, new_bids
@@ -674,88 +673,265 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             - bids : List[Tuple[GenericObservationTask, int]]] - List of bids for each parent task of the given task. Is None if no valid bids could be generated.
         """
 
-        # calculate path utility without the new task
-        old_path_utility : float = self._calculate_path_utility(state, specs, cross_track_fovs, current_path, observation_history, orbitdata, mission)
+        # count current path revisit and observation numbers
+        n_obs_curr, t_prev_curr = self._count_observation_number_and_revisit_times_from_path(state, current_path, observation_history)
 
-        # get relevant parent tasks from task being scheduled
-        parent_tasks = [parent_task 
-                        for parent_task in task_to_schedule.parent_tasks
-                        if parent_task in self.known_event_tasks]
+        # calculate current path utility
+        current_path_utility : float = self._calculate_path_utility(state, specs, cross_track_fovs, current_path, observation_history, orbitdata, mission, n_obs_curr, t_prev_curr)
 
-        # get bounds for min and maximum observation numbers for each parent task
-        n_obs_per_task = {parent_task : list(range(len(self.results[parent_task])+(1 if self.results[parent_task][-1].has_winner() else 0)))
-                            for parent_task in parent_tasks}
+        # enumerate the generic observation tasks being observed in the proposed path
+        t_img_sequences : dict[GenericObservationTask, list[float]] = defaultdict(list)
+        n_obs_candidates : dict[GenericObservationTask, list[int]] = defaultdict(list)
+        observation_indices : dict[GenericObservationTask, list[int]] = defaultdict(list)
+        
+        # extract observation time and sequence indices for each parent 
+        for obs_idx,obs in enumerate(proposed_path):
+            for parent_task in obs.task.parent_tasks:
+                t_img_sequences[parent_task].append(obs.t_start)
+                observation_indices[parent_task].append(obs_idx)
 
-        # initiate possible observation number and revisit pair tracker for each parent task
-        n_obs_revisit_pairs = defaultdict(list)
+        # enumerate candidate observation numbers for each parent task
+        for parent_task,obs_indices in observation_indices.items():
+            # check if task is being bid on
+            if parent_task not in self.results:
+                # task only concerns this agent; set to existing observation count from original path
+                n_obs_candidates[parent_task] = [[n_obs_curr[obs_idx][parent_task]] 
+                                                    for obs_idx in obs_indices]
+
+            else:
+                # get existing observation count at the beginning of the path
+                n_obs_performed = n_obs_curr[obs_indices[0]].get(parent_task, 0)
+
+                # calculate the maximum possible observation number for this parent task
+                n_obs_max = max(len(self.results[parent_task])+1, len(obs_indices))
+
+                for occurrance_idx,obs_idx in enumerate(obs_indices):
+                    # calculate upper and lower bounds for candidate observation numbers
+                    n_obs_lower_bound = n_obs_performed + occurrance_idx
+                    n_obs_upper_bound = n_obs_max - (len(obs_indices) - occurrance_idx - 1)
+
+                    # generate candidate observation numbers for this parent task
+                    n_obs_occurance = list(range(n_obs_lower_bound, n_obs_upper_bound))
+                    n_obs_candidates[parent_task].append(n_obs_occurance)
+
+        # enumerate valid labelings for each parent task
+        valid_n_obs_sequences : dict[GenericObservationTask, list[list[int]]] = {}
+        for parent_task in observation_indices.keys():
+            valid_n_obs_sequences[parent_task] = self.enumerate_labelings_for_task(parent_task, t_img_sequences[parent_task], n_obs_candidates[parent_task])
+
+            # TODO calculate t_prev for all 
+
+        x = 1
+
+    def enumerate_labelings_for_task(
+                                        self,
+                                        task : GenericObservationTask,
+                                        t_img_sequence,     # [t1, t2, ..., tm]
+                                        n_obs_candidates,   # [F1, F2, ..., Fm], each Fi is a small set or range of ints
+                                        # external_prev_time, # dict n -> t_ext[n] for already scheduled obs
+                                        max_solutions=None  # optional limit
+                                    ):
+        m = len(t_img_sequence)
+        assignments = [None] * m         # n_obs_r for r=0..m-1
+        t_prev_assignments = [None] * m  # t_prev_r for r=0..m-1
+        
+        best_solutions = []
+
+        # For quick lookup: which n have we already assigned and at what time (from this agent)
+        local_obs_time = {}  # n -> t
+
+        def prev_t_img(n_obs : int):
+            # Find time of (n-1)-th obs, from external or our path
+            n_obs_prev = n_obs - 1
+            
+            # check if there is no predecessor
+            if n_obs_prev < 0: 
+                return np.NINF # no previous observation; return negative infinity
+            
+            # check if predecessor is being considered by this agent
+            if n_obs_prev in local_obs_time:
+                return local_obs_time[n_obs_prev] # found locally
+            
+            # check if this task is being bid on by other agents
+            if task not in self.results: 
+                return None # no other agents bidding on this task; no predecessor available
+
+            raise NotImplementedError("External previous observation time lookup not yet implemented.")
+
+            # check for predecessor in bids from other agents
+            if n_obs_prev < len(self.results.get(task, [])):
+                current_bid : Bid = self.results[task][n_obs_prev]
+            return None
+
+        def dfs(r : int):
+            nonlocal best_solutions
+            if max_solutions is not None and len(best_solutions) >= max_solutions:
+                return
+
+            if r == m:
+                # full labeling found
+                best_solutions.append(assignments.copy())
+                return
+
+            t_img = t_img_sequence[r]
+
+            # iterate candidate ns in some priority order (e.g. by local utility)
+            for n in sorted(n_obs_candidates[r]):
+                # check chain constraints
+                t_prev = prev_t_img(n)
+
+                # check if previous observation exists
+                if t_prev is None: continue
+
+                # check revisit time constraints
+                if t_prev > t_img: continue
+
+                # commit
+                assignments[r] = n
+                local_prev_value = local_obs_time.get(n, None)
+                local_obs_time[n] = t_img
+
+                dfs(r + 1)
+
+                # undo
+                if local_prev_value is None:
+                    del local_obs_time[n]
+                else:
+                    local_obs_time[n] = local_prev_value
+                assignments[r] = None
+
+        dfs(0)
+        return best_solutions
+
+        x = 1
+
+        # # get relevant parent tasks from task being scheduled
+        # parent_tasks = [parent_task 
+        #                 for parent_task in task_to_schedule.parent_tasks
+        #                 if parent_task in self.known_event_tasks]
+
+        # # get bounds for min and maximum observation numbers for each parent task
+        # n_obs_per_task = {parent_task : list(range(len(self.results[parent_task])+1))
+        #                     for parent_task in parent_tasks}
+
+        # # initiate possible observation number and revisit pair tracker for each parent task
+        # n_obs_revisit_pairs : Dict[SpecificObservationTask, List[Tuple[int, float]]] = defaultdict(list)
                 
-        # calculate revisit times for each possible observation number
-        for parent_task, n_obs_list in n_obs_per_task.items():
-            for n_obs in n_obs_list:             
-                # check if observation has already been performed
-                if self.results[parent_task][n_obs].was_performed(): 
-                    continue # observation already performed; skip
 
-                # check if agent is already scheduled to perform observation
-                if self.results[parent_task][n_obs].winning_bidder == state.agent_name: 
-                    continue # observation already scheduled by this agent; skip
-
-                # calculate previous observation time
-                t_prev = self.results[parent_task][n_obs-1].t_img if n_obs > 0 else np.NINF
-
-                # check if previous observation time is prior to the chosen observation time 
-                if t_img < t_prev: 
-                    continue # incompatible observation time and observation number; skip
-
-                # estimate revisit time
-                t_revisit = t_img - t_prev if n_obs > 0 else np.NINF
-
-                # add valid (n_obs, t_revisit) pair to list
-                n_obs_revisit_pairs[parent_task].append((n_obs, t_revisit))
-
-        assert all([parent_task in n_obs_revisit_pairs for parent_task in parent_tasks]), \
-            "No valid (n_obs, t_revisit) pairs could be generated for all parent tasks."
-        
-        # enlist all possible (n_obs, t_revisit) options for each parent task
-        options_lists = [n_obs_revisit_pairs[parent_task] for parent_task in parent_tasks]
-        
-        # initiate search for best (n_obs, t_revisit) combination
-        best_combo : dict = dict()
-        best_val : float = np.NINF
-
-        # calculate bid for each parent task and each possible (n_obs, t_revisit) pair
-        for combo in product(*options_lists):
-            n_obs_bid = {parent_task : n_obs for parent_task, (n_obs, _) in zip(parent_tasks, combo)}
-            t_prev_bid = {parent_task : t_prev for parent_task, (_, t_prev) in zip(parent_tasks, combo)}
+        # # calculate observation number and revisit time for tasks in path
+        # n_obs, t_prev = self._calculate_observation_number_and_revisit_in_path(path, observation_history)
+     
+        # # replace observation number and revisit time values for task being scheduled if provided
+        # if any(param is not None for param in [task_to_schedule, n_obs_bid, t_prev_bid]):            
+        #     # find index and observation action for task being scheduled
+        #     matching_index,matching_obs = min([(obs_idx, obs) for obs_idx, obs in enumerate(path) 
+        #                                         if obs.task == task_to_schedule],
+        #                                         key=lambda item: item[0])
             
-            # calculate new path utility with proposed (n_obs, t_revisit) pairs
-            new_path_utility : float = self._calculate_path_utility(state, specs, cross_track_fovs, proposed_path, observation_history, orbitdata, mission, task_to_schedule, n_obs_bid, t_prev_bid)
+        #     # update observation number and previous observation time for task being scheduled
+        #     for parent_task in n_obs_bid.keys():
+        #         # get previous bids for this task
+        #         previous_bids = [bid for bid in self.results[parent_task]
+        #                          if bid.t_img < matching_obs.t_start 
+        #                          and bid.winning_bidder == state.agent_name]
+        #         latest_bid = max(previous_bids, key=lambda bid: bid.t_img, default=None)
 
-            # calculate bid value
-            bid_value : float = new_path_utility - old_path_utility
+        #         # check if overwrite values are valid
+        #         assert n_obs_bid[parent_task] >= len(previous_bids), \
+        #             f"Proposed observation number {n_obs_bid[parent_task]} for task '{parent_task}' is less than the number of previous bids {len(previous_bids)} for the same task by this agent."
+        #         assert t_prev_bid[parent_task] >= (latest_bid.t_img if latest_bid else np.NINF), \
+        #             f"Proposed previous observation time {t_prev_bid[parent_task]} [s] for task '{parent_task}' is earlier than the latest previous bid time {latest_bid.t_img if latest_bid else 'NINF'} for the same task by this agent."
 
-            # calculate total subsequent bid values for competing bids
-            subsequent_bid_values = {parent_task : sum([subsequent_bid.winning_bid 
-                                            for subsequent_bid in self.results[parent_task][n_obs+1:]]) \
-                                            if n_obs < len(self.results[parent_task]) else 0.0
-                                    for parent_task in parent_tasks}
+        #         # overwrite observation number and previous observation time
+        #         n_obs[matching_index][parent_task] = n_obs_bid[parent_task]
+        #         t_prev[matching_index][parent_task] = t_prev_bid[parent_task]
+
+        #     # update observation number and previous observation time for task being scheduled
+        #     for parent_task in n_obs_bid.keys():
+        #         n_obs[matching_index][parent_task] = n_obs_bid[parent_task]
+        #         t_prev[matching_index][parent_task] = t_prev_bid[parent_task]
+
+        # # calculate revisit times for each possible observation number
+        # for parent_task, n_obs_list in n_obs_per_task.items():
+        #     for n_obs in n_obs_list:             
+        #         # check if a bid even exists for this observation number
+        #         if n_obs >= len(self.results[parent_task]): 
+        #             # no bid exists; observation number is valid with infinite revisit time
+        #             n_obs_revisit_pairs[parent_task].append((n_obs, np.Inf))
+        #             continue
+
+        #         # check if observation has already been performed
+        #         if self.results[parent_task][n_obs].was_performed(): 
+        #             continue # observation already performed; skip
+
+        #         # check if agent is already scheduled to perform observation
+        #         if self.results[parent_task][n_obs].winning_bidder == state.agent_name: 
+        #             continue # observation already scheduled by this agent; skip
+
+        #         # calculate previous observation time
+        #         t_prev = self.results[parent_task][n_obs-1].t_img if n_obs > 0 else np.NINF
+
+        #         # check if previous observation time is prior to the chosen observation time 
+        #         if t_img < t_prev: 
+        #             continue # incompatible observation time and observation number; skip
+
+        #         # estimate revisit time
+        #         t_revisit = t_img - t_prev if n_obs > 0 else np.NINF
+
+        #         # add valid (n_obs, t_revisit) pair to list
+        #         n_obs_revisit_pairs[parent_task].append((n_obs, t_revisit))
+
+        # assert all([parent_task in n_obs_revisit_pairs for parent_task in parent_tasks]), \
+        #     "No valid (n_obs, t_revisit) pairs could be generated for all parent tasks."
+        
+        # # enlist all possible (n_obs, t_revisit) options for each parent task
+        # options_lists = [n_obs_revisit_pairs[parent_task] for parent_task in parent_tasks]
+        
+        # # initiate search for best (n_obs, t_revisit) combination
+        # best_combo : dict = dict()
+        # best_val : float = np.NINF
+
+        # # calculate bid for each parent task and each possible (n_obs, t_revisit) pair
+        # for combo in product(*options_lists):
+        #     n_obs_bid = {parent_task : n_obs for parent_task, (n_obs, _) in zip(parent_tasks, combo)}
+        #     t_prev_bid = {parent_task : t_prev for parent_task, (_, t_prev) in zip(parent_tasks, combo)}
             
-            # check if outbids all subsequent bids
-            if any(bid_value <= subsequent_bid_value + self.EPS
-                   for subsequent_bid_value in subsequent_bid_values.values()): 
-                continue # does not outbid all subsequent bids; skip
+        #     # calculate new path utility with proposed (n_obs, t_revisit) pairs
+        #     new_path_utility : float = self._calculate_path_utility(state, specs, cross_track_fovs, proposed_path, observation_history, orbitdata, mission, task_to_schedule, n_obs_bid, t_prev_bid)
+
+        #     # calculate bid value
+        #     bid_value : float = new_path_utility - current_path_utility
+
+        #     # create bids for each parent task based on current (n_obs, t_revisit) combination
+        #     current_bids = [Bid(parent_task, state.agent_name, n_obs, bid_value, bid_value, 
+        #                         state.agent_name, t_img, state.t, 
+        #                         main_measurement=task_to_schedule.instrument_name)
+        #                     for parent_task, (n_obs, _) in zip(parent_tasks, combo)]
             
-            # check if bid value is best so far
-            if bid_value > best_val + self.EPS:
-                best_val = bid_value
-                best_combo = {parent_task: (n_obs, t_prev) 
-                              for parent_task, (n_obs, t_prev) in zip(parent_tasks, combo)}
+        #     x = 1
+
+        #     # calculate total subsequent bid values for competing bids
+        #     subsequent_bid_values = {parent_task : sum([subsequent_bid.winning_bid 
+        #                                     for subsequent_bid in self.results[parent_task][n_obs+1:]]) \
+        #                                     if n_obs < len(self.results[parent_task]) else 0.0
+        #                             for parent_task in parent_tasks}
+            
+        #     # check if outbids all subsequent bids
+        #     if any(bid_value <= subsequent_bid_value + self.EPS
+        #            for subsequent_bid_value in subsequent_bid_values.values()): 
+        #         continue # does not outbid all subsequent bids; skip
+            
+        #     # check if bid value is best so far
+        #     if bid_value > best_val + self.EPS:
+        #         best_val = bid_value
+        #         best_combo = {parent_task: (n_obs, t_prev) 
+        #                       for parent_task, (n_obs, t_prev) in zip(parent_tasks, combo)}
         
         
-        # create and return bids for each parent task based on best (n_obs, t_revisit) combination
-        return [AsynchronousBid(parent_task, state.agent_name, n_obs, best_val, state.agent_name, 
-                                 best_val, t_img, state.t, task_to_schedule.instrument_name) 
-                for parent_task, (n_obs,_) in best_combo.items()]
+        # # create and return bids for each parent task based on best (n_obs, t_revisit) combination
+        # return [AsynchronousBid(parent_task, state.agent_name, n_obs, best_val, state.agent_name, 
+        #                          best_val, t_img, state.t, task_to_schedule.instrument_name) 
+        #         for parent_task, (n_obs,_) in best_combo.items()]
         
     def _calculate_path_utility(self,
                                 state : SimulationAgentState,
@@ -765,25 +941,13 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                 observation_history : ObservationHistory,
                                 orbitdata : OrbitData,
                                 mission : Mission,
-                                task_to_schedule : SpecificObservationTask = None,
-                                n_obs_bid : Dict[GenericObservationTask, int] = None,
-                                t_prev_bid : Dict[GenericObservationTask, float] = None
+                                n_obs : List[Dict[GenericObservationTask, int]],
+                                t_prev : List[Dict[GenericObservationTask, float]]
                             ) -> float:
         """ Calculate total expected utility of observation path. """
         
-        # validate input arguments
-        if any(param is not None for param in [task_to_schedule, n_obs_bid, t_prev_bid]):
-            assert all(param is not None for param in [task_to_schedule, n_obs_bid, t_prev_bid]), \
-                "Proposed bid parameters must be provided if either is specified."
-            
-            assert all(parent_task in task_to_schedule.parent_tasks for parent_task in n_obs_bid.keys()), \
-                "Proposed bid observation numbers contain parent tasks not associated with the task being scheduled."
-            
-            assert all(parent_task in task_to_schedule.parent_tasks for parent_task in t_prev_bid.keys()), \
-                "Proposed bid previous observation times contain parent tasks not associated with the task being scheduled."
-
         # calculate path value
-        path_value = self._calculate_path_value(state, specs, cross_track_fovs, path, observation_history, orbitdata, mission, task_to_schedule, n_obs_bid, t_prev_bid)
+        path_value = self._calculate_path_value(specs, cross_track_fovs, path, observation_history, orbitdata, mission, n_obs, t_prev)
         
         # calculate path cost
         path_cost = self._calculate_path_cost(state, specs, path)
@@ -792,58 +956,18 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         return path_value - path_cost
 
     def _calculate_path_value(self,
-                              state : SimulationAgentState,
                               specs : object,
                               cross_track_fovs : Dict[str, float],
                               path : List[ObservationAction],
                               observation_history : ObservationHistory,
                               orbitdata : OrbitData,
                               mission : Mission,
-                              task_to_schedule : SpecificObservationTask,
-                              n_obs_bid : Dict[GenericObservationTask, int],
-                              t_prev_bid : Dict[GenericObservationTask, float]
+                              n_obs : List[Dict[GenericObservationTask, int]],
+                              t_prev : List[Dict[GenericObservationTask, float]]
                             ) -> float:
         """ Calculate total expected value of observation path. """
-        # initialize path value
-        total_value = 0.0
-
-        # calculate observation number and revisit time for tasks in path
-        n_obs, t_prev = self._calculate_observation_number_and_revisit_in_path(path, observation_history)
-     
-        # replace observation number and revisit time values for task being scheduled if provided
-        if any(param is not None for param in [task_to_schedule, n_obs_bid, t_prev_bid]):            
-            # find index and observation action for task being scheduled
-            matching_index,matching_obs = min([(obs_idx, obs) for obs_idx, obs in enumerate(path) 
-                                                if obs.task == task_to_schedule],
-                                                key=lambda item: item[0])
-            
-            # update observation number and previous observation time for task being scheduled
-            for parent_task in n_obs_bid.keys():
-                # get previous bids for this task
-                previous_bids = [bid for bid in self.results[parent_task]
-                                 if bid.t_img < matching_obs.t_start 
-                                 and bid.winning_bidder == state.agent_name]
-                latest_bid = max(previous_bids, key=lambda bid: bid.t_img, default=None)
-
-                # check if overwrite values are valid
-                assert n_obs_bid[parent_task] >= len(previous_bids), \
-                    f"Proposed observation number {n_obs_bid[parent_task]} for task '{parent_task}' is less than the number of previous bids {len(previous_bids)} for the same task by this agent."
-                assert t_prev_bid[parent_task] >= (latest_bid.t_img if latest_bid else np.NINF), \
-                    f"Proposed previous observation time {t_prev_bid[parent_task]} [s] for task '{parent_task}' is earlier than the latest previous bid time {latest_bid.t_img if latest_bid else 'NINF'} for the same task by this agent."
-
-                # overwrite observation number and previous observation time
-                n_obs[matching_index][parent_task] = n_obs_bid[parent_task]
-                t_prev[matching_index][parent_task] = t_prev_bid[parent_task]
-
-            # update observation number and previous observation time for task being scheduled
-            for parent_task in n_obs_bid.keys():
-                n_obs[matching_index][parent_task] = n_obs_bid[parent_task]
-                t_prev[matching_index][parent_task] = t_prev_bid[parent_task]
-
-        # iterate through observations in path
-        for obs_idx, obs in enumerate(path):
-            # calculate expected value of observation
-            obs_value = self.estimate_specific_task_value(obs.task,
+        # calculate and accumulate expected value of observation
+        task_values = [self.estimate_specific_task_value(obs.task,
                                                  obs.t_start,
                                                  obs.task.min_duration,
                                                  specs,
@@ -853,13 +977,13 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                                  observation_history,
                                                  n_obs[obs_idx],
                                                  t_prev[obs_idx])
+                        for obs_idx, obs in enumerate(path)]
 
-            # accumulate total value
-            total_value += obs_value
-
-        return total_value    
+        # return total task value
+        return sum(task_values)    
     
-    def _calculate_observation_number_and_revisit_in_path(self,
+    def _count_observation_number_and_revisit_times_from_path(self,
+                                                          state : SimulationAgentState,
                                                           path : List[ObservationAction],
                                                           observation_history : ObservationHistory
                                                         ) -> Tuple[List[Dict[GenericObservationTask, int]],
@@ -913,12 +1037,21 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             for parent_task in obs.task.parent_tasks:
                 # check if parent task is being bid on
                 if parent_task in self.results: # task is part of negotiations
+                    # get matching bid for this task
+                    matching_bid : Bid = next([bid for bid in self.results[parent_task]
+                                         if abs(bid.t_img - obs.t_start) < self.EPS
+                                         and bid.is_bidder_winning()], None)
+                    
                     # get previous bids for this task
                     previous_bids = [bid for bid in self.results[parent_task]
-                                     if bid.t_img < obs.t_start and bid.has_winner()]
+                                     if bid.t_img < obs.t_start 
+                                     and bid.is_bidder_winning()]
+                    
+                    assert matching_bid is not None, \
+                        f"No matching bid found for observation at time {obs.t_start} [s] for task '{parent_task}' by agent '{state.agent_name}'."
 
                     # update overall observation number and revisit times along path using previous bids
-                    n_obs[obs_idx][parent_task] = len(previous_bids)
+                    n_obs[obs_idx][parent_task] = matching_bid.n_obs
                     t_prev[obs_idx][parent_task] = max([bid.t_img for bid in previous_bids], default=np.NINF)                    
                 
                 else: # task is not part of negotiations
