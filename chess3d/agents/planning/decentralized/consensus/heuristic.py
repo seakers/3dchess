@@ -823,6 +823,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             # count maximum number of observations for this parent task
             n_obs_max = max(len(self.results[parent_task])+1, len(obs_sequence_indices[parent_task]))
             
+            # set best labeling variables
+            best_labeling = None
+            best_labeling_value = -np.Inf
+
             # estimate value of proposed lablings
             for n_obs_sequences, t_prev_sequences in task_lablings:
                 # initiate list of values for this labeling
@@ -878,9 +882,11 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 # compute total labeling value
                 labeling_value = sum(task_values)
 
-                # TODO check if it is the best labeling so far
+                # check if it is the best labeling so far
+                if labeling_value <= best_labeling_value: 
+                    continue  # not the best labeling; try next labeling
 
-                # if so, check for constraints
+                # check constraints for this labeling
                 #   if constraints are met, set as best labeling for this task
                 #   else, check if constraint violations are still allowed for this task
                 #       if so, set as best labeling for this task
