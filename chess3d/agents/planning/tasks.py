@@ -158,7 +158,7 @@ class DefaultMissionTask(GenericObservationTask):
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"GenericObservation_{self.parameter}_{self.priority}_{self.location[0][2]}_{self.location[0][3]}"
+        return f"GenericObservation_{self.parameter}_{self.priority}_{int(self.location[0][2])}_{int(self.location[0][3])}"
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
@@ -555,3 +555,10 @@ class SpecificObservationTask:
             slew_angles=Interval.from_dict(data["slew_angles"]),
             id=data["id"]
         )
+    
+    def __eq__(self, other : 'SpecificObservationTask') -> bool:
+        assert isinstance(other, SpecificObservationTask), "Can only compare with another SpecificObservationTask."
+        return self.to_dict() == other.to_dict()
+    
+    def __hash__(self):
+        return hash(self.id)

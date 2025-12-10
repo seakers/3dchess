@@ -32,7 +32,6 @@ from chess3d.nodes.environment import SimulationEnvironment
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
-from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.planning.centralized.dealer import TestingDealer
 from chess3d.agents.planning.centralized.milp import DealerMILPPlanner
 from chess3d.agents.planning.centralized.worker import WorkerPlanner
@@ -1242,50 +1241,52 @@ class SimulationElementFactory:
         mission : Mission = missions[agent_dict['mission'].lower()]
         mission = copy.deepcopy(mission)
 
-        if isinstance(clock_config, RealTimeClockConfig):            
-            # load science module
-            science = SimulationElementFactory.load_science_module(science_dict,
-                                                            results_path,
-                                                            agent_name,
-                                                            mission,
-                                                            agent_network_config,
-                                                            logger)
+        if isinstance(clock_config, RealTimeClockConfig):    
+            raise NotImplementedError("Real-time clock not yet supported in agent factory.")
 
-            # load planner module
-            planner = SimulationElementFactory.load_planner_module(planner_dict,
-                                                            results_path,
-                                                            agent_specs,
-                                                            agent_network_config,
-                                                            agent_orbitdata, 
-                                                            level, 
-                                                            logger)
+            # # load science module
+            # science = SimulationElementFactory.load_science_module(science_dict,
+            #                                                 results_path,
+            #                                                 agent_name,
+            #                                                 mission,
+            #                                                 agent_network_config,
+            #                                                 logger)
 
-            # create agent
-            if agent_type == SimulationAgentTypes.SATELLITE:
+            # # load planner module
+            # planner = SimulationElementFactory.load_planner_module(planner_dict,
+            #                                                 results_path,
+            #                                                 agent_specs,
+            #                                                 agent_network_config,
+            #                                                 agent_orbitdata, 
+            #                                                 level, 
+            #                                                 logger)
 
-                # define initial state
-                position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
-                time_data =  pd.read_csv(position_file, nrows=3)
-                l : str = time_data.at[1,time_data.axes[1][0]]
-                _, _, _, _, dt = l.split(' '); dt = float(dt)
+            # # create agent
+            # if agent_type == SimulationAgentTypes.SATELLITE:
 
-                initial_state = SatelliteAgentState(agent_name,
-                                                    orbit_state_dict,
-                                                    time_step=dt) 
+            #     # define initial state
+            #     position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
+            #     time_data =  pd.read_csv(position_file, nrows=3)
+            #     l : str = time_data.at[1,time_data.axes[1][0]]
+            #     _, _, _, _, dt = l.split(' '); dt = float(dt)
+
+            #     initial_state = SatelliteAgentState(agent_name,
+            #                                         orbit_state_dict,
+            #                                         time_step=dt) 
                 
-                # return satellite agent
-                return RealtimeSatelliteAgent(
-                                        agent_name,
-                                        results_path,
-                                        manager_network_config,
-                                        agent_network_config,
-                                        initial_state, 
-                                        agent_specs,
-                                        mission,
-                                        planner,
-                                        science,
-                                        logger=logger
-                                    )
+            #     # return satellite agent
+            #     return RealtimeSatelliteAgent(
+            #                             agent_name,
+            #                             results_path,
+            #                             manager_network_config,
+            #                             agent_network_config,
+            #                             initial_state, 
+            #                             agent_specs,
+            #                             mission,
+            #                             planner,
+            #                             science,
+            #                             logger=logger
+            #                         )
             
         else:
             # initialize observation data processor 
@@ -1742,7 +1743,7 @@ class SimulationElementFactory:
                             agent_orbitdata : OrbitData,
                             level : int,
                             logger : logging.Logger
-                            ) -> PlanningModule:
+                            ):
 
         raise NotImplementedError('`load_planner_module` requires missions argument.')
 

@@ -21,8 +21,8 @@ class WorkerPlanner(AbstractPeriodicPlanner):
         self.dealer_name = dealer_name
         self.plan_message : PlanMessage = None
 
-    def update_percepts(self, state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions):       
-        super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
+    def update_percepts(self, state, current_plan, tasks, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions):       
+        super().update_percepts(state, current_plan, tasks, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
 
         # check if there are any plan messages for this agent
         plan_messages = {msg for msg in misc_messages 

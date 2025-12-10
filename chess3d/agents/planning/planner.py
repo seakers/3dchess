@@ -52,8 +52,7 @@ class AbstractPlanner(ABC):
                          state : SimulationAgentState,
                          incoming_reqs : list,
                          relay_messages : list,
-                         completed_actions : list,
-                         **kwargs
+                         completed_actions : list
                         ) -> None:
         """ Updates internal knowledge based on incoming percepts """
         
@@ -236,7 +235,7 @@ class AbstractPlanner(ABC):
         return True
         
     @runtime_tracker
-    def check_task_clusterability(self, schedulable_tasks : list, must_overlap : bool, threshold : float) -> dict:
+    def check_task_clusterability(self, schedulable_tasks : List[SpecificObservationTask], must_overlap : bool, threshold : float) -> dict:
         """ 
         Creates adjacency list for a given list of specific observation tasks.
 
@@ -245,7 +244,6 @@ class AbstractPlanner(ABC):
         - `must_overlap` : Whether tasks' availability must overlap in availability time to be considered for clustering.
         - `threshold` : The time threshold for clustering tasks in seconds [s].
         """
-        schedulable_tasks : list[SpecificObservationTask] = schedulable_tasks
 
         # create adjacency list for tasks
         adj : Dict[str, set[SpecificObservationTask]] = {task.id : set() for task in schedulable_tasks}
@@ -282,7 +280,8 @@ class AbstractPlanner(ABC):
 
         # check if adjacency list is symmetric
         for p in schedulable_tasks:
-            assert p not in adj[p.id], f'Task {p.id} is in its own adjacency list.'
+            assert p not in adj[p.id], \
+                f'Task {p.id} is in its own adjacency list.'
             for q in adj[p.id]:
                 assert p in adj[q.id], f'Task {p.id} is in the adjacency list of task {q.id} but not vice versa.'
 

@@ -118,13 +118,14 @@ class DealerPlanner(AbstractPeriodicPlanner):
     def update_percepts(self, 
                         state, 
                         current_plan, 
+                        tasks,
                         incoming_reqs, 
                         relay_messages, 
                         misc_messages, 
                         completed_actions, 
                         aborted_actions, 
                         pending_actions):
-        super().update_percepts(state, current_plan, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
+        super().update_percepts(state, current_plan, tasks, incoming_reqs, relay_messages, misc_messages, completed_actions, aborted_actions, pending_actions)
 
         # check if any client broadcasted their state or plan
         agent_state_messages : list[AgentStateMessage] = [msg for msg in misc_messages 

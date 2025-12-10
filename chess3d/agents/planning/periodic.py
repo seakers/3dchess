@@ -72,6 +72,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
     def update_percepts(self, 
                         state : SimulationAgentState,
                         current_plan : Plan,
+                        tasks : List[GenericObservationTask],
                         incoming_reqs: list, 
                         relay_messages: list, 
                         misc_messages : list,

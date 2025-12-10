@@ -23,7 +23,6 @@ from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
 from chess3d.messages import *
-from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
 from chess3d.mission.mission import Mission
@@ -614,78 +613,6 @@ class AbstractAgent(Agent):
     async def send_peer_broadcast(self, msg: SimulationMessage) -> None:
         return await super().send_peer_broadcast(msg)
     
-
-class RealtimeAgent(AbstractAgent):
-    """
-    Implements 
-    """
-
-    def __init__(self, 
-                 agent_name, 
-                 results_path, 
-                 agent_network_config, 
-                 manager_network_config, 
-                 initial_state, 
-                 specs, 
-                 mission : Mission,
-                 planning_module : InternalModule = None,
-                 science_module : InternalModule = None,
-                 level=logging.INFO, 
-                 logger=None):
-        
-        # load agent modules
-        modules = []
-        if planning_module is not None:
-            if not isinstance(planning_module, PlanningModule):
-                raise AttributeError(f'`planning_module` must be of type `PlanningModule`; is of type {type(planning_module)}')
-            modules.append(planning_module)
-        if science_module is not None:
-            if not isinstance(science_module, ScienceModule):
-                raise AttributeError(f'`science_module` must be of type `ScienceModule`; is of type {type(science_module)}')
-            modules.append(science_module)
-
-        super().__init__(agent_name, results_path, agent_network_config, manager_network_config, initial_state, specs, modules, mission, level, logger)
-
-    @runtime_tracker
-    async def think(self, senses: list) -> list:
-        # send all sensed messages to planner
-        self.log(f'sending {len(senses)} senses to planning module...', level=logging.DEBUG)
-        senses_dict = []
-        state_dict = None
-        for sense in senses:
-            sense : SimulationMessage
-            if isinstance(sense, AgentStateMessage):
-                state_dict = sense.to_dict()
-            else:
-                senses_dict.append(sense.to_dict())
-
-        senses_msg = SenseMessage( self.get_element_name(), 
-                                    self.get_element_name(),
-                                    state_dict, 
-                                    senses_dict)
-        await self.send_internal_message(senses_msg)
-
-        # wait for planner to send list of tasks to perform
-        self.log(f'senses sent! waiting on response from planner module...')
-        actions = []
-        
-        while True:
-            _, _, content = await self.internal_inbox.get()
-            
-            if content['msg_type'] == SimulationMessageTypes.PLAN.value:
-                msg = PlanMessage(**content)
-
-                # assert self.get_current_time() - msg.t_plan <= 1e-3
-
-                for action_dict in msg.plan:
-                    self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
-                    actions.append(action_dict)  
-                break
-        
-        self.log(f"plan of {len(actions)} actions received from planner module!")
-        return actions
-
-
 class SimulatedAgent(AbstractAgent):
     def __init__(self, 
                  agent_name, 
@@ -722,18 +649,29 @@ class SimulatedAgent(AbstractAgent):
         self.plan : Plan = PeriodicPlan(t=-1.0)
         self.orbitdata = orbitdata
         self.plan_history = []
-        self.tasks : list[GenericObservationTask] = []
+        self.tasks : list[GenericObservationTask] = SimulatedAgent.__initialize_default_mission_tasks(mission, orbitdata)
         self.known_reqs : set[TaskRequest] = set() # TODO do we need this or is the task list enough?
         self.observation_history : ObservationHistory = None
 
         # initialize observation history
         self.observation_history = ObservationHistory(orbitdata)
 
-        # gather targets for default mission tasks
-        objective_targets = { objective : [] for objective in self.mission 
+    @staticmethod
+    def __initialize_default_mission_tasks(mission : Mission, orbitdata : OrbitData) -> None:
+        """ 
+        Creates default observation tasks for each non-default mission objective
+         based on the spatial requirements of each objective.
+        """
+        # initialize task list
+        tasks = []
+
+        # gather targets for each non-default mission objective
+        objective_targets = { objective : [] for objective in mission 
                              # ignore non-default objectives
                              if not isinstance(objective, DefaultMissionObjective)
                              }
+        
+        # iterate through each mission objective
         for objective in objective_targets:         
             for req in objective:
                 # ignore non-spatial requirements
@@ -748,7 +686,7 @@ class SimulatedAgent(AbstractAgent):
                 elif isinstance(req, GridTargetSpatialRequirement):
                     req_targets = [
                         (lat, lon, grid_index, gp_index)
-                        for grid in self.orbitdata.grid_data
+                        for grid in orbitdata.grid_data
                         for lat,lon,grid_index,gp_index in grid.values
                         if grid_index == req.grid_index and gp_index < req.grid_size
                     ]
@@ -757,16 +695,19 @@ class SimulatedAgent(AbstractAgent):
                     raise TypeError(f"Unknown spatial requirement type: {type(req)}")
                     
             # create monitoring tasks from each location in this mission objective
-            tasks = [DefaultMissionTask(objective.parameter,
+            objective_tasks = [DefaultMissionTask(objective.parameter,
                                         location=(lat, lon, grid_index, gp_index),
-                                        mission_duration=self.orbitdata.duration*24*3600,
+                                        mission_duration=orbitdata.duration*24*3600,
                                         objective=objective,
                                         )
                         for lat,lon,grid_index,gp_index in req_targets
                     ]
             
             # add to list of known tasks
-            self.tasks.extend(tasks)
+            tasks.extend(objective_tasks)
+
+        # return list of created tasks
+        return tasks
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -777,9 +718,9 @@ class SimulatedAgent(AbstractAgent):
         incoming_reqs : list[TaskRequest]
         states : list[AgentStateMessage]
 
-        # check action completion
+        # process action completion
         completed_actions, aborted_actions, pending_actions \
-            = self._check_action_completion(action_statuses)
+            = self.__process_action_completion(action_statuses)
 
         # extract latest state from senses
         states = [a for a in states if a.state['agent_name'] == self.get_element_name()]
@@ -787,13 +728,13 @@ class SimulatedAgent(AbstractAgent):
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
         # update plan completion
-        self.update_plan_completion(completed_actions, 
+        self.__update_plan_completion(completed_actions, 
                                     aborted_actions, 
                                     pending_actions, 
                                     state.t)
 
         # process performed observations
-        generated_reqs : list[TaskRequest] = self.process_observations(incoming_reqs, observations)
+        generated_reqs : list[TaskRequest] = self.__process_observations(incoming_reqs, observations)
         incoming_reqs.extend(generated_reqs)
         
         # compile measurements performed by myself or other agents NOTE do we still need this feature?
@@ -803,13 +744,13 @@ class SimulatedAgent(AbstractAgent):
             # for objective in self.mission.objectives:
 
         # update observation history
-        self.update_observation_history(observations)
+        self.__update_observation_history(observations)
 
         # update tasks from incoming requests
-        self.update_tasks(incoming_reqs=incoming_reqs)
+        self.__update_tasks(incoming_reqs=incoming_reqs)
 
         # update known requests
-        self.update_reqs(incoming_reqs=incoming_reqs)
+        self.__update_reqs(incoming_reqs=incoming_reqs)
 
         # --- Create plan ---
         if self.preplanner is not None:
@@ -818,6 +759,7 @@ class SimulatedAgent(AbstractAgent):
             # update preplanner precepts
             self.preplanner.update_percepts(state,
                                             self.plan, 
+                                            self.tasks,
                                             incoming_reqs,
                                             relay_messages,
                                             misc_messages,
@@ -832,7 +774,7 @@ class SimulatedAgent(AbstractAgent):
                                               self.plan):  
                 
                 # update tasks for only tasks that are available
-                self.update_tasks(available_only=True)
+                self.__update_tasks(available_only=True)
                 
                 # initialize plan      
                 self.plan : Plan = self.preplanner.generate_plan(state, 
@@ -854,19 +796,21 @@ class SimulatedAgent(AbstractAgent):
                 # -------------------------------------
 
         # --- Modify plan ---
-        # Check if reeplanning is needed
+        # Check if replanning is needed
         if self.replanner is not None:
             # there is a replanner assigned to this planner
 
             # update replanner precepts
             self.replanner.update_percepts( state,
                                             self.plan, 
+                                            self.tasks,
                                             incoming_reqs,
                                             relay_messages,
                                             misc_messages,
                                             completed_actions,
                                             aborted_actions,
-                                            pending_actions
+                                            pending_actions,
+                                            self.observation_history
                                         )
             
             if self.replanner.needs_planning(state, 
@@ -964,7 +908,7 @@ class SimulatedAgent(AbstractAgent):
         return relay_messages, incoming_reqs, observations, states, action_statuses, misc_messages
 
     @runtime_tracker
-    def _check_action_completion(self, action_statuses : list) -> tuple:
+    def __process_action_completion(self, action_statuses : list) -> tuple:
         
         # collect all action statuses from messages
         actions = [action_from_dict(**action_msg.action) for action_msg in action_statuses]
@@ -986,7 +930,7 @@ class SimulatedAgent(AbstractAgent):
         return completed_actions, aborted_actions, pending_actions
 
     @runtime_tracker
-    def update_plan_completion(self, 
+    def __update_plan_completion(self, 
                                 completed_actions : list, 
                                 aborted_actions : list, 
                                 pending_actions : list, 
@@ -1001,7 +945,7 @@ class SimulatedAgent(AbstractAgent):
                                            t)    
 
     @runtime_tracker
-    def process_observations(self, incoming_reqs, observations) -> list:
+    def __process_observations(self, incoming_reqs, observations) -> list:
         """
         Processes observations and generates new requests based on the observations.
         """
@@ -1012,7 +956,7 @@ class SimulatedAgent(AbstractAgent):
             # no processor assigned; return empty list
             return []
     
-    def update_tasks(self, incoming_reqs : list = [], available_only : bool = False) -> None:
+    def __update_tasks(self, incoming_reqs : list = [], available_only : bool = False) -> None:
         """
         Updates the list of tasks based on incoming requests and task availability.
         """
@@ -1021,7 +965,7 @@ class SimulatedAgent(AbstractAgent):
                        for req in incoming_reqs
                        if isinstance(req, TaskRequest)]
         
-        # # filter tasks that can be performed by agent
+        # TODO filter tasks that can be performed by agent?
         # valid_event_tasks = []
         # payload_instrument_names = {instrument_name.lower() for instrument_name in self.payload.keys()}
         # for event_task in event_tasks_flat:
@@ -1034,19 +978,19 @@ class SimulatedAgent(AbstractAgent):
         
         # filter tasks to only include active tasks
         if available_only: # only consider tasks that are active and available
-            # self.tasks = [task for task in self.tasks 
-            #               if task.is_available(self.get_current_time())]
-        # else: # consider all tasks that have not expired yet
             self.tasks = [task for task in self.tasks 
                           if not task.is_expired(self.get_current_time())]
 
-    def update_reqs(self, incoming_reqs : List[TaskRequest] = [], available_only : bool = True) -> None:
+    def __update_reqs(self, incoming_reqs : List[TaskRequest] = [], available_only : bool = True) -> None:
         """ Updates the known requests based on incoming requests and request availability. """
         
         # update known requests
         self.known_reqs.update(incoming_reqs)
 
-        # check for request availability
+        if incoming_reqs:
+            x = 1 # breakpoint
+
+        # filter for request availability
         if available_only:
             self.known_reqs = {req for req in self.known_reqs 
                                if req.task.is_available(self.get_current_time())
@@ -1066,7 +1010,7 @@ class SimulatedAgent(AbstractAgent):
         return completed_observations
 
     @runtime_tracker
-    def update_observation_history(self, observations : list) -> None:
+    def __update_observation_history(self, observations : list) -> None:
         """
         Updates the observation history with the completed observations.
         """

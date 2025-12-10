@@ -1,10 +1,12 @@
 from abc import abstractmethod
 from logging import Logger
+from typing import List
 
 from dmas.modules import ClockConfig
 
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
+from chess3d.agents.planning.tasks import GenericObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
 from chess3d.mission.mission import Mission
@@ -23,6 +25,7 @@ class AbstractReactivePlanner(AbstractPlanner):
     def update_percepts(self, 
                         state : SimulationAgentState,
                         current_plan : Plan,
+                        tasks : List[GenericObservationTask],
                         incoming_reqs: list, 
                         relay_messages: list, 
                         misc_messages : list,
@@ -45,7 +48,7 @@ class AbstractReactivePlanner(AbstractPlanner):
                         clock_config : ClockConfig,
                         orbitdata : OrbitData,
                         mission : Mission,
-                        tasks : list,
+                        tasks : List[GenericObservationTask],
                         observation_history : ObservationHistory,
                     ) -> Plan:
         pass
