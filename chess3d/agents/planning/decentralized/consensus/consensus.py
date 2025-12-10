@@ -481,12 +481,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 if bid.was_performed():
                     continue # already marked or has no winner; skip
                 
-                # assume bid has a winner different from this agent
-                assert bid.has_winner(), "Cannot mark bid as performed if it has no winner."
-                assert bid.winning_bidder != state.agent_name, "Bid should have been marked as performed by parent agent in previous step."
-
                 # check if imaging time has passed
                 if bid.t_img < state.t:
+                    # assume bid has a winner different from this agent
+                    assert bid.has_winner(), "Cannot mark bid as performed if it has no winner."
+                    assert bid.winning_bidder != state.agent_name, "Bid should have been marked as performed by parent agent in previous step."
+                    
                     # mark bid as performed
                     bid.set_performed(state.t, performed=True, performer=bid.winning_bidder)
 

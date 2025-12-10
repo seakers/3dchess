@@ -79,6 +79,32 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # create specific and merged tasks from scheduled tasks and urgent tasks
         schedulable_tasks : List[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
+        # DEBUG CHECKS
+        planned_specific_tasks = [obs.task for obs in current_plan if isinstance(obs,ObservationAction)]
+        
+        earlies_planned_specific_task   : SpecificObservationTask = min(planned_specific_tasks, key=lambda task: task.accessibility.left) if planned_specific_tasks else None
+        earliest_schedulable_task       : SpecificObservationTask = min(schedulable_tasks, key=lambda task: task.accessibility.left) if schedulable_tasks else None
+
+        if earlies_planned_specific_task and earliest_schedulable_task:
+            same_parent_tasks = (len(earlies_planned_specific_task.parent_tasks) == len(earliest_schedulable_task.parent_tasks)
+                                 and all(pt1 == pt2 for pt1,pt2 in zip(sorted(earlies_planned_specific_task.parent_tasks, key=lambda x: x.id), sorted(earliest_schedulable_task.parent_tasks, key=lambda x: x.id))))
+            same_id = earlies_planned_specific_task.id == earliest_schedulable_task.id
+            same_instrument = earlies_planned_specific_task.instrument_name == earliest_schedulable_task.instrument_name
+            same_duration = abs(earlies_planned_specific_task.min_duration - earliest_schedulable_task.min_duration) <= self.EPS
+            same_accessibility = (abs(earlies_planned_specific_task.accessibility.left - earliest_schedulable_task.accessibility.left) <= self.EPS
+                                  and abs(earlies_planned_specific_task.accessibility.right - earliest_schedulable_task.accessibility.right) <= self.EPS)
+            same_slew_angles = (abs(earlies_planned_specific_task.slew_angles.left - earliest_schedulable_task.slew_angles.left) <= self.EPS
+                                and abs(earlies_planned_specific_task.slew_angles.right - earliest_schedulable_task.slew_angles.right) <= self.EPS)
+            same_task = [
+                same_parent_tasks,
+                same_id,
+                same_instrument,
+                same_duration,
+                same_accessibility,
+                same_slew_angles
+            ]
+        # END DEBUG CHECKS
+
         # generate new plan according to selected model
         if self.heuristic == self.EARLIEST_ACCESS:
             return self.earliest_access_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, schedulable_tasks, orbitdata, mission, observation_history)

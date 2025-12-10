@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import math
-from typing import Union
+from typing import Set, Union
 import uuid
 
 from chess3d.mission.events import GeophysicalEvent
@@ -323,7 +323,7 @@ class EventObservationTask(GenericObservationTask):
 
 class SpecificObservationTask:
     def __init__(self,
-                 parent_task : Union[GenericObservationTask, set],
+                 parent_tasks : Union[GenericObservationTask, set],
                  instrument_name : str, 
                  accessibility : Interval,
                  min_duration : float,
@@ -333,7 +333,7 @@ class SpecificObservationTask:
         """ Represents an observation task to be scheduled by a particular agent """
 
         # validate inputs
-        assert isinstance(parent_task, (GenericObservationTask, set)), "Parent task(s) must be a `GenericObservationTask` or a set of `GenericObservationTask`."
+        assert isinstance(parent_tasks, (GenericObservationTask, set)), "Parent task(s) must be a `GenericObservationTask` or a set of `GenericObservationTask`."
         assert isinstance(instrument_name, str), "Instrument name must be a string."
         assert isinstance(accessibility, Interval), "Accessibility must be an Interval."
         assert not accessibility.is_empty(), "Accessibility must not be empty."
@@ -343,31 +343,71 @@ class SpecificObservationTask:
         assert min_duration <= accessibility.span(), "Minimum duration must not exceed accessibility interval span."
         assert isinstance(slew_angles, Interval), "Slew angles must be an Interval."
         
-        if isinstance(parent_task, set):
+        if isinstance(parent_tasks, set):
             assert all([isinstance(task, GenericObservationTask) 
-                        for task in parent_task]), \
+                        for task in parent_tasks]), \
                 "All parent tasks must be instances of GenericObservationTask."
             assert all([accessibility.overlaps(task.availability) 
-                        for task in parent_task 
+                        for task in parent_tasks 
                         if isinstance(task, GenericObservationTask)]),\
                 "Accesibility interval must be within the parent tasks' availability interval."
         else:
-            assert accessibility.overlaps(parent_task.availability), \
+            assert accessibility.overlaps(parent_tasks.availability), \
                 "Accessibility interval must be within the parent task's availability interval."
 
         # set parametersparent_task}
         self.parent_tasks : set[GenericObservationTask] = \
-              {parent_task} if isinstance(parent_task, GenericObservationTask) else parent_task
+              {parent_tasks} if isinstance(parent_tasks, GenericObservationTask) else parent_tasks
         self.instrument_name : str = instrument_name
         self.accessibility : Interval = accessibility
         self.min_duration : Interval = min_duration
         self.slew_angles : Interval = slew_angles
-        self.id : str = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
+        self.id : str = id if id is not None else self.generate_id(parent_tasks, instrument_name, accessibility)
+
+    @staticmethod
+    def generate_id(parent_tasks : Union[GenericObservationTask, set],
+                    instrument_name : str,
+                    accessibility : Interval) -> str:
+        """
+        Deterministic ID for a specific observation task based on:
+        - parent generic task IDs
+        - access interval [start, end)
+        - optional agent/instrument/index
+        """
+        # check inputs
+        if isinstance(parent_tasks, GenericObservationTask):
+            parent_tasks = {parent_tasks}
+        assert isinstance(parent_tasks, set), "parent_tasks must be a set of `GenericObservationTask`"
+
+        # 0. Define namespace for UUID generation
+        SPECIFIC_TASK_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
+
+        # 1. Canonicalize parent IDs (sorted string representation)
+        parent_part = ",".join(sorted([str(p.id) for p in parent_tasks]))
+
+        # 2. Canonicalize interval as ISO 8601
+        start, end = accessibility.left, accessibility.right
+        interval_part = f"{np.round(start,3)}_{np.round(end,3)}"
+
+        # 3. Optional salt for extra disambiguation
+        extras = []
+        extras.append(f"instrument={instrument_name}")
+        extras_part = ";".join(extras)
+
+        # 4. Final canonical name string
+        #    (you can tweak the separators as long as you’re consistent)
+        if extras_part:
+            name = f"{parent_part}|{interval_part}|{extras_part}"
+        else:
+            name = f"{parent_part}|{interval_part}"
+
+        # 5. Deterministic UUID derived from this name
+        return str(uuid.uuid5(SPECIFIC_TASK_NAMESPACE, name))
     
     def copy(self) -> 'SpecificObservationTask':
         """ Create a deep copy of the task. """
         return SpecificObservationTask(
-            parent_task=self.parent_tasks,
+            parent_tasks=self.parent_tasks,
             instrument_name=self.instrument_name,
             accessibility=self.accessibility,
             min_duration=self.min_duration,

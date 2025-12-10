@@ -349,7 +349,7 @@ class TestSpecificObservationTask(unittest.TestCase):
             id="parent_task_001"
         )
         task = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument",
             accessibility=Interval(2000.0,3000.0),
             min_duration= 0.0,
@@ -423,7 +423,7 @@ class TestSpecificObservationTask(unittest.TestCase):
             id="parent_task_001"
         )
         task = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument",
             accessibility=Interval(2000.0,3000.0),
             min_duration= 0.0,
@@ -448,7 +448,7 @@ class TestSpecificObservationTask(unittest.TestCase):
             id="parent_task_001"
         )
         task_1 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(2000.0,3000.0),
             min_duration=10.0,
@@ -468,7 +468,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Cannot merge without overlapping slew angles
         task_2 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(2000.0,3000.0),  
             min_duration=10.0,
@@ -478,7 +478,7 @@ class TestSpecificObservationTask(unittest.TestCase):
         
         # Can only merge with non-overlapping access windows if specified
         task_3 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(3100.0,4000.0), # non-overlapping access window
             min_duration=10.0,
@@ -489,7 +489,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Can merge with overlapping, non-encompassing access windows
         task_4 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(2500.0,4000.0), # overlapping accessing window
             min_duration=10.0,
@@ -499,7 +499,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Cannot merge with overlapping, non-encompassing access windows with restricted duration requirements
         task_5 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(2950.0,4000.0), # accessing window only allows for 50.0 [s] of joint access
             min_duration=100.0, # minimum duration requirement of 100.0 [s]
@@ -509,7 +509,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Can merge with encompassing task
         task_6 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(2500.0,3000.0), # access window fully contained within `task_1`
             min_duration=10.0,
@@ -519,7 +519,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Cannot merge with encompassing task if duration requirements are not met
         task_7 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(2550.0,3000.0), # access window fully contained within `task_1`
             min_duration=450.0, # minimum duration requirement of 500.0 [s]
@@ -528,7 +528,7 @@ class TestSpecificObservationTask(unittest.TestCase):
         self.assertFalse(task_1.can_merge(other_task=task_7))
 
         task_8 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(2000.0,3000.0), # access window is the same as `task_1`
             min_duration=1000.0, # minimum duration requirement of exceedes maximum duration requirement
@@ -538,7 +538,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Can merge with encompassing tasks if duration requirements are met
         task_9 = SpecificObservationTask(
-            parent_task=parent_task,
+            parent_tasks=parent_task,
             instrument_name="test_instrument_1",
             accessibility=Interval(1000.0,4000.0), # access window fully contains `task_1`
             min_duration=1000.0, # minimum duration requirement of exceedes `task_1` maximum duration requirement
@@ -563,7 +563,7 @@ class TestSpecificObservationTask(unittest.TestCase):
         )
 
         task_1 = SpecificObservationTask(
-            parent_task=parent_task_1,
+            parent_tasks=parent_task_1,
             instrument_name="test_instrument_1",
             accessibility=Interval(100.0,200.0),
             min_duration=10.0,
@@ -578,7 +578,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Cannot merge with a task with different instrument
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_1,
+            parent_tasks=parent_task_1,
             instrument_name="test_instrument_2", # invalid instrument name
             accessibility=Interval(100.0,200.0),
             min_duration=10.0,
@@ -588,7 +588,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Cannot merge with a task with non-overlapping slew angles
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_1,
+            parent_tasks=parent_task_1,
             instrument_name="test_instrument_1",
             accessibility=Interval(100.0,200.0),
             min_duration=10.0,
@@ -598,7 +598,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Cannot merge with task with non-overlapping availability when required
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_1,
+            parent_tasks=parent_task_1,
             instrument_name="test_instrument_1",
             accessibility=Interval(300.0,400.0), # accessibility interval contained within `task_1`
             min_duration=100.0, # Restrictive duration requirements
@@ -608,7 +608,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Can merge with non-overlapping tasks when allowed
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(220.0,300.0), # Non-overlapping accessibility
             min_duration=20.0,
@@ -626,7 +626,7 @@ class TestSpecificObservationTask(unittest.TestCase):
         
         # Merge overlapping task with less restrictive duration requirements
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(150.0,300.0), # proceeding overlapping accessibility
             min_duration=5.0, # shorter minimum duration
@@ -643,7 +643,7 @@ class TestSpecificObservationTask(unittest.TestCase):
         self.assertEqual(merged_task.min_duration, task_1.min_duration)
 
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(50.0, 150.0), # preceding overlapping accessibility
             min_duration=5.0, # shorter minimum duration
@@ -661,7 +661,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Merge overlapping task with more restrictive duration requirements
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(150.0,300.0), # proceeding overlapping accessibility
             min_duration=20.0, # longer minimum duration
@@ -678,7 +678,7 @@ class TestSpecificObservationTask(unittest.TestCase):
         self.assertEqual(merged_task.min_duration, task_2.min_duration)
         
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(50.0, 150.0), # preceding overlapping accessibility
             min_duration=20.0, # longer minimum duration
@@ -696,7 +696,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Merge encompassed task with less restrictive duration requirements
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(125.0, 175.0), # encompassed accessibility
             min_duration=5.0, # shorter minimum duration
@@ -714,7 +714,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Merge encompassed task with more restrictive duration requirements
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(125.0, 175.0), # encompassed accessibility
             min_duration=20.0, # longer minimum duration
@@ -732,7 +732,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Merge encompassing task with less restrictive duration requirements
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(75.0, 225.0), # encompassing accessibility
             min_duration=5.0, # shorter minimum duration
@@ -750,7 +750,7 @@ class TestSpecificObservationTask(unittest.TestCase):
 
         # Merge encompassing task with more restrictive duration requirements
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,
+            parent_tasks=parent_task_2,
             instrument_name="test_instrument_1",
             accessibility=Interval(75.0, 225.0), # encompassing accessibility
             min_duration=20.0, # longer minimum duration
@@ -783,21 +783,21 @@ class TestSpecificObservationTask(unittest.TestCase):
         
         # Create specific observation tasks
         task_1 = SpecificObservationTask(
-            parent_task=parent_task_1,
+            parent_tasks=parent_task_1,
             instrument_name="test_instrument_1",
             accessibility=Interval(2000.0,3000.0),
             min_duration= 0.0,
             slew_angles=Interval(20.0, 45.0)
         )
         task_2 = SpecificObservationTask(
-            parent_task=parent_task_2,                  
+            parent_tasks=parent_task_2,                  
             instrument_name="test_instrument_1",
             accessibility=Interval(2000.0,3000.0),
             min_duration= 0.0,
             slew_angles=Interval(20.0, 45.0)
         )
         task_3 = SpecificObservationTask(
-            parent_task=parent_task_1,
+            parent_tasks=parent_task_1,
             instrument_name="test_instrument_1",
             accessibility=Interval(2000.0,3000.0),
             min_duration= 0.0,
