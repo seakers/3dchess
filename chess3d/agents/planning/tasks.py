@@ -105,6 +105,9 @@ class GenericObservationTask(ABC):
     def __repr__(self):
         """ String representation of the task. """
 
+    def __str__(self):
+        return self.__repr__()
+
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'GenericObservationTask':
         """ Create a task from a dictionary. """
@@ -290,8 +293,8 @@ class EventObservationTask(GenericObservationTask):
         )
 
     def __repr__(self):
-        return f"EventObservationTask(parameter={self.parameter}, priority={self.priority}, event={self.event}, location={self.location}, availability={self.availability}, id={self.id})"
-
+        return f'EventObservationTask({self.id.split("-")[0]})'
+    
     def to_dict(self) -> dict:
         """ Convert the task to a dictionary. """
         d = super().to_dict()
@@ -379,29 +382,25 @@ class SpecificObservationTask:
             parent_tasks = {parent_tasks}
         assert isinstance(parent_tasks, set), "parent_tasks must be a set of `GenericObservationTask`"
 
-        # 0. Define namespace for UUID generation
+        # Define namespace for UUID generation
         SPECIFIC_TASK_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
 
-        # 1. Canonicalize parent IDs (sorted string representation)
+        # Collect parent IDs (sorted string representation)
         parent_part = ",".join(sorted([str(p.id) for p in parent_tasks]))
 
-        # 2. Canonicalize interval as ISO 8601
+        # Collect access interval [start, end]
         start, end = accessibility.left, accessibility.right
         interval_part = f"{np.round(start,3)}_{np.round(end,3)}"
 
-        # 3. Optional salt for extra disambiguation
+        # Collect additional info for disambiguation
         extras = []
         extras.append(f"instrument={instrument_name}")
         extras_part = ";".join(extras)
 
-        # 4. Final canonical name string
-        #    (you can tweak the separators as long as you’re consistent)
-        if extras_part:
-            name = f"{parent_part}|{interval_part}|{extras_part}"
-        else:
-            name = f"{parent_part}|{interval_part}"
+        # Create canonical name string
+        name = f"{parent_part}|{interval_part}|{extras_part}"
 
-        # 5. Deterministic UUID derived from this name
+        # Return deterministic UUID derived from name
         return str(uuid.uuid5(SPECIFIC_TASK_NAMESPACE, name))
     
     def copy(self) -> 'SpecificObservationTask':
@@ -575,7 +574,7 @@ class SpecificObservationTask:
 
     def __repr__(self):
         return f"SpecificObservationTask_{self.id.split('-')[0]}"
-        
+            
     def to_dict(self) -> dict:
         return {
             "id": self.id,
