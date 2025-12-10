@@ -434,28 +434,76 @@ class AbstractPlanner(ABC):
         # estimate measurment look angle 
         th_img = np.average([task.slew_angles.left, task.slew_angles.right])
 
-        # estimate measurement performance metrics
-        task_performance_metrics : Dict[GenericObservationTask, Dict[tuple, dict]] = \
-                {parent_task : self.__estimate_task_performance_metrics(parent_task, 
-                                                                        task.instrument_name, 
-                                                                        th_img, 
-                                                                        t_img, 
-                                                                        d_img, 
-                                                                        specs, 
-                                                                        cross_track_fovs, 
-                                                                        orbitdata, 
-                                                                        observation_history, 
-                                                                        n_obs_in_plan[parent_task], 
-                                                                        t_prev_in_plan[parent_task])
-                 for parent_task in task.parent_tasks}
+        # calculate task reward per parent task
+        rewards = {parent_task : self._estimate_task_value(parent_task,
+                                                            task.instrument_name,
+                                                            th_img,
+                                                            t_img,
+                                                            d_img,
+                                                            specs,
+                                                            cross_track_fovs,
+                                                            orbitdata,
+                                                            mission,
+                                                            observation_history,
+                                                            n_obs_in_plan[parent_task],
+                                                            t_prev_in_plan[parent_task])
+                     for parent_task in task.parent_tasks}
 
-        # calculate task reward per target observed
-        rewards = {parent_task : max([mission.calc_task_value(parent_task, measurement) 
-                                      for measurement in measurements.values()]) if len(measurements.values()) > 0 else 0.0
-                   for parent_task,measurements in task_performance_metrics.items()}
-        
         # return total reward
-        return sum(rewards.values())    
+        return sum(rewards.values()) 
+
+        # # estimate measurement performance metrics
+        # task_performance_metrics : Dict[GenericObservationTask, Dict[tuple, dict]] = \
+        #         {parent_task : self._estimate_task_performance_metrics(parent_task, 
+        #                                                                 task.instrument_name, 
+        #                                                                 th_img, 
+        #                                                                 t_img, 
+        #                                                                 d_img, 
+        #                                                                 specs, 
+        #                                                                 cross_track_fovs, 
+        #                                                                 orbitdata, 
+        #                                                                 observation_history, 
+        #                                                                 n_obs_in_plan[parent_task], 
+        #                                                                 t_prev_in_plan[parent_task])
+        #          for parent_task in task.parent_tasks}
+
+        # # calculate task reward per target observed
+        # rewards = {parent_task : max([mission.calc_task_value(parent_task, measurement) 
+        #                               for measurement in measurements.values()]) if len(measurements.values()) > 0 else 0.0
+        #            for parent_task,measurements in task_performance_metrics.items()}
+        
+        # # return total reward
+        # return sum(rewards.values())    
+    
+    def _estimate_task_value(self,
+                            task : GenericObservationTask,
+                            instrument_name : str,
+                            th_img : float,
+                            t_img : float,
+                            d_img : float,
+                            specs : Spacecraft, 
+                            cross_track_fovs : dict,
+                            orbitdata : OrbitData,
+                            mission : Mission,
+                            observation_history : ObservationHistory,
+                            n_obs_in_plan : int = 0,
+                            t_prev_in_plan : float = np.NINF
+                        ) -> float:
+        measurement_performance : dict = self.__estimate_task_performance_metrics(task, 
+                                                                                 instrument_name, 
+                                                                                 th_img, 
+                                                                                 t_img, 
+                                                                                 d_img, 
+                                                                                 specs, 
+                                                                                 cross_track_fovs, 
+                                                                                 orbitdata, 
+                                                                                 observation_history, 
+                                                                                 n_obs_in_plan, 
+                                                                                 t_prev_in_plan)
+
+        return max([mission.calc_task_value(task, measurement) 
+                    for measurement in measurement_performance.values()]) \
+                        if len(measurement_performance.values()) > 0 else 0.0
 
     @runtime_tracker    
     def __estimate_task_performance_metrics(self, 

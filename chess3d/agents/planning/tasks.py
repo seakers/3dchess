@@ -157,8 +157,9 @@ class DefaultMissionTask(GenericObservationTask):
         super().__init__(GenericObservationTask.DEFAULT, parameter, [location], Interval(0.0, mission_duration), priority, objective, id)
 
     def generate_id(self) -> str:
-        """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"GenericObservation_{self.parameter}_{self.priority}_{int(self.location[0][2])}_{int(self.location[0][3])}"
+        """ Generate a unique identifier for the task. """
+        # return f"GenericObservation_{self.parameter}_{self.priority}_{int(self.location[0][2])}_{int(self.location[0][3])}"
+        return str(uuid.uuid1())
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
@@ -172,7 +173,7 @@ class DefaultMissionTask(GenericObservationTask):
         )
     
     def __repr__(self):
-        return f"DefaultMissionTask(parameter={self.parameter}, priority={self.priority}, location={self.location}, availability={self.availability}, id={self.id})"
+        return f"DefaultMissionTask({int(self.location[0][-2])},{int(self.location[0][-1])})"
 
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'DefaultMissionTask':
@@ -533,7 +534,7 @@ class SpecificObservationTask:
             raise AssertionError(f"Cannot merge tasks; {e}")
 
     def __repr__(self):
-        return f"SpecificObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
+        return f"SpecificObservationTask_{self.id.split('-')[0]}"
         
     def to_dict(self) -> dict:
         return {

@@ -50,14 +50,18 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             }
         }
         
-    def setup_announcer_config(self, event_name : str) -> dict:
+    def setup_announcer_config(self, event_name : str = None) -> dict:
         """ Setup announcer planner configuration for the scenario. """
 
-        assert isinstance(event_name, str), "event_name must be a string"
+        # default to no planner
+        if event_name is None: return {}
 
+        # validate event file exists
+        assert isinstance(event_name, str), "event_name must be a string"
         assert os.path.isfile(f"./tests/planners/resources/events/{event_name}.csv"), \
             f"Event file not found: {event_name}.csv"
         
+        # return event announcer planner config
         return {
                 "preplanner": {
                     "@type": "eventAnnouncer",
@@ -86,7 +90,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
         announcer_spacecraft['name'] = 'SAT0'
-        announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
+        announcer_spacecraft['planner'] = self.setup_announcer_config(None)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
 
