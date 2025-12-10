@@ -71,6 +71,64 @@ class AbstractPlanner(ABC):
         """ Creates a plan for the agent to perform """
 
     @runtime_tracker
+    def calculate_access_opportunities(self, 
+                                       state : SimulationAgentState, 
+                                       planning_horizon : Interval,
+                                       orbitdata : OrbitData
+                                    ) -> dict:
+        """ Calculate access opportunities for targets visible in the planning horizon """
+
+        # check planning horizon span
+        if planning_horizon.is_empty(): 
+            return {}
+
+        # compile coverage data
+        raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(planning_horizon.left, planning_horizon.right)
+
+        # initiate access times
+        access_opportunities = {}
+        
+        for i in tqdm(range(len(raw_coverage_data['time [s]'])), 
+                        desc=f'{state.agent_name}/PREPLANNER: Compiling access opportunities', 
+                        leave=False):
+            t_img = raw_coverage_data['time [s]'][i]
+            grid_index = raw_coverage_data['grid index'][i]
+            gp_index = raw_coverage_data['GP index'][i]
+            instrument = raw_coverage_data['instrument'][i]
+            # look_angle = raw_coverage_data['look angle [deg]'][i]
+            off_nadir_angle = raw_coverage_data['off-nadir axis angle [deg]'][i]
+            
+            # initialize dictionaries if needed
+            if grid_index not in access_opportunities:
+                access_opportunities[grid_index] = {}
+                
+            if gp_index not in access_opportunities[grid_index]:
+                access_opportunities[grid_index][gp_index] = defaultdict(list)
+
+            # compile time interval information 
+            found = False
+            for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
+                interval : Interval
+                t : list
+                th : list
+
+                overlap_interval = Interval(t_img - orbitdata.time_step, 
+                                            t_img + orbitdata.time_step)
+                
+                if overlap_interval.overlaps(interval):
+                    interval.extend(t_img)
+                    t.append(t_img)
+                    th.append(off_nadir_angle)
+                    found = True
+                    break      
+
+            if not found:
+                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [off_nadir_angle]])
+                
+        # return access times and grid information
+        return access_opportunities
+
+    @runtime_tracker
     def create_tasks_from_accesses(self, 
                                     available_tasks : list,
                                     access_times : list, 
@@ -113,6 +171,7 @@ class AbstractPlanner(ABC):
 
         # return tasks
         return schedulable_tasks
+        
     
     @runtime_tracker
     def single_tasks_from_accesses(self,
