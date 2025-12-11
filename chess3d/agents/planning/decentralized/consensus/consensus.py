@@ -233,7 +233,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 raise NotImplementedError("Updating preplan bids with urgent tasks not yet implemented.")
 
             # get series of observation number and time for each parent task in preplan
-            n_obs, _ = self._count_observation_number_and_revisit_times_from_path(state, preplan_observations, observation_history)
+            n_obs, _ = self._count_observation_number_and_revisit_times_from_path(state, preplan_observations)
 
             # create bundle from list of bids from new preplan observations
             preplan_bundle_bids = [(obs.task, [Bid(parent_task, state.agent_name, 
@@ -798,7 +798,23 @@ class ConsensusPlanner(AbstractReactivePlanner):
                             ) -> float:
         """ Calculate total expected value of observation path. """
         # calculate and accumulate expected value of observation
-        task_values = [self.estimate_specific_task_value(obs.task,
+        task_values = self._calculate_path_values(specs, cross_track_fovs, path, observation_history, orbitdata, mission, n_obs, t_prev)
+
+        # return total task value
+        return sum(task_values) 
+
+    def _calculate_path_values(self,
+                              specs : object,
+                              cross_track_fovs : Dict[str, float],
+                              path : List[ObservationAction],
+                              observation_history : ObservationHistory,
+                              orbitdata : OrbitData,
+                              mission : Mission,
+                              n_obs : List[Dict[GenericObservationTask, int]],
+                              t_prev : List[Dict[GenericObservationTask, float]]
+                            ) -> List[float]:
+        """ Calculate expected value of each observation in the path. """
+        return [self.estimate_specific_task_value(obs.task,
                                                  obs.t_start,
                                                  obs.task.min_duration,
                                                  specs,
@@ -810,13 +826,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                                  t_prev[obs_idx])
                         for obs_idx, obs in enumerate(path)]
 
-        # return total task value
-        return sum(task_values)    
-    
     def _count_observation_number_and_revisit_times_from_path(  self,
                                                                 state : SimulationAgentState,
-                                                                path : List[ObservationAction],
-                                                                observation_history : ObservationHistory
+                                                                path : List[ObservationAction]
                                                             ) -> Tuple[List[Dict[GenericObservationTask, int]],
                                                                     List[Dict[GenericObservationTask, float]]]:
         """ Calculate observation number and revisit time for tasks in the given path given the known bids. """
@@ -829,15 +841,19 @@ class ConsensusPlanner(AbstractReactivePlanner):
         parent_tasks = {parent_task for action in path 
                         for parent_task in action.task.parent_tasks}
         
-        # ---HISTORICAL DATA---
+        # ---HISTORICAL DATA FROM BID RESULTS---
         # initiate observation history for all parent tasks in path
         n_obs_history = {parent_task: 0 for parent_task in parent_tasks}
         t_prev_history = {parent_task: np.NINF for parent_task in parent_tasks}
 
         # iterate through previous bids to populate initial observation numbers and previous observation times
         for parent_task in parent_tasks:
+            # assume parent task is part of results
+            assert parent_task in self.results, \
+                "Parent task in path must be part of results to count observation numbers and revisit times."
+
             # get previous matching observations for this task
-            prev_bids = [bid for bid in self.results.get(parent_task, [])
+            prev_bids = [bid for bid in self.results[parent_task]
                          if bid.t_img < state.t]
             
             assert all(bid.n_obs == idx for idx, bid in enumerate(prev_bids)), \

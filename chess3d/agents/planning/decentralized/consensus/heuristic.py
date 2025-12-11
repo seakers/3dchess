@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from collections import defaultdict
+from collections import defaultdict, deque
 from itertools import product
 from typing import Dict, List, Tuple
 from tqdm import tqdm
@@ -227,7 +227,8 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         """
 
         # initialized bundle from current plan
-        proposed_bundle : List[Tuple[SpecificObservationTask, Dict[GenericObservationTask, int]]] = \
+        proposed_bundle : List[Tuple[SpecificObservationTask, 
+                                     Dict[GenericObservationTask, int]]] = \
                 [task_tuple for task_tuple in self.bundle]
         
         # initialize proposed path from current plan
@@ -236,44 +237,89 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                             key=lambda action: action.t_start)
         
         # extract existing bids from current bundle
-        proposed_bids = [[self.results[task][n_obs] for task,n_obs in obs.items()] for _,obs in proposed_bundle] 
+        proposed_bids = defaultdict(dict)
+        for _,obs in proposed_bundle:
+            for task,n_obs in obs.items():
+                bid = self.results[task][n_obs]
+                proposed_bids[task][n_obs] = bid.copy()
 
-        # iterate through urgent tasks and attempt to add to bundle
+        # extract observation number assignments for current path
+        n_obs_proposed, t_prev_proposed = self._count_observation_number_and_revisit_times_from_path(state, proposed_path)
+
+        # calculate current path utility
+        current_path_value : float = self._calculate_path_utility(state, specs, cross_track_fovs, proposed_path, observation_history, orbitdata, mission, n_obs_proposed, t_prev_proposed)
+
+        # Add tasks to path iteratively based on heuristic
         for proposed_task in tqdm(sorted_schedulable_tasks, desc=f'{state.agent_name}-REPLANNER: Building bundle', leave=False):
+            # initialize search for best path for proposed task    
+            best_path = None
+            best_path_value = current_path_value # must outperform current path
+            
             # Generate proposed paths using heuristic insertion path builder
             candidate_paths = self.__heuristic_insertion_path_builder(state, specs, proposed_path, proposed_task)
-            
+
             # Find best placement in path   
             for candidate_path, t_img in candidate_paths:
                 # if no feasible path was found, ignore new urgent task
                 if candidate_path is None: continue
+
+                # find best observation sequence for each parent task of the proposed task in this candidate path
+                n_obs_candidate, t_prev_candidate = self._generate_best_observation_number_and_revisit_times_from_proposed_path(state, proposed_task, candidate_path, specs, cross_track_fovs, orbitdata, mission, observation_history)
+
+                # get path value for proposed path using best observation sequences
+                proposed_path_value : float = self._calculate_path_utility(state, specs, cross_track_fovs, proposed_path, observation_history, orbitdata, mission, n_obs_candidate, t_prev_candidate)
+
+                # if path does not increase overall utility, skip
+                if proposed_path_value <= best_path_value: continue
                 
-                # find all possible task observation numbers for proposed task in candidate path
-                valid_labelings = self._generate_valid_labelings_for_task_in_path(state, candidate_path, observation_history)
+                # else: save as best path
+                best_path = candidate_path
+                best_path_value = proposed_path_value
+                n_obs_best = n_obs_candidate
+                t_prev_best = t_prev_candidate
 
-                # if any parent task has no valid observation numbers, skip to next candidate path
-                if any((not labels for labels in valid_labelings.values())): continue
+            # if no best path was found, continue to next proposed task
+            if best_path is None: continue
 
-                # select observation number combination that maximizes value for that task
-                best_labeling = self._get_best_labeling_for_task_in_path(state, specs, cross_track_fovs, orbitdata, mission, observation_history, candidate_path, valid_labelings)
+            # TODO calc value of new bids for best proposed path for this task
 
-                x = 1
+            # generate new bids from new values
+            new_bids = []
+            for obs_idx,obs in enumerate(best_path):
+                for parent_task in obs.task.parent_tasks:
+                    # check if observation task is related to proposed task
+                    if parent_task not in proposed_task.parent_tasks: continue
+                        
+                    # create bid for observation
+                    bid = Bid(
+                        parent_task,
+                        state.agent_name,
+                        n_obs_best[obs_idx][parent_task],
+                        0.0, # TODO calculate observation value 
+                        0.0, 
+                        state.agent_name,
+                        obs.t_start,
+                        state.t,
+                        main_measurement=obs.task.instrument_name
+                    )
 
-                # create bids for relevant parent tasks
-                # new_bids : List[Bid] = self._generate_bids_for_task_in_path(state, specs, proposed_path, candidate_path, proposed_task, 
-                #                                                             t_img, cross_track_fovs, orbitdata, mission, observation_history)
-                    
-                # # if no new bids were generated, skip to next urgent task
-                # if not new_bids: continue
+                    # add to lisf ot new bids
+                    new_bids.append(bid)
+
+            # if new bids outperform the existing bids, check constraints
+            #   if constraints are met, accept new path and bids. 
+            #       Update bundle, results, and bids.
+            #   else:
+            #       continue?
+
+            # if they do not outperform, check if bids are for earlier observations
+            #   if they are for earlier observations, check constraint violation counters
+            #       if counters allow, accept new path and bids
+            #       else: continue
+
             
             raise NotImplementedError("Heuristic insertion bundle builder finalization not yet implemented.")
         
-            # add bids to bundle
-            proposed_bundle.append([(bid.task, bid.n_obs) for bid in new_bids])
-
-            # update current path                    
-            proposed_path = [action for action in candidate_path]
-
         # temp return
         return proposed_bundle, proposed_path, proposed_bids
         
@@ -630,503 +676,174 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
     """
     BUNDLE-BUILDING PHASE - Bid Generation Methods
     """
-    def _generate_valid_labelings_for_task_in_path(self, 
-                                                  state : SimulationAgentState,
-                                                  proposed_path : List[ObservationAction],
-                                                  observation_history : ObservationHistory
-                                                ) -> Dict[GenericObservationTask, List[Tuple[List[int], List[float]]]]:
-        """ Generate valid labelings for given task in the context of the given path. 
+    def _generate_best_observation_number_and_revisit_times_from_proposed_path(self,
+                                                                               state : SimulationAgentState,
+                                                                               proposed_task : SpecificObservationTask,
+                                                                               candidate_path : List[ObservationAction],
+                                                                               specs : object,
+                                                                               cross_track_fovs : dict,
+                                                                               orbitdata : OrbitData,
+                                                                               mission : Mission,
+                                                                               observation_history : ObservationHistory
+                                                                            ) -> Tuple[Dict[int, Dict[GenericObservationTask, int]], 
+                                                                                       Dict[int, Dict[GenericObservationTask, float]]]:
+        """ Generate best observation numbers and revisit times for each observation in the proposed path. 
         
         ### Returns 
-            - valid_labelings : Dict[GenericObservationTask, List[Tuple[List[int], List[float]]]] - List of valid labelings for the given task. Each labeling is a tuple containing a list of observation numbers and a list of previous observation times.
+            - n_obs_best : Dict[int, Dict[GenericObservationTask, int]] - Best observation numbers for each observation in the proposed path.
+            - t_prev_best : Dict[int, Dict[GenericObservationTask, float]] - Best previous observation times for each observation in the proposed path.
         """
-        # enumerate the generic observation tasks being observed in the proposed path
-        t_img_sequences : dict[GenericObservationTask, list[float]] = defaultdict(list)
-        n_obs_candidates : dict[GenericObservationTask, list[int]] = defaultdict(list)
-        obs_sequence_indices : dict[GenericObservationTask, list[int]] = defaultdict(list)
-        
-        # extract observation time and sequence indices for each parent 
-        for obs_idx,obs in enumerate(proposed_path):
-            for parent_task in obs.task.parent_tasks:
-                t_img_sequences[parent_task].append(obs.t_start)
-                obs_sequence_indices[parent_task].append(obs_idx)
+        # find observation time for proposed task in candidate path
+        task_obs_times : list[Tuple[float,str,SpecificObservationTask]] = [
+                        (action.t_start, state.agent_name, action.look_angle, action.task) for action in candidate_path 
+                        if any(parent_task in proposed_task.parent_tasks for parent_task in action.task.parent_tasks)
+                    ]
 
-        # count proposed path revisit and observation numbers
-        n_obs_prop, _ = self._count_observation_number_and_revisit_times_from_path(state, proposed_path, observation_history)
+        # initiate observation and revisit time for observations across path
+        n_obs_candidate, t_prev_candidate = self._count_observation_number_and_revisit_times_from_path(state, candidate_path)
 
-        # enumerate candidate observation numbers for each parent task
-        for parent_task,obs_indices in obs_sequence_indices.items():
-            # check if task is being bid on
+        # initialize best observation numbers and previous observation times
+        n_obs_best : Dict[GenericObservationTask, list[str]] = defaultdict(list)
+        t_img_best : Dict[GenericObservationTask, list[float]] = defaultdict(list)
+        t_prev_best : Dict[GenericObservationTask, list[float]] = defaultdict(list)
+
+        # find best observation sequences for each parent task
+        for parent_task in proposed_task.parent_tasks:
+            # assume parent task has been considered in results
             assert parent_task in self.results, f"Parent task {parent_task} not being bid on by any agent; cannot generate bids."
             
-            # calculate the maximum possible observation number for this parent task
-            n_obs_max = max(len(self.results[parent_task])+1, len(obs_indices))
+            # get all possible observation opportunities from results
+            available_obs_times : list[Tuple[float,str,SpecificObservationTask]] = \
+                  [(bid.t_img,bid.bidder,None,None) for bid in self.results[parent_task] if bid.winning_bidder != state.agent_name]
 
-            for occurrance_idx,obs_idx in enumerate(obs_indices):
-                # get previous observation number for this parent task before path started
-                n_obs_prev = n_obs_prop[obs_sequence_indices[parent_task][0]].get(parent_task, 0)
+            # include proposed task imaging time 
+            available_obs_times.extend(task_obs_times)
 
-                # calculate upper and lower bounds for candidate observation numbers
-                n_obs_lower_bound = n_obs_prev + occurrance_idx
-                n_obs_upper_bound = n_obs_max - (len(obs_indices) - occurrance_idx - 1)
+            # sort by observation time
+            available_obs_times.sort(key=lambda x: x[0])
 
-                # generate candidate observation numbers for this parent task
-                n_obs_occurance = list(range(n_obs_lower_bound, n_obs_upper_bound))
-                n_obs_candidates[parent_task].append(n_obs_occurance)
+            # collect feasible sequences
+            feasible_sequences = self._find_feasible_observation_sequences_for_task(state, available_obs_times)
 
-        # return valid labelings for each parent task
-        return {
-                    parent_task: self.enumerate_labelings_for_task(state, parent_task, t_img_sequences[parent_task], n_obs_candidates[parent_task])
-                    for parent_task in obs_sequence_indices.keys()
-                }
+            # initialize search for best sequence
+            best_sequence = None
+            best_value = -np.Inf
 
-    def enumerate_labelings_for_task(
-                                        self,
-                                        state : SimulationAgentState,
-                                        task : GenericObservationTask,
-                                        t_img_sequence,     # [t1, t2, ..., tm]
-                                        n_obs_candidates,   # [F1, F2, ..., Fm], each Fi is a small set or range of ints
-                                        # external_prev_time, # dict n -> t_ext[n] for already scheduled obs
-                                        max_solutions=np.Inf  # optional limit
-                                    ):
-        """ Performs depth-first search to enumerate all valid labelings of observation numbers for a given task. """
-        # get length of observation sequence
-        task_obs_sequence_length = len(t_img_sequence)
-        
-        # initiate assignment lists
-        n_obs_assignments = [None] * task_obs_sequence_length   # n_obs_r for r=0..m-1
-        t_prev_assignments = [None] * task_obs_sequence_length  # t_prev_r for r=0..m-1
-        
-        # initiate valid solutions list
-        valid_solutions = []
+            # find sequence that maximizes value for this agent
+            for obs_names,obs_times,obs_look_angles,obs_tasks in feasible_sequences:
+                seq_value = 0.0
+                for i_seq,(agent_name,t_obs,look_angle,spec_task) in enumerate(zip(obs_names,obs_times,obs_look_angles,obs_tasks)):
+                    # only consider observations performed by this agent
+                    if agent_name != state.agent_name: continue
 
-        # Initialize map for which `n_obs` have we already assigned and at what time (from this agent)
-        local_obs_time : Dict[int, float] = {}  # n_obs -> t_img
+                    # assume specific task was defined
+                    assert isinstance(spec_task, SpecificObservationTask), "Specific task for observation not defined."
 
-        def prev_t_img(n_obs : int):
-            # Find time of (n-1)-th obs, from external or our path
-            n_obs_prev = n_obs - 1
+                    # get observation number and previous observation time
+                    n_obs = i_seq
+                    t_prev = obs_times[i_seq-1] if i_seq > 0 else np.NINF
+
+                    # estimate task value for this observation
+                    seq_value += self._estimate_task_value(parent_task,
+                                                           spec_task.instrument_name,
+                                                           look_angle, 
+                                                           t_obs,
+                                                           spec_task.min_duration,
+                                                           specs, 
+                                                           cross_track_fovs,
+                                                           orbitdata,
+                                                           mission,
+                                                           observation_history,
+                                                           n_obs,
+                                                           t_prev
+                                                        )
+                if seq_value > best_value:
+                    best_value = seq_value
+                    best_sequence = (obs_names, obs_times, obs_look_angles, obs_tasks)
             
-            # check if there is no predecessor
-            if n_obs_prev < 0: 
-                return np.NINF # no previous observation; return negative infinity
+            # check if best sequence was found
+            if best_sequence is None: continue # no feasible sequence found; skip to next parent task
             
-            # check if predecessor is being considered by this agent
-            if n_obs_prev in local_obs_time:
-                return local_obs_time[n_obs_prev] # found locally
+            # extract best sequence
+            for i_seq,(agent_name,t_obs,look_angle,spec_task) in enumerate(zip(*best_sequence)):
+                # only consider observations performed by this agent
+                if agent_name != state.agent_name: continue
+
+                # assume specific task was defined
+                assert isinstance(spec_task, SpecificObservationTask), "Specific task for observation not defined."
+
+                # get observation number and previous observation time
+                n_obs = i_seq
+                t_prev = obs_times[i_seq-1] if i_seq > 0 else np.NINF
+
+                # add to best sequences
+                n_obs_best[parent_task].append(n_obs)
+                t_img_best[parent_task].append(t_obs)
+                t_prev_best[parent_task].append(t_prev)
             
-            # check if this task is being bid on by other agents
-            if task not in self.results: 
-                return None # no other agents bidding on this task; no predecessor available
-
-            # else, lookup predecessor observation time from external bids
-            prev_bid : Bid = self.results[task][n_obs_prev] if n_obs_prev < len(self.results.get(task, [])) else None
-
-            # check if no one has bid for predecessor
-            if prev_bid is None: return None
-
-            # check if parent agent is winning predecessor
-            if prev_bid.winning_bidder == state.agent_name:
-                # if reaching here, it means that the predecessor should have been found locally
-                return None
-        
-            # else return external observation time if predecessor has a winner
-            return prev_bid.t_img if prev_bid.has_winner() else None
-
-        def dfs(task_obs_sequence_idx : int):
-            # initiate solution list
-            nonlocal valid_solutions
-
-            # timeout: check if maximum solutions reached
-            if len(valid_solutions) >= max_solutions: return
-
-            # base case: check if sequence is fully labeled
-            if task_obs_sequence_idx == task_obs_sequence_length:
-                # full labeling found; add to list of solutions and return to previous case
-                return valid_solutions.append((n_obs_assignments.copy(), t_prev_assignments.copy()))
-
-            # get current observation time
-            t_img = t_img_sequence[task_obs_sequence_idx]
-
-            # iterate candidate `n_obs` for this observation
-            for n_obs in sorted(n_obs_candidates[task_obs_sequence_idx]):
-                # get previous imaging time and observation number for candidate `n_obs`
-                t_prev = prev_t_img(n_obs)
-                n_obs_prev = n_obs_assignments[task_obs_sequence_idx-1] if task_obs_sequence_idx > 0 else None
-
-                # define constraints
-                constraints = [
-                    (n_obs_prev is not None and n_obs_prev < n_obs) or n_obs == 0,  # observation number must be greater than sequence index
-                    (t_prev is not None and t_prev <= t_img) or n_obs == 0          # previous observation time must be before current time
-                ]
-
-                # check constraints
-                if not all(constraints): 
-                    continue  # constraints not satisfied; try next candidate `n_obs`
-
-                # commit to assignment lists
-                n_obs_assignments[task_obs_sequence_idx] = n_obs
-                t_prev_assignments[task_obs_sequence_idx] = t_prev
-
-                # save previous local observation time value for future undo
-                local_prev_value = local_obs_time.get(n_obs, None)
-
-                # assign previous observation time to local value map
-                local_obs_time[n_obs] = t_img
-
-                # check next observation in sequence
-                dfs(task_obs_sequence_idx + 1)
-
-                # undo previous observation time assignment
-                if local_prev_value is None:
-                    del local_obs_time[n_obs]
-                else:
-                    local_obs_time[n_obs] = local_prev_value
-
-                # undo observation sequence assignment
-                n_obs_assignments[task_obs_sequence_idx] = None
-                t_prev_assignments[task_obs_sequence_idx] = None
             
-            # fallback;
-            return
+            # convert best sequences to dict format
+            for i_obs,obs_action in enumerate(candidate_path):
+                for parent_task in obs_action.task.parent_tasks:
+                    # check if parent task has best sequence
+                    if parent_task not in n_obs_best: continue
 
-        dfs(0)
-        return valid_solutions
+                    # check if this observation is performed by this agent
+                    if obs_action.t_start not in t_img_best[parent_task]: continue
 
-    def _get_best_labeling_for_task_in_path(self,
-                                            state : SimulationAgentState,
-                                            specs : object,
-                                            cross_track_fovs : dict,
-                                            orbitdata : OrbitData,
-                                            mission : Mission,
-                                            observation_history : ObservationHistory,
-                                            proposed_path : List[ObservationAction],
-                                            valid_labelings : Dict[GenericObservationTask, List[Tuple[List[int], List[float]]]]
-                                            ) -> Tuple[List[int], List[float]]:
-        """ Select the best labeling for a given task in the context of the given path. 
-        
-        ### Returns 
-            - best_labeling : Tuple[List[int], List[float]] - Best labeling for the given task. A tuple containing a list of observation numbers and a list of previous observation times.
-        """
-        # initiate imaging times and sequence for each task in the proposed path
-        t_img_sequences : dict[GenericObservationTask, list[float]] = defaultdict(list)
-        obs_sequence_indices : dict[GenericObservationTask, list[int]] = defaultdict(list)
-        
-        # extract observation time and sequence indices for each parent 
-        for obs_idx,obs in enumerate(proposed_path):
-            for parent_task in obs.task.parent_tasks:
-                t_img_sequences[parent_task].append(obs.t_start)
-                obs_sequence_indices[parent_task].append(obs_idx)
+                    # find index of this observation in best sequence
+                    seq_idx = t_img_best[parent_task].index(obs_action.t_start)
 
-        # find labing that maximizes value for each task 
-        for parent_task,task_lablings in valid_labelings.items():
-            # count maximum number of observations for this parent task
-            n_obs_max = max(len(self.results[parent_task])+1, len(obs_sequence_indices[parent_task]))
+                    # assign best observation number and previous observation time
+                    n_obs_candidate[i_obs][parent_task] = n_obs_best[parent_task][seq_idx]
+                    t_prev_candidate[i_obs][parent_task] = t_prev_best[parent_task][seq_idx]
+
+        # return updated observation numbers and previous observation times
+        return n_obs_candidate, t_prev_candidate
+
+    def _find_feasible_observation_sequences_for_task(self,
+                                                      state : SimulationAgentState,
+                                                      available_obs : List[tuple]
+                                                    ) -> List[Tuple[List[str], List[float]]]:
+        """ Find feasible observation number sequences for a given task. """
+        # initialize feasible sequence tracker
+        feasible_sequences = []
+
+        # count minimum sequence length; use number of occurrences of this agent in available observation times
+        min_seq_length = sum(1 for _,agent_name,*_ in available_obs if agent_name == state.agent_name)
+
+        # create dfs queue
+        dfs_queue = deque()
+
+        # seed dfs with initial observations from this agent
+        for obs in available_obs: dfs_queue.append([obs])
+
+        # perform dfs to find feasible sequences
+        while dfs_queue:
+            # pop current sequence from stack
+            current_sequence = dfs_queue.pop()
+
+            # check for available successors
+            successors = [obs for obs in available_obs
+                          if obs[0] > current_sequence[-1][0]]
             
-            # set best labeling variables
-            best_labeling = None
-            best_labeling_value = -np.Inf
+            # base case: no more successors to add to sequence
+            if not successors:
+                # check if min length was achieved 
+                if len(current_sequence) < min_seq_length: continue # min length not met; skip to next sequence 
 
-            # estimate value of proposed lablings
-            for n_obs_sequences, t_prev_sequences in task_lablings:
-                # initiate list of values for this labeling
-                task_values = [0.0 for _ in range(n_obs_max)]
-                task_t_imgs = [None for _ in range(n_obs_max)]
-
-                # calculate value for this labeling
-                for n_obs_in_seq,t_prev_in_seq,obs_idx_in_seq in zip(n_obs_sequences, t_prev_sequences, obs_sequence_indices[parent_task]):
-                    # find matching observation action in proposed path
-                    obs_action : ObservationAction = proposed_path[obs_idx_in_seq]
-
-                    # calculate and accumulate value for this observation
-                    task_values[n_obs_in_seq] = self._estimate_task_value(parent_task,
-                                                                        obs_action.instrument_name,
-                                                                        obs_action.look_angle,
-                                                                        obs_action.t_start,
-                                                                        obs_action.task.min_duration,
-                                                                        specs,
-                                                                        cross_track_fovs,
-                                                                        orbitdata,
-                                                                        mission,
-                                                                        observation_history,
-                                                                        n_obs_in_seq,
-                                                                        t_prev_in_seq
-                                                                        )
-                    # assign observation time for this observation number
-                    task_t_imgs[n_obs_in_seq] = obs_action.t_start
-
-                # fill in gaps between assigned values with current bids if necessary
-                for i,t in enumerate(task_t_imgs):
-                    if i == 0: continue # skip first observation number
-
-                    if t is None and task_t_imgs[i-1] is not None:
-                        # missing value; try to fill in from existing bids
-                        # check if bid exists for this observation number
-                        if i < len(self.results.get(parent_task, [])):
-                            # get bid for this observation number
-                            bid : Bid = self.results[parent_task][i]
-
-                            assert bid.winning_bidder != state.agent_name, \
-                                "Internal error: trying to fill in missing bid from own agent."
-
-                            # check if bid has a winner
-                            if bid.has_winner():
-                                # assign value and observation time from winning bid
-                                task_values[i] = bid.winning_bid
-                                task_t_imgs[i] = bid.t_img
-
-                # ensure tasks with assigned times have assigned predecessor times
-                assert all((t is not None) or (i == 0) or (task_t_imgs[i-1] is not None) for i,t in enumerate(task_t_imgs)), \
-                    "Assigned observation times have missing predecessors."
-
-                # compute total labeling value
-                labeling_value = sum(task_values)
-
-                # check if it is the best labeling so far
-                if labeling_value <= best_labeling_value: 
-                    continue  # not the best labeling; try next labeling
-
-                # check constraints for this labeling
-                #   if constraints are met, set as best labeling for this task
-                #   else, check if constraint violations are still allowed for this task
-                #       if so, set as best labeling for this task
-                #       else, continue to next labeling
-                # else, continue to next labeling
-                x = 1            
-
-        raise NotImplementedError("Best labeling selection not yet implemented.")
-
-    # def _generate_bids_for_task_in_path(self,
-    #                                     state : SimulationAgentState,
-    #                                     specs : object,
-    #                                     current_path : List[ObservationAction],
-    #                                     proposed_path : List[ObservationAction],
-    #                                     task_to_schedule : SpecificObservationTask,
-    #                                     t_img : float,
-    #                                     cross_track_fovs : dict,
-    #                                     orbitdata : OrbitData,
-    #                                     mission : Mission,
-    #                                     observation_history : ObservationHistory
-    #                                 ) -> List[Bid]:
-    #     """ Generate bid for given task in the context of the given path. 
-        
-    #     ### Returns 
-    #         - bids : List[Tuple[GenericObservationTask, int]]] - List of bids for each parent task of the given task. Is None if no valid bids could be generated.
-    #     """
-
-    #     # count current path revisit and observation numbers
-    #     # TODO make and use a counter that only uses existing bidding results
-    #     n_obs_curr, t_prev_curr = self._count_observation_number_and_revisit_times_from_path(state, current_path, observation_history)
-
-    #     # calculate current path utility
-    #     current_path_utility : float = self._calculate_path_utility(state, specs, cross_track_fovs, current_path, observation_history, orbitdata, mission, n_obs_curr, t_prev_curr)
-
-        # # enumerate the generic observation tasks being observed in the proposed path
-        # t_img_sequences : dict[GenericObservationTask, list[float]] = defaultdict(list)
-        # n_obs_candidates : dict[GenericObservationTask, list[int]] = defaultdict(list)
-        # obs_sequence_indices : dict[GenericObservationTask, list[int]] = defaultdict(list)
-        
-        # # extract observation time and sequence indices for each parent 
-        # for obs_idx,obs in enumerate(proposed_path):
-        #     for parent_task in obs.task.parent_tasks:
-        #         t_img_sequences[parent_task].append(obs.t_start)
-        #         obs_sequence_indices[parent_task].append(obs_idx)
-
-    #     # count proposed path revisit and observation numbers
-    #     n_obs_prop, _ = self._count_observation_number_and_revisit_times_from_path(state, proposed_path, observation_history)
-
-    #     # enumerate candidate observation numbers for each parent task
-    #     for parent_task,obs_indices in obs_sequence_indices.items():
-    #         # check if task is being bid on
-    #         assert parent_task in self.results, f"Parent task {parent_task} not being bid on by any agent; cannot generate bids."
+                # add to feasible sequences
+                obs_names = [agent_name for _,agent_name,_,_ in current_sequence]
+                obs_times = [t_img for t_img,_,_,_ in current_sequence]
+                obs_look_angles = [look_angle for _,_,look_angle,_ in current_sequence]
+                obs_tasks = [spec_task for _,_,_,spec_task in current_sequence]
+                feasible_sequences.append((obs_names, obs_times, obs_look_angles, obs_tasks))               
             
-    #         # calculate the maximum possible observation number for this parent task
-    #         n_obs_max = max(len(self.results[parent_task])+1, len(obs_indices))
+            for obs_next in successors:
+                # create new sequence with successor added
+                new_sequence = [obs for obs in current_sequence] + [obs_next]
 
-    #         for occurrance_idx,obs_idx in enumerate(obs_indices):
-    #             # get previous observation number for this parent task before path started
-    #             n_obs_prev = n_obs_prop[obs_sequence_indices[parent_task][0]].get(parent_task, 0)
+                # add new sequence to dfs stack
+                dfs_queue.append(new_sequence)            
 
-    #             # calculate upper and lower bounds for candidate observation numbers
-    #             n_obs_lower_bound = n_obs_prev + occurrance_idx
-    #             n_obs_upper_bound = n_obs_max - (len(obs_indices) - occurrance_idx - 1)
-
-    #             # generate candidate observation numbers for this parent task
-    #             n_obs_occurance = list(range(n_obs_lower_bound, n_obs_upper_bound))
-    #             n_obs_candidates[parent_task].append(n_obs_occurance)
-
-    #     # enumerate valid labelings for each parent task
-    #     valid_n_obs_sequences : dict[GenericObservationTask, list[list[int]]] = defaultdict(list)
-    #     valid_t_prev_sequences : dict[GenericObservationTask, list[list[float]]] = defaultdict(list)
-    #     for parent_task in obs_sequence_indices.keys():
-    #         # enumerate valid labelings
-    #         valid_solutions = self.enumerate_labelings_for_task(parent_task, t_img_sequences[parent_task], n_obs_candidates[parent_task])
-
-    #         # calculate value of each valid labeling
-    #         valid_solution_values : list[float] = []
-    #         for sol_idx,(n_obs_sequences,t_prev_sequences) in enumerate(valid_solutions):
-    #             valid_solution_value = 0.0
-
-    #             # TODO count all of the observation numbers for a given task to calculate the total value.
-    #             # Use newly computed value for valid labeling to compute bid value. If gaps exist in the sequence,
-    #             # use a known bid from the current results to fill in the gaps. the goal is to find the label 
-    #             # that maximizes the total value for the task, together with its proposed observation sequence
-    #             # and the observations being bid on by other agents.
-
-    #             # iterate through observation sequence
-                # for n_obs_in_seq,t_prev_in_seq,obs_idx_in_seq in zip(n_obs_sequences, t_prev_sequences, obs_sequence_indices[parent_task]):
-                #     # find matching observation action in proposed path
-                #     obs_action : ObservationAction = proposed_path[obs_idx_in_seq]
-
-                #     # calculate and accumulate value for this observation
-                #     valid_solution_value += self._estimate_task_value(parent_task,
-                #                                                 obs_action.instrument_name,
-                #                                                 obs_action.look_angle,
-                #                                                 obs_action.t_start,
-                #                                                 obs_action.task.min_duration,
-                #                                                 specs,
-                #                                                 cross_track_fovs,
-                #                                                 orbitdata,
-                #                                                 mission,
-                #                                                 observation_history,
-                #                                                 n_obs_in_seq,
-                #                                                 t_prev_in_seq
-                #                                                 )
-
-    #             valid_solution_values.append(valid_solution_value)
-    #             # valid_n_obs_sequences[parent_task].append(n_obs_sequences)
-    #             # valid_t_prev_sequences[parent_task].append(t_prev_sequences)
-
-    #     x = 1
-
-        # # get relevant parent tasks from task being scheduled
-        # parent_tasks = [parent_task 
-        #                 for parent_task in task_to_schedule.parent_tasks
-        #                 if parent_task in self.known_event_tasks]
-
-        # # get bounds for min and maximum observation numbers for each parent task
-        # n_obs_per_task = {parent_task : list(range(len(self.results[parent_task])+1))
-        #                     for parent_task in parent_tasks}
-
-        # # initiate possible observation number and revisit pair tracker for each parent task
-        # n_obs_revisit_pairs : Dict[SpecificObservationTask, List[Tuple[int, float]]] = defaultdict(list)
-                
-
-        # # calculate observation number and revisit time for tasks in path
-        # n_obs, t_prev = self._calculate_observation_number_and_revisit_in_path(path, observation_history)
-     
-        # # replace observation number and revisit time values for task being scheduled if provided
-        # if any(param is not None for param in [task_to_schedule, n_obs_bid, t_prev_bid]):            
-        #     # find index and observation action for task being scheduled
-        #     matching_index,matching_obs = min([(obs_idx, obs) for obs_idx, obs in enumerate(path) 
-        #                                         if obs.task == task_to_schedule],
-        #                                         key=lambda item: item[0])
-            
-        #     # update observation number and previous observation time for task being scheduled
-        #     for parent_task in n_obs_bid.keys():
-        #         # get previous bids for this task
-        #         previous_bids = [bid for bid in self.results[parent_task]
-        #                          if bid.t_img < matching_obs.t_start 
-        #                          and bid.winning_bidder == state.agent_name]
-        #         latest_bid = max(previous_bids, key=lambda bid: bid.t_img, default=None)
-
-        #         # check if overwrite values are valid
-        #         assert n_obs_bid[parent_task] >= len(previous_bids), \
-        #             f"Proposed observation number {n_obs_bid[parent_task]} for task '{parent_task}' is less than the number of previous bids {len(previous_bids)} for the same task by this agent."
-        #         assert t_prev_bid[parent_task] >= (latest_bid.t_img if latest_bid else np.NINF), \
-        #             f"Proposed previous observation time {t_prev_bid[parent_task]} [s] for task '{parent_task}' is earlier than the latest previous bid time {latest_bid.t_img if latest_bid else 'NINF'} for the same task by this agent."
-
-        #         # overwrite observation number and previous observation time
-        #         n_obs[matching_index][parent_task] = n_obs_bid[parent_task]
-        #         t_prev[matching_index][parent_task] = t_prev_bid[parent_task]
-
-        #     # update observation number and previous observation time for task being scheduled
-        #     for parent_task in n_obs_bid.keys():
-        #         n_obs[matching_index][parent_task] = n_obs_bid[parent_task]
-        #         t_prev[matching_index][parent_task] = t_prev_bid[parent_task]
-
-        # # calculate revisit times for each possible observation number
-        # for parent_task, n_obs_list in n_obs_per_task.items():
-        #     for n_obs in n_obs_list:             
-        #         # check if a bid even exists for this observation number
-        #         if n_obs >= len(self.results[parent_task]): 
-        #             # no bid exists; observation number is valid with infinite revisit time
-        #             n_obs_revisit_pairs[parent_task].append((n_obs, np.Inf))
-        #             continue
-
-        #         # check if observation has already been performed
-        #         if self.results[parent_task][n_obs].was_performed(): 
-        #             continue # observation already performed; skip
-
-        #         # check if agent is already scheduled to perform observation
-        #         if self.results[parent_task][n_obs].winning_bidder == state.agent_name: 
-        #             continue # observation already scheduled by this agent; skip
-
-        #         # calculate previous observation time
-        #         t_prev = self.results[parent_task][n_obs-1].t_img if n_obs > 0 else np.NINF
-
-        #         # check if previous observation time is prior to the chosen observation time 
-        #         if t_img < t_prev: 
-        #             continue # incompatible observation time and observation number; skip
-
-        #         # estimate revisit time
-        #         t_revisit = t_img - t_prev if n_obs > 0 else np.NINF
-
-        #         # add valid (n_obs, t_revisit) pair to list
-        #         n_obs_revisit_pairs[parent_task].append((n_obs, t_revisit))
-
-        # assert all([parent_task in n_obs_revisit_pairs for parent_task in parent_tasks]), \
-        #     "No valid (n_obs, t_revisit) pairs could be generated for all parent tasks."
-        
-        # # enlist all possible (n_obs, t_revisit) options for each parent task
-        # options_lists = [n_obs_revisit_pairs[parent_task] for parent_task in parent_tasks]
-        
-        # # initiate search for best (n_obs, t_revisit) combination
-        # best_combo : dict = dict()
-        # best_val : float = np.NINF
-
-        # # calculate bid for each parent task and each possible (n_obs, t_revisit) pair
-        # for combo in product(*options_lists):
-        #     n_obs_bid = {parent_task : n_obs for parent_task, (n_obs, _) in zip(parent_tasks, combo)}
-        #     t_prev_bid = {parent_task : t_prev for parent_task, (_, t_prev) in zip(parent_tasks, combo)}
-            
-        #     # calculate new path utility with proposed (n_obs, t_revisit) pairs
-        #     new_path_utility : float = self._calculate_path_utility(state, specs, cross_track_fovs, proposed_path, observation_history, orbitdata, mission, task_to_schedule, n_obs_bid, t_prev_bid)
-
-        #     # calculate bid value
-        #     bid_value : float = new_path_utility - current_path_utility
-
-        #     # create bids for each parent task based on current (n_obs, t_revisit) combination
-        #     current_bids = [Bid(parent_task, state.agent_name, n_obs, bid_value, bid_value, 
-        #                         state.agent_name, t_img, state.t, 
-        #                         main_measurement=task_to_schedule.instrument_name)
-        #                     for parent_task, (n_obs, _) in zip(parent_tasks, combo)]
-            
-        #     x = 1
-
-        #     # calculate total subsequent bid values for competing bids
-        #     subsequent_bid_values = {parent_task : sum([subsequent_bid.winning_bid 
-        #                                     for subsequent_bid in self.results[parent_task][n_obs+1:]]) \
-        #                                     if n_obs < len(self.results[parent_task]) else 0.0
-        #                             for parent_task in parent_tasks}
-            
-        #     # check if outbids all subsequent bids
-        #     if any(bid_value <= subsequent_bid_value + self.EPS
-        #            for subsequent_bid_value in subsequent_bid_values.values()): 
-        #         continue # does not outbid all subsequent bids; skip
-            
-        #     # check if bid value is best so far
-        #     if bid_value > best_val + self.EPS:
-        #         best_val = bid_value
-        #         best_combo = {parent_task: (n_obs, t_prev) 
-        #                       for parent_task, (n_obs, t_prev) in zip(parent_tasks, combo)}
-        
-        
-        # # create and return bids for each parent task based on best (n_obs, t_revisit) combination
-        # return [AsynchronousBid(parent_task, state.agent_name, n_obs, best_val, state.agent_name, 
-        #                          best_val, t_img, state.t, task_to_schedule.instrument_name) 
-        #         for parent_task, (n_obs,_) in best_combo.items()]
-        
-     
-    
-    
+        return feasible_sequences
