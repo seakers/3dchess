@@ -809,8 +809,7 @@ class SimulatedAgent(AbstractAgent):
                                             misc_messages,
                                             completed_actions,
                                             aborted_actions,
-                                            pending_actions,
-                                            self.observation_history
+                                            pending_actions
                                         )
             
             if self.replanner.needs_planning(state, 
