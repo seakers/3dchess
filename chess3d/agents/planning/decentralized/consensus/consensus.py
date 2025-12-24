@@ -1092,6 +1092,53 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         print(out)
 
+    def _log_path(self, dsc : str, state : SimulationAgentState, proposed_path : List[ObservationAction], level=logging.DEBUG) -> None:
+        out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
+        line = 'i\tt_img\t Task IDs\n'
+        
+        # count characters in line for formatting
+        L_LINE = len(line)
+        L_LINE_PADding = 20
+
+        # header
+        out += line 
+
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
+
+        if not proposed_path:
+            out += '\t<empty path>\n'
+            for _ in range(L_LINE + L_LINE_PADding): out += '-'
+            out += '\n'
+
+        n = 15
+        for i,obs in enumerate(proposed_path):
+            spec_task : SpecificObservationTask = obs.task
+            req_id_short = ""
+
+            for task in spec_task.parent_tasks:
+                if isinstance(spec_task, EventObservationTask):
+                    req_id_short += spec_task.id.split('-')[-1] + ","
+                else:
+                    req_id_short += f'Default({int(task.location[0][-2])},{int(task.location[0][-1])}),'
+
+            line = f'{i}\t{np.round(obs.t_start,1)}\t[{req_id_short[:-1]}]\n'
+            out += line
+
+            for _ in range(L_LINE + L_LINE_PADding):
+                out += '-'
+            out += '\n'
+
+            if i > n:
+                out += '\t\t\t...\n'
+                for _ in range(L_LINE + L_LINE_PADding):
+                    out += '-'
+                out += '\n'
+                break
+
+        print(out)
+
     def _log_bundle(self, dsc : str, state : SimulationAgentState, level=logging.DEBUG) -> None:
         out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'i\t Task IDs\n'

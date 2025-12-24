@@ -20,11 +20,11 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
     def toy_planner_config(self):
         return {
-            "preplanner": {
-                "@type": "heuristic",
-                "debug": "False",
-                # "period" : 250,
-            },
+            # "preplanner": {
+            #     "@type": "heuristic",
+            #     "debug": "False",
+            #     # "period" : 250,
+            # },
             "replanner": {
                 "@type": "consensus",
                 "model": "heuristicInsertion",
