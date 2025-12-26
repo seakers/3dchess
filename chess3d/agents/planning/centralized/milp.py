@@ -12,7 +12,8 @@ from tqdm import tqdm
 
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.planning.centralized.dealer import DealerPlanner
-from chess3d.agents.planning.tasks import GenericObservationTask, ObservationOpportunity
+from chess3d.agents.planning.tasks import GenericObservationTask
+from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
 from chess3d.mission.mission import Mission
@@ -383,7 +384,7 @@ class DealerMILPPlanner(DealerPlanner):
                                        observation_history: ObservationHistory) -> list:
         """ Estimate static task rewards for each client and task based on parent tasks """
         
-        return [[self.estimate_specific_task_value(task, 
+        return [[self.estimate_observation_opportunity_value(task, 
                                                       task.accessibility.left, 
                                                       task.min_duration, 
                                                       self.client_specs[client], 
@@ -500,7 +501,7 @@ class DealerMILPPlanner(DealerPlanner):
                                        observation_history: ObservationHistory) -> List[List[List[float]]]:
         """ Estimate linear task rewards for each client and task based on parent tasks """
 
-        return [[[self.estimate_specific_task_value(task, 
+        return [[[self.estimate_observation_opportunity_value(task, 
                                                       task.accessibility.left, 
                                                       task.min_duration, 
                                                       self.client_specs[client], 
@@ -508,7 +509,7 @@ class DealerMILPPlanner(DealerPlanner):
                                                       self.client_orbitdata[client], 
                                                       self.client_missions[client], 
                                                      observation_history),
-                            self.estimate_specific_task_value(task, 
+                            self.estimate_observation_opportunity_value(task, 
                                                       task.accessibility.right, 
                                                       task.min_duration, 
                                                       self.client_specs[client], 

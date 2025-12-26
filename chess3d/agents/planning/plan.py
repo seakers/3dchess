@@ -380,7 +380,7 @@ class Plan(ABC):
                         out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}"
 
                     if isinstance(action, ObservationAction):
-                        locations = {int(gp_idx) for *_,gp_idx in action.task.get_location()}
+                        locations = {int(gp_idx) for *_,gp_idx in action.obs_opp.get_location()}
                         locations = sorted(list(locations))
                         n_locations = len(locations)
 

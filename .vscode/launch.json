@@ -112,7 +112,7 @@
             }
         },
         {
-            "name": "TEST: Heuristic Preplanner",
+            "name": "PLANNER TEST: Heuristic Preplanner",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/planners/heuristic_test.py",
@@ -124,7 +124,7 @@
             }
         },
         {
-            "name": "TEST: Earliest Access Preplanner",
+            "name": "PLANNER TEST: Earliest Access Preplanner",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/planners/earliest_test.py",
@@ -136,7 +136,7 @@
             }
         },
         {
-            "name": "TEST: Nadir Preplanner",
+            "name": "PLANNER TEST: Nadir Preplanner",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/planners/nadir_test.py",
@@ -148,7 +148,7 @@
             }
         },
         {
-            "name": "TEST: Dynamic Programming Preplanner",
+            "name": "PLANNER TEST: Dynamic Programming Preplanner",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/planners/dp_test.py",
@@ -159,18 +159,19 @@
                 "PYTHONPATH": "${workspaceRoot}"
             }
         },
-        {
-            "name": "TEST: Single-Sat MILP Preplanner",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/tests/planners/single_milp_test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            }
-        },
+        // TODO: re-enable MILP tests when fixed
+        // {
+        //     "name": "PLANNER TEST: Single-Sat MILP Preplanner",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/tests/planners/single_milp_test.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}"
+        //     }
+        // },
         {
             "name": "TEST: Ground Station Agent Definition",
             "type": "debugpy",
@@ -184,7 +185,7 @@
             }
         },
         {
-            "name": "TEST: Dealer-Worker Preplanner",
+            "name": "PLANNER TEST: Dealer-Worker Preplanner",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/planners/dealer_worker_test.py",
@@ -196,7 +197,7 @@
             }
         },
         {
-            "name": "TEST: Event Announcer Preplanner",
+            "name": "PLANNER TEST: Event Announcer Preplanner",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/planners/event_announcer_test.py",
@@ -232,7 +233,7 @@
             }
         },
         {
-            "name": "TEST: Consensus Replanner",
+            "name": "PLANNER TEST: Consensus Replanner",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/planners/consensus_test.py",

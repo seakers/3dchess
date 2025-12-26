@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from chess3d.orbitdata import OrbitData
 
-
 class ObservationTracker:
     def __init__(self, lat : float, lon : float, grid_index : int, gp_index : int, t_last : float = np.NINF, n_obs : int = 0, latest_observation : dict = None):
         """ 

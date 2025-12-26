@@ -2,7 +2,8 @@
 from typing import  Dict, Union
 
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
-from chess3d.agents.planning.tasks import *
+from chess3d.agents.planning.tasks import GenericObservationTask, DefaultMissionTask, EventObservationTask
+from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.mission.objectives import *
 
 class Mission:
@@ -145,9 +146,9 @@ class Mission:
     #     availability = Interval(event.t_start, event.t_start+event.d_exp)
     #     return EventObservationTask(objective.parameter, event.location, availability, event.severity, event, objective)
 
-    def get_required_attributes(self) -> List[str]:
-        """Returns a list of all required attributes across all mission requirements."""
-        return list({req.attribute for req in self.requirements})
+    # def get_required_attributes(self) -> List[str]:
+    #     """Returns a list of all required attributes across all mission requirements."""
+    #     return list({req.attribute for req in self.requirements})
 
     def __repr__(self):
         """String representation of the mission."""

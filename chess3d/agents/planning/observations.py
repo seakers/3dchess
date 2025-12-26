@@ -1,10 +1,12 @@
 from collections.abc import Iterable
 import math
-from typing import Union
+from typing import List, Tuple, Union
 import uuid
 
+import numpy as np
+
 from chess3d.agents.planning.tasks import GenericObservationTask
-from chess3d.mission.objectives import *
+from chess3d.mission.objectives import MissionObjective
 from chess3d.utils import EmptyInterval, Interval
 
 class ObservationOpportunity:

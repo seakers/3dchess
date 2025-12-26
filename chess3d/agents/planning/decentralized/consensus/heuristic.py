@@ -11,17 +11,16 @@ from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
 from dmas.clocks import ClockConfig
 
-from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.decentralized.consensus.consensus import ConsensusPlanner
-from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, EventObservationTask, ObservationOpportunity
-from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
-from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
+from chess3d.agents.actions import ObservationAction
+from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
+from chess3d.agents.planning.observations import ObservationOpportunity
+from chess3d.agents.planning.tracker import ObservationHistory
+from chess3d.agents.planning.plan import Plan
 from chess3d.agents.planning.decentralized.consensus.bids import Bid
 from chess3d.agents.science.reward import *
-from chess3d.messages import BusMessage, MeasurementBidMessage
 from chess3d.mission.mission import Mission
-from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
+from chess3d.agents.states import SimulationAgentState
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
@@ -78,20 +77,20 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 
         # create specific and merged tasks from scheduled tasks and urgent tasks
-        schedulable_tasks : List[ObservationOpportunity] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
+        observation_opportunities : List[ObservationOpportunity] = self.create_observation_opportunities_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
         # extract already planned specific tasks from current plan
-        planned_specific_tasks = [obs.task for obs in current_plan if isinstance(obs,ObservationAction)]
+        planned_specific_tasks = [obs.obs_opp for obs in current_plan if isinstance(obs,ObservationAction)]
         
         # filter tasks that are already in the current plan
-        schedulable_tasks = [task for task in schedulable_tasks
+        observation_opportunities = [task for task in observation_opportunities
                              if task not in planned_specific_tasks]
         
         # -------------------------------
         # DEBUG PRINTOUTS
         # if self._debug:
         #     out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n'
-        #     out += 'TASKS CONSIDERED FOR BUNDLE BUILDING:\n'
+        #     out += 'OBS OPPORTUNITIES CONSIDERED FOR BUNDLE BUILDING:\n'
         #     # header
         #     line = 'i\tSpecTaskID\tAccess Start\tParentID(s)\t\n'
         #     out += line
@@ -101,9 +100,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         #     for _ in range(L_LINE + L_LINE_PADding): out += '='
         #     out += '\n'
         #     # task entries
-        #     for task_idx,task in enumerate(schedulable_tasks):
+        #     for task_idx,task in enumerate(observation_opportunities):
         #         out += f'{task_idx}\t{task.id.split("-")[0]}\t{np.round(task.accessibility.left,1)}\t\t{[str(p) for p in task.parent_tasks]}\n'
-        #     out += f'Total Tasks Considered: {len(schedulable_tasks)}\n'
+        #     out += f'Total Observations Considered: {len(observation_opportunities)}\n'
         #     # print to console
         #     print(out)
         # -------------------------------
@@ -111,15 +110,15 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # generate new plan according to selected model
         if self.heuristic == self.EARLIEST_ACCESS:
             # use earliest-access heuristic
-            return self.earliest_access_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, schedulable_tasks, orbitdata, mission, observation_history)
+            return self.earliest_access_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, observation_opportunities, orbitdata, mission, observation_history)
         
         elif self.heuristic == self.TASK_VALUE:
             # use task-value heuristic
-            return self.task_value_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, schedulable_tasks, orbitdata, mission, observation_history)
+            return self.task_value_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, observation_opportunities, orbitdata, mission, observation_history)
         
         elif self.heuristic == self.TASK_PRIORITY:
             # use task-priority heuristic
-            return self.task_priority_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, schedulable_tasks, orbitdata, mission, observation_history)
+            return self.task_priority_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, observation_opportunities, orbitdata, mission, observation_history)
 
         # Fallback for unsupported heuristic
         raise NotImplementedError(f"Heuristic '{self.heuristic}' not supported.")            
@@ -150,7 +149,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                        specs : object,
                                        cross_track_fovs : dict,
                                        current_plan : Plan,
-                                       schedulable_tasks : List[ObservationOpportunity],
+                                       observation_opportunities : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
@@ -165,17 +164,17 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             Updated observation path after bundle building.
         """ 
         # sort urgent tasks by earliest access time
-        sorted_schedulable_tasks = sorted(schedulable_tasks, key=lambda task: task.accessibility)
+        sorted_observation_opportunities = sorted(observation_opportunities, key=lambda task: task.accessibility)
     
         # build bundle using heuristic insertion method
-        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_schedulable_tasks, orbitdata, mission, observation_history, heuristic_evaluator=lambda task: task.accessibility.left)
+        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_observation_opportunities, orbitdata, mission, observation_history, heuristic_evaluator=lambda task: task.accessibility.left)
 
     def task_value_heuristic_bundle_builder(self,
                                        state : SimulationAgentState,
                                        specs : object,
                                        cross_track_fovs : dict,
                                        current_plan : Plan,
-                                       schedulable_tasks : List[ObservationOpportunity],
+                                       observation_opportunities : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
@@ -192,25 +191,25 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             Updated observation path after bundle building.
         """ 
         # sort urgent tasks by expected task value
-        task_values = [(task, self.estimate_specific_task_value(task,
+        task_values = [(task, self.estimate_observation_opportunity_value(task,
                                                                task.accessibility.left,
                                                                task.min_duration,
                                                                specs,
                                                                cross_track_fovs,
                                                                orbitdata,
                                                                mission,
-                                                               observation_history)) for task in schedulable_tasks]
-        sorted_schedulable_tasks = [task for task, _ in sorted(task_values, key=lambda item: (-item[1], item[0].accessibility, item[0].id))]
+                                                               observation_history)) for task in observation_opportunities]
+        sorted_observation_opportunities = [task for task, _ in sorted(task_values, key=lambda item: (-item[1], item[0].accessibility, item[0].id))]
     
         # build bundle using heuristic insertion method
-        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_schedulable_tasks, orbitdata, mission, observation_history)
+        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_observation_opportunities, orbitdata, mission, observation_history)
 
     def task_priority_heuristic_bundle_builder(self,
                                        state : SimulationAgentState,
                                        specs : object,
                                        cross_track_fovs : dict,
                                        current_plan : Plan,
-                                       schedulable_tasks : List[ObservationOpportunity],
+                                       observation_opportunities : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
@@ -226,22 +225,22 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             Updated observation path after bundle building.
         """ 
         # sort urgent tasks by intrinsic task priority
-        task_priorities = [(task, task.get_priority()) for task in schedulable_tasks]
-        sorted_schedulable_tasks = [task for task, _ in sorted(task_priorities, key=lambda item: (-item[1], item[0].accessibility, item[0].id))]
+        task_priorities = [(task, task.get_priority()) for task in observation_opportunities]
+        sorted_observation_opportunities = [task for task, _ in sorted(task_priorities, key=lambda item: (-item[1], item[0].accessibility, item[0].id))]
         
         # build bundle using heuristic insertion method
-        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_schedulable_tasks, orbitdata, mission, observation_history)
+        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_observation_opportunities, orbitdata, mission, observation_history)
 
     def _is_task_mutually_exclusive_with_path(self, task : ObservationOpportunity, path : List[ObservationAction]):
         """ Check if task is mutually exclusive with any observations in the given path. """
-        return any([task.is_mutually_exclusive(action.task) for action in path])
+        return any([task.is_mutually_exclusive(action.obs_opp) for action in path])
 
     def __heuristic_insertion_bundle_builder(self,
                                        state : SimulationAgentState,
                                        specs : object,
                                        cross_track_fovs : dict,
                                        current_plan : Plan,
-                                       sorted_schedulable_tasks : List[ObservationOpportunity],
+                                       sorted_observation_opportunities : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
@@ -298,7 +297,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # ------------------------------- 
 
         # Add tasks to path iteratively based on heuristic
-        for proposed_observation in tqdm(sorted_schedulable_tasks, desc=f'{state.agent_name}-REPLANNER: Building bundle', leave=False):
+        for proposed_observation in tqdm(sorted_observation_opportunities, desc=f'{state.agent_name}-REPLANNER: Building bundle', leave=False):
             # -------------------------------
             # DEBUG PRINTOUTS
             # if self._debug:
@@ -375,7 +374,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     proposed_bundle[idx][1][parent_task] = proposed_bid.n_obs
             
             
-            specific_tasks_in_path = [action.task for action in proposed_path]
+            specific_tasks_in_path = [action.obs_opp for action in proposed_path]
             bundle_elements_to_remove = [
                 bundle_idx for bundle_idx,(spec_task,_) in enumerate(proposed_bundle)
                 if spec_task not in specific_tasks_in_path
@@ -456,11 +455,11 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         ]
 
         # ensure new task was included in new paths
-        assert not self._debug or all([(path is None or any([action.task == new_task for action in path])) for path,_ in proposed_paths]), \
+        assert not self._debug or all([(path is None or any([action.obs_opp == new_task for action in path])) for path,_ in proposed_paths]), \
               "New task not included in proposed paths."
         
         # ensure new tas was included in path changes
-        assert not self._debug or all([(path is None or any([action.task == new_task for action in path_changes])) for path,path_changes in proposed_paths]), \
+        assert not self._debug or all([(path is None or any([action.obs_opp == new_task for action in path_changes])) for path,path_changes in proposed_paths]), \
               "New task not included in proposed path changes."
 
         # return proposed paths and the respective observation times for the new task in said paths
@@ -637,12 +636,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             m = abs(obs_prev.look_angle - obs_curr.look_angle) / max_slew_rate
 
             # calculate earliest start time for current observation
-            t_earliest = max(obs_prev.t_end + m, obs_curr.task.accessibility.left)
+            t_earliest = max(obs_prev.t_end + m, obs_curr.obs_opp.accessibility.left)
 
             # check earliest time if feasible
             is_feasible = (obs_prev.t_end + m <= t_earliest
-                           and t_earliest in obs_curr.task.accessibility
-                           and t_earliest + obs_curr.task.min_duration in obs_curr.task.accessibility)
+                           and t_earliest in obs_curr.obs_opp.accessibility
+                           and t_earliest + obs_curr.obs_opp.min_duration in obs_curr.obs_opp.accessibility)
 
             # check of new observation time is earlier the or the same as original
             if t_earliest < obs_curr.t_start or abs(t_earliest - obs_curr.t_start) <= self.EPS:
@@ -656,7 +655,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             # else if new observation time is feasible, add shifted observation to new path
             elif is_feasible: 
                 # create shifted observation action
-                shifted_observation = ObservationAction(obs_curr.instrument_name, obs_curr.look_angle, t_earliest, obs_curr.task.min_duration, obs_curr.task)
+                shifted_observation = ObservationAction(obs_curr.instrument_name, obs_curr.look_angle, t_earliest, obs_curr.obs_opp.min_duration, obs_curr.obs_opp)
 
                 # add shifted observation to new path
                 new_path.append(shifted_observation)
@@ -799,17 +798,17 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             - t_prev_best : Dict[int, Dict[GenericObservationTask, float]] - Best previous observation times for each observation in the proposed path.
         """
 
-        # extract modified specific tasks from path changes
-        modified_specific_tasks : List[ObservationOpportunity] = [action.task for action in path_changes]   
+        # extract modified task observation opportunities from path changes
+        modified_specific_tasks : List[ObservationOpportunity] = [action.obs_opp for action in path_changes]   
         modified_parent_tasks = sorted({parent_task for task in modified_specific_tasks 
                                  for parent_task in task.tasks}, key=lambda x: x.id)
 
         # find observation time for proposed task in candidate path
         modified_parent_task_obs_times : Dict[GenericObservationTask, List[Tuple[float,str,float,ObservationOpportunity]]] \
                     = {parent_task : [
-                        (action.t_start, state.agent_name, action.look_angle, action.task) 
+                        (action.t_start, state.agent_name, action.look_angle, action.obs_opp) 
                         for action in candidate_path 
-                        if parent_task in action.task.tasks
+                        if parent_task in action.obs_opp.tasks
                     ] for parent_task in modified_parent_tasks}
         
         # initialize best observation numbers and previous observation times
@@ -998,7 +997,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # assign best observation numbers and previous observation times to observations in candidate path
         for obs_idx,obs in enumerate(candidate_path):
             # iterate through matching tasks of this observation
-            for parent_task in obs.task.tasks:
+            for parent_task in obs.obs_opp.tasks:
                 # check if sequence was modified for this parent task
                 if parent_task in n_obs_best:
                     # extract observation time and revisit time from best sequences
@@ -1009,7 +1008,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
                     # generate new bids for this observation if it is part of path changes
                     new_bid = Bid(parent_task, state.agent_name, n_obs, val, val, state.agent_name, t_img, state.t, main_measurement=obs.instrument_name)
-                    new_bids[obs.task][parent_task] = new_bid
+                    new_bids[obs.obs_opp][parent_task] = new_bid
 
                     # assign best observation number and previous observation time
                     n_obs_candidate[obs_idx][parent_task] = n_obs

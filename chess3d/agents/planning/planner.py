@@ -2,7 +2,7 @@
 from collections import defaultdict
 from functools import reduce
 import queue
-from typing import Dict, Tuple
+from typing import Dict, Set, Tuple
 
 from instrupy.base import BasicSensorModel
 from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
@@ -15,7 +15,8 @@ from pyparsing import List
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan
-from chess3d.agents.planning.tasks import GenericObservationTask, ObservationOpportunity
+from chess3d.agents.planning.tasks import GenericObservationTask
+from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
@@ -129,16 +130,16 @@ class AbstractPlanner(ABC):
         return access_opportunities
 
     @runtime_tracker
-    def create_tasks_from_accesses(self, 
-                                    available_tasks : list,
-                                    access_times : list, 
+    def create_observation_opportunities_from_accesses(self, 
+                                    available_tasks : List[GenericObservationTask],
+                                    access_times : List[tuple], 
                                     cross_track_fovs : dict,
                                     orbitdata : OrbitData,
                                     must_overlap : bool = True,
                                     threshold : float = 5*60
                                     ) -> list:
         """ 
-        Creates specific observation tasks from precalculated access times of known generic task targets. 
+        Creates observation opportunities from precalculated access times of known generic task targets. 
 
         #### Arguments
         - `available_tasks` : List of known and available generic observation tasks.
@@ -151,56 +152,56 @@ class AbstractPlanner(ABC):
 
         if not must_overlap: raise NotImplementedError('Clustering without overlap is not yet fully implemented.')
 
-        # generate schedulable tasks from access times
-        schedulable_tasks : list[ObservationOpportunity] \
-            = self.single_tasks_from_accesses(available_tasks, access_times, cross_track_fovs, orbitdata)
+        # generate task observation opportunities from access times
+        observation_opps : list[ObservationOpportunity] \
+            = self.single_task_observation_opportunity_from_accesses(available_tasks, access_times, cross_track_fovs, orbitdata)
         
         # check if tasks are clusterable
         task_adjacency : Dict[str, set[ObservationOpportunity]] \
-            = self.check_task_clusterability(schedulable_tasks, must_overlap, threshold)
+            = self.check_task_observation_opportunity_clusterability(observation_opps, must_overlap, threshold)
    
         # cluster tasks based on adjacency
-        combined_tasks : list[ObservationOpportunity] = self.cluster_tasks(schedulable_tasks, task_adjacency, must_overlap, threshold)
+        combined_obs : list[ObservationOpportunity] = self.cluster_task_observation_opportunities(observation_opps, task_adjacency, must_overlap, threshold)
 
         # add clustered tasks to the final list of tasks available for scheduling
-        schedulable_tasks.extend(combined_tasks) 
+        observation_opps.extend(combined_obs) 
 
-        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] 
-                    for task in schedulable_tasks]), \
+        assert all([obs.slew_angles.span()-1e-6 <= cross_track_fovs[obs.instrument_name] 
+                    for obs in observation_opps]), \
             f"Tasks have slew angles larger than the maximum allowed field of view."
 
         # return tasks
-        return schedulable_tasks
-        
+        return observation_opps        
     
     @runtime_tracker
-    def single_tasks_from_accesses(self,
-                                   available_tasks : list,
-                                   access_times : list, 
+    def single_task_observation_opportunity_from_accesses(self,
+                                   available_tasks : List[GenericObservationTask],
+                                   access_times : List[tuple], 
                                    cross_track_fovs : dict,
                                    orbitdata : OrbitData,
                                    threshold : float = 1e-9
-                                   ) -> list:
-        """ Creates one specific task per each access opportunity for every available task """
+                                   ) -> List[ObservationOpportunity]:
+        """ Creates one instance of a task observation opportunity per each access opportunity 
+        for every available task """
 
-        # initialize list of schedulable tasks
-        schedulable_tasks : list[ObservationOpportunity] = []
+        # initialize list of task observation opportunities
+        observation_opps : List[ObservationOpportunity] = []
 
-        # create one task per each access opportunity
+        # create one instance of an observation opportunity per each access opportunity
         for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
-            task : GenericObservationTask
-
-            # TODO improve minimum and maximum measurement duration requirement calculation
+            
+            # determine minimum duration requirement for this task
             if task.objective is not None:
                 duration_reqs = [req for req in task.objective
                                 if isinstance(req, MeasurementDurationRequirement)]
                 duration_req : MeasurementDurationRequirement = duration_reqs[0] if duration_reqs else None
             else:
                 duration_req = None
+            # TODO improve minimum and maximum measurement duration requirement calculation
             min_duration_req : float = min(duration_req.thresholds) if duration_req is not None else orbitdata.time_step
             assert isinstance(min_duration_req, (int,float)) and min_duration_req >= 0.0, "minimum duration requirement must be a positive number."
 
-            # find access time for each target location for this task
+            # collect access interval information for each target location for this task
             for *__,grid_index,gp_index in task.location:
                 # ensure grid_index and gp_index are integers
                 grid_index,gp_index = int(grid_index), int(gp_index)
@@ -217,7 +218,7 @@ class AbstractPlanner(ABC):
                                         if task.availability.overlaps(access_interval)
                                         ]
                 
-                # create a schedulable task for each access time
+                # create a task observation opportunity for each access time
                 for access_time in matching_access_times:
                     # unpack access time
                     instrument_name,accessibility,_,th = access_time
@@ -254,16 +255,16 @@ class AbstractPlanner(ABC):
                         if accessibility.span() - min_duration_req >= threshold: 
                             continue # is over the threshold; skip
 
-                        # create and add schedulable task to list of schedulable tasks with a different minimum observation requirement
-                        schedulable_tasks.append(ObservationOpportunity(task,
+                        # create and add task observation opportunity to list of task observation opportunities with a different minimum observation requirement
+                        observation_opps.append(ObservationOpportunity(task,
                                                                         instrument_name,
                                                                         accessibility,
                                                                         accessibility.span(), # slightly shorter than `min_duration_req`
                                                                         slew_angles
                                                                         ))
                     else:
-                        # create and add schedulable task to list of schedulable tasks
-                        schedulable_tasks.append(ObservationOpportunity(task,
+                        # create and add task observation opportunity to list of task observation opportunities
+                        observation_opps.append(ObservationOpportunity(task,
                                                                         instrument_name,
                                                                         accessibility,
                                                                         min_duration_req,
@@ -271,8 +272,8 @@ class AbstractPlanner(ABC):
                                                                         ))
 
         
-        # return list of schedulable tasks
-        return schedulable_tasks
+        # return list of task observation opportunities
+        return observation_opps
             
     def can_perform_task(self, task : GenericObservationTask, instrument_name : str) -> bool:
         """ Checks if the agent can perform the task at hand with the given instrument """
@@ -294,38 +295,38 @@ class AbstractPlanner(ABC):
         return True
         
     @runtime_tracker
-    def check_task_clusterability(self, schedulable_tasks : List[ObservationOpportunity], must_overlap : bool, threshold : float) -> dict:
+    def check_task_observation_opportunity_clusterability(self, observation_opportunities : List[ObservationOpportunity], must_overlap : bool, threshold : float) -> dict:
         """ 
-        Creates adjacency list for a given list of specific observation tasks.
+        Creates adjacency list for a given list of task observation opportunities.
 
         #### Arguments
-        - `schedulable_tasks` : A list of specific observation tasks to create the adjacency list for.
+        - `observation_opportunities` : A list of task observation opportunities to create the adjacency list for.
         - `must_overlap` : Whether tasks' availability must overlap in availability time to be considered for clustering.
         - `threshold` : The time threshold for clustering tasks in seconds [s].
         """
 
         # create adjacency list for tasks
-        adj : Dict[str, set[ObservationOpportunity]] = {task.id : set() for task in schedulable_tasks}
+        adj : Dict[str, set[ObservationOpportunity]] = {task.id : set() for task in observation_opportunities}
                 
-        if schedulable_tasks:
+        if observation_opportunities:
             # sort tasks by accessibility
-            schedulable_tasks.sort(key=lambda a : a.accessibility) 
+            observation_opportunities.sort(key=lambda a : a.accessibility) 
             
             # get min and max accessibility times
-            t_min = schedulable_tasks[0].accessibility.left
+            t_min = observation_opportunities[0].accessibility.left
 
             # initialize bins
             bins = defaultdict(list)
             
             # group task in bins by accessibility
-            for task in tqdm(schedulable_tasks, leave=False, desc="Grouping tasks into bins"):
+            for task in tqdm(observation_opportunities, leave=False, desc="Grouping tasks into bins"):
                 task : ObservationOpportunity
                 center_time = (task.accessibility.left + task.accessibility.right) / 2 - t_min
                 bin_key = int(center_time // threshold)
                 bins[bin_key].append(task)
 
             # populate adjacency list
-            with tqdm(total=len(schedulable_tasks), desc="Checking task clusterability", leave=False) as pbar:
+            with tqdm(total=len(observation_opportunities), desc="Checking task clusterability", leave=False) as pbar:
                 for b in bins:
                     candidates : list[ObservationOpportunity]\
                           = bins[b] + bins.get(b + 1, [])  # optionally add b-1 for symmetry
@@ -338,7 +339,7 @@ class AbstractPlanner(ABC):
                         pbar.update(1)
 
         # check if adjacency list is symmetric
-        for p in schedulable_tasks:
+        for p in observation_opportunities:
             assert p not in adj[p.id], \
                 f'Task {p.id} is in its own adjacency list.'
             for q in adj[p.id]:
@@ -347,9 +348,13 @@ class AbstractPlanner(ABC):
         return adj
 
     @runtime_tracker
-    def cluster_tasks(self, schedulable_tasks : list, adj : dict, must_overlap : bool, threshold : float) -> list:
+    def cluster_task_observation_opportunities(self, 
+                                               observation_opportunities : List[ObservationOpportunity], 
+                                               adj : Dict[str, Set[ObservationOpportunity]], 
+                                               must_overlap : bool, 
+                                               threshold : float) -> list:
         """ 
-        Clusters tasks based on adjacency. 
+        Clusters observation opportunities based on adjacency. 
         
         ```
         while V!=Ø do
@@ -371,25 +376,22 @@ class AbstractPlanner(ABC):
         ```
         
         """         
-        schedulable_tasks : list[ObservationOpportunity]
-        adj : Dict[str, set[ObservationOpportunity]] = adj
-
-        # only keep tasks that have at least one clusterable task
-        v = [task for task in schedulable_tasks if len(adj[task.id]) > 0]
+        # only keep observation opportunities that have at least one clusterable observation opportunity
+        v = [obs for obs in observation_opportunities if len(adj[obs.id]) > 0]
         
-        # sort tasks by degree of adjacency 
-        v : list[ObservationOpportunity] = self.sort_tasks_by_degree(schedulable_tasks, adj)
+        # sort observation opportunities by degree of adjacency 
+        v : list[ObservationOpportunity] = self.sort_by_degree(observation_opportunities, adj)
         
-        # combine tasks into clusters
-        combined_tasks : list[ObservationOpportunity] = []
+        # combine observation opportunities into clusters
+        combined_obs : list[ObservationOpportunity] = []
 
-        with tqdm(total=len(v), desc="Merging overlapping tasks", leave=False) as pbar:
+        with tqdm(total=len(v), desc="Merging overlapping observation opportunities", leave=False) as pbar:
             while len(v) > 0:
-                # pop first task from the list of tasks to be scheduled
+                # pop first observation opportunity from the list of observation opportunities to be scheduled
                 p : ObservationOpportunity = v.pop()
 
                 # get list of neighbors of p sorted by number of common neighbors
-                n_p : list[ObservationOpportunity] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)
+                n_p : list[ObservationOpportunity] = self.sort_observation_opportunities_by_common_neighbors(p, list(adj[p.id]), adj)
 
                 # initialize clique with p
                 clique = set()
@@ -422,7 +424,7 @@ class AbstractPlanner(ABC):
                     v.remove(q)
 
                     # Reset neighbor collection N_p for the new p;
-                    n_p : list[ObservationOpportunity] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)               
+                    n_p : list[ObservationOpportunity] = self.sort_observation_opportunities_by_common_neighbors(p, list(adj[p.id]), adj)               
 
                 for q in clique: 
                     # TODO: look into ID being used. Ideally we would want a new ID for the combined task.
@@ -435,28 +437,28 @@ class AbstractPlanner(ABC):
 
                 # DEBUGGING--------- 
                 # clique.add(p)
-                # cliques.append(sorted([schedulable_tasks.index(t)+1 for t in clique]))
+                # cliques.append(sorted([observation_opportunities.index(t)+1 for t in clique]))
                 # ------------------
 
                 # add merged task to the list of combined tasks
-                combined_tasks.append(p) 
+                combined_obs.append(p) 
 
-                # sort remaining schedulable tasks by degree of adjacency 
-                v : list[ObservationOpportunity] = self.sort_tasks_by_degree(v, adj)
+                # sort remaining task observation opportunities by degree of adjacency 
+                v : list[ObservationOpportunity] = self.sort_by_degree(v, adj)
         
-        # return only tasks that have multiple parents (avoid generating duplicate tasks)
-        return [task for task in combined_tasks if len(task.tasks) > 1] 
+        # return only observation opportunities that have multiple parents (avoid generating duplicate observation opportunities)
+        return [obs for obs in combined_obs if len(obs.tasks) > 1] 
 
     @runtime_tracker
-    def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:
-        """ Sorts tasks by degree of adjacency. """
-        # calculate degree of each task
-        degrees : dict = {task : len(adjacency[task.id]) for task in tasks}
+    def sort_by_degree(self, obs_opportunities : List[ObservationOpportunity], adjacency : dict) -> list:
+        """ Sorts observation opportunities by degree of adjacency. """
+        # calculate degree of each observation opportunity
+        degrees : dict = {obs : len(adjacency[obs.id]) for obs in obs_opportunities}
 
-        # sort tasks by degree and return
-        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.priority for parent_task in p.parent_tasks]), -p.accessibility.left))
+        # sort observation opportunities by degree and return
+        return sorted(obs_opportunities, key=lambda p: (degrees[p], sum([parent_task.priority for parent_task in p.tasks]), -p.accessibility.left))
 
-    def sort_tasks_by_common_neighbors(self, p : ObservationOpportunity, n_p : list, adjacency : dict) -> list:
+    def sort_observation_opportunities_by_common_neighbors(self, p : ObservationOpportunity, n_p : list, adjacency : dict) -> list:
         # specify types
         n_p : list[ObservationOpportunity] = n_p
         adjacency : Dict[str, set[ObservationOpportunity]] = adjacency
@@ -477,8 +479,8 @@ class AbstractPlanner(ABC):
                                      -p.accessibility.left))
 
     @runtime_tracker
-    def estimate_specific_task_value(self, 
-                                     task : ObservationOpportunity, 
+    def estimate_observation_opportunity_value(self, 
+                                     obs : ObservationOpportunity, 
                                      t_img : float,
                                      d_img : float,
                                      specs : Spacecraft, 
@@ -491,11 +493,11 @@ class AbstractPlanner(ABC):
                                 ) -> float:
         """ Estimates task value based on predicted observation performance. """
         # estimate measurment look angle 
-        th_img = np.average([task.slew_angles.left, task.slew_angles.right])
+        th_img = np.average([obs.slew_angles.left, obs.slew_angles.right])
 
         # calculate task reward per parent task
         rewards = {parent_task : self._estimate_task_value(parent_task,
-                                                            task.instrument_name,
+                                                            obs.instrument_name,
                                                             th_img,
                                                             t_img,
                                                             d_img,
@@ -506,7 +508,7 @@ class AbstractPlanner(ABC):
                                                             observation_history,
                                                             n_obs_in_plan[parent_task],
                                                             t_prev_in_plan[parent_task])
-                     for parent_task in task.tasks}
+                     for parent_task in obs.tasks}
 
         # return total reward
         return sum(rewards.values()) 
@@ -1067,7 +1069,7 @@ class AbstractPlanner(ABC):
 
                 # ensure no mutually exclusive tasks are present in observation sequence
                 return all(
-                    not obs_i.task.is_mutually_exclusive(obs_j.task)
+                    not obs_i.obs_opp.is_mutually_exclusive(obs_j.obs_opp)
                     for i, obs_i in enumerate(observations)
                     for j, obs_j in enumerate(observations)
                     if i < j

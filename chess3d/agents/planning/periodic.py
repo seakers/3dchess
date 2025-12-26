@@ -1,8 +1,6 @@
 from typing import List
-from collections import defaultdict
 import logging
 import numpy as np
-from tqdm import tqdm
 from abc import abstractmethod
 
 from dmas.modules import ClockConfig
@@ -12,7 +10,8 @@ from dmas.agents import AgentAction
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
-from chess3d.agents.planning.tasks import GenericObservationTask, ObservationOpportunity
+from chess3d.agents.planning.tasks import GenericObservationTask
+from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
@@ -126,11 +125,11 @@ class AbstractPeriodicPlanner(AbstractPlanner):
         # calculate coverage opportunities for tasks
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 
-        # create schedulable tasks from known tasks and future access opportunities
-        schedulable_tasks : list[ObservationOpportunity] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
+        # create task observation opportunities from known tasks and future access opportunities
+        observation_opportunities : list[ObservationOpportunity] = self.create_observation_opportunities_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
         # schedule observation tasks
-        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, mission, observation_history)
+        observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, observation_opportunities, mission, observation_history)
 
         assert isinstance(observations, list) and all([isinstance(obs, ObservationAction) for obs in observations]), \
             f'Observation actions not generated correctly. Is of type `{type(observations)}` with elements of type `{type(observations[0])}`.'
@@ -167,7 +166,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
                 and task.availability.overlaps(planning_horizon)]
     
     @abstractmethod
-    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, schedulable_tasks : list, mission : Mission, observation_history : ObservationHistory) -> list:
+    def _schedule_observations(self, state : SimulationAgentState, specs : object, clock_config : ClockConfig, orbitdata : OrbitData, observation_opportunities : list, mission : Mission, observation_history : ObservationHistory) -> list:
         """ Creates a list of observation actions to be performed by the agent """    
 
     @abstractmethod

@@ -9,7 +9,7 @@ from orbitpy.util import Spacecraft
 
 from chess3d.agents.states import SimulationAgentState, SatelliteAgentState
 from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
-from chess3d.agents.planning.tasks import ObservationOpportunity
+from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.actions import ObservationAction
 from chess3d.mission.mission import Mission
@@ -44,7 +44,7 @@ class NadirPointingPlanner(EarliestAccessPlanner):
                                specs : object, 
                                _ : ClockConfig, 
                                orbitdata : OrbitData, 
-                               schedulable_tasks : list,
+                               observation_opportunities : List[ObservationOpportunity],
                                mission : Mission,
                                observation_history : ObservationHistory
                                ) -> list:
@@ -59,8 +59,8 @@ class NadirPointingPlanner(EarliestAccessPlanner):
         # compile instrument field of view specifications   
         cross_track_fovs : dict = self._collect_fov_specs(specs)
         
-        # sort tasks by heuristic
-        schedulable_tasks : list[ObservationOpportunity] = self._sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
+        # sort observation opportunities by heuristic
+        observation_opportunities : list[ObservationOpportunity] = self._sort_observation_opportunities_by_heuristic(state, observation_opportunities, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -75,45 +75,45 @@ class NadirPointingPlanner(EarliestAccessPlanner):
         # generate plan
         plan_sequence : list[tuple[ObservationOpportunity, ObservationAction]] = []
 
-        for task in tqdm(schedulable_tasks,
+        for obs in tqdm(observation_opportunities,
                          desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 
                          leave=False):
             
             # check if agent has the payload to peform observation
-            if task.instrument_name not in payload: continue
+            if obs.instrument_name not in payload: continue
 
             # get previous and future observation actions' info
             th_prev,t_prev,d_prev,th_next,t_next,d_next \
-                = self._get_previous_and_future_observation_info(state, task, plan_sequence, max_slew_rate)
+                = self._get_previous_and_future_observation_info(state, obs, plan_sequence, max_slew_rate)
             
             # set task observation angle
-            th_img = np.average((task.slew_angles.left, task.slew_angles.right))
+            th_img = np.average((obs.slew_angles.left, obs.slew_angles.right))
             
             # select task imaging time and duration # TODO room for improvement? Currently aims for earliest and shortest observation possible
-            t_img = max(t_prev + d_prev, task.accessibility.left)
-            d_img = task.min_duration
+            t_img = max(t_prev + d_prev, obs.accessibility.left)
+            d_img = obs.min_duration
             
             # check if the observation fits within the task's accessibility window
-            if t_img + d_img not in task.accessibility: continue
+            if t_img + d_img not in obs.accessibility: continue
 
             # check if the observation is feasible
             prev_action_feasible : bool = (t_prev + d_prev <= t_img - 1e-6)
-            curr_action_feasible : bool = (abs(th_img) <= cross_track_fovs[task.instrument_name] / 2.0)
+            curr_action_feasible : bool = (abs(th_img) <= cross_track_fovs[obs.instrument_name] / 2.0)
             next_action_feasible : bool = (t_img + d_img <= t_next - 1e-6)         
             
             if prev_action_feasible and curr_action_feasible and next_action_feasible:
                 # check if task is mutually exclusive with any already scheduled tasks
-                if any(task.is_mutually_exclusive(task_j) for task_j,_ in plan_sequence): continue
+                if any(obs.is_mutually_exclusive(task_j) for task_j,_ in plan_sequence): continue
                 
                 # create observation action
-                action = ObservationAction(task.instrument_name, 
+                action = ObservationAction(obs.instrument_name, 
                                            th_img, 
                                            t_img, 
                                            d_img,
-                                           task)
+                                           obs)
 
                 # add to plan sequence
-                plan_sequence.append((task, action))
+                plan_sequence.append((obs, action))
 
         # return sorted by start time
         return sorted([action for _,action in plan_sequence], key=lambda a : a.t_start)
@@ -121,7 +121,7 @@ class NadirPointingPlanner(EarliestAccessPlanner):
     @runtime_tracker
     def is_observation_path_valid(self, 
                                   state : SimulationAgentState, 
-                                  observations : list,
+                                  observations : List[ObservationAction],
                                   max_slew_rate : float = None,
                                   max_torque : float = None,
                                   specs : object = None
@@ -151,10 +151,9 @@ class NadirPointingPlanner(EarliestAccessPlanner):
             cross_track_fovs : dict = self._collect_fov_specs(specs)
 
             # check if every observation can be reached from the prior measurement
-            for j in range(len(observations)):
+            for j,observation_j in enumerate(observations):
 
                 # estimate the state of the agent at the given measurement
-                observation_j : ObservationAction = observations[j]
                 th_j = observation_j.look_angle
                 t_j = observation_j.t_start
                 fov = cross_track_fovs[observation_j.instrument_name]

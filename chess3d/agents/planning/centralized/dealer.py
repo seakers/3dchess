@@ -12,9 +12,10 @@ from dmas.agents import AgentAction
 import pandas as pd
 
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
+from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, ObservationOpportunity
+from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.messages import  AgentStateMessage, PlanMessage
@@ -243,7 +244,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
         for client,observations in client_observations.items():
             assert all(isinstance(obs, ObservationAction) for obs in observations), \
                 f'All scheduled observations for client {client} must be instances of `ObservationAction`.'
-            assert all(obs.task.tasks for obs in observations), \
+            assert all(obs.obs_opp.tasks for obs in observations), \
                 f'All scheduled observations for client {client} must have a parent task.'
             assert self.is_observation_path_valid(self.client_states[client], observations, None, None, self.client_specs[client]), \
                 f'Generated observation path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
@@ -413,7 +414,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
                                           available_tasks : Dict[Mission, List[GenericObservationTask]], 
                                           target_access_opportunities : dict
                                         ) -> Dict:
-        return {client : self.create_tasks_from_accesses(available_tasks[self.client_missions[client]], 
+        return {client : self.create_observation_opportunities_from_accesses(available_tasks[self.client_missions[client]], 
                                                          client_access_opportunities, 
                                                          self.cross_track_fovs[client], 
                                                          self.client_orbitdata[client])

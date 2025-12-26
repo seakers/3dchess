@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from collections import defaultdict, deque
+from collections import defaultdict
 from itertools import chain
 from typing import Dict, List, Tuple
 
@@ -10,10 +10,11 @@ from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
 from dmas.clocks import ClockConfig
 
-from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
+from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask, ObservationOpportunity
-from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
+from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
+from chess3d.agents.planning.observations import ObservationOpportunity
+from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
 from chess3d.agents.planning.decentralized.consensus.bids import Bid
 from chess3d.agents.science.reward import *
@@ -223,22 +224,22 @@ class ConsensusPlanner(AbstractReactivePlanner):
                   [action for action in current_plan if isinstance(action, ObservationAction)]
 
             # ensure all parent tasks in preplan observations are known in results
-            assert all((parent_task in self.results for obs in preplan_observations for parent_task in obs.task.tasks)), \
+            assert all((parent_task in self.results for obs in preplan_observations for parent_task in obs.obs_opp.tasks)), \
                 "All parent tasks in preplan observations must be known in results."
             
-            if any((isinstance(parent_task, EventObservationTask) for obs in preplan_observations for parent_task in obs.task.tasks)):
+            if any((isinstance(parent_task, EventObservationTask) for obs in preplan_observations for parent_task in obs.obs_opp.tasks)):
                 raise NotImplementedError("Updating preplan bids with urgent tasks not yet implemented.")
 
             # get series of observation number and time for each parent task in preplan
             n_obs, _ = self._count_observations_and_revisit_times_from_path(preplan_observations)
 
             # calculate observation values for each preplanned observation
-            obs_values = [{parent_task : obs.task.get_priority() # TODO implement preplan observation value calculation
-                           for parent_task in obs.task.tasks}
+            obs_values = [{parent_task : obs.obs_opp.get_priority() # TODO implement preplan observation value calculation
+                           for parent_task in obs.obs_opp.tasks}
                           for _, obs in enumerate(preplan_observations)]
 
             # create bundle from list of bids from new preplan observations
-            preplan_bundle_bids = [(obs.task, [Bid(parent_task, state.agent_name, 
+            preplan_bundle_bids = [(obs.obs_opp, [Bid(parent_task, state.agent_name, 
                                                    n_obs[obs_idx][parent_task], 
                                                    obs_values[obs_idx][parent_task],
                                                    obs_values[obs_idx][parent_task],
@@ -247,7 +248,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                                    current_plan.t, 
                                                    {state.agent_name: current_plan.t}, 
                                                    obs.instrument_name)
-                                  for parent_task in obs.task.tasks] )
+                                  for parent_task in obs.obs_opp.tasks] )
                                   for obs_idx,obs in enumerate(preplan_observations)]
             
             preplanned_bundle = [ (specific_task, {bid.task: bid.n_obs for bid in bids}) 
@@ -379,7 +380,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         performed_task_bids = []
 
         # collect actions in bundle past their imaging time
-        performed_tasks : list[ObservationOpportunity] = [obs.task for obs in performed_observations]
+        performed_tasks : list[ObservationOpportunity] = [obs.obs_opp for obs in performed_observations]
 
         performed_bundle_tasks = [ (specific_task, obs_tasks) 
                                     for specific_task, obs_tasks in self.bundle
@@ -842,9 +843,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
                               t_prev : List[Dict[GenericObservationTask, float]]
                             ) -> List[float]:
         """ Calculate expected value of each observation in the path. """
-        return [self.estimate_specific_task_value(obs.task,
+        return [self.estimate_observation_opportunity_value(obs.obs_opp,
                                                  obs.t_start,
-                                                 obs.task.min_duration,
+                                                 obs.obs_opp.min_duration,
                                                  specs,
                                                  cross_track_fovs,
                                                  orbitdata,
@@ -866,7 +867,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # get all parent tasks in the given path
         parent_tasks = {parent_task for action in path 
-                        for parent_task in action.task.tasks}
+                        for parent_task in action.obs_opp.tasks}
         
         # ---HISTORICAL DATA FROM BID RESULTS---
         # initiate observation history for all parent tasks in path
@@ -903,7 +904,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # initiate previous observations and times along path
         for obs_idx, obs in enumerate(path):           
-            for parent_task in obs.task.tasks:
+            for parent_task in obs.obs_opp.tasks:
                 # update overall observation number and revisit times along path using historical and path data
                 n_obs[obs_idx][parent_task] = n_obs_history[parent_task] + n_obs_in_path[parent_task]
                 t_prev[obs_idx][parent_task] = max(t_prev_history[parent_task], t_prev_in_path[parent_task])               
@@ -929,7 +930,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # ---HISTORICAL DATA FROM BID RESULTS---
         # iterate through path to populate observation numbers and previous observation times
         for obs_idx, obs in enumerate(path):
-            for parent_task in obs.task.tasks:
+            for parent_task in obs.obs_opp.tasks:
                 # get matching bid for this observation task
                 matching_bids = [bid for bid in self.results[parent_task]
                                 if abs(bid.t_img - obs.t_start) <= self.EPS]
@@ -952,7 +953,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # ensure every parent task in path has values for `n_obs` and `t_prev`
         assert all(
             all(parent_task in n_obs[obs_idx] and parent_task in t_prev[obs_idx]
-                for parent_task in obs.task.tasks)
+                for parent_task in obs.obs_opp.tasks)
                 for obs_idx,obs in enumerate(path)), \
             "Not all parent tasks in path have observation number values."
         
@@ -1153,7 +1154,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         n = 15
         for i,obs in enumerate(observation_path):
-            spec_task : ObservationOpportunity = obs.task
+            spec_task : ObservationOpportunity = obs.obs_opp
             req_id_short = ""
 
             for task in spec_task.tasks:

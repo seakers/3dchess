@@ -118,7 +118,7 @@ class SingleSatMILP(AbstractPeriodicPlanner):
             # Filter tasks based on current state
             reduced_tasks = [task for task in tasks
                      if task.accessibility.right - max(task.accessibility.left, curr_state.t) >= task.min_duration
-                     and all(not task.is_mutually_exclusive(obs.task) for obs in observations)]
+                     and all(not task.is_mutually_exclusive(obs.obs_opp) for obs in observations)]
                      
             for task in reduced_tasks:
                 if curr_state.t in task.accessibility:
@@ -270,7 +270,7 @@ class SingleSatMILP(AbstractPeriodicPlanner):
         task_indices = [j for j,_ in indexed_tasks]
 
         # Define constants
-        rewards = np.array([self.estimate_specific_task_value(task, 
+        rewards = np.array([self.estimate_observation_opportunity_value(task, 
                                                      task.accessibility.left, 
                                                      task.min_duration, 
                                                      specs, cross_track_fovs, orbitdata, 
@@ -374,7 +374,7 @@ class SingleSatMILP(AbstractPeriodicPlanner):
         task_indices = [j for j,_ in indexed_tasks]
 
         # Define constants
-        rewards = np.array([self.estimate_specific_task_value(task, 
+        rewards = np.array([self.estimate_observation_opportunity_value(task, 
                                                      task.accessibility.left, 
                                                      task.min_duration, 
                                                      specs, cross_track_fovs, orbitdata, 
