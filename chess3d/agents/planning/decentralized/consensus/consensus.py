@@ -47,7 +47,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # Consensus Couple-Constrained Planner
         
         ## Bundle
-        The Bundle is defined as a list of a tuple indicating the specific task that was added to the plan, 
+        The Bundle is defined as a list of a tuple indicating the specific observation opportunity that was added to the plan, 
         and a dictionary that maps the observation number being bid on.
         
         """
@@ -223,36 +223,36 @@ class ConsensusPlanner(AbstractReactivePlanner):
             preplan_observations : List[ObservationAction] = \
                   [action for action in current_plan if isinstance(action, ObservationAction)]
 
-            # ensure all parent tasks in preplan observations are known in results
-            assert all((parent_task in self.results for obs in preplan_observations for parent_task in obs.obs_opp.tasks)), \
-                "All parent tasks in preplan observations must be known in results."
+            # ensure all tasks in preplan observations are known in results
+            assert all((task in self.results for obs_action in preplan_observations for task in obs_action.obs_opp.tasks)), \
+                "All tasks in preplan observations must be known in results."
             
-            if any((isinstance(parent_task, EventObservationTask) for obs in preplan_observations for parent_task in obs.obs_opp.tasks)):
+            if any((isinstance(task, EventObservationTask) for obs_action in preplan_observations for task in obs_action.obs_opp.tasks)):
                 raise NotImplementedError("Updating preplan bids with urgent tasks not yet implemented.")
 
-            # get series of observation number and time for each parent task in preplan
+            # get series of observation number and time for each task in preplan
             n_obs, _ = self._count_observations_and_revisit_times_from_path(preplan_observations)
 
             # calculate observation values for each preplanned observation
-            obs_values = [{parent_task : obs.obs_opp.get_priority() # TODO implement preplan observation value calculation
-                           for parent_task in obs.obs_opp.tasks}
-                          for _, obs in enumerate(preplan_observations)]
+            obs_values = [{task : obs_action.obs_opp.get_priority() # TODO implement preplan observation value calculation
+                           for task in obs_action.obs_opp.tasks}
+                          for _, obs_action in enumerate(preplan_observations)]
 
             # create bundle from list of bids from new preplan observations
-            preplan_bundle_bids = [(obs.obs_opp, [Bid(parent_task, state.agent_name, 
-                                                   n_obs[obs_idx][parent_task], 
-                                                   obs_values[obs_idx][parent_task],
-                                                   obs_values[obs_idx][parent_task],
+            preplan_bundle_bids = [(obs_action.obs_opp, [Bid(task, state.agent_name, 
+                                                   n_obs[obs_idx][task], 
+                                                   obs_values[obs_idx][task],
+                                                   obs_values[obs_idx][task],
                                                    state.agent_name, 
-                                                   obs.t_start, 
+                                                   obs_action.t_start, 
                                                    current_plan.t, 
                                                    {state.agent_name: current_plan.t}, 
-                                                   obs.instrument_name)
-                                  for parent_task in obs.obs_opp.tasks] )
-                                  for obs_idx,obs in enumerate(preplan_observations)]
+                                                   obs_action.instrument_name)
+                                  for task in obs_action.obs_opp.tasks] )
+                                  for obs_idx,obs_action in enumerate(preplan_observations)]
             
-            preplanned_bundle = [ (specific_task, {bid.task: bid.n_obs for bid in bids}) 
-                                 for specific_task, bids in preplan_bundle_bids]
+            preplanned_bundle = [ (obs_opp, {bid.task: bid.n_obs for bid in bids}) 
+                                 for obs_opp, bids in preplan_bundle_bids]
 
             # update results with new preplan bids
             for _, bids in preplan_bundle_bids:
@@ -380,14 +380,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
         performed_task_bids = []
 
         # collect actions in bundle past their imaging time
-        performed_tasks : list[ObservationOpportunity] = [obs.obs_opp for obs in performed_observations]
+        observed_opportunities : list[ObservationOpportunity] = [obs_action.obs_opp for obs_action in performed_observations]
 
-        performed_bundle_tasks = [ (specific_task, obs_tasks) 
-                                    for specific_task, obs_tasks in self.bundle
-                                    if specific_task in performed_tasks]
+        performed_bundle_tasks = [ (obs_opp, obs_tasks) 
+                                    for obs_opp, obs_tasks in self.bundle
+                                    if obs_opp in observed_opportunities]
 
         # iterate through performed bundle to mark bids as performed
-        for specific_task, obs_tasks in performed_bundle_tasks:     
+        for obs_opp, obs_tasks in performed_bundle_tasks:     
                        
             # imaging time has passed for task bids; assume tasks were performed by parent agent
             assert any([self.results[task][n_obs].winning_bidder == state.agent_name for task,n_obs in obs_tasks.items()]), \
@@ -411,7 +411,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             bundle_updates.append(performed_bids)
 
             # add tasks to list of performed tasks
-            performed_task_bids.append((specific_task, obs_tasks))
+            performed_task_bids.append((obs_opp, obs_tasks))
                
         # create revised bundle considering newly performed tasks
         revised_bundle = [entry for entry in self.bundle 
@@ -866,52 +866,53 @@ class ConsensusPlanner(AbstractReactivePlanner):
         t_prev = [defaultdict(lambda: np.NINF) for _ in path]
 
         # get all parent tasks in the given path
-        parent_tasks = {parent_task for action in path 
-                        for parent_task in action.obs_opp.tasks}
+        path_tasks : set[GenericObservationTask]= {task 
+                                                   for obs_action in path 
+                                                   for task in obs_action.obs_opp.tasks}
         
         # ---HISTORICAL DATA FROM BID RESULTS---
         # initiate observation history for all parent tasks in path
         #  only considers performed bids as historical data
-        n_obs_history = {parent_task: 0 for parent_task in parent_tasks}
-        t_prev_history = {parent_task: np.NINF for parent_task in parent_tasks}
+        n_obs_history = {task: 0 for task in path_tasks}
+        t_prev_history = {task: np.NINF for task in path_tasks}
 
         # iterate through previous bids to populate initial observation numbers and previous observation times
-        for parent_task in parent_tasks:
+        for task in path_tasks:
             # assume parent task is part of results
-            assert parent_task in self.results, \
+            assert task in self.results, \
                 "Parent task in path must be part of results to count observation numbers and revisit times."
 
             # get previous matching observations for this task
-            peformed_bids = [bid for bid in self.results[parent_task]
+            peformed_bids = [bid for bid in self.results[task]
                                 if bid.was_performed()]
             
             assert all(bid.n_obs == idx for idx, bid in enumerate(peformed_bids)), \
                 "Results bids are not sorted by observation number."
             
             # update previous observation counts
-            n_obs_history[parent_task] += len(peformed_bids)
+            n_obs_history[task] += len(peformed_bids)
 
             # calculate latest observation time from previous bids
             t_latest = max((bid.t_img for bid in peformed_bids), default=np.NINF)
             
             # update previous observation times
-            t_prev_history[parent_task] = max(t_prev_history[parent_task], t_latest)
+            t_prev_history[task] = max(t_prev_history[task], t_latest)
 
         # ---PATH DATA---
         # initiate observation counter for all parent tasks in path
-        n_obs_in_path = {parent_task: 0 for parent_task in parent_tasks}
-        t_prev_in_path = {parent_task: np.NINF for parent_task in parent_tasks}
+        n_obs_in_path = {task: 0 for task in path_tasks}
+        t_prev_in_path = {task: np.NINF for task in path_tasks}
 
         # initiate previous observations and times along path
         for obs_idx, obs in enumerate(path):           
-            for parent_task in obs.obs_opp.tasks:
+            for task in obs.obs_opp.tasks:
                 # update overall observation number and revisit times along path using historical and path data
-                n_obs[obs_idx][parent_task] = n_obs_history[parent_task] + n_obs_in_path[parent_task]
-                t_prev[obs_idx][parent_task] = max(t_prev_history[parent_task], t_prev_in_path[parent_task])               
+                n_obs[obs_idx][task] = n_obs_history[task] + n_obs_in_path[task]
+                t_prev[obs_idx][task] = max(t_prev_history[task], t_prev_in_path[task])               
 
                 # update previous path observation counts 
-                n_obs_in_path[parent_task] += 1
-                t_prev_in_path[parent_task] = max(t_prev_in_path[parent_task], obs.t_end)
+                n_obs_in_path[task] += 1
+                t_prev_in_path[task] = max(t_prev_in_path[task], obs.t_end)
 
         # return observation numbers and previous observation times
         return n_obs, t_prev
@@ -930,9 +931,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # ---HISTORICAL DATA FROM BID RESULTS---
         # iterate through path to populate observation numbers and previous observation times
         for obs_idx, obs in enumerate(path):
-            for parent_task in obs.obs_opp.tasks:
+            for task in obs.obs_opp.tasks:
                 # get matching bid for this observation task
-                matching_bids = [bid for bid in self.results[parent_task]
+                matching_bids = [bid for bid in self.results[task]
                                 if abs(bid.t_img - obs.t_start) <= self.EPS]
                 
                 assert matching_bids, \
@@ -943,19 +944,19 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 matching_bid : Bid = matching_bids.pop()
 
                 # get previous matching observations for this task
-                prev_bids = [bid for bid in self.results[parent_task]
+                prev_bids = [bid for bid in self.results[task]
                             if bid.t_img < obs.t_start]
                 
                 # update previous observation counts
-                n_obs[obs_idx][parent_task] = matching_bid.n_obs
-                t_prev[obs_idx][parent_task] = max((bid.t_img for bid in prev_bids), default=np.NINF)
+                n_obs[obs_idx][task] = matching_bid.n_obs
+                t_prev[obs_idx][task] = max((bid.t_img for bid in prev_bids), default=np.NINF)
 
         # ensure every parent task in path has values for `n_obs` and `t_prev`
         assert all(
-            all(parent_task in n_obs[obs_idx] and parent_task in t_prev[obs_idx]
-                for parent_task in obs.obs_opp.tasks)
-                for obs_idx,obs in enumerate(path)), \
-            "Not all parent tasks in path have observation number values."
+            all(task in n_obs[obs_idx] and task in t_prev[obs_idx]
+                for task in obs_action.obs_opp.tasks)
+                for obs_idx,obs_action in enumerate(path)), \
+            "Not all observation opportunity tasks in path have an assigned observation number values."
         
         # return observation numbers and previous observation times
         return n_obs, t_prev
