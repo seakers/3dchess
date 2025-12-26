@@ -12,7 +12,7 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import *
 
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
-from chess3d.agents.planning.tasks import SpecificObservationTask
+from chess3d.agents.planning.tasks import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
@@ -77,7 +77,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
         # sort tasks by start time
-        schedulable_tasks : list[SpecificObservationTask] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -t.get_priority(), -len(t.parent_tasks)))
+        schedulable_tasks : list[ObservationOpportunity] = sorted(schedulable_tasks, key=lambda t: (t.accessibility.left, -t.get_priority(), -len(t.tasks)))
 
         # call appropriate model to generate observation schedule
         if self.model in [self.EARLIEST, self.DISCRETE]:
@@ -116,7 +116,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
 
     def __discrete_model(self, 
                          state : SatelliteAgentState, 
-                         schedulable_tasks : List[SpecificObservationTask], 
+                         schedulable_tasks : List[ObservationOpportunity], 
                          orbitdata : OrbitData,
                          mission : Mission, 
                          observation_history : ObservationHistory,
@@ -130,7 +130,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
 
         # add dummy task to represent initial state
         instrument_names = list(payload.keys())
-        dummy_task = SpecificObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), 0.0, Interval(state.attitude[0],state.attitude[0]))
+        dummy_task = ObservationOpportunity(set([]), instrument_names[0], Interval(state.t,state.t), 0.0, Interval(state.attitude[0],state.attitude[0]))
         schedulable_tasks.insert(0,dummy_task)
 
         
@@ -217,7 +217,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
     
     def __dag_dp_pull(self, 
                       state : SimulationAgentState, 
-                      schedulable_tasks : List[SpecificObservationTask], 
+                      schedulable_tasks : List[ObservationOpportunity], 
                       preds_map : Dict[tuple, list], 
                       rewards : Dict[tuple, float], 
                       src : tuple
@@ -248,7 +248,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
             if v == src: continue
 
             # get task for v
-            tv : SpecificObservationTask = schedulable_tasks[v[1][0]]
+            tv : ObservationOpportunity = schedulable_tasks[v[1][0]]
 
             # initialize values for best predecessor search
             best_val = np.NINF
@@ -301,7 +301,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
 
     def __continuous_model(self, 
                            state : SatelliteAgentState, 
-                           schedulable_tasks : List[SpecificObservationTask], 
+                           schedulable_tasks : List[ObservationOpportunity], 
                            orbitdata : OrbitData,
                            mission : Mission, 
                            observation_history : ObservationHistory,
@@ -314,7 +314,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
         """ schedules observations using a continuous-time dynamic programming approach """
         # add dummy task to represent initial state
         instrument_names = list(payload.keys())
-        dummy_task = SpecificObservationTask(set([]), instrument_names[0], Interval(state.t,state.t), 0.0, Interval(state.attitude[0],state.attitude[0]))
+        dummy_task = ObservationOpportunity(set([]), instrument_names[0], Interval(state.t,state.t), 0.0, Interval(state.attitude[0],state.attitude[0]))
         schedulable_tasks.insert(0,dummy_task)
         
         # initiate results arrays
@@ -454,7 +454,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
     
     def __generate_discret_time_pairs(self, 
                                       state: SatelliteAgentState, 
-                                      schedulable_tasks: List[SpecificObservationTask],
+                                      schedulable_tasks: List[ObservationOpportunity],
                                       orbitdata: OrbitData
                                     ) -> List[tuple]:
         # initialize time discretization pairs
@@ -483,7 +483,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
 
     def __create_adjacency_dict(self, 
                                 state : SatelliteAgentState, 
-                                schedulable_tasks : List[SpecificObservationTask],
+                                schedulable_tasks : List[ObservationOpportunity],
                                 task_pairs : List[tuple],
                                 d_imgs : List[float],
                                 slew_times : List[float],
@@ -505,7 +505,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
 
                 # unpack task-time pair j
                 idx_j,t_img_j = pair_j
-                task_j : SpecificObservationTask = schedulable_tasks[idx_j]
+                task_j : ObservationOpportunity = schedulable_tasks[idx_j]
 
                 # find pairs that can preceed j
                 idx_prev = max(0, j-1)

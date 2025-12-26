@@ -70,12 +70,12 @@ class SingleSatMILP(AbstractPeriodicPlanner):
         if not schedulable_tasks: return []
         
         # Set type for `schedulable_tasks` and sort in ascending start time access
-        schedulable_tasks : list[SpecificObservationTask] = sorted(schedulable_tasks, key=lambda x: x.accessibility.left)
+        schedulable_tasks : list[ObservationOpportunity] = sorted(schedulable_tasks, key=lambda x: x.accessibility.left)
         
         # validate Inputs
-        assert all(isinstance(task, SpecificObservationTask) for task in schedulable_tasks), "All tasks must be of type `SpecificObservationTask`."
+        assert all(isinstance(task, ObservationOpportunity) for task in schedulable_tasks), "All tasks must be of type `SpecificObservationTask`."
         assert all(task.min_duration > 0 for task in schedulable_tasks), "All tasks must have positive duration requirements."
-        t_max = max((task.accessibility.right for task in schedulable_tasks if isinstance(task, SpecificObservationTask)))
+        t_max = max((task.accessibility.right for task in schedulable_tasks if isinstance(task, ObservationOpportunity)))
         assert t_max <= state.t + self.horizon, f"Tasks exceed the planning horizon of {self.horizon} seconds."
 
         if not isinstance(state, SatelliteAgentState):
@@ -165,8 +165,8 @@ class SingleSatMILP(AbstractPeriodicPlanner):
                     raise ValueError(f'Model `{self.model}` not recognized. Valid models are: {self.VALID_MODELS}')
 
                 # Extract observation sequence
-                d = [task.min_duration for task in reduced_tasks if isinstance(task, SpecificObservationTask)]
-                th_imgs = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in reduced_tasks if isinstance(task, SpecificObservationTask)]
+                d = [task.min_duration for task in reduced_tasks if isinstance(task, ObservationOpportunity)]
+                th_imgs = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in reduced_tasks if isinstance(task, ObservationOpportunity)]
 
                 # Append to list of observations
                 observations.extend(self.__extract_observation_sequence(reduced_tasks, curr_state, x, tau, d, th_imgs))
@@ -214,8 +214,8 @@ class SingleSatMILP(AbstractPeriodicPlanner):
                 t_2 = time.perf_counter() - t_ref
 
                 # Extract observation sequence
-                d = [task.min_duration for task in reduced_tasks if isinstance(task, SpecificObservationTask)]
-                th_imgs = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in reduced_tasks if isinstance(task, SpecificObservationTask)]
+                d = [task.min_duration for task in reduced_tasks if isinstance(task, ObservationOpportunity)]
+                th_imgs = [np.average((task.slew_angles.left, task.slew_angles.right)) for task in reduced_tasks if isinstance(task, ObservationOpportunity)]
 
                 # Append to list of observations
                 # observations.extend(self.__extract_observation_sequence(reduced_tasks, curr_state, x_1, tau_1, d, th_imgs))
@@ -251,12 +251,12 @@ class SingleSatMILP(AbstractPeriodicPlanner):
         if not schedulable_tasks: return None, [], [], [], np.NAN
 
         # Add dummy task to represent initial state
-        dummy_task = SpecificObservationTask(set([]),
+        dummy_task = ObservationOpportunity(set([]),
                                              schedulable_tasks[0].instrument_name,
                                              Interval(state.t,state.t), 
                                              0.0, 
                                              Interval(state.attitude[0],state.attitude[0]))
-        tasks : list[SpecificObservationTask] = [dummy_task]
+        tasks : list[ObservationOpportunity] = [dummy_task]
         tasks.extend(schedulable_tasks)
 
         # Create a new model
@@ -277,10 +277,10 @@ class SingleSatMILP(AbstractPeriodicPlanner):
                                                      mission, 
                                                      observation_history)
                             for task in tqdm(tasks,leave=False,desc='SATELLITE: Calculating task rewards')
-                            if isinstance(task,SpecificObservationTask)])
-        t_start   = np.array([task.accessibility.left-state.t for task in tasks if isinstance(task, SpecificObservationTask)])
-        d         = np.array([task.min_duration for task in tasks if isinstance(task, SpecificObservationTask)])
-        th_imgs   = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in tasks if isinstance(task, SpecificObservationTask)])
+                            if isinstance(task,ObservationOpportunity)])
+        t_start   = np.array([task.accessibility.left-state.t for task in tasks if isinstance(task, ObservationOpportunity)])
+        d         = np.array([task.min_duration for task in tasks if isinstance(task, ObservationOpportunity)])
+        th_imgs   = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in tasks if isinstance(task, ObservationOpportunity)])
         slew_time = np.array([[abs(th_imgs[j_p]-th_imgs[j]) / max_slew_rate 
                                for j in task_indices]
                                for j_p in task_indices
@@ -355,12 +355,12 @@ class SingleSatMILP(AbstractPeriodicPlanner):
         if not schedulable_tasks: return None, [], [], [], np.NAN
 
         # Add dummy task to represent initial state
-        dummy_task = SpecificObservationTask(set([]),
+        dummy_task = ObservationOpportunity(set([]),
                                              schedulable_tasks[0].instrument_name,
                                              Interval(state.t,state.t), 
                                              0.0, 
                                              Interval(state.attitude[0],state.attitude[0]))
-        tasks : list[SpecificObservationTask] = [dummy_task]
+        tasks : list[ObservationOpportunity] = [dummy_task]
         tasks.extend(schedulable_tasks)
 
         # Create a new model
@@ -381,11 +381,11 @@ class SingleSatMILP(AbstractPeriodicPlanner):
                                                      mission, 
                                                      observation_history)
                             for task in tqdm(tasks,leave=False,desc='SATELLITE: Calculating task rewards')
-                            if isinstance(task,SpecificObservationTask)])
-        t_start   = np.array([task.accessibility.left-state.t for task in tasks if isinstance(task, SpecificObservationTask)])
-        t_end     = np.array([task.accessibility.right-state.t for task in tasks if isinstance(task, SpecificObservationTask)])
-        d         = np.array([task.min_duration for task in tasks if isinstance(task, SpecificObservationTask)])
-        th_imgs   = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in tasks if isinstance(task, SpecificObservationTask)])
+                            if isinstance(task,ObservationOpportunity)])
+        t_start   = np.array([task.accessibility.left-state.t for task in tasks if isinstance(task, ObservationOpportunity)])
+        t_end     = np.array([task.accessibility.right-state.t for task in tasks if isinstance(task, ObservationOpportunity)])
+        d         = np.array([task.min_duration for task in tasks if isinstance(task, ObservationOpportunity)])
+        th_imgs   = np.array([np.average((task.slew_angles.left, task.slew_angles.right)) for task in tasks if isinstance(task, ObservationOpportunity)])
         slew_time = np.array([[abs(th_imgs[j_p]-th_imgs[j]) / max_slew_rate 
                                for j in task_indices]
                                for j_p in task_indices

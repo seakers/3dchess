@@ -14,7 +14,7 @@ import pandas as pd
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.messages import  AgentStateMessage, PlanMessage
@@ -232,7 +232,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
               self._calculate_client_target_access_opportunities(planning_horizons)
 
         # create schedulable tasks from known tasks and future access opportunities
-        schedulable_client_tasks : Dict[str, list[SpecificObservationTask]] = \
+        schedulable_client_tasks : Dict[str, list[ObservationOpportunity]] = \
               self._create_schedulable_client_tasks(available_client_tasks, target_access_opportunities)
 
         # schedule observations for each client
@@ -243,7 +243,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
         for client,observations in client_observations.items():
             assert all(isinstance(obs, ObservationAction) for obs in observations), \
                 f'All scheduled observations for client {client} must be instances of `ObservationAction`.'
-            assert all(obs.task.parent_tasks for obs in observations), \
+            assert all(obs.task.tasks for obs in observations), \
                 f'All scheduled observations for client {client} must have a parent task.'
             assert self.is_observation_path_valid(self.client_states[client], observations, None, None, self.client_specs[client]), \
                 f'Generated observation path/sequence is not valid. Overlaps or mutually exclusive tasks detected.'
@@ -423,7 +423,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
     def _schedule_client_observations(self, 
                                       state : SimulationAgentState, 
                                       available_client_tasks : Dict[Mission, List[GenericObservationTask]],
-                                      schedulable_client_tasks: Dict[str, List[SpecificObservationTask]], 
+                                      schedulable_client_tasks: Dict[str, List[ObservationOpportunity]], 
                                       observation_history : ObservationHistory
                                     ) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """        

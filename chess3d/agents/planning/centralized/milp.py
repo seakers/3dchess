@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from chess3d.agents.actions import ObservationAction
 from chess3d.agents.planning.centralized.dealer import DealerPlanner
-from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tasks import GenericObservationTask, ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
 from chess3d.mission.mission import Mission
@@ -75,7 +75,7 @@ class DealerMILPPlanner(DealerPlanner):
     def _schedule_client_observations(self, 
                                       state : SimulationAgentState,
                                       available_client_tasks : Dict[Mission, List[GenericObservationTask]],
-                                      schedulable_client_tasks: Dict[str, List[SpecificObservationTask]], 
+                                      schedulable_client_tasks: Dict[str, List[ObservationOpportunity]], 
                                       observation_history : ObservationHistory
                                     ) -> Dict[str, List[ObservationAction]]:
         """ schedules observations for all clients """
@@ -109,7 +109,7 @@ class DealerMILPPlanner(DealerPlanner):
         K : list[list[int]] = [len([task 
                                         for client_tasks in schedulable_client_tasks.values() 
                                         for task in client_tasks 
-                                        if ptask in task.parent_tasks 
+                                        if ptask in task.tasks 
                                     ])
                                 for ptask in parent_tasks]
 
@@ -134,27 +134,27 @@ class DealerMILPPlanner(DealerPlanner):
         
         # Initialize constants
         t_start   = [[task.accessibility.left-state.t 
-                              for task in schedulable_client_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for task in schedulable_client_tasks[client]  if isinstance(task, ObservationOpportunity)]
                               for client in indexed_clients]
         t_end     = [[task.accessibility.right-state.t 
-                              for task in schedulable_client_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for task in schedulable_client_tasks[client]  if isinstance(task, ObservationOpportunity)]
                               for client in indexed_clients]
         d         = [[task.min_duration 
-                              for task in schedulable_client_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for task in schedulable_client_tasks[client]  if isinstance(task, ObservationOpportunity)]
                               for client in indexed_clients]
         th_imgs   = [[np.average((task.slew_angles.left, task.slew_angles.right)) 
-                              for task in schedulable_client_tasks[client]  if isinstance(task, SpecificObservationTask)]
+                              for task in schedulable_client_tasks[client]  if isinstance(task, ObservationOpportunity)]
                               for client in indexed_clients]
         slew_times= [[[abs(th_imgs[client_index][j_p]-th_imgs[client_index][j]) / max_client_slew_rates[client]
-                                for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)]
-                                for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, SpecificObservationTask)]
+                                for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, ObservationOpportunity)]
+                                for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, ObservationOpportunity)]
                                 for client_index, client in enumerate(indexed_clients)]
         
         # Map sparse arch matrix of feasible task sequences
         A : list = [(s,j,j_p)
                         for s,client in enumerate(indexed_clients)
-                        for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, SpecificObservationTask)
-                        for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)
+                        for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, ObservationOpportunity)
+                        for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, ObservationOpportunity)
                         if t_start[s][j] + d[s][j] + slew_times[s][j][j_p]
                             <= t_end[s][j_p] - d[s][j_p]    # sequence j->j' is feasible
                             and j != j_p                  # ensure distinct tasks
@@ -163,8 +163,8 @@ class DealerMILPPlanner(DealerPlanner):
         # Map task mutual exclusivity constraints
         E : list = [(s,j,j_p)
                     for s,client in enumerate(indexed_clients)
-                    for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, SpecificObservationTask)
-                    for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, SpecificObservationTask)
+                    for j,task_j in enumerate(schedulable_client_tasks[client]) if isinstance(task_j, ObservationOpportunity)
+                    for j_p,task_j_p in enumerate(schedulable_client_tasks[client]) if isinstance(task_j_p, ObservationOpportunity)
                     if (task_j.is_mutually_exclusive(task_j_p) 
                         or (t_start[s][j] + d[s][j] + slew_times[s][j][j_p] > t_end[s][j_p] - d[s][j_p]    # sequence j->j' is not feasible
                             and t_start[s][j_p] + d[s][j_p] + slew_times[s][j_p][j] > t_end[s][j] - d[s][j] # sequence j'->j is not feasible
@@ -192,7 +192,7 @@ class DealerMILPPlanner(DealerPlanner):
 
         return observations    
 
-    def __generate_dummy_task(self, client : str) -> SpecificObservationTask:
+    def __generate_dummy_task(self, client : str) -> ObservationOpportunity:
         """ 
         Generates a dummy task to represent the initial state a given client. 
         Uses previously estimated or measured state of the desired client as the initial state.        
@@ -201,7 +201,7 @@ class DealerMILPPlanner(DealerPlanner):
         instrument : str = self.client_specs[client].instrument[0].name  # choose the first instrument by default
 
         # generate and return dummy task
-        return SpecificObservationTask(set(),                                                   # empty set of parent tasks
+        return ObservationOpportunity(set(),                                                   # empty set of parent tasks
                                             instrument,                                         # some default instrument
                                             Interval(self.client_states[client].t,
                                                      self.client_states[client].t),             # accessibility set to current time only
@@ -392,7 +392,7 @@ class DealerMILPPlanner(DealerPlanner):
                                                       self.client_missions[client], 
                                                      observation_history)
                             for task in tqdm(schedulable_tasks[client],leave=False,desc=f'{state.agent_name}/PREPLANNER: Calculating task rewards for client agent `{client}`')
-                            if isinstance(task,SpecificObservationTask)]
+                            if isinstance(task,ObservationOpportunity)]
                             for client in indexed_clients]
 
     def __linear_milp_planner(self,
@@ -517,7 +517,7 @@ class DealerMILPPlanner(DealerPlanner):
                                                       self.client_missions[client], 
                                                      observation_history)]
                             for task in tqdm(schedulable_tasks[client],leave=False,desc=f'{state.agent_name}/PREPLANNER: Calculating task rewards for client agent `{client}`')
-                            if isinstance(task,SpecificObservationTask)]
+                            if isinstance(task,ObservationOpportunity)]
                             for client in indexed_clients]
     
     def __reobs_milp_planner(self,

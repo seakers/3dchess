@@ -12,7 +12,7 @@ from dmas.agents import AgentAction
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
-from chess3d.agents.planning.tasks import GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tasks import GenericObservationTask, ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
@@ -127,7 +127,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 
         # create schedulable tasks from known tasks and future access opportunities
-        schedulable_tasks : list[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
+        schedulable_tasks : list[ObservationOpportunity] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
         # schedule observation tasks
         observations : list = self._schedule_observations(state, specs, clock_config, orbitdata, schedulable_tasks, mission, observation_history)

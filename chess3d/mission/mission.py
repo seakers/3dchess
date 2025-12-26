@@ -18,26 +18,26 @@ class Mission:
         self.objectives : list[MissionObjective] = [obj for obj in objectives]
         self.normalizing_parameter : float = normalizing_parameter if normalizing_parameter is not None else 1e-6
 
-    def calc_task_utility(self, task : SpecificObservationTask, measurement: dict, prev_state : SimulationAgentState) -> float:
+    def calc_task_utility(self, task : ObservationOpportunity, measurement: dict, prev_state : SimulationAgentState) -> float:
         """Calculate the utility of a task based on the mission's objectives and the measurement."""
         
         # Validate inputs
-        assert isinstance(task, SpecificObservationTask), "Task must be an instance of `SpecificObservationTask`"
+        assert isinstance(task, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
         assert isinstance(prev_state, SimulationAgentState), "Previous state must be an instance of `SimulationAgentState`"
 
         # Calculate utility = specific_task_value - norm * task_cost
         return self.calc_specific_task_value(task, measurement) - self.normalizing_parameter * self.calc_task_cost(task, prev_state)
 
-    def calc_specific_task_value(self, task: SpecificObservationTask, measurement: dict) -> float:
+    def calc_specific_task_value(self, task: ObservationOpportunity, measurement: dict) -> float:
         """Calculate the utility of a specific observation task based on the mission's objectives and the measurement."""
 
         # Validate inputs
-        assert isinstance(task, SpecificObservationTask), "Task must be an instance of `SpecificObservationTask`"
+        assert isinstance(task, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
         assert isinstance(measurement, dict), "Measurement must be a dictionary"        
 
         # Calculate the value of a specific task by summing the value of parent tasks
-        return sum([self.calc_task_value(gen_task, measurement) for gen_task in task.parent_tasks])
+        return sum([self.calc_task_value(gen_task, measurement) for gen_task in task.tasks])
 
     def calc_task_value(self, task: GenericObservationTask, measurement : dict) -> float:
         """Calculate the value of a task based on the mission's objectives."""
@@ -82,11 +82,11 @@ class Mission:
 
         return obj_relevances
 
-    def calc_task_cost(self, task: SpecificObservationTask, prev_state: SimulationAgentState) -> float:
+    def calc_task_cost(self, task: ObservationOpportunity, prev_state: SimulationAgentState) -> float:
         """Calculate the cost of a task based on the previous state."""
         
         # Validate Inputs
-        assert isinstance(task, SpecificObservationTask), "Task must be an instance of `SpecificObservationTask`"
+        assert isinstance(task, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
         assert isinstance(prev_state, SimulationAgentState), "Previous state must be an instance of `SimulationAgentState`"
 
         if not isinstance(prev_state, SatelliteAgentState):

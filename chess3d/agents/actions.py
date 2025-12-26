@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Union
 
 import numpy as np
-from chess3d.agents.planning.tasks import SpecificObservationTask
+from chess3d.agents.planning.tasks import ObservationOpportunity
 from chess3d.mission.objectives import MissionObjective
 from chess3d.utils import CoordinateTypes
 from dmas.agents import AgentAction
@@ -261,7 +261,7 @@ class ObservationAction(AgentAction):
                     look_angle : float, 
                     t_start: Union[float, int], 
                     duration: Union[float, int] = 0.0, 
-                    task : SpecificObservationTask = None,
+                    task : ObservationOpportunity = None,
                     status: str = 'PENDING', 
                     id: str = None, 
                     **_) -> None:
@@ -278,17 +278,17 @@ class ObservationAction(AgentAction):
         super().__init__(ActionTypes.OBSERVE.value, t_start, t_start + duration, status, id)
         
         # Concert task from dict if needed
-        task = SpecificObservationTask.from_dict(task) if isinstance(task, dict) else task
+        task = ObservationOpportunity.from_dict(task) if isinstance(task, dict) else task
         
         # check parameters
         assert isinstance(instrument_name,str), f'`instrument_name` must be of type `str`. Is of type `{type(instrument_name)}`.'
         assert isinstance(look_angle,(int,float)), f'`look_angle` must be a numerical value of type `float` or `int`. Is of type `{type(look_angle)}`'
-        assert isinstance(task,SpecificObservationTask) or task is None, f'`task` must be of type `SpecificObservationTask` or None. Is of type `{type(task)}`.'
+        assert isinstance(task,ObservationOpportunity) or task is None, f'`task` must be of type `SpecificObservationTask` or None. Is of type `{type(task)}`.'
 
         # set parameters
         self.instrument_name = instrument_name
         self.look_angle = look_angle
-        self.task : SpecificObservationTask = task
+        self.task : ObservationOpportunity = task
 
     def to_dict(self):
         out = super().to_dict()

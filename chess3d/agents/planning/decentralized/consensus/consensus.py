@@ -12,7 +12,7 @@ from dmas.clocks import ClockConfig
 
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask, ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
 from chess3d.agents.planning.decentralized.consensus.bids import Bid
@@ -58,7 +58,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         assert optimistic_bidding_threshold >= 0, "Optimistic bidding threshold must be non-negative"
 
         # initialize consensus results
-        self.bundle : List[Tuple[SpecificObservationTask, Dict[GenericObservationTask, int]]] = list()
+        self.bundle : List[Tuple[ObservationOpportunity, Dict[GenericObservationTask, int]]] = list()
         self.path : List[ObservationAction] = list()
         self.results : Dict[GenericObservationTask, List[Bid]] = defaultdict(list)
         self.optimistic_bidding_counters : Dict[GenericObservationTask, List[int]] = defaultdict(list)
@@ -223,10 +223,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
                   [action for action in current_plan if isinstance(action, ObservationAction)]
 
             # ensure all parent tasks in preplan observations are known in results
-            assert all((parent_task in self.results for obs in preplan_observations for parent_task in obs.task.parent_tasks)), \
+            assert all((parent_task in self.results for obs in preplan_observations for parent_task in obs.task.tasks)), \
                 "All parent tasks in preplan observations must be known in results."
             
-            if any((isinstance(parent_task, EventObservationTask) for obs in preplan_observations for parent_task in obs.task.parent_tasks)):
+            if any((isinstance(parent_task, EventObservationTask) for obs in preplan_observations for parent_task in obs.task.tasks)):
                 raise NotImplementedError("Updating preplan bids with urgent tasks not yet implemented.")
 
             # get series of observation number and time for each parent task in preplan
@@ -234,7 +234,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
             # calculate observation values for each preplanned observation
             obs_values = [{parent_task : obs.task.get_priority() # TODO implement preplan observation value calculation
-                           for parent_task in obs.task.parent_tasks}
+                           for parent_task in obs.task.tasks}
                           for _, obs in enumerate(preplan_observations)]
 
             # create bundle from list of bids from new preplan observations
@@ -247,7 +247,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                                    current_plan.t, 
                                                    {state.agent_name: current_plan.t}, 
                                                    obs.instrument_name)
-                                  for parent_task in obs.task.parent_tasks] )
+                                  for parent_task in obs.task.tasks] )
                                   for obs_idx,obs in enumerate(preplan_observations)]
             
             preplanned_bundle = [ (specific_task, {bid.task: bid.n_obs for bid in bids}) 
@@ -379,7 +379,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         performed_task_bids = []
 
         # collect actions in bundle past their imaging time
-        performed_tasks : list[SpecificObservationTask] = [obs.task for obs in performed_observations]
+        performed_tasks : list[ObservationOpportunity] = [obs.task for obs in performed_observations]
 
         performed_bundle_tasks = [ (specific_task, obs_tasks) 
                                     for specific_task, obs_tasks in self.bundle
@@ -647,6 +647,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
             # reset new event task inbox
             self.incoming_event_tasks = list()
 
+            if self._debug:
+                if self.results_changes_performed or self.bundle_changes_performed:
+                    x = 1 # debug breakpoint 
+
     """
     ---------------------------
     BUNDLE-BUILDING PHASE
@@ -663,11 +667,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
                       observation_history : ObservationHistory,
                     ) -> Plan:  
         """ Generate new plan according to consensus replanning model. """             
-        # DEBUG do not modify plan
-        # return current_plan.copy()
 
+        # DEBUG RETURN------------------- 
+        # do not modify plan
+        # return current_plan.copy()
         # -------------------------------
-        # DEBUG PRINTOUTS
+
+        # DEBUG PRINTOUTS----------------
         if self._debug:
             self._log_results('RESULTS (BEFORE PLANNING PHASE)', state, self.results)
             self._log_bundle('BUNDLE (BEFORE PLANNING PHASE)', state, self.bundle)
@@ -680,7 +686,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         assert self.path is not None and len(self.path) > 0, "New observation path cannot be empty."
         assert self.is_observation_path_valid(state, self.path, None, None, specs), "New observation path is not valid."   
 
-        # TODO update results
+        # update results
         self.__update_results_from_bundle(new_bids)
 
         # -------------------------------
@@ -700,7 +706,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         self.plan = ReactivePlan(maneuvers, self.path, broadcasts, t=state.t, t_next=self.preplan.t_next)
 
         # clear new urgent tasks
-        self.incoming_event_tasks = set()
+        self.incoming_event_tasks = list()
 
         # return final plan
         return self.plan.copy()
@@ -725,49 +731,66 @@ class ConsensusPlanner(AbstractReactivePlanner):
         
         """
     
-    def __update_results_from_bundle(self, new_bundle : List[List[Bid]]) -> None:
+    def __update_results_from_bundle(self, 
+                                     new_bids : Dict[GenericObservationTask, Dict[int, Bid]]
+                                    #  ) -> Dict[GenericObservationTask, List[Bid]]
+                                    ) -> None:
         """ Update results dictionary from new bundle. """
         
-        # # check if this agent was the one who bid on the invalid bid
-        # if self.results[task][invalid_bid_idx].bidder == state.agent_name:
-        #     # decrement optimistic bidding counter for this bid (floor at 0)
-        #     self.optimistic_bidding_counters[task][invalid_bid_idx] = \
-        #         max(0, self.optimistic_bidding_counters[task][invalid_bid_idx] - 1)
-        
-
-        raise NotImplementedError("Updating results from new bundle not yet implemented.")
-        # iterate through bids in new bundle
-        for bids in new_bundle:
-            for bid in bids:
-                # check if bid for this task and observation number already exists
-                if len(self.results[bid.task]) <= bid.n_obs:
-                    # add empty bids up to `n_obs`
-                    for i_obs in range(bid.n_obs - len(self.results[bid.task]) + 1):
-                        n_obs = len(self.results[bid.task]) + i_obs
-                        self.results[bid.task].append(AsynchronousBid(bid.task, bid.bidder, n_obs=n_obs))
+        # update results with new bids
+        for task, bids_dict in new_bids.items():
+            for n_obs, bid in bids_dict.items():
+                # check if bid is for a new observation number
+                if n_obs >= len(self.results[task]):
+                    # assume bids are received in order of observation numbers
+                    assert len(self.results[task]) == n_obs, \
+                          "Generated bids for non-consecutive observation numbers."
+                    
+                    # add an empty bid for each missing observation number
+                    self.results[task].append(bid)
                 
-                # get existing bid
-                existing_bid = self.results[bid.task][bid.n_obs]
-                
-                # check if new bid is better than existing bid
-                assert bid > existing_bid,\
-                      "Generated a bid that is not better than existing bid in results."
+                else:
+                    # get previous bid
+                    previous_bid : Bid = self.results[task][n_obs]
 
-                # update results with new bid
-                self.results[bid.task][bid.n_obs] = bid
+                    # reduce any optimistic bidding counters if needed  
+                    if previous_bid > bid and previous_bid.t_img > bid.t_img:
+                        # bid was worsened; reduce optimistic bidding counter
+                        self.optimistic_bidding_counters[task][n_obs] -= 1
 
-        # ensure that results bids match their observation number
-        assert all(
-                bid.n_obs == obs_idx
-                for task in self.results
-                for obs_idx, bid in enumerate(self.results[task])
-            ), "Results bids are not sorted by observation number."
+                        # ensure bid counters are possitive
+                        assert self.optimistic_bidding_counters[task][n_obs] >= 0, \
+                            "Bundle-builder attempted optimistic bid for task with optimistic bid attempt counter already at zero."
+
+                    # update existing bid
+                    self.results[task][n_obs] = bid
+
+        # ensure all bids meet requirements
+        # 1) previous task must be assigned
+        # 2) observation numbers must be consecutive
+        # 3) imaging times must be after previous imaging time
+        for task, bids in self.results.items():
+            for n_obs_idx, bid in enumerate(bids[1:], start=1):
+                # get previous bid to compare constraints with
+                prev_bid : Bid = bids[n_obs_idx - 1]
+
+                # define constraints
+                constraints : List[bool] = [
+                    # Constraint 0: Previous bid must be assigned to a winner
+                    prev_bid.has_winner(),
+                    # Constraint 1: Observation number must be consecutive
+                    prev_bid.n_obs + 1 == bid.n_obs,
+                    # Constraint 2: Imaging time must be after previous imaging time
+                    prev_bid.t_img <= bid.t_img
+                ]
+                    
+                # check if any constraint is violated
+                assert all(constraints), \
+                    "Generated bids violate constraints; cannot update results."
         
-        # ensure that bids are consecutive in observation numbers
-        assert all(
-            all(bid.n_obs == idx for idx, bid in enumerate(bids))
-            for bids in self.results.values()
-        ), "Bids are not sorted in consecutive n_obs values."
+        # TODO enforce any constraints        
+
+        return        
 
     def _calculate_path_utility(self,
                                 state : SimulationAgentState,
@@ -843,7 +866,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # get all parent tasks in the given path
         parent_tasks = {parent_task for action in path 
-                        for parent_task in action.task.parent_tasks}
+                        for parent_task in action.task.tasks}
         
         # ---HISTORICAL DATA FROM BID RESULTS---
         # initiate observation history for all parent tasks in path
@@ -880,7 +903,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # initiate previous observations and times along path
         for obs_idx, obs in enumerate(path):           
-            for parent_task in obs.task.parent_tasks:
+            for parent_task in obs.task.tasks:
                 # update overall observation number and revisit times along path using historical and path data
                 n_obs[obs_idx][parent_task] = n_obs_history[parent_task] + n_obs_in_path[parent_task]
                 t_prev[obs_idx][parent_task] = max(t_prev_history[parent_task], t_prev_in_path[parent_task])               
@@ -906,7 +929,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # ---HISTORICAL DATA FROM BID RESULTS---
         # iterate through path to populate observation numbers and previous observation times
         for obs_idx, obs in enumerate(path):
-            for parent_task in obs.task.parent_tasks:
+            for parent_task in obs.task.tasks:
                 # get matching bid for this observation task
                 matching_bids = [bid for bid in self.results[parent_task]
                                 if abs(bid.t_img - obs.t_start) <= self.EPS]
@@ -929,7 +952,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # ensure every parent task in path has values for `n_obs` and `t_prev`
         assert all(
             all(parent_task in n_obs[obs_idx] and parent_task in t_prev[obs_idx]
-                for parent_task in obs.task.parent_tasks)
+                for parent_task in obs.task.tasks)
                 for obs_idx,obs in enumerate(path)), \
             "Not all parent tasks in path have observation number values."
         
@@ -981,7 +1004,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             compiled_bid_msgs = [
                 MeasurementBidMessage(state.agent_name, state.agent_name, bid.to_dict())
                 for task,bids in self.results.items()
-                if isinstance(task, EventObservationTask)  # only share bids for event tasks
+                if isinstance(task, EventObservationTask)  # only share bids for event-driven tasks
                 for bid in bids
             ]
             compiled_results_msg = BusMessage(state.agent_name, 
@@ -1037,7 +1060,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
     """
     LOGGING
     """
-    def _log_results(self, dsc : str, state : SimulationAgentState, level=logging.DEBUG, n : int = 50) -> None:
+    def _log_results(self, 
+                     dsc : str, 
+                     state : SimulationAgentState, 
+                     results : Dict[GenericObservationTask, List[Bid]],
+                     level=logging.DEBUG, 
+                     n : int = 50) -> None:
         out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'Task ID\t  n_obs\tins\t\twinner\tbid\tt_img\tt_stamp  performed\n'
         
@@ -1053,7 +1081,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         out += '\n'
 
         i = 1
-        for task, bids in self.results.items():
+        for task, bids in results.items():
             task : GenericObservationTask
 
             if isinstance(task, EventObservationTask):
@@ -1066,7 +1094,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
             if not bids:
                 out += f'{req_id_short} <none>\n'
 
-            for bid in bids:
+            if isinstance(bids, dict):
+                printed_bids = sorted(bids.values(), key=lambda b: b.n_obs)
+            elif isinstance(bids, list):
+                printed_bids = bids
+            else:
+                raise TypeError("Bids in results must be either a list or a dictionary.")   
+
+            for bid in printed_bids:
                 # if i > n: break
 
                 bid : Bid
@@ -1092,7 +1127,11 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         print(out)
 
-    def _log_path(self, dsc : str, state : SimulationAgentState, proposed_path : List[ObservationAction], level=logging.DEBUG) -> None:
+    def _log_path(self, 
+                  dsc : str, 
+                  state : SimulationAgentState, 
+                  observation_path : List[ObservationAction], 
+                  level=logging.DEBUG) -> None:
         out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'i\tt_img\t Task IDs\n'
         
@@ -1107,17 +1146,17 @@ class ConsensusPlanner(AbstractReactivePlanner):
         for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
 
-        if not proposed_path:
+        if not observation_path:
             out += '\t<empty path>\n'
             for _ in range(L_LINE + L_LINE_PADding): out += '-'
             out += '\n'
 
         n = 15
-        for i,obs in enumerate(proposed_path):
-            spec_task : SpecificObservationTask = obs.task
+        for i,obs in enumerate(observation_path):
+            spec_task : ObservationOpportunity = obs.task
             req_id_short = ""
 
-            for task in spec_task.parent_tasks:
+            for task in spec_task.tasks:
                 if isinstance(spec_task, EventObservationTask):
                     req_id_short += spec_task.id.split('-')[-1] + ","
                 else:
@@ -1139,7 +1178,11 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         print(out)
 
-    def _log_bundle(self, dsc : str, state : SimulationAgentState, level=logging.DEBUG) -> None:
+    def _log_bundle(self, 
+                    dsc : str, 
+                    state : SimulationAgentState, 
+                    bundle : List[Tuple[GenericObservationTask, Dict[GenericObservationTask, int]]], 
+                    level=logging.DEBUG) -> None:
         out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'i\t Task IDs\n'
         
@@ -1154,13 +1197,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
         for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
 
-        if not self.bundle:
+        if not bundle:
             out += '\t<empty bundle>\n'
             for _ in range(L_LINE + L_LINE_PADding): out += '-'
             out += '\n'
 
         n = 15
-        for i,(_,tasks) in enumerate(self.bundle):
+        for i,(_,tasks) in enumerate(bundle):
             line = f'{i}\t['
             for task,n_obs in tasks.items():
                 # if i > n: break

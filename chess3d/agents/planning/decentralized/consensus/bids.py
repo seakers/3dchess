@@ -743,8 +743,8 @@ class Bid:
     
     def __repr__(self):
         task_id = self.task.id.split('-')
-        return f'Bid({task_id[0]},n={self.n_obs},a={self.bidder},w={self.winning_bidder},b={round(self.winning_bid,5)},t_img={round(self.t_img,3)})'
-        # return f'Bid({task_id[0]},n={self.n_obs},a={self.bidder},w={self.winning_bidder},b={round(self.winning_bid,5)})'
+        # return f'Bid({task_id[0]},n={self.n_obs},a={self.bidder},w={self.winning_bidder},b={round(self.winning_bid,5)},t_img={round(self.t_img,3)})'
+        return f'Bid({task_id[0]},n={self.n_obs},a={self.bidder},w={self.winning_bidder},b={round(self.winning_bid,5)})'
 
     def __hash__(self) -> int:
         return hash(self.task.id) ^ hash(self.n_obs) ^ hash(self.bidder)

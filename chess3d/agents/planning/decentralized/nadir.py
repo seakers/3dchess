@@ -9,7 +9,7 @@ from orbitpy.util import Spacecraft
 
 from chess3d.agents.states import SimulationAgentState, SatelliteAgentState
 from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
-from chess3d.agents.planning.tasks import SpecificObservationTask
+from chess3d.agents.planning.tasks import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.actions import ObservationAction
 from chess3d.mission.mission import Mission
@@ -60,7 +60,7 @@ class NadirPointingPlanner(EarliestAccessPlanner):
         cross_track_fovs : dict = self._collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        schedulable_tasks : list[SpecificObservationTask] = self._sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
+        schedulable_tasks : list[ObservationOpportunity] = self._sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -73,7 +73,7 @@ class NadirPointingPlanner(EarliestAccessPlanner):
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
         # generate plan
-        plan_sequence : list[tuple[SpecificObservationTask, ObservationAction]] = []
+        plan_sequence : list[tuple[ObservationOpportunity, ObservationAction]] = []
 
         for task in tqdm(schedulable_tasks,
                          desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 

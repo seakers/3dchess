@@ -88,6 +88,30 @@
             }
         },
         {
+            "name": "TEST: Observation Opportunity Definition",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/tasks/opportunities_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            }
+        },
+        {
+            "name": "TEST: Task Request Definition",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/tasks/requests_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            }
+        },
+        {
             "name": "TEST: Heuristic Preplanner",
             "type": "debugpy",
             "request": "launch",

@@ -14,7 +14,7 @@ from dmas.clocks import ClockConfig
 from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.decentralized.consensus.consensus import ConsensusPlanner
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, EventObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask, EventObservationTask, ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
 from chess3d.agents.planning.decentralized.consensus.bids import Bid
@@ -78,7 +78,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 
         # create specific and merged tasks from scheduled tasks and urgent tasks
-        schedulable_tasks : List[SpecificObservationTask] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
+        schedulable_tasks : List[ObservationOpportunity] = self.create_tasks_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
         # extract already planned specific tasks from current plan
         planned_specific_tasks = [obs.task for obs in current_plan if isinstance(obs,ObservationAction)]
@@ -89,23 +89,23 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         
         # -------------------------------
         # DEBUG PRINTOUTS
-        if self._debug:
-            out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n'
-            out += 'TASKS CONSIDERED FOR BUNDLE BUILDING:\n'
-            # header
-            line = 'i\tSpecTaskID\tAccess Start\tParentID(s)\t\n'
-            out += line
-            L_LINE = len(line)
-            L_LINE_PADding = 30
-            # divider 
-            for _ in range(L_LINE + L_LINE_PADding): out += '='
-            out += '\n'
-            # task entries
-            for task_idx,task in enumerate(schedulable_tasks):
-                out += f'{task_idx}\t{task.id.split("-")[0]}\t{np.round(task.accessibility.left,1)}\t\t{[str(p) for p in task.parent_tasks]}\n'
-            out += f'Total Tasks Considered: {len(schedulable_tasks)}\n'
-            # print to console
-            print(out)
+        # if self._debug:
+        #     out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n'
+        #     out += 'TASKS CONSIDERED FOR BUNDLE BUILDING:\n'
+        #     # header
+        #     line = 'i\tSpecTaskID\tAccess Start\tParentID(s)\t\n'
+        #     out += line
+        #     L_LINE = len(line)
+        #     L_LINE_PADding = 30
+        #     # divider 
+        #     for _ in range(L_LINE + L_LINE_PADding): out += '='
+        #     out += '\n'
+        #     # task entries
+        #     for task_idx,task in enumerate(schedulable_tasks):
+        #         out += f'{task_idx}\t{task.id.split("-")[0]}\t{np.round(task.accessibility.left,1)}\t\t{[str(p) for p in task.parent_tasks]}\n'
+        #     out += f'Total Tasks Considered: {len(schedulable_tasks)}\n'
+        #     # print to console
+        #     print(out)
         # -------------------------------
 
         # generate new plan according to selected model
@@ -150,7 +150,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                        specs : object,
                                        cross_track_fovs : dict,
                                        current_plan : Plan,
-                                       schedulable_tasks : List[SpecificObservationTask],
+                                       schedulable_tasks : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
@@ -175,7 +175,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                        specs : object,
                                        cross_track_fovs : dict,
                                        current_plan : Plan,
-                                       schedulable_tasks : List[SpecificObservationTask],
+                                       schedulable_tasks : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
@@ -210,7 +210,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                        specs : object,
                                        cross_track_fovs : dict,
                                        current_plan : Plan,
-                                       schedulable_tasks : List[SpecificObservationTask],
+                                       schedulable_tasks : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
@@ -232,7 +232,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # build bundle using heuristic insertion method
         return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_schedulable_tasks, orbitdata, mission, observation_history)
 
-    def _is_task_mutually_exclusive_with_path(self, task : SpecificObservationTask, path : List[ObservationAction]):
+    def _is_task_mutually_exclusive_with_path(self, task : ObservationOpportunity, path : List[ObservationAction]):
         """ Check if task is mutually exclusive with any observations in the given path. """
         return any([task.is_mutually_exclusive(action.task) for action in path])
 
@@ -241,11 +241,11 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                        specs : object,
                                        cross_track_fovs : dict,
                                        current_plan : Plan,
-                                       sorted_schedulable_tasks : List[SpecificObservationTask],
+                                       sorted_schedulable_tasks : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
-                                    ) -> Tuple[list, list]:
+                                    ) -> Tuple[list, list, dict]:
         """ 
         Build bundle using a given heuristic. Attempts to insert tasks into existing path, right-shift existing tasks to accommodate for new 
          tasks or replaces tasks in the current plan if it leads to a feasible plan that can increase overall plan utility.  Tasks are added 
@@ -259,7 +259,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         """
 
         # initialized bundle from current plan
-        proposed_bundle : List[Tuple[SpecificObservationTask, 
+        proposed_bundle : List[Tuple[ObservationOpportunity, 
                                      Dict[GenericObservationTask, int]]] = \
                 [task_tuple for task_tuple in self.bundle]
         
@@ -269,10 +269,17 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                             key=lambda action: action.t_start)
         
         # extract existing bids from current bundle
-        proposed_bids = defaultdict(dict)
+        proposed_bids : Dict[GenericObservationTask, Dict[int, Bid]] = defaultdict(dict)
         for _,obs in proposed_bundle:
             for task,n_obs in obs.items():
+                # find matchiong existing bid
                 existing_bid = self.results[task][n_obs]
+
+                # ensure this bid is assigned to current agent
+                assert existing_bid.winning_bidder == state.agent_name, \
+                          "Existing bids in bundle do not belong to current agent."
+                
+                # add to proposed bids
                 proposed_bids[task][n_obs] = existing_bid.copy()
 
         # extract observation number assignments for current path
@@ -284,7 +291,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # -------------------------------
         # DEBUG PRINTOUTS
         if self._debug:
-            self._log_results('RESULTS (DURING BUNDLE-BUILDING PHASE)', state, self.results)
+        #     self._log_results('PROPOSED BIDS (DURING BUNDLE-BUILDING PHASE)', state, proposed_bids)
             self._log_path('CURRENT PATH (DURING BUNDLE-BUILDING PHASE)', state, proposed_path)
             # self._log_bundle('BUNDLE (DURING BUNDLE-BUILDING PHASE)', state, proposed_bundle)
             x = 1
@@ -294,24 +301,24 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         for proposed_observation in tqdm(sorted_schedulable_tasks, desc=f'{state.agent_name}-REPLANNER: Building bundle', leave=False):
             # -------------------------------
             # DEBUG PRINTOUTS
-            if self._debug:
-                req_id_short = ""
+            # if self._debug:
+            #     req_id_short = ""
 
-                for task in proposed_observation.parent_tasks:
-                    if isinstance(proposed_observation, EventObservationTask):
-                        req_id_short += proposed_observation.id.split('-')[-1] + ","
-                    else:
-                        req_id_short += f'Default({int(task.location[0][-2])},{int(task.location[0][-1])}),'
+            #     for task in proposed_observation.parent_tasks:
+            #         if isinstance(proposed_observation, EventObservationTask):
+            #             req_id_short += proposed_observation.id.split('-')[-1] + ","
+            #         else:
+            #             req_id_short += f'Default({int(task.location[0][-2])},{int(task.location[0][-1])}),'
                 
-                out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n'
-                out += f'OBSERVATION OPPORTUNITY BEING CONSIDERED FOR BUNDLE ADDITION: \nt={proposed_observation.accessibility} (ParentID(s): [{req_id_short[:-1]}])\n'
-                print(out)
+            #     out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n'
+            #     out += f'OBSERVATION OPPORTUNITY BEING CONSIDERED FOR BUNDLE ADDITION: \nt={proposed_observation.accessibility} (ParentID(s): [{req_id_short[:-1]}])\n'
+            #     print(out)
             # ------------------------------- 
             
             # initialize search for best path for proposed task    
             best_path : List[ObservationAction] = None
             best_path_utility : float = current_path_utility # must outperform current path
-            bids_best : Dict[SpecificObservationTask, Dict[GenericObservationTask,Bid]] = None
+            best_bids : Dict[ObservationOpportunity, Dict[GenericObservationTask,Bid]] = None
             
             # Generate proposed paths using heuristic insertion path builder
             candidate_paths = self.__heuristic_insertion_path_builder(state, specs, proposed_path, proposed_observation)
@@ -320,20 +327,17 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             for candidate_path, path_changes in candidate_paths:
                 # -------------------------------
                 # DEBUG PRINTOUTS
-                if self._debug:
-                    self._log_path('CANDIDATE PATH (DURING BUNDLE-BUILDING PHASE)', state, candidate_path)
-                    changes_indices = [candidate_path.index(change) if change in candidate_path else None for change in path_changes]
-                    print(f'Changes at: i={changes_indices}')
+                # if self._debug:
+                #     self._log_path('CANDIDATE PATH (DURING BUNDLE-BUILDING PHASE)', state, candidate_path)
+                #     changes_indices = [candidate_path.index(change) if change in candidate_path else None for change in path_changes]
+                #     print(f'Changes at: i={changes_indices}')
                 # -------------------------------
 
                 # find best observation sequence for each parent task of the proposed task in this candidate path
-                n_obs_candidate, t_prev_candidate, bids_candidate = self._assign_best_observations_and_revisit_times_to_proposed_path(state, candidate_path, path_changes, specs, cross_track_fovs, orbitdata, mission, observation_history)
+                n_obs_candidate, t_prev_candidate, bids_candidate = self._assign_best_observations_and_revisit_times_to_proposed_path(state, candidate_path, path_changes, proposed_bids, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
                 # check if valid bids were found for proposed task
                 if bids_candidate is None: continue # no valid bids found; skip
-
-                # assert len(bids_candidate) == len(path_changes), \
-                #     "Bids candidate does not match path changes length."
 
                 # get path value for proposed path using best observation sequences
                 proposed_path_utility : float = self._calculate_path_utility(state, specs, cross_track_fovs, candidate_path, observation_history, orbitdata, mission, n_obs_candidate, t_prev_candidate)
@@ -344,49 +348,70 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 # else: save as best path
                 best_path_utility = proposed_path_utility
                 best_path = candidate_path
-                bids_best = bids_candidate
+                best_bids = bids_candidate
 
             # if no best path was found, continue to next proposed task
             if best_path is None: continue
             
             # update proposed path
-            proposed_path = best_path
+            proposed_path : List[ObservationAction] = best_path
 
             # update current path utility
-            current_path_utility = best_path_utility
+            current_path_utility : float = best_path_utility
 
             # update bundle
             ## add new observations to proposed bundle
-            obs_dict = {parent_task: bid.n_obs for parent_task,bid in bids_best[proposed_observation].items()}
+            obs_dict = {parent_task: bid.n_obs for parent_task,bid in best_bids[proposed_observation].items()}
             proposed_bundle.append((proposed_observation, obs_dict))
 
+            ## map tasks in bundle to best bids
+            matching_bundle_indices = {spec_task : idx 
+                                       for idx,(spec_task,_) in enumerate(proposed_bundle)
+                                       if spec_task in best_bids}
+            
             ## update any values in proposed bids and results
-            matching_bundle_indices = {spec_task : idx for idx,(spec_task,_) 
-                                       in enumerate(proposed_bundle)
-                                       if spec_task in bids_best}
             for spec_task,idx in matching_bundle_indices.items():
-                for parent_task,proposed_bid in bids_best[spec_task].items():
+                for parent_task,proposed_bid in best_bids[spec_task].items():
                     proposed_bundle[idx][1][parent_task] = proposed_bid.n_obs
             
-            # update proposed bids and results
-            for parent_task,proposed_bid in bids_best[proposed_observation].items():
-                # add to proposed bids
-                proposed_bids[parent_task][proposed_bid.n_obs] = proposed_bid.copy()
+            
+            specific_tasks_in_path = [action.task for action in proposed_path]
+            bundle_elements_to_remove = [
+                bundle_idx for bundle_idx,(spec_task,_) in enumerate(proposed_bundle)
+                if spec_task not in specific_tasks_in_path
+            ]
 
-                # update results
-                try:
-                    existing_bid : Bid = self.results[parent_task][proposed_bid.n_obs]
-                    self.results[parent_task][proposed_bid.n_obs] = existing_bid.update(proposed_bid, state.t)
-                except IndexError:
-                    self.results[parent_task].append(proposed_bid.copy())    
+            ## remove any existing bids for observations that were removed from the path
+            for bundle_idx in sorted(bundle_elements_to_remove, reverse=True):
+                spec_task, obs_dict = proposed_bundle.pop(bundle_idx)
+
+            ## ensure path and bundle lengths match
+            assert len(proposed_path) == len(proposed_bundle), \
+                "Proposed path and bundle lengths do not match after bundle building phase."
+
+            # compile list of updated proposed bids
+            updated_proposed_bids = defaultdict(dict)
+            for obs,tasks in proposed_bundle:
+                # check if any new bid modified this observation
+                if obs in best_bids: 
+                    # observation was modified; update bids
+                    for task,bid in best_bids[obs].items():
+                        updated_proposed_bids[task][bid.n_obs] = bid.copy()
+                else:
+                    # observation was not modified; retain existing proposed bids
+                    for task,n_obs in tasks.items():
+                        updated_proposed_bids[task][n_obs] = proposed_bids[task][n_obs].copy()   
+            
+            # update list of proposed bids
+            proposed_bids = updated_proposed_bids
 
             # -------------------------------
             # DEBUG PRINTOUTS
-            if self._debug:
-                self._log_results('RESULTS (DURING BUNDLE-BUILDING PHASE)', state, self.results)
-                self._log_path('CURRENT PATH (DURING BUNDLE-BUILDING PHASE)', state, proposed_path)
-                # self._log_bundle('BUNDLE (DURING BUNDLE-BUILDING PHASE)', state, proposed_bundle)
-                x = 1
+            # if self._debug:
+            #     self._log_results('PROPOSED BIDS (DURING BUNDLE-BUILDING PHASE)', state, proposed_bids)
+            #     self._log_path('CURRENT PATH (DURING BUNDLE-BUILDING PHASE)', state, proposed_path)
+            #     self._log_bundle('BUNDLE (DURING BUNDLE-BUILDING PHASE)', state, proposed_bundle)
+            #     x = 1
             # -------------------------------               
         
         # temp return
@@ -399,7 +424,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                             state : SimulationAgentState,
                                             specs : object,
                                             current_path : List[ObservationAction],
-                                            new_task : SpecificObservationTask
+                                            new_task : ObservationOpportunity
                                         ) -> List[Tuple[List[ObservationAction], List[ObservationAction]]]:
         """ 
         Generates a list of proposed paths by applying the following operators to the path:
@@ -445,7 +470,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                     state : SimulationAgentState,
                                     specs : object,
                                     current_path : List[ObservationAction],
-                                    new_task : SpecificObservationTask,
+                                    new_task : ObservationOpportunity,
                                     max_slew_rate : float,
                                     max_torque : float
                                 ) -> Tuple[List[ObservationAction], List[ObservationAction]]:
@@ -539,7 +564,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                         state : SimulationAgentState,
                                         specs : object,
                                         current_path : List[ObservationAction],
-                                        new_task : SpecificObservationTask,
+                                        new_task : ObservationOpportunity,
                                         max_slew_rate : float,
                                         max_torque : float
                                     ) -> Tuple[List[ObservationAction], List[ObservationAction]]:
@@ -650,7 +675,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                                  state : SimulationAgentState,
                                                  specs : object,
                                                  current_path : List[ObservationAction],
-                                                 new_task : SpecificObservationTask,
+                                                 new_task : ObservationOpportunity,
                                                  max_slew_rate : float,
                                                  max_torque : float
                                             ) -> Tuple[List[ObservationAction], List[ObservationAction]]:
@@ -759,6 +784,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                                                      state : SimulationAgentState,                                                                    #  proposed_task : SpecificObservationTask,
                                                                      candidate_path : List[ObservationAction],
                                                                      path_changes : List[ObservationAction],
+                                                                     proposed_bids : Dict[GenericObservationTask, Dict[int, Bid]],
                                                                      specs : object,
                                                                      cross_track_fovs : dict,
                                                                      orbitdata : OrbitData,
@@ -774,16 +800,16 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         """
 
         # extract modified specific tasks from path changes
-        modified_specific_tasks : List[SpecificObservationTask] = [action.task for action in path_changes]   
+        modified_specific_tasks : List[ObservationOpportunity] = [action.task for action in path_changes]   
         modified_parent_tasks = sorted({parent_task for task in modified_specific_tasks 
-                                 for parent_task in task.parent_tasks}, key=lambda x: x.id)
+                                 for parent_task in task.tasks}, key=lambda x: x.id)
 
         # find observation time for proposed task in candidate path
-        modified_parent_task_obs_times : Dict[GenericObservationTask, List[Tuple[float,str,float,SpecificObservationTask]]] \
+        modified_parent_task_obs_times : Dict[GenericObservationTask, List[Tuple[float,str,float,ObservationOpportunity]]] \
                     = {parent_task : [
                         (action.t_start, state.agent_name, action.look_angle, action.task) 
                         for action in candidate_path 
-                        if parent_task in action.task.parent_tasks
+                        if parent_task in action.task.tasks
                     ] for parent_task in modified_parent_tasks}
         
         # initialize best observation numbers and previous observation times
@@ -798,9 +824,19 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             # assume parent task has been considered in results
             assert parent_task in self.results, f"Parent task {parent_task} not being bid on by any agent; cannot generate bids."
             
+            # count all previously performed observations for this parent task
+            performed_obs : list[Tuple[float,str,float,ObservationOpportunity]] = \
+                            [(bid.t_img,bid.bidder,np.NAN,None) 
+                             for bid in self.results[parent_task] 
+                             if bid.was_performed()]
+            
+            if performed_obs:
+                x = 1 # debug breakpoint
+
             # get all possible observation opportunities from results
-            available_obs_times : list[Tuple[float,str,SpecificObservationTask]] = \
-                  [(bid.t_img,bid.bidder,None,None) for bid in self.results[parent_task] if bid.winning_bidder != state.agent_name]
+            available_obs_times : list[Tuple[float,str,float,ObservationOpportunity]] = \
+                  [(bid.t_img,bid.bidder,np.NAN,None) for bid in self.results[parent_task] 
+                   if bid.winning_bidder != state.agent_name]
 
             # include proposed task imaging time 
             available_obs_times.extend(modified_parent_task_obs_times[parent_task])
@@ -822,9 +858,13 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 is_sequence_valid = True
 
                 # evaluate sequence value for this agent
-                for n_obs,(agent_name,t_obs,look_angle,spec_task) in enumerate(zip(obs_names,obs_times,obs_look_angles,obs_tasks)):
+                for seq_idx,(agent_name,t_obs,look_angle,spec_task) in enumerate(zip(obs_names,obs_times,obs_look_angles,obs_tasks)):
                     # assume specific task was defined
-                    assert isinstance(spec_task, SpecificObservationTask), "Specific task for observation not defined."
+                    assert isinstance(spec_task, ObservationOpportunity), \
+                        "Specific task for observation not defined."
+
+                    # get observation number for this observation
+                    n_obs = seq_idx + len(performed_obs)
 
                     # get observation number and previous observation time
                     t_prev = obs_times[n_obs-1] if n_obs > 0 else np.NINF
@@ -872,7 +912,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                         # if there is an existing bid, accept if either:
                         else:
                             # get existing bid
-                            existing_bid : Bid = self.results[parent_task][n_obs]
+                            try:
+                                existing_bid : Bid = proposed_bids[parent_task][n_obs]
+                            except KeyError:
+                                existing_bid : Bid = self.results[parent_task][n_obs]
 
                             accept_bid = [
                                 # 1) I am the current bid winner
@@ -922,15 +965,16 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             return None, None, None
 
         # -------------------------------
-        # DEBUG PRINTOUTS
+        # DEBUG BREAKPOINT
         if self._debug:
             x = 1
         # -------------------------------
             
-        # filter out obserations from other agents in best sequences
+        # filter out observations from other agents in best sequences
         indeces_to_remove = {parent_task : [idx for idx,agent_name in enumerate(obs_names_best[parent_task])
                                             if agent_name != state.agent_name] 
                              for parent_task in modified_parent_tasks}
+        
         for parent_task,indices in indeces_to_remove.items():
             for idx in sorted(indices, reverse=True):
                 n_obs_best[parent_task].pop(idx)
@@ -944,16 +988,18 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                    for parent_task in modified_parent_tasks]), \
                "Not all observations from other agents were removed from best sequences."
 
-        # Create bids for tasks in the proposed path based on best observation numbers and previous observation times.
-        new_bids : Dict[SpecificObservationTask, Dict[GenericObservationTask, Bid]] = defaultdict(dict)
+        # initiate bid lists for tasks in the proposed path based on best observation numbers and previous observation times
+        new_bids : Dict[ObservationOpportunity, Dict[GenericObservationTask, Bid]] = defaultdict(dict)
 
-        # compile best observation numbers and previous observation times for each observation in candidate path
+        # initiate list of best observation numbers and previous observation times for each observation in candidate path
         n_obs_candidate = [dict() for _ in candidate_path]
         t_prev_candidate = [dict() for _ in candidate_path]
         
+        # assign best observation numbers and previous observation times to observations in candidate path
         for obs_idx,obs in enumerate(candidate_path):
-            for parent_task in obs.task.parent_tasks:
-                # check if best sequences were found for this parent task
+            # iterate through matching tasks of this observation
+            for parent_task in obs.task.tasks:
+                # check if sequence was modified for this parent task
                 if parent_task in n_obs_best:
                     # extract observation time and revisit time from best sequences
                     n_obs = n_obs_best[parent_task].pop(0)
@@ -971,8 +1017,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 else:
                     # no best sequence found for this parent task; use existing bids from results
                     # get matching bid for this observation task
-                    matching_bids = [bid for bid in self.results[parent_task]
-                                    if abs(bid.t_img - obs.t_start) <= self.EPS]
+                    matching_bids = [bid for bid in proposed_bids[parent_task].values()
+                                    if abs(bid.t_img - obs.t_start) <= self.EPS
+                                    and bid.bidder == state.agent_name]
                     
                     assert matching_bids, \
                         "Matching bid for observation in path not found in results. Was assigned without updating results."
@@ -982,13 +1029,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     matching_bid : Bid = matching_bids.pop()
 
                     # get previous matching observations for this task
-                    prev_bids = [bid for bid in self.results[parent_task]
+                    prev_bids = [bid for bid in proposed_bids[parent_task].values()
                                 if bid.t_img < obs.t_start]
                     
                     # update previous observation counts
                     n_obs_candidate[obs_idx][parent_task] = matching_bid.n_obs
                     t_prev_candidate[obs_idx][parent_task] = max((bid.t_img for bid in prev_bids), default=np.NINF)
-
         
         # TODO assure all best observation numbers have been assigned
         

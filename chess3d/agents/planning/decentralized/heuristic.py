@@ -9,7 +9,7 @@ from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.tasks import SpecificObservationTask
+from chess3d.agents.planning.tasks import ObservationOpportunity
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
@@ -42,7 +42,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         cross_track_fovs : dict = self._collect_fov_specs(specs)
         
         # sort tasks by heuristic
-        sorted_schedulable_tasks : list[SpecificObservationTask] = self._sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
+        sorted_schedulable_tasks : list[ObservationOpportunity] = self._sort_tasks_by_heuristic(state, schedulable_tasks, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
         # get pointing agility specifications
         adcs_specs : dict = specs.spacecraftBus.components.get('adcs', None)
@@ -55,7 +55,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         assert max_torque, 'ADCS `maxTorque` specification missing from agent specs object.'
 
         # generate plan
-        plan_sequence : list[tuple[SpecificObservationTask, ObservationAction]] = []
+        plan_sequence : list[tuple[ObservationOpportunity, ObservationAction]] = []
 
         for task in tqdm(sorted_schedulable_tasks,
                          desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Observations', 
@@ -104,7 +104,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
     
     def _get_previous_and_future_observation_info(self, 
                                                  state : SimulationAgentState, 
-                                                 task : SpecificObservationTask, 
+                                                 task : ObservationOpportunity, 
                                                  plan_sequence : list, 
                                                  max_slew_rate : float) -> tuple:
         
@@ -139,7 +139,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
 
         return th_prev, t_prev, d_prev, th_next, t_next, d_next
 
-    def __get_previous_observation_action(self, task : SpecificObservationTask, plan_sequence : list) -> ObservationAction:
+    def __get_previous_observation_action(self, task : ObservationOpportunity, plan_sequence : list) -> ObservationAction:
         """ find any previously scheduled observation """
         # set types
         observations : list[ObservationAction] = [observation for _,observation in plan_sequence]
@@ -151,7 +151,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
         # return latest observation action
         return max(actions_prev, key=lambda a: a.t_end) if actions_prev else None
     
-    def __get_next_observation_action(self, task : SpecificObservationTask, plan_sequence : list) -> ObservationAction:
+    def __get_next_observation_action(self, task : ObservationOpportunity, plan_sequence : list) -> ObservationAction:
          # set types
         observations : list[ObservationAction] = [observation for _,observation in plan_sequence]
 
@@ -165,7 +165,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
     @runtime_tracker
     def _sort_tasks_by_heuristic(self, 
                                 state : SimulationAgentState, 
-                                tasks : List[SpecificObservationTask], 
+                                tasks : List[ObservationOpportunity], 
                                 specs : Spacecraft, 
                                 cross_track_fovs : dict, 
                                 orbitdata : OrbitData, 
@@ -203,7 +203,7 @@ class HeuristicInsertionPlanner(AbstractPeriodicPlanner):
     
     @runtime_tracker
     def _calc_heuristic(self,
-                        task : SpecificObservationTask, 
+                        task : ObservationOpportunity, 
                         specs : Spacecraft, 
                         cross_track_fovs : dict, 
                         orbitdata : OrbitData, 
