@@ -20,6 +20,8 @@ class ObservationOpportunity:
                  ):
         """ 
         Represents an observation opportunity that can be scheduled by an agent in order to fulfill one or more generic observation tasks.
+
+        **Arguments:**
         - :`tasks` : : The parent generic observation task(s) that this opportunity can fulfill.
         - :`instrument_name`: The name of the instrument to be used for the observation.
         - :`accessibility`: The time interval during which the observation opportunity is accessible.

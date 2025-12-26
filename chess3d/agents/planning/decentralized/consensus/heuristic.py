@@ -71,15 +71,15 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # calculate coverage opportunities for available tasks
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 
-        # create specific and merged tasks from scheduled tasks and urgent tasks
+        # create and merge task observation opportunities from scheduled tasks and urgent tasks
         observation_opportunities : List[ObservationOpportunity] = self.create_observation_opportunities_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
-        # extract already planned specific tasks from current plan
-        planned_specific_tasks = [obs.obs_opp for obs in current_plan if isinstance(obs,ObservationAction)]
+        # extract already planned task observation opportunities from current plan
+        planned_observation_opportunities = [obs.obs_opp for obs in current_plan if isinstance(obs,ObservationAction)]
         
         # filter tasks that are already in the current plan
-        observation_opportunities = [task for task in observation_opportunities
-                             if task not in planned_specific_tasks]
+        observation_opportunities = [obs_opp for obs_opp in observation_opportunities
+                             if obs_opp not in planned_observation_opportunities]
         
         # -------------------------------
         # DEBUG PRINTOUTS
@@ -153,7 +153,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         Build bundle using earliest-access heuristic. 
 
         #### Returns
-        - bundle : List[Tuple[GenericObservationTask, int, SpecificObservationTask, Bid]]
+        - bundle : List[Tuple[GenericObservationTask, int, ObservationOpportunity, Bid]]
             List of tuples containing (task, observation number, observation time, expected utility).
         - path : List[ObservationAction]
             Updated observation path after bundle building.
@@ -180,7 +180,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
          in value due to in-schedule interactions.
 
         #### Returns
-        - bundle : List[Tuple[GenericObservationTask, int, SpecificObservationTask, Bid]]
+        - bundle : List[Tuple[GenericObservationTask, int, ObservationOpportunity, Bid]]
             List of tuples containing (task, observation number, observation time, expected utility).
         - path : List[ObservationAction]
             Updated observation path after bundle building.
@@ -214,7 +214,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
          Considers the intrinsic priority of the tasks being considered in the bundle. 
 
         #### Returns
-        - bundle : List[Tuple[GenericObservationTask, int, SpecificObservationTask, Bid]]
+        - bundle : List[Tuple[GenericObservationTask, int, ObservationOpportunity, Bid]]
             List of tuples containing (task, observation number, observation time, expected utility).
         - path : List[ObservationAction]
             Updated observation path after bundle building.
@@ -246,7 +246,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
          according to heuristic evaluator. 
 
         #### Returns
-        - bundle : List[Tuple[GenericObservationTask, int, SpecificObservationTask, Bid]]
+        - bundle : List[Tuple[GenericObservationTask, int, ObservationOpportunity, Bid]]
             List of tuples containing (task, observation number, observation time, expected utility).
         - path : List[ObservationAction]
             Updated observation path after bundle building.        
@@ -359,25 +359,25 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             proposed_bundle.append((proposed_observation, obs_dict))
 
             ## map tasks in bundle to best bids
-            matching_bundle_indices = {spec_task : idx 
-                                       for idx,(spec_task,_) in enumerate(proposed_bundle)
-                                       if spec_task in best_bids}
+            matching_bundle_indices = {obs_opp : idx 
+                                       for idx,(obs_opp,_) in enumerate(proposed_bundle)
+                                       if obs_opp in best_bids}
             
             ## update any values in proposed bids and results
-            for spec_task,idx in matching_bundle_indices.items():
-                for task,proposed_bid in best_bids[spec_task].items():
+            for obs_opp,idx in matching_bundle_indices.items():
+                for task,proposed_bid in best_bids[obs_opp].items():
                     proposed_bundle[idx][1][task] = proposed_bid.n_obs
             
             
-            specific_tasks_in_path = [action.obs_opp for action in proposed_path]
+            obs_opps_in_path = [obs_action.obs_opp for obs_action in proposed_path]
             bundle_elements_to_remove = [
-                bundle_idx for bundle_idx,(spec_task,_) in enumerate(proposed_bundle)
-                if spec_task not in specific_tasks_in_path
+                bundle_idx for bundle_idx,(obs_opp,_) in enumerate(proposed_bundle)
+                if obs_opp not in obs_opps_in_path
             ]
 
             ## remove any existing bids for observations that were removed from the path
             for bundle_idx in sorted(bundle_elements_to_remove, reverse=True):
-                spec_task, obs_dict = proposed_bundle.pop(bundle_idx)
+                proposed_bundle.pop(bundle_idx)
 
             ## ensure path and bundle lengths match
             assert len(proposed_path) == len(proposed_bundle), \
@@ -775,7 +775,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
     BUNDLE-BUILDING PHASE - Bid Generation Methods
     """
     def _assign_best_observations_and_revisit_times_to_proposed_path(self,
-                                                                     state : SimulationAgentState,                                                                    #  proposed_task : SpecificObservationTask,
+                                                                     state : SimulationAgentState,  
                                                                      candidate_path : List[ObservationAction],
                                                                      path_changes : List[ObservationAction],
                                                                      proposed_bids : Dict[GenericObservationTask, Dict[int, Bid]],
@@ -857,7 +857,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 for seq_idx,(agent_name,t_obs,look_angle,spec_task) in enumerate(zip(obs_names,obs_times,obs_look_angles,obs_tasks)):
                     # assume specific task was defined
                     assert isinstance(spec_task, ObservationOpportunity), \
-                        "Specific task for observation not defined."
+                        "Task observation opportunity not defined."
 
                     # get observation number for this observation
                     n_obs = seq_idx + len(performed_obs)
