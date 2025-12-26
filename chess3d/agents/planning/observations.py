@@ -67,7 +67,7 @@ class ObservationOpportunity:
                     instrument_name : str,
                     accessibility : Interval) -> str:
         """
-        Deterministic ID for a specific observation task based on:
+        Deterministic ID for a task observation opportunity based on:
         - parent generic task IDs
         - access interval [start, end)
         - optional agent/instrument/index
@@ -78,7 +78,7 @@ class ObservationOpportunity:
         assert isinstance(parent_tasks, set), "parent_tasks must be a set of `GenericObservationTask`"
 
         # Define namespace for UUID generation
-        SPECIFIC_TASK_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
+        OBS_OPPORTUNITY_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
 
         # Collect parent IDs (sorted string representation)
         parent_part = ",".join(sorted([str(p.id) for p in parent_tasks]))
@@ -96,7 +96,7 @@ class ObservationOpportunity:
         name = f"{parent_part}|{interval_part}|{extras_part}"
 
         # Return deterministic UUID derived from name
-        return str(uuid.uuid5(SPECIFIC_TASK_NAMESPACE, name))
+        return str(uuid.uuid5(OBS_OPPORTUNITY_NAMESPACE, name))
     
     def copy(self) -> 'ObservationOpportunity':
         """ Create a deep copy of the task. """
@@ -124,7 +124,7 @@ class ObservationOpportunity:
     def is_mutually_exclusive(self, other_task : 'ObservationOpportunity') -> bool:
         """ Check if two tasks are mutually exclusive. """
         # validate inputs
-        assert isinstance(other_task, ObservationOpportunity), "The other task must be an instance of `SpecificObservationTask`."
+        assert isinstance(other_task, ObservationOpportunity), "The other task must be an instance of `ObservationOpportunity`."
 
         # check if they are the same task        
         same_task : bool = (other_task == self)
@@ -198,7 +198,7 @@ class ObservationOpportunity:
         """
                
         # Validate inputs
-        assert isinstance(other, ObservationOpportunity), "The other task must be an instance of SpecificObservationTask."
+        assert isinstance(other, ObservationOpportunity), "The other task must be an instance of `ObservationOpportunity`."
         assert isinstance(must_overlap, bool), "must_overlap must be a boolean."
         assert isinstance(max_duration, (float, int)), "max_duration must be a number."
         assert max_duration > 0.0, "max_duration must be positive."
@@ -242,7 +242,7 @@ class ObservationOpportunity:
         """
         try:
             # Check other task's type
-            assert isinstance(other, ObservationOpportunity), "can only merge with tasks of type `SpecificObservationTask`."
+            assert isinstance(other, ObservationOpportunity), "can only merge with tasks of type `ObservationOpportunity`."
 
             # Merge parent tasks
             merged_parent_tasks = {task for task in self.tasks}
@@ -272,7 +272,7 @@ class ObservationOpportunity:
             raise AssertionError(f"Cannot merge tasks; {e}")
 
     def __repr__(self):
-        return f"SpecificObservationTask_{self.id.split('-')[0]}"
+        return f"ObservationOpportunity_{self.id.split('-')[0]}"
             
     def to_dict(self) -> dict:
         return {
@@ -296,7 +296,7 @@ class ObservationOpportunity:
         )
     
     def __eq__(self, other : 'ObservationOpportunity') -> bool:
-        assert isinstance(other, ObservationOpportunity), "Can only compare with another SpecificObservationTask."
+        assert isinstance(other, ObservationOpportunity), "Can only compare with another `ObservationOpportunity`."
         return self.to_dict() == other.to_dict()
     
     def __hash__(self):

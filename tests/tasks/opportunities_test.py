@@ -4,9 +4,9 @@ from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.tasks import DefaultMissionTask
 from chess3d.utils import Interval, print_welcome
 
-class TestSpecificObservationTask(unittest.TestCase):
+class TestObservationOpportunity(unittest.TestCase):
     def test_observation_opportunity(self):
-        # Create a specific observation opportunity
+        # Create a observation opportunity
         tasks = DefaultMissionTask(
             parameter="test_parameter",
             location=(45.0, 90.0, 1, 2),
@@ -81,7 +81,7 @@ class TestSpecificObservationTask(unittest.TestCase):
                           slew_angles="20.0-45.0" ) # Invalid slew angles
     
     def test_observation_opportunity_copy(self):
-        # Create a specific observation opportunity
+        # Create a observation opportunity
         tasks = DefaultMissionTask(
             parameter="test_parameter",
             location=(45.0, 90.0, 1, 2),
@@ -108,7 +108,7 @@ class TestSpecificObservationTask(unittest.TestCase):
         self.assertIsNot(opp, task_copy)
 
     def test_observation_opportunity_can_merge(self):
-        # Create a specific observation opportunity
+        # Create a observation opportunity
         task_1 = DefaultMissionTask(
             parameter="test_parameter",
             location=(45.0, 90.0, 1, 2),
@@ -219,7 +219,7 @@ class TestSpecificObservationTask(unittest.TestCase):
         self.assertTrue(opp_1.can_merge(other=opp_9,max_duration=1000.0))
 
     def test_observation_opportunity_merge(self):
-        # Create a specific observation task
+        # Create a observation task
         task_1 = DefaultMissionTask(
             parameter="test_parameter",
             location=(45.0, 90.0, 1, 2),
@@ -452,7 +452,7 @@ class TestSpecificObservationTask(unittest.TestCase):
             id="tasks_002"
         )
         
-        # Create specific observation tasks
+        # Create observation tasks
         opp_1 = ObservationOpportunity(
             tasks=task_1,
             instrument_name="test_instrument_1",
