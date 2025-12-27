@@ -689,7 +689,7 @@ class AbstractPlanner(ABC):
 
         # extract ground point accesses that are within the agent's field of view
         accessible_gps_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
-                                        if abs(raw_access_data['look angle [deg]'][i] - th_img) \
+                                        if abs(raw_access_data['off-nadir axis angle [deg]'][i] - th_img) \
                                             <= cross_track_fovs[instrument_name] / 2
                                         and raw_access_data['instrument'][i] == instrument_name]
         accessible_gps_performances = {col : [raw_access_data[col][i] 

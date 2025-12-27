@@ -685,7 +685,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         self.bundle, self.path, new_bids = self.bundle_building_phase(state, specs, tasks, current_plan, clock_config, orbitdata, mission, observation_history)
         
         # check if new path is valid
-        assert self.path is not None and len(self.path) > 0, "New observation path cannot be empty."
+        assert self.path is not None, "New observation path is not valid."
         assert self.is_observation_path_valid(state, self.path, None, None, specs), "New observation path is not valid."   
 
         # update results
