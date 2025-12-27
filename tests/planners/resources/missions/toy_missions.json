@@ -1,7 +1,7 @@
 {
     "missions" : [
         {
-            "name": "Algal blooms monitoring",
+            "name": "Algal blooms comprehensive",
             "objectives" : [
                 {
                     "objective_type" : "default_mission",
@@ -75,6 +75,88 @@
                         }
                     ],
                     "event_type" : "algal bloom"
+                }
+            ]
+        },
+        {
+            "name": "Algal bloom response",
+            "objectives" : [                
+                {
+                    "objective_type" : "event_driven",
+                    "event_type" : "algal bloom",
+                    "parameter": "Chlorophyll-A",
+                    "weight": 10,
+                    "requirements" : [
+                        {
+                            "requirement_type": "continuous",
+                            "attribute": "horizontal_spatial_resolution",
+                            "thresholds": [10, 30, 100],
+                            "scores": [1.0, 0.7, 0.1]
+                        },
+                        {
+                            "requirement_type": "categorical",
+                            "attribute": "spectral_resolution",
+                            "thresholds": ["Hyperspectral", "Multispectral"],
+                            "scores": [1, 0.5]
+                        },
+                        {
+                            "requirement_type": "capability",
+                            "attribute": "instrument",
+                            "valid_values": ["VNIR hyper", "TIR"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [60, 100, 1000],
+                            "scores": [1.0, 0.7, 0.1]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "n_observations",
+                            "strategy" : "exp_saturation",
+                            "saturation_rate" : 0.5
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Algal bloom monitoring",
+            "objectives" : [
+                {
+                    "objective_type" : "default_mission",
+                    "parameter": "Chlorophyll-A",
+                    "weight": 1,
+                    "requirements" : [
+                        {
+                            "requirement_type": "continuous",
+                            "attribute": "horizontal_spatial_resolution",
+                            "thresholds": [10, 30, 100],
+                            "scores": [1.0, 0.7, 0.1]
+                        },
+                        {
+                            "requirement_type": "categorical",
+                            "attribute": "spectral_resolution",
+                            "thresholds": ["Hyperspectral", "Multispectral"],
+                            "scores": [1, 0.5]
+                        },
+                        {
+                            "requirement_type": "capability",
+                            "attribute": "instrument",
+                            "valid_values": ["VNIR hyper", "TIR"]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "revisit_time",
+                            "thresholds": [30, 100, 1000],
+                            "scores": [0.1, 0.7, 1.0]
+                        },
+                        {
+                            "requirement_type": "temporal",
+                            "attribute": "n_observations",
+                            "strategy" : "no_change"
+                        }
+                    ]
                 }
             ]
         }

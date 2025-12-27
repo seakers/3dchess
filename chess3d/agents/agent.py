@@ -659,23 +659,23 @@ class SimulatedAgent(AbstractAgent):
     @staticmethod
     def __initialize_default_mission_tasks(mission : Mission, orbitdata : OrbitData) -> None:
         """ 
-        Creates default observation tasks for each non-default mission objective
+        Creates default observation tasks for each default mission objective
          based on the spatial requirements of each objective.
         """
         # initialize task list
         tasks = []
 
-        # gather targets for each non-default mission objective
+        # gather targets for each default mission objective
         objective_targets = { objective : [] for objective in mission 
                              # ignore non-default objectives
-                             if not isinstance(objective, DefaultMissionObjective)
+                             if isinstance(objective, DefaultMissionObjective)
                              }
         
-        # iterate through each mission objective
-        for objective in objective_targets:         
+        for objective,targets in objective_targets.items():     
             for req in objective:
                 # ignore non-spatial requirements
-                if not isinstance(req, SpatialRequirement): continue
+                if not isinstance(req, SpatialRequirement): 
+                    req_targets = []
                 
                 elif isinstance(req, PointTargetSpatialRequirement):
                     raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
@@ -684,6 +684,7 @@ class SimulatedAgent(AbstractAgent):
                     raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
                 
                 elif isinstance(req, GridTargetSpatialRequirement):
+                    # collect all targets matching this grid requirement
                     req_targets = [
                         (lat, lon, grid_index, gp_index)
                         for grid in orbitdata.grid_data
@@ -693,14 +694,18 @@ class SimulatedAgent(AbstractAgent):
                     
                 else: 
                     raise TypeError(f"Unknown spatial requirement type: {type(req)}")
-                    
+            
+                targets.extend(req_targets)
+        
+        # iterate through each mission objective
+        for objective,targets in objective_targets.items():                           
             # create monitoring tasks from each location in this mission objective
             objective_tasks = [DefaultMissionTask(objective.parameter,
                                         location=(lat, lon, grid_index, gp_index),
                                         mission_duration=orbitdata.duration*24*3600,
                                         objective=objective,
                                         )
-                        for lat,lon,grid_index,gp_index in req_targets
+                        for lat,lon,grid_index,gp_index in targets
                     ]
             
             # add to list of known tasks

@@ -36,9 +36,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
     EPS = 1e-6
 
     def __init__(self, 
-                 model : str = HEURISTIC_INSERTION,
-                 replan_threshold : int = 1,
-                 optimistic_bidding_threshold : int = 1,
+                 model : str,
+                 replan_threshold : int,
+                 optimistic_bidding_threshold : int,
                  debug : bool = False,
                  logger: logging.Logger = None
                  ) -> None:
@@ -53,6 +53,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         """
 
         # validate inputs
+        assert isinstance(model, str), "Model must be a string."
         assert model in self.MODELS, f"Invalid model '{model}'. Must be one of {self.MODELS}."
         assert isinstance(replan_threshold, int) and replan_threshold > 0, "Replan threshold must be positive integer."
         assert isinstance(optimistic_bidding_threshold, int), "Optimistic bidding threshold must be an integer"
@@ -749,6 +750,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     
                     # add an empty bid for each missing observation number
                     self.results[task].append(bid)
+
+                    # add optimistic bidding counter for new bid
+                    self.optimistic_bidding_counters[task].append(self.optimistic_bidding_threshold)
                 
                 else:
                     # get previous bid

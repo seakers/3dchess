@@ -288,7 +288,7 @@ class Simulation:
         except pd.errors.EmptyDataError:
             columns = ['observer','t_img','lat','lon','range','look','incidence','zenith','instrument_name']
             observations_performed = pd.DataFrame(data=[],columns=columns)
-            print('OOPS!')
+            print('No observations were performed.')
 
         # load all senario events
         print('Loading event data...')
@@ -1721,10 +1721,11 @@ class SimulationElementFactory:
             if replanner_type.lower() in ['consensus', 'cbba']:
                 model = replanner_dict.get('model', 'heuristicInsertion')
                 replan_threshold = replanner_dict.get('replanThreshold', 1)
+                optimistic_bidding_threshold = replanner_dict.get('optimisticBiddingThreshold', 1)
 
                 if 'heuristic' in model:
                     heuristic = replanner_dict.get('heuristic', 'earliestAccess')
-                    replanner = HeuristicInsertionConsensusPlanner(heuristic, replan_threshold, debug, logger)
+                    replanner = HeuristicInsertionConsensusPlanner(heuristic, replan_threshold, optimistic_bidding_threshold, debug, logger)
                 else:
                     raise NotImplementedError(f'replanner model `{model}` not yet supported.')
             

@@ -36,9 +36,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
     def __init__(self,
                  heuristic : str = EARLIEST_ACCESS,
                  replan_threshold : int = 1, 
+                 optimistic_bidding_threshold : int = 1,
                  debug : bool = False, 
                  logger : bool = None):
-        super().__init__(ConsensusPlanner.HEURISTIC_INSERTION, replan_threshold, debug, logger)
+        super().__init__(ConsensusPlanner.HEURISTIC_INSERTION, replan_threshold, optimistic_bidding_threshold, debug, logger)
 
         # validate inputs
         assert heuristic in self.HEURISTICS, f"Invalid heuristic '{heuristic}'. Must be one of {self.HEURISTICS}."
@@ -825,6 +826,8 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                             [(bid.t_img,bid.bidder,np.NAN,None) 
                              for bid in self.results[task] 
                              if bid.was_performed()]
+            latest_performed_obs_time : Tuple[float,str,float,ObservationOpportunity] \
+                = max(performed_obs, key=lambda obs: obs[0]) if performed_obs else None
             
             if performed_obs:
                 x = 1 # debug breakpoint
@@ -863,7 +866,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     n_obs = seq_idx + len(performed_obs)
 
                     # get observation number and previous observation time
-                    t_prev = obs_times[n_obs-1] if n_obs > 0 else np.NINF
+                    t_prev = obs_times[seq_idx-1] if seq_idx > 0 else latest_performed_obs_time[0] if performed_obs else np.NINF
                     
                     # get observation value
                     if agent_name != state.agent_name: 

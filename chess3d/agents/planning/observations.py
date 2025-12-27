@@ -233,7 +233,7 @@ class ObservationOpportunity:
         
     def merge(self, other : 'ObservationOpportunity', must_overlap : bool = False, max_duration : float = 2*60) -> 'ObservationOpportunity':
         """ 
-        Merge two tasks into one. 
+        Merge two task observation opportunities into one. 
                 
         **Arguments:**
         - `other_task`: The other task to merge with.
