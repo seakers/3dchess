@@ -102,6 +102,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     ) -> None:
         """ Updates internal knowledge based on incoming percepts """
 
+        # update base percepts
+        super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
+
         # collect bids from incoming messages to inbox
         incoming_bids : List[Bid] = self.__collect_incoming_bids(misc_messages)  
 
@@ -119,7 +122,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # -------------------------------
 
         # perform consensus phase for incoming task bids
-        results_updates, bundle_updates = self._consensus_phase(state, incoming_reqs, incoming_bids, tasks, current_plan, performed_observations)
+        results_updates, bundle_updates, self.last_performed_observations \
+              = self._consensus_phase(state, incoming_reqs, incoming_bids, tasks, current_plan, performed_observations)
 
         # -------------------------------
         # DEBUG PRINTOUTS
@@ -210,8 +214,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
             # check for further updates
             if not constraint_bundle_updates and not constraint_violations:
                 break # no more updates; exit loop       
+        
+        # collect performed observation opportunities
+        performed_observation_opportunities : List[ObservationOpportunity] \
+            = [obs_opp for obs_opp,_ in performed_bundle_updates]
 
-        return results_updates, bundle_updates   
+        # return lists of updates
+        return results_updates, bundle_updates, performed_observation_opportunities   
 
     def __update_bundle_from_preplan(self, 
                                      state : SimulationAgentState, 
@@ -412,7 +421,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 performed_bids.append(bid_to_perform.copy())
             
             # add bids to list of bundle updates
-            bundle_updates.append(performed_bids)
+            bundle_updates.append((obs_opp, performed_bids))
 
             # add tasks to list of performed tasks
             performed_task_bids.append((obs_opp, obs_tasks))
@@ -686,7 +695,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # -------------------------------
 
         # build new bundle and path according to replanning model
-        self.bundle, self.path, new_bids = self.bundle_building_phase(state, specs, tasks, current_plan, clock_config, orbitdata, mission, observation_history)
+        self.bundle, self.path, new_bids = self.bundle_building_phase(state, specs, tasks, current_plan, orbitdata, mission, observation_history)
         
         # check if new path is valid
         assert self.path is not None, "New observation path is not valid."

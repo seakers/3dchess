@@ -53,7 +53,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                        specs : object,
                        tasks : List[GenericObservationTask],
                        current_plan : Plan,
-                       clock_config : ClockConfig,
                        orbitdata : OrbitData,
                        mission : Mission,
                        observation_history : ObservationHistory
@@ -74,6 +73,18 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
         # create and merge task observation opportunities from scheduled tasks and urgent tasks
         observation_opportunities : List[ObservationOpportunity] = self.create_observation_opportunities_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
+
+        # TEMP filter observation opportunities that were just performed
+        observation_opportunities = [obs_opp for obs_opp in observation_opportunities
+                                     if all(not obs_opp.is_mutually_exclusive(obs) for obs in self.last_performed_observations)]
+        
+
+        
+        for obs in self.last_performed_observations:
+            for obs_opp in observation_opportunities:
+                if obs_opp.is_mutually_exclusive(obs):  
+                    y = obs_opp.is_mutually_exclusive(obs)
+                    x = 1 # breakpoint
 
         # extract already planned task observation opportunities from current plan
         planned_observation_opportunities = [obs.obs_opp for obs in current_plan if isinstance(obs,ObservationAction)]

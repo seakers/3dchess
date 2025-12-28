@@ -41,8 +41,9 @@ class AbstractPlanner(ABC):
             raise ValueError(f'`logger` must be of type `Logger`. Is of type `{type(logger)}`.')
 
         # initialize attributes
-        self.known_reqs : set[TaskRequest] = set()                   # set of known measurement requests
-        self.stats : dict = dict()                                          # collector for runtime performance statistics
+        self.known_reqs : set[TaskRequest] = set()                                # set of known measurement requests
+        self.stats : dict = dict()                                                # collector for runtime performance statistics
+        self.last_performed_observations : List[ObservationOpportunity] = list()  # list of last performed observations
         
         # set attribute parameters
         self._debug = debug                 # toggles debugging features
@@ -62,7 +63,11 @@ class AbstractPlanner(ABC):
 
         # update list of known requests
         self.known_reqs.update(incoming_reqs)
-        
+
+        # update latest observation opportunities measured by this agent
+        self.last_performed_observations = list({action.obs_opp for action in completed_actions
+                                            if isinstance(action, ObservationAction)})
+
     @abstractmethod
     def needs_planning(self, **kwargs) -> bool:
         """ Determines whether planning is triggered """ 
@@ -156,22 +161,29 @@ class AbstractPlanner(ABC):
         observation_opps : list[ObservationOpportunity] \
             = self.single_task_observation_opportunity_from_accesses(available_tasks, access_times, cross_track_fovs, orbitdata)
         
+        # filter out opportunities that have just been performed
+        filtered_observation_opps : list[ObservationOpportunity] \
+            = [obs for obs in observation_opps 
+               if all(not obs.is_mutually_exclusive(performed_obs) 
+                      for performed_obs in self.last_performed_observations)] \
+                if self.last_performed_observations else observation_opps
+
         # check if tasks are clusterable
         task_adjacency : Dict[str, set[ObservationOpportunity]] \
-            = self.check_task_observation_opportunity_clusterability(observation_opps, must_overlap, threshold)
+            = self.check_task_observation_opportunity_clusterability(filtered_observation_opps, must_overlap, threshold)
    
         # cluster tasks based on adjacency
-        combined_obs : list[ObservationOpportunity] = self.cluster_task_observation_opportunities(observation_opps, task_adjacency, must_overlap, threshold)
+        combined_obs : list[ObservationOpportunity] = self.cluster_task_observation_opportunities(filtered_observation_opps, task_adjacency, must_overlap, threshold)
 
         # add clustered tasks to the final list of tasks available for scheduling
-        observation_opps.extend(combined_obs) 
+        filtered_observation_opps.extend(combined_obs) 
 
         assert all([obs.slew_angles.span()-1e-6 <= cross_track_fovs[obs.instrument_name] 
-                    for obs in observation_opps]), \
+                    for obs in filtered_observation_opps]), \
             f"Tasks have slew angles larger than the maximum allowed field of view."
 
         # return tasks
-        return observation_opps        
+        return filtered_observation_opps        
     
     @runtime_tracker
     def single_task_observation_opportunity_from_accesses(self,

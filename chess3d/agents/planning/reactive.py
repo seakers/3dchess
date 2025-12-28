@@ -21,24 +21,24 @@ class AbstractReactivePlanner(AbstractPlanner):
 
         self.preplan : PeriodicPlan = None
 
-    @abstractmethod
-    def update_percepts(self, 
-                        state : SimulationAgentState,
-                        current_plan : Plan,
-                        tasks : List[GenericObservationTask],
-                        incoming_reqs: list, 
-                        relay_messages: list, 
-                        misc_messages : list,
-                        completed_actions: list,
-                        aborted_actions : list,
-                        pending_actions : list
-                        ) -> None:
+    # @abstractmethod
+    # def update_percepts(self, 
+    #                     state : SimulationAgentState,
+    #                     current_plan : Plan,
+    #                     tasks : List[GenericObservationTask],
+    #                     incoming_reqs: list, 
+    #                     relay_messages: list, 
+    #                     misc_messages : list,
+    #                     completed_actions: list,
+    #                     aborted_actions : list,
+    #                     pending_actions : list
+    #                     ) -> None:
         
-        super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
+    #     super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
         
-        # update latest preplan
-        if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, PeriodicPlan): 
-            self.preplan : PeriodicPlan = current_plan.copy() 
+    #     # update latest preplan
+    #     if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, PeriodicPlan): 
+    #         self.preplan : PeriodicPlan = current_plan.copy() 
 
     @abstractmethod
     def generate_plan(  self, 
