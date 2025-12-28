@@ -410,6 +410,9 @@ class OrbitData:
             # exclude intervals that contain time `t`
             future_intervals = [(t_start, t_end) for t_start,t_end in future_intervals
                                 if t < t_start] # interval starts after time `t`
+        else:
+            # include current intervals but clip to start at time `t`
+            future_intervals = [(max(t, t_start), t_end) for t_start,t_end in future_intervals]
 
         # check if there are any valid intervals
         if not future_intervals: return None
