@@ -113,6 +113,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
         if (incoming_bids or self.incoming_event_tasks) and self._debug:
             self._log_results('RESULTS (BEFORE CONSENSUS PHASE)', state, self.results)
             self._log_bundle('BUNDLE (BEFORE CONSENSUS PHASE)', state, self.bundle)
+
+        if performed_observations and self._debug:
+            x = 1 # debug breakpoint
         # -------------------------------
 
         # perform consensus phase for incoming task bids
@@ -679,6 +682,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         if self._debug:
             self._log_results('RESULTS (BEFORE PLANNING PHASE)', state, self.results)
             self._log_bundle('BUNDLE (BEFORE PLANNING PHASE)', state, self.bundle)
+            x = 1 # breakpoint
         # -------------------------------
 
         # build new bundle and path according to replanning model
@@ -696,6 +700,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         if self._debug:
             self._log_results('RESULTS (AFTER PLANNING PHASE)', state, self.results)
             self._log_bundle('BUNDLE (AFTER PLANNING PHASE)', state, self.bundle)
+            x = 1 # breakpoint
         # -------------------------------
     
         # generate maneuver and travel actions from observations

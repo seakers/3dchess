@@ -854,6 +854,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 # initiate sequence value tracker
                 seq_values = []
                 t_prev_seq = []
+                n_obs_seq = []
                 is_sequence_valid = True
 
                 # evaluate sequence value for this agent
@@ -934,7 +935,8 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
                     # accumulate sequence value
                     seq_values.append(obs_value)     
-                    t_prev_seq.append(t_prev)      
+                    t_prev_seq.append(t_prev) 
+                    n_obs_seq.append(n_obs)     
 
                 # skip to next sequence if current sequence is invalid
                 if not is_sequence_valid: 
@@ -953,7 +955,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     best_value = total_seq_value
 
                     # update to best sequence trackers
-                    n_obs_best[task] = list(range(len(obs_names)))
+                    n_obs_best[task] = n_obs_seq
                     t_img_best[task] = obs_times
                     t_prev_best[task] = t_prev_seq 
                     obs_names_best[task] = obs_names
