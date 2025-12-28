@@ -276,8 +276,6 @@ class ObservationOpportunity:
             # Return merged observation opportunity
             # TODO check if we need to generate a new ID here. Currently makes a new id based on parent tasks and accessibility
             return ObservationOpportunity(merged_parent_tasks, self.instrument_name, merged_accessibility, min_duration_req, merged_slew_angles) 
-            # out =  ObservationOpportunity(merged_parent_tasks, self.instrument_name, merged_accessibility, min_duration_req, merged_slew_angles) 
-            # return out
         
         except AssertionError as e:
             raise AssertionError(f"Cannot merge observation opportunities; {e}")

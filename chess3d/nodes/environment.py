@@ -521,8 +521,9 @@ class SimulationEnvironment(EnvironmentNode):
                     raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
 
                 # query coverage data of everything that is within the field of view of the agent
+                # TODO Add along-track angle checking. Currently assumes that only cross-track maneuverability is available
                 valid_access_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
-                                     if abs(raw_access_data['look angle [deg]'][i] - satellite_off_axis_angle) <= instrument_off_axis_fov
+                                     if abs(raw_access_data['off-nadir axis angle [deg]'][i] - satellite_off_axis_angle) <= instrument_off_axis_fov
                                      and instrument.name == raw_access_data['instrument'][i]]
         
                 matching_data = {col : [raw_access_data[col][i] for i in valid_access_data_indeces]
@@ -670,39 +671,47 @@ class SimulationEnvironment(EnvironmentNode):
             raise e        
             
     def compile_observations(self) -> pd.DataFrame:
-        columns = None
-        data = []
-        for msg in tqdm(self.observation_history, desc='Compiling observations results', leave=True):
-            msg : ObservationResultsMessage
-            observation_data : list = msg.observation_data
-            observer = msg.dst
+        try:
+            columns = None
+            data = []
+            
+            for msg in tqdm(self.observation_history, 
+                            desc='Compiling observations results', 
+                            leave=True):
+                msg : ObservationResultsMessage
+                observation_data : List[dict] = msg.observation_data
+                observer = msg.dst
 
-            for obs in observation_data:
-                
-                # find column names 
-                if columns is None:
-                    columns = [key for key in obs]
-                    columns.insert(0, 'observer')
-                    columns.insert(2, 't_img')
-                    columns.remove('t_start')
-                    columns.remove('t_end')
+                for obs in observation_data:
+                    
+                    # find column names 
+                    if columns is None:
+                        columns = [key for key in obs]
+                        columns.insert(0, 'observer')
+                        columns.insert(2, 't_img')
+                        columns.remove('t_start')
+                        columns.remove('t_end')
 
-                # add observation to data list
-                obs['observer'] = observer
-                for key in columns:
-                    val = obs.get(key, None)
-                    if isinstance(val, list):
-                        if len(val) == 1:
-                            obs[key] = val[0]
-                        else:
-                            obs[key] = [val[0], val[-1]]
+                    # add observation to data list
+                    obs['observer'] = observer
+                    for key in columns:
+                        val = obs.get(key, None)
+                        if isinstance(val, list):
+                            if len(val) == 1:
+                                obs[key] = val[0]
+                            else:
+                                obs[key] = [val[0], val[-1]]
 
-                obs['t_img'] = [obs['t_start'], obs['t_end']]
-                obs.pop('t_start')
-                obs.pop('t_end')
-                data.append([obs[key] for key in columns])
+                    obs['t_img'] = [obs['t_start'], obs['t_end']]
+                    obs.pop('t_start')
+                    obs.pop('t_end')
 
-        return pd.DataFrame(data=data, columns=columns)
+                    data.append([obs[key] for key in columns])
+
+            return pd.DataFrame(data=data, columns=columns)
+        except Exception as e:
+            print(e.with_traceback())
+            raise e
     
     def compile_broadcasts(self) -> pd.DataFrame:
         columns = ['t_msg', 'Sender', 'Message Type', 

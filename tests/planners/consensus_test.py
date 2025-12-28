@@ -100,15 +100,22 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             - no onboard event-detection        
 
         ### Scenario  Description
-        - Duration: 2 hours
+        - Duration: 12 hours
         - Grid: One target at (lat=0.0°, lon=0.0°)
         - Events: No events
+
+        ### Expected Outcomes
+        - Satellite performs 7 observations, one per each access window.
+        - All observations are successfully scheduled and executed without conflicts.
+        - The planner effectively tracks the bidding and performance of the observations being scheduled.
+        - Final planner results should indicate 7 completed bids and an empty bundle at the end of the simulation.
+        - The environment results should reflect the successful completion of all scheduled observations.
         """
         # check for case toggle 
         if not self.toy_1: return
 
         # setup scenario parameters
-        duration = 2.0 / 24.0
+        duration = 12.0 / 24.0
         grid_name = 'toy_1'
         scenario_name = f'toy_1-{self.planner_name()}'
         connectivity = 'LOS'
