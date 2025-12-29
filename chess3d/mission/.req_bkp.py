@@ -554,8 +554,7 @@ class ReobservationStrategyRequirement(TemporalRequirement):
         elif strategy == cls.TRIANGLE_THRESHOLD:
             return TriangleThresholdReobservationsStrategy.from_dict(dict)
 
-        raise ValueError(f"Unknown reobservation strategy: {strategy}")
-    
+        raise ValueError(f"Unknown reobservation strategy: {strategy}")   
 
 class NoChangeReobservationStrategy(ReobservationStrategyRequirement):
     def __init__(self, id = None, **_):
@@ -837,7 +836,6 @@ class SpatialRequirement(MissionRequirement):
     @abstractmethod
     def _build_spatial_preference_function(self, distance_threshold: float) -> callable:
         """Creates a spatial preference function based on a distance threshold."""
-        raise NotImplementedError("Subclasses must implement this method")
 
     def haversine_np(self, lat1 : float, lon1 : float, lat2 : float, lon2 : float) -> float:
         """

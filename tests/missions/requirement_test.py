@@ -1,447 +1,1070 @@
 import unittest
 
-from chess3d.mission.requirements import *
+import numpy as np
+
+from chess3d.mission.requirements import ConstantValueRequirement, ExpDecayRequirement, ExpSaturationRequirement, GaussianRequirement, IntervalInterpolationRequirement, LogThresholdRequirement, MissionRequirement, PreferenceStrategies, RequirementTypes, CategoricalRequirement, StepsRequirement, TriangleRequirement
 from chess3d.utils import print_welcome
 
-class TestRequirements(unittest.TestCase):
-    # MissionRequirement base class
-    def test_from_dict_invalid_type(self):
-        bad_dict = {
-            "req_type": "unknown_type",
-            "attribute": "foo",
-            "thresholds": [1, 2, 3],
-            "scores": [1.0, 0.5, 0.0]
-        }
-        self.assertRaises(ValueError, MissionRequirement.from_dict, bad_dict)
+class TestCategoricalRequirement(unittest.TestCase):
+    def setUp(self):
 
-
-class TestCategoricalRequirements(unittest.TestCase):
-    # Categorical Requirements
-    def test_categorical_requirement_valid(self):
-        thresholds = ["low", "medium", "high"]
-        scores = [1.0, 0.5, 0.0]
-        req = CategoricalRequirement("cloud_cover", thresholds, scores)
-        self.assertEqual(req.attribute, "cloud_cover")
-        self.assertTrue(all(threshold in thresholds for threshold in req.thresholds))   
-        self.assertTrue(all(score in scores for score in req.scores))
-        self.assertEqual(req.calc_preference_value("Medium"),0.5)
-    def test_categorical_requirement_invalid_score_range(self):
-        self.assertRaises(AssertionError, CategoricalRequirement, "cloud_cover", ["Low", "High"], [1.2, 0.0])    
-    def test_categorical_requirement_mismatched_lists(self):
-        self.assertRaises(AssertionError, CategoricalRequirement, "cloud_cover", ["Low", "Medium"], [1.0])
-    def test_categorical_copy(self):
-        req = CategoricalRequirement("cloud", ["low", "high"], [1.0, 0.0])
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_categorical_to_from_dict(self):
-        original = CategoricalRequirement("cloud", ["low", "medium", "high"], [1.0, 0.5, 0.0])
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, CategoricalRequirement)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-
-
-class TestDiscreteRequirements(unittest.TestCase):
-    # Discrete Value Requirements
-    def test_discrete_requirement_valid(self):
-        increasing_req = DiscreteRequirement("test", 
-                                             thresholds =[0.1, 0.3, 0.5], 
-                                             scores     =[1.0, 0.7, 0.4])
-        self.assertEqual(increasing_req.attribute, "test")
-        self.assertEqual(increasing_req.calc_preference_value(0.3), 0.7)
-        self.assertEqual(increasing_req.calc_preference_value(0.2), 0.7)
-
-        decreasing_req = DiscreteRequirement("test", 
-                                             thresholds =[0.5, 0.3, 0.1], 
-                                             scores     =[1.0, 0.7, 0.4])
-        self.assertEqual(decreasing_req.attribute, "test")
-        self.assertEqual(decreasing_req.calc_preference_value(0.3), 0.7)
-        self.assertEqual(decreasing_req.calc_preference_value(0.2), 0.4)
-    def test_discrete_requirement_unsorted_thresholds(self):
-        self.assertRaises(AssertionError, DiscreteRequirement, "test",
-                          thresholds=[0.3, 0.1, 0.5], scores=[1.0, 0.7, 0.4])
-    def test_discrete_requirement_out_of_bounds_score(self):
-        self.assertRaises(AssertionError, DiscreteRequirement, "test", 
-                          thresholds=[0.1, 0.2], scores=[1.1, 0.9])   
-    def test_discrete_copy(self):
-        req = DiscreteRequirement("ndvi", [0.1, 0.3], [1.0, 0.5])
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_discrete_to_from_dict(self):
-        original = DiscreteRequirement("ndvi", [0.1, 0.2], [1.0, 0.6])
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, DiscreteRequirement)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-
-
-class TestContinousRequirements(unittest.TestCase):
-    # Continuous Value Requirements
-    def test_continuous_requirement_valid(self):
-        req = ContinuousRequirement("temp", [10, 20, 30], [1.0, 0.5, 0.0])
-        self.assertAlmostEqual(req.calc_preference_value(15), 0.75)
-    def test_continuous_requirement_out_of_bounds(self):
-        req = ContinuousRequirement("temp", [10, 20, 30], [1.0, 0.5, 0.0])
-        self.assertAlmostEqual(req.calc_preference_value(35), 0.0)
-    def test_continuous_copy(self):
-        req = ContinuousRequirement("temp", [10, 20], [1.0, 0.0])
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_continuous_to_from_dict(self):
-        original = ContinuousRequirement("temp", [5.0, 25.0], [1.0, 0.2])
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, ContinuousRequirement)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-
-# Temporal Requirements
-class TestTemporalRequirements(unittest.TestCase):
-    def test_availability_requirement(self):
-        req = AvailabilityRequirement(0,10)
-        self.assertTrue(isinstance(req, AvailabilityRequirement))
-        self.assertEqual(req.availability.left, 0)
-        self.assertEqual(req.availability.right, 10)
-    def test_availability_requirement_evaluation(self):
-        req = AvailabilityRequirement(0, 10)
-        self.assertEqual(req.calc_preference_value(0), 1.0)
-        self.assertEqual(req.calc_preference_value(5), 1.0)
-        self.assertEqual(req.calc_preference_value(10), 1.0)
-        self.assertEqual(req.calc_preference_value(11), 0.0)
-        self.assertRaises(AssertionError, req.calc_preference_value, -1)
-    def test_availability_requirement_copy(self):
-        req = AvailabilityRequirement(0, 10)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_availability_requirement_to_from_dict(self):
-        original = AvailabilityRequirement(0, 10)
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, AvailabilityRequirement)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-
-    def test_measurement_duration_requirement(self):
-        req = MeasurementDurationRequirement([10800, 7200, 3600], 
-                                             [  1.0,  0.5,  0.1])
-        self.assertTrue(isinstance(req, MeasurementDurationRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
-        self.assertEqual(req.attribute, TemporalRequirement.DURATION)
-        self.assertEqual(req.calc_preference_value(0), 0.1)  # Should be 0.1
-        self.assertEqual(req.calc_preference_value(3600), 0.1)  # Should be 0.1
-        self.assertTrue(0.5 >= req.calc_preference_value(4000) >= 0.1)  # Should be between 0.5 and 0.1
-        self.assertTrue(1.0 >= req.calc_preference_value(8000) >= 0.5)  # Should be between 1.0 and 0.5
-        self.assertEqual(req.calc_preference_value(10800), 1.0)  # Should be 1.0
-        self.assertEqual(req.calc_preference_value(20000), 1.0)  # Should be 0.1
-
-    def test_revisit_time_requirement(self):
-        req = RevisitTemporalRequirement([3600, 7200, 10800], [1.0, 0.5, 0.1])
-        self.assertTrue(isinstance(req, RevisitTemporalRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
-        self.assertEqual(req.attribute, TemporalRequirement.REVISIT)
-        self.assertTrue(1.0 >= req.calc_preference_value(4000) >= 0.5)  # Should be between 1.0 and 0.5
-        self.assertEqual(req.calc_preference_value(3000), 1.0)  # Should be 1.0
-        self.assertEqual(req.calc_preference_value(20000), 0.1)  # Should be 0.1
-    def test_revisit_time_requirement_copy(self):
-        req = RevisitTemporalRequirement([3600, 7200], [1.0, 0.5])
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_revisit_time_requirement_to_from_dict(self):
-        original = RevisitTemporalRequirement([3600.0, 7200.0], [1.0, 0.5])
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, RevisitTemporalRequirement)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-    
-    def test_no_change_reobservation_strategy_requirement(self):
-        req = NoChangeReobservationStrategy()
-        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
-        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
-        self.assertTrue(isinstance(req, NoChangeReobservationStrategy))
-        self.assertEqual(req.calc_preference_value(1), 1.0)
-        self.assertEqual(req.calc_preference_value(2), 1.0)
-    def test_no_change_reobservation_strategy_copy(self):
-        req = NoChangeReobservationStrategy()
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_no_change_reobservation_strategy_to_from_dict(self):
-        original = NoChangeReobservationStrategy()
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, NoChangeReobservationStrategy)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-    
-    def test_exponential_saturation_reobservation_strategy(self):
-        req = ExpSaturationReobservationsStrategy(0.5)
-        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
-        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
-        self.assertTrue(isinstance(req, ExpSaturationReobservationsStrategy))
-        self.assertTrue(req.calc_preference_value(1) <= 0.5)
-        self.assertTrue(0.5 <= req.calc_preference_value(2))
-    def test_exponential_saturation_reobservation_strategy_copy(self):
-        req = ExpSaturationReobservationsStrategy(0.5)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_exponential_saturation_reobservation_strategy_to_from_dict(self):
-        original = ExpSaturationReobservationsStrategy(0.5)
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, ExpSaturationReobservationsStrategy)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-    
-    def test_logarithmic_threshold_reobservation_strategy(self):
-        req = LogThresholdReobservationsStrategy(2, 0.5)
-        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
-        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
-        self.assertTrue(isinstance(req, LogThresholdReobservationsStrategy))        
-        self.assertTrue(req.calc_preference_value(1) < 0.5)
-        self.assertAlmostEqual(req.calc_preference_value(2), 0.5)
-        self.assertAlmostEqual(req.calc_preference_value(10), 0.98, places=2)
-    def test_logarithmic_threshold_reobservation_strategy_copy(self):
-        req = LogThresholdReobservationsStrategy(2, 0.5)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_logarithmic_threshold_reobservation_strategy_to_from_dict(self):
-        original = LogThresholdReobservationsStrategy(2, 0.5)
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, LogThresholdReobservationsStrategy)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-    
-    def test_exponential_decay_reobservation_strategy(self):
-        req = ExpDecayReobservationStrategy(2)
-        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
-        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
-        self.assertTrue(isinstance(req, ExpDecayReobservationStrategy))
-        self.assertEqual(req.calc_preference_value(0), 1.0)
-        self.assertTrue(0 < req.calc_preference_value(1) <= 0.5)
-        self.assertAlmostEqual(req.calc_preference_value(4), 0.0, places=2)
-    def test_exponential_decay_reobservation_strategy_copy(self):
-        req = ExpDecayReobservationStrategy(2)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_exponential_decay_reobservation_strategy_to_from_dict(self):
-        original = ExpDecayReobservationStrategy(2)
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, ExpDecayReobservationStrategy)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-    
-    def test_guassian_threshold_reobservation_strategy(self):
-        req = GaussianThresholdReobservationsStrategy(4, 0.5)
-        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
-        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
-        self.assertTrue(isinstance(req, GaussianThresholdReobservationsStrategy))
-        self.assertAlmostEqual(req.calc_preference_value(0), 0.0, places=4)
-        self.assertTrue(0 < req.calc_preference_value(3) <= 0.5, "Value should be between 0 and 0.5")
-        self.assertAlmostEqual(req.calc_preference_value(4), 1, places=4)
-        self.assertTrue(0 < req.calc_preference_value(5) <= 0.5, "Value should be between 0 and 0.5")
-        self.assertAlmostEqual(req.calc_preference_value(8), 0.0, places=4)
-    def test_guassian_threshold_reobservation_strategy_copy(self):
-        req = GaussianThresholdReobservationsStrategy(4, 0.5)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_guassian_threshold_reobservation_strategy_to_from_dict(self):
-        original = GaussianThresholdReobservationsStrategy(4, 0.5)
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, GaussianThresholdReobservationsStrategy)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-
-    def test_triangle_threshold_reobservation_strategy(self):
-        req = TriangleThresholdReobservationsStrategy(4, 2.0)
-        self.assertTrue(isinstance(req, ReobservationStrategyRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.TEMPORAL)
-        self.assertEqual(req.attribute, TemporalRequirement.N_OBS)
-        self.assertTrue(isinstance(req, TriangleThresholdReobservationsStrategy))
-        self.assertAlmostEqual(req.calc_preference_value(0), 0.0, places=4)
-        self.assertAlmostEqual(req.calc_preference_value(3), 0.5, places=4)
-        self.assertAlmostEqual(req.calc_preference_value(4), 1, places=4)
-        self.assertAlmostEqual(req.calc_preference_value(5), 0.5, places=4)
-        self.assertAlmostEqual(req.calc_preference_value(8), 0.0, places=4)
-    def test_triangle_threshold_reobservation_strategy_copy(self):
-        req = TriangleThresholdReobservationsStrategy(4, 2.0)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_triangle_threshold_reobservation_strategy_to_from_dict(self):
-        original = TriangleThresholdReobservationsStrategy(4, 2.0)
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, TriangleThresholdReobservationsStrategy)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
-
-class TestSpatialRequirements(unittest.TestCase):
-    # Spatial Requirements
-    ## Point Target Spatial Requirement
-    def test_point_target_spatial_requirement(self):
-        target = (0.0, 0.0, 0, 0)
-        req = PointTargetSpatialRequirement(target,
-                                             distance_threshold=0.1)
-        self.assertTrue(isinstance(req, PointTargetSpatialRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
-        self.assertEqual(req.location_type, SpatialRequirement.POINT)
-        self.assertEqual(req.target, target)
-        self.assertEqual(req.distance_threshold, 0.1)
-    def test_point_target_spatial_requirement_evaluation(self):
-        target = (0.0, 0.0, 0, 0)
-        req = PointTargetSpatialRequirement(target, distance_threshold=10.0)
-        self.assertAlmostEqual(req.calc_preference_value((0.0, 0.0, 0, 0)), 1.0)
-        self.assertAlmostEqual(req.calc_preference_value((0.05, 0.05, 0, 1000)), 1.0)
-        self.assertAlmostEqual(req.calc_preference_value((0.2, 0.2, 0, 1000)), 0.0)
-    def test_point_target_spatial_requirement_copy(self):
-        target = (0.0, 0.0, 0, 0)
-        req = PointTargetSpatialRequirement(target, distance_threshold=0.1)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_point_target_spatial_requirement_to_from_dict(self):
-        target = (0.0, 0.0, 0, 0)
-        req = PointTargetSpatialRequirement(target, distance_threshold=0.1)
-        as_dict = req.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, PointTargetSpatialRequirement)
-        self.assertEqual(req.to_dict(), reconstructed.to_dict())
-
-    ## Target List Spatial Requirement
-    def test_target_list_spatial_requirement(self):
-        targets = [(0.0, 0.0, 0, 0), (1.0, 1.0, 0, 1)]
-        req = TargetListSpatialRequirement(targets, 
-                                           distance_threshold=0.1)
+        self.attribute = "test_attribute"
+        self.req = CategoricalRequirement(
+                                        req_type=RequirementTypes.CAPABILITY.value, 
+                                        attribute=self.attribute,
+                                        preferences={"A": 1, "B": 0.5, "C": 0}
+                                    )
         
-        self.assertTrue(isinstance(req, TargetListSpatialRequirement))
-        self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
-        self.assertEqual(req.location_type, SpatialRequirement.LIST)
-        self.assertTrue(all([target in req.targets for target in targets]))
-        self.assertEqual(req.distance_threshold, 0.1)
-    def test_target_list_spatial_requirement_evaluation(self):
-        targets = [(0.0, 0.0, 0, 0), (1.0, 1.0, 0, 1)]
-        req = TargetListSpatialRequirement(targets,
-                                             distance_threshold=10.0)
-        self.assertAlmostEqual(req.calc_preference_value((0.0, 0.0, 0, 0)), 1.0)
-        self.assertAlmostEqual(req.calc_preference_value((0.05, 0.05, 0, 1000)), 1.0)
-        self.assertAlmostEqual(req.calc_preference_value((0.2, 0.2, 0, 1000)), 0.0)
-    def test_target_list_spatial_requirement_copy(self):
-        targets = [(0.0, 0.0, 0, 0), (1.0, 1.0, 0, 1)]
-        req = TargetListSpatialRequirement(targets, distance_threshold=0.1)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_target_list_spatial_requirement_to_from_dict(self):
-        targets = [(0.0, 0.0, 0, 0), (1.0, 1.0, 0, 1)]
-        req = TargetListSpatialRequirement(targets, distance_threshold=0.1)
-        as_dict = req.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, TargetListSpatialRequirement)
-        self.assertEqual(req.to_dict(), reconstructed.to_dict())
 
-    ## Test Grid Target Spatial Requirement
-    def test_grid_target_spatial_requirement(self):
-        grid_name = "test_grid"
-        grid_index = 0
-        grid_size = 10
-        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
+    def test_constructor(self):
+        # Test creation of a CategoricalRequirement        
+        self.assertIsInstance(self.req, CategoricalRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.CAPABILITY.value)
+        self.assertEqual(self.req.attribute, "test_attribute")
+        self.assertEqual(self.req.strategy, PreferenceStrategies.CATEGORICAL.value)
+        self.assertEqual(self.req.preferences, {"a": 1, "b": 0.5, "c": 0}) # keys should be lowercase
 
-        self.assertIsInstance(req, GridTargetSpatialRequirement)
-        self.assertEqual(req.requirement_type, MissionRequirement.SPATIAL)
-        self.assertEqual(req.location_type, SpatialRequirement.GRID)
-        self.assertEqual(req.grid_name, grid_name)
-        self.assertEqual(req.grid_index, grid_index)
-        self.assertEqual(req.grid_size, grid_size)
-    def test_grid_target_spatial_requirement_evaluation(self):
-        grid_name = "test_grid"
-        grid_index = 0
-        grid_size = 10
-        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
-        # Test evaluation for a point within the grid cell
-        self.assertAlmostEqual(req.calc_preference_value((0.0, 0.0, grid_index, 5)), 1.0)
-        # Test evaluation for a point outside the grid cell
-        self.assertAlmostEqual(req.calc_preference_value((0.2, 0.2, grid_index, 11)), 0.0)
-        self.assertAlmostEqual(req.calc_preference_value((0.2, 0.2, grid_index+1, 11)), 0.0)
-    def test_grid_target_spatial_requirement_copy(self):
-        grid_name = "test_grid"
-        grid_index = 0
-        grid_size = 10
-        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_grid_target_spatial_requirement_to_from_dict(self):
-        grid_name = "test_grid"
-        grid_index = 0
-        grid_size = 10
-        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
-        as_dict = req.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, GridTargetSpatialRequirement)
-        self.assertEqual(req.to_dict(), reconstructed.to_dict())
-    def test_grid_target_spatial_requirement_invalid_location(self):
-        grid_name = "test_grid"
-        grid_index = 0
-        grid_size = 10
-        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
-        # Test with a location that is not a tuple/list of length 4
-        with self.assertRaises(AssertionError):
-            req.calc_preference_value((0.0, 0.0, grid_index))  # Missing grid index and gp index
-    def test_grid_target_spatial_requirement_invalid_grid_index(self):
-        grid_name = "test_grid"
-        grid_index = 0
-        grid_size = 10
-        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
-        # Test with a grid index that is not an integer or is negative
-        with self.assertRaises(AssertionError):
-            req.calc_preference_value((0.0, 0.0, -1, 5))  # Negative grid index
-    def test_grid_target_spatial_requirement_invalid_gp_index(self):
-        grid_name = "test_grid"
-        grid_index = 0
-        grid_size = 10
-        req = GridTargetSpatialRequirement(grid_name, grid_index, grid_size)
-        # Test with a gp index that is not an integer or is out of bounds
-        with self.assertRaises(AssertionError):
-            req.calc_preference_value((0.0, 0.0, grid_index, -1))  # Negative gp index
-            with self.assertRaises(AssertionError):
-                req.calc_preference_value((0.0, 0.0, grid_index, grid_size))  # gp index equal to grid size
+        # Test invalid preferences
+        self.assertRaises(AssertionError, CategoricalRequirement,
+                          req_type="invalid_req", # invalid type
+                          attribute=self.attribute,
+                          preferences={"A": 1, "B": 0.5, "C": 0})  
+        self.assertRaises(AssertionError, CategoricalRequirement,
+                          req_type=RequirementTypes.CAPABILITY.value, 
+                          attribute=123,                  # invalid attribute type
+                          preferences={"A": 1, "B": 0.5, "C": 0})  
+        self.assertRaises(AssertionError, CategoricalRequirement,
+                          req_type=RequirementTypes.CAPABILITY.value,
+                          attribute=self.attribute,
+                          preferences="{'A: 1, 'B': 1}")  # Invalid preference type
+        self.assertRaises(AssertionError, CategoricalRequirement,
+                          req_type=RequirementTypes.CAPABILITY.value, 
+                          attribute=self.attribute,
+                          preferences={"A": 1, "B": 0.5, "C": 0},
+                          id=123 # invalid id type
+                          )  
+        self.assertRaises(ValueError, CategoricalRequirement,
+                          req_type=RequirementTypes.CAPABILITY.value, 
+                          attribute=self.attribute,
+                          preferences={"A": 1, "B": 0.5, "C": 0},
+                          id="123" # invalid id value
+                          )  
+        self.assertRaises(AssertionError, CategoricalRequirement,
+                          req_type=RequirementTypes.CAPABILITY.value,
+                          attribute=self.attribute,
+                          preferences={1: "A", 2 : "B"})  # Invalid preference key types
+        self.assertRaises(AssertionError, CategoricalRequirement,
+                          req_type=RequirementTypes.CAPABILITY.value,
+                          attribute=self.attribute,
+                          preferences={"A": "1", "B": "1"})  # Invalid preference value types
+        self.assertRaises(AssertionError, CategoricalRequirement,
+                          req_type=RequirementTypes.CAPABILITY.value,
+                          attribute=self.attribute,
+                          preferences={"A": 1, "B": 2})  # Invalid preference value
 
-class TestCapabilityRequirements(unittest.TestCase):
-    def test_capability_requirement_valid(self):
-        req = CapabilityRequirement("instrument", ["optical", "radar"])
-        self.assertEqual(req.attribute, "instrument")
-        self.assertTrue(all(val in req.valid_values for val in ["optical", "radar"]))
-        self.assertEqual(req.calc_preference_value("optical"), 1.0)
-        self.assertEqual(req.calc_preference_value("radar"), 1.0)
-        self.assertEqual(req.calc_preference_value("thermal"), 0.0)
-    def test_capability_requirement_invalid(self):
-        # Test with an empty valid values list
-        with self.assertRaises(AssertionError):
-            CapabilityRequirement("instrument", [])
-        # Test with a non-list valid values
-        with self.assertRaises(AssertionError):
-            CapabilityRequirement("instrument", "optical")
-    def test_capability_requirement_copy(self):
-        req = CapabilityRequirement("sensor_type", ["optical", "radar"])
-        req_copy = req.copy()
-        self.assertEqual(req.to_dict(), req_copy.to_dict())
-        self.assertIsNot(req, req_copy)
-    def test_capability_requirement_to_from_dict(self):
-        original = CapabilityRequirement("sensor_type", ["optical", "radar"])
-        as_dict = original.to_dict()
-        reconstructed = MissionRequirement.from_dict(as_dict)
-        self.assertIsInstance(reconstructed, CapabilityRequirement)
-        self.assertEqual(original.to_dict(), reconstructed.to_dict())
+    def test_get_preference(self):
+        # Test preference retrieval
+        self.assertEqual(self.req.calc_preference(self.attribute, "A"), 1)
+        self.assertEqual(self.req.calc_preference(self.attribute, "B"), 0.5)
+        self.assertEqual(self.req.calc_preference(self.attribute, "C"), 0)
+        self.assertEqual(self.req.calc_preference(self.attribute, "D"), 0)  # Not in preferences
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", "A") # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, 1234, "A") # wrong attribute type
+
+    def test_representation(self):
+        # Test string representation
+        expected_str = "MissionRequirement(type=CAPABILITY, strategy=CATEGORICAL, attribute=test_attribute)"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.CAPABILITY.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.CATEGORICAL.value)
+        self.assertEqual(req_dict["preferences"], {"a": 1, "b": 0.5, "c": 0})
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.CAPABILITY.value,
+            "strategy" : "CATEGORICAL",
+            "attribute": self.attribute,
+            "preferences": {"A": 1, "B": 0.5, "C": 0}
+        }
+        # test class method
+        req_from_dict : CategoricalRequirement= CategoricalRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, CategoricalRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.preferences, self.req.preferences)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : CategoricalRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, CategoricalRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.preferences, self.req.preferences)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+    def test_copy(self):
+        # Test copying of the requirement
+        req_copy = self.req.copy()
+        self.assertIsInstance(req_copy, CategoricalRequirement)
+        self.assertEqual(req_copy.to_dict(), self.req.to_dict())
+        self.assertIsNot(req_copy, self.req)  # Ensure it's a different instance
+
+class TestConstantValueRequirement(unittest.TestCase):
+    def setUp(self):
+        self.attribute = "constant_value_attribute"
+        self.value = 0.75
+        self.req = ConstantValueRequirement(
+            req_type=RequirementTypes.PERFORMANCE.value,
+            attribute=self.attribute,
+            value=self.value
+        )
+
+    def test_constructor(self):
+        # Test creation of a ConstantValueRequirement        
+        self.assertIsInstance(self.req, ConstantValueRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(self.req.attribute, self.attribute)
+        self.assertEqual(self.req.strategy, PreferenceStrategies.CONSTANT.value)
+        self.assertEqual(self.req.value, self.value)
+
+        # Test invalid value type
+        self.assertRaises(AssertionError, ConstantValueRequirement,
+                          req_type="invalid_req", # invalid req type
+                          attribute=self.attribute,
+                          value=self.value)
+        self.assertRaises(AssertionError, ConstantValueRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=123, # invalid attribute type
+                          value=self.value)
+        self.assertRaises(AssertionError, ConstantValueRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          value="not_a_float")  # invalid value type
+        self.assertRaises(AssertionError, ConstantValueRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          value=10)  # invalid value 
+        self.assertRaises(AssertionError, ConstantValueRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          value=self.value,
+                          id=123)  # invalid id type
+        self.assertRaises(ValueError, ConstantValueRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          value=self.value,
+                          id="123")  # invalid id value
+        
+    def test_get_preference(self):
+        # Test preference retrieval
+        self.assertEqual(self.req.calc_preference(self.attribute, 123456), self.value)
+        self.assertEqual(self.req.calc_preference(self.attribute, 0.254), self.value)
+        self.assertRaises(AssertionError, self.req.calc_preference, 12345, 10) # wrong attribute type
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", 10) # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, None) # wrong value type
+
+    def test_representation(self):
+        # Test string representation
+        expected_str = "MissionRequirement(type=PERFORMANCE, strategy=CONSTANT, attribute=constant_value_attribute)"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.CONSTANT.value)
+        self.assertEqual(req_dict["value"], self.value)
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.PERFORMANCE.value,
+            "strategy" : PreferenceStrategies.CONSTANT.value,
+            "attribute": self.attribute,
+            "value": self.value
+        }
+        # test class method
+        req_from_dict : ConstantValueRequirement= ConstantValueRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, ConstantValueRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.value, self.req.value)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : ConstantValueRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, ConstantValueRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.value, self.req.value)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+    def test_copy(self):
+        # Test copying of the requirement
+        req_copy = self.req.copy()
+        self.assertIsInstance(req_copy, ConstantValueRequirement)
+        self.assertEqual(req_copy.to_dict(), self.req.to_dict())
+        self.assertIsNot(req_copy, self.req)  # Ensure it's a different instance
+
+class TestExpSaturationRequirement(unittest.TestCase):
+    def setUp(self):
+        self.attribute = "exp_saturation_attribute"
+        self.sat_rate = 0.1
+        self.req = ExpSaturationRequirement(
+            req_type=RequirementTypes.PERFORMANCE.value,
+            attribute=self.attribute,
+            sat_rate=self.sat_rate
+        )
     
+    def test_constructor(self): 
+        # Test creation of an ExpSaturationRequirement        
+        self.assertIsInstance(self.req, ExpSaturationRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(self.req.attribute, self.attribute)
+        self.assertEqual(self.req.strategy, PreferenceStrategies.EXP_SATURATION.value)
+        self.assertEqual(self.req.sat_rate, self.sat_rate)
+
+        # Test invalid saturation_rate type
+        self.assertRaises(AssertionError, ExpSaturationRequirement,
+                          req_type="invalid_req", # invalid req type
+                          attribute=self.attribute,
+                          sat_rate=self.sat_rate)
+        self.assertRaises(AssertionError, ExpSaturationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=123, # invalid attribute type
+                          sat_rate=self.sat_rate)
+        self.assertRaises(AssertionError, ExpSaturationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          sat_rate="not_a_float")  # invalid saturation_rate type
+        self.assertRaises(AssertionError, ExpSaturationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          sat_rate=-0.5)  # invalid saturation_rate value 
+        self.assertRaises(AssertionError, ExpSaturationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          sat_rate=self.sat_rate,
+                          id=123)  # invalid id type
+        self.assertRaises(ValueError, ExpSaturationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          sat_rate=self.sat_rate,
+                          id="123")  # invalid id value
+        
+    def test_get_preference(self):
+        # Test preference retrieval
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 0), 0.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 10), 1 - 2.718281828459045**(-1))
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 50), 1 - 2.718281828459045**(-5))
+        self.assertRaises(AssertionError, self.req.calc_preference, 12345, 10) # wrong attribute type
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", 10) # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, "10") # wrong value type
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, -1) # invalid value 
+
+    def test_representation(self):
+        # Test string representation
+        expected_str = "MissionRequirement(type=PERFORMANCE, strategy=EXP_SATURATION, attribute=exp_saturation_attribute, sat_rate=0.1)"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.EXP_SATURATION.value)
+        self.assertEqual(req_dict["sat_rate"], self.sat_rate)
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.PERFORMANCE.value,
+            "strategy" : PreferenceStrategies.EXP_SATURATION.value,
+            "attribute": self.attribute,
+            "sat_rate": self.sat_rate
+        }
+        # test class method
+        req_from_dict : ExpSaturationRequirement= ExpSaturationRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, ExpSaturationRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.sat_rate, self.req.sat_rate)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : ExpSaturationRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, ExpSaturationRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.sat_rate, self.req.sat_rate)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+    def test_copy(self):
+        # Test copying of the requirement
+        req_copy = self.req.copy()
+        self.assertIsInstance(req_copy, ExpSaturationRequirement)
+        self.assertEqual(req_copy.to_dict(), self.req.to_dict())
+        self.assertIsNot(req_copy, self.req)  # Ensure it's a different instance
+
+class TestLogThresholdRequirement(unittest.TestCase):
+    def setUp(self):
+        self.attribute = "log_threshold_attribute"
+        self.threshold = 5.0
+        self.slope = 0.2
+        self.req = LogThresholdRequirement(
+            req_type=RequirementTypes.SPATIAL.value,
+            attribute=self.attribute,
+            slope=self.slope,
+            threshold=self.threshold
+        )
+
+    def test_constructor(self):
+        # Test creation of a LogThresholdRequirement        
+        self.assertIsInstance(self.req, LogThresholdRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.SPATIAL.value)
+        self.assertEqual(self.req.attribute, self.attribute)
+        self.assertEqual(self.req.strategy, PreferenceStrategies.LOG_THRESHOLD.value)
+        self.assertEqual(self.req.slope, self.slope)
+        self.assertEqual(self.req.threshold, self.threshold)
+
+        # Test invalid slope and threshold types
+        self.assertRaises(AssertionError, LogThresholdRequirement,
+                          req_type="invalid_req", # invalid req type
+                          attribute=self.attribute,
+                          slope=self.slope,
+                          threshold=self.threshold)
+        self.assertRaises(AssertionError, LogThresholdRequirement,
+                          req_type=RequirementTypes.SPATIAL.value, 
+                          attribute=123, # invalid attribute type
+                          slope=self.slope,
+                          threshold=self.threshold)
+        self.assertRaises(AssertionError, LogThresholdRequirement,
+                          req_type=RequirementTypes.SPATIAL.value, 
+                          attribute=self.attribute,
+                          slope="not_a_float",  # invalid slope type
+                          threshold=self.threshold)
+        self.assertRaises(AssertionError, LogThresholdRequirement,
+                          req_type=RequirementTypes.SPATIAL.value, 
+                          attribute=self.attribute,
+                          slope=-1.0,  # invalid slope value
+                          threshold=self.threshold)
+        self.assertRaises(AssertionError, LogThresholdRequirement,
+                          req_type=RequirementTypes.SPATIAL.value, 
+                          attribute=self.attribute,
+                          slope=self.slope,
+                          threshold="not_a_float")  # invalid threshold type
+        self.assertRaises(AssertionError, LogThresholdRequirement,
+                          req_type=RequirementTypes.SPATIAL.value, 
+                          attribute=self.attribute,
+                          slope=self.slope,
+                          threshold=-1.0)  # invalid threshold value
+        self.assertRaises(AssertionError, LogThresholdRequirement,
+                          req_type=RequirementTypes.SPATIAL.value, 
+                          attribute=self.attribute,
+                          slope=self.slope,
+                          threshold=self.threshold,
+                          id=123)  # invalid id type
+        self.assertRaises(ValueError, LogThresholdRequirement,
+                          req_type=RequirementTypes.SPATIAL.value, 
+                          attribute=self.attribute,
+                          slope=self.slope,
+                          threshold=self.threshold,
+                          id="123")  # invalid id value
+    
+    def calc_preference(self, value):
+        return 1 / (1 + np.exp(-self.slope * (value - self.threshold)))
+
+    def test_get_preference(self):
+        # Test preference retrieval
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 0), self.calc_preference(0))
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 5), self.calc_preference(5))
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 10), self.calc_preference(10))
+        self.assertRaises(AssertionError, self.req.calc_preference, 12345, 10) # wrong attribute type
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", 10) # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, "10") # wrong value type
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, -1) # invalid value
+
+    def test_representation(self):
+        # Test string representation
+        expected_str = "MissionRequirement(type=SPATIAL, strategy=LOG_THRESHOLD, attribute=log_threshold_attribute, slope=0.2, threshold=5.0)"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.SPATIAL.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.LOG_THRESHOLD.value)
+        self.assertEqual(req_dict["slope"], self.slope)
+        self.assertEqual(req_dict["threshold"], self.threshold)
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.SPATIAL.value,
+            "strategy" : PreferenceStrategies.LOG_THRESHOLD.value,
+            "attribute": self.attribute,
+            "slope": self.slope,
+            "threshold": self.threshold
+        }
+        # test class method
+        req_from_dict : LogThresholdRequirement= LogThresholdRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, LogThresholdRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.slope, self.req.slope)
+        self.assertEqual(req_from_dict.threshold, self.req.threshold)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : LogThresholdRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, LogThresholdRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.slope, self.req.slope)
+        self.assertEqual(req_from_dict.threshold, self.req.threshold)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+    def test_copy(self):
+        # Test copying of the requirement
+        req_copy = self.req.copy()
+        self.assertIsInstance(req_copy, LogThresholdRequirement)
+        self.assertEqual(req_copy.to_dict(), self.req.to_dict())
+        self.assertIsNot(req_copy, self.req)  # Ensure it's a different instance
+    
+class TestExpDecayRequirement(unittest.TestCase):
+    def setUp(self):
+        self.attribute = "exp_decay_attribute"
+        self.decay_rate = 0.05
+
+        self.req = ExpDecayRequirement(
+            req_type=RequirementTypes.TEMPORAL.value,
+            attribute=self.attribute,
+            decay_rate=self.decay_rate
+        )
+
+    def test_constructor(self):
+        # Test creation of an ExpDecayRequirement        
+        self.assertIsInstance(self.req, ExpDecayRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.TEMPORAL.value)
+        self.assertEqual(self.req.attribute, self.attribute)
+        self.assertEqual(self.req.strategy, PreferenceStrategies.EXP_DECAY.value)
+        self.assertEqual(self.req.decay_rate, self.decay_rate)
+
+        # Test invalid decay_rate type
+        self.assertRaises(AssertionError, ExpDecayRequirement,
+                          req_type="invalid_req", # invalid req type
+                          attribute=self.attribute,
+                          decay_rate=self.decay_rate)
+        self.assertRaises(AssertionError, ExpDecayRequirement,
+                          req_type=RequirementTypes.TEMPORAL.value, 
+                          attribute=123, # invalid attribute type
+                          decay_rate=self.decay_rate)
+        self.assertRaises(AssertionError, ExpDecayRequirement,
+                          req_type=RequirementTypes.TEMPORAL.value, 
+                          attribute=self.attribute,
+                          decay_rate="not_a_float")  # invalid decay_rate type
+        self.assertRaises(AssertionError, ExpDecayRequirement,
+                          req_type=RequirementTypes.TEMPORAL.value, 
+                          attribute=self.attribute,
+                          decay_rate=-0.5)  # invalid decay_rate value 
+        self.assertRaises(AssertionError, ExpDecayRequirement,
+                          req_type=RequirementTypes.TEMPORAL.value, 
+                          attribute=self.attribute,
+                          decay_rate=self.decay_rate,
+                          id=123)  # invalid id type
+        self.assertRaises(ValueError, ExpDecayRequirement,
+                          req_type=RequirementTypes.TEMPORAL.value, 
+                          attribute=self.attribute,
+                          decay_rate=self.decay_rate,
+                          id="123")  # invalid id value
+        
+    def test_get_preference(self):
+        # Test preference retrieval
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 0), 1.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 10), 2.718281828459045**(-0.5))
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 50), 2.718281828459045**(-2.5))
+        self.assertRaises(AssertionError, self.req.calc_preference, 12345, 10) # wrong attribute type
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", 10) # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, "10") # wrong value type
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, -1) # invalid value
+
+    def test_representation(self):
+        # Test string representation
+        expected_str = "MissionRequirement(type=TEMPORAL, strategy=EXP_DECAY, attribute=exp_decay_attribute, decay_rate=0.05)"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.TEMPORAL.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.EXP_DECAY.value)
+        self.assertEqual(req_dict["decay_rate"], self.decay_rate)
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.TEMPORAL.value,
+            "strategy" : PreferenceStrategies.EXP_DECAY.value,
+            "attribute": self.attribute,
+            "decay_rate": self.decay_rate
+        }
+        # test class method
+        req_from_dict : ExpDecayRequirement= ExpDecayRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, ExpDecayRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.decay_rate, self.req.decay_rate)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : ExpDecayRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, ExpDecayRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.decay_rate, self.req.decay_rate)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+    def test_copy(self):    
+        # Test copying of the requirement
+        req_copy = self.req.copy()
+        self.assertIsInstance(req_copy, ExpDecayRequirement)
+        self.assertEqual(req_copy.to_dict(), self.req.to_dict())
+        self.assertIsNot(req_copy, self.req)  # Ensure it's a different instance
+
+class TestGaussianRequirement(unittest.TestCase):
+    def setUp(self):
+        self.attribute = "gaussian_attribute"
+        self.mean = 10.0
+        self.stddev = 2.0
+
+        self.req = GaussianRequirement(
+            req_type=RequirementTypes.PERFORMANCE.value,
+            attribute=self.attribute,
+            mean=self.mean,
+            stddev=self.stddev
+        )
+
+    def test_constructor(self):
+        # Test creation of a GaussianRequirement        
+        self.assertIsInstance(self.req, GaussianRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(self.req.attribute, self.attribute)
+        self.assertEqual(self.req.strategy, PreferenceStrategies.GAUSSIAN.value)
+        self.assertEqual(self.req.mean, self.mean)
+        self.assertEqual(self.req.stddev, self.stddev)
+
+        # Test invalid mean and std_dev types
+        self.assertRaises(AssertionError, GaussianRequirement,
+                          req_type="invalid_req", # invalid req type
+                          attribute=self.attribute,
+                          mean=self.mean,
+                          stddev=self.stddev)
+        self.assertRaises(AssertionError, GaussianRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=123, # invalid attribute type
+                          mean=self.mean,
+                          stddev=self.stddev)
+        self.assertRaises(AssertionError, GaussianRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          mean="not_a_float",  # invalid mean type
+                          stddev=self.stddev)
+        self.assertRaises(AssertionError, GaussianRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          mean=self.mean,
+                          stddev="not_a_float")  # invalid stddev type
+        self.assertRaises(AssertionError, GaussianRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          mean=self.mean,
+                          stddev=-1.0)  # invalid stddev value 
+        self.assertRaises(AssertionError, GaussianRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          mean=self.mean,
+                          stddev=self.stddev,
+                          id=123)  # invalid id type
+        self.assertRaises(ValueError, GaussianRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          mean=self.mean,
+                          stddev=self.stddev,
+                          id="123")  # invalid id value
+        
+    def test_get_preference(self):
+        # Test preference retrieval
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 10), 1.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 12), np.exp(-0.5))
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 14), np.exp(-2.0))
+        self.assertRaises(AssertionError, self.req.calc_preference, 12345, 10) # wrong attribute type
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", 10) # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, "10") # wrong value type
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, -1) # invalid value 
+
+    def test_representation(self):
+        # Test string representation
+        expected_str = "MissionRequirement(type=PERFORMANCE, strategy=GAUSSIAN, attribute=gaussian_attribute, mean=10.0, stddev=2.0)"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.GAUSSIAN.value)
+        self.assertEqual(req_dict["mean"], self.mean)
+        self.assertEqual(req_dict["stddev"], self.stddev)
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.PERFORMANCE.value,
+            "strategy" : PreferenceStrategies.GAUSSIAN.value,
+            "attribute": self.attribute,
+            "mean": self.mean,
+            "stddev": self.stddev
+        }
+        # test class method
+        req_from_dict : GaussianRequirement= GaussianRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, GaussianRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.mean, self.req.mean)
+        self.assertEqual(req_from_dict.stddev, self.req.stddev)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : GaussianRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, GaussianRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.mean, self.req.mean)
+        self.assertEqual(req_from_dict.stddev, self.req.stddev)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+class TestTriangleRequirement(unittest.TestCase):
+    def setUp(self):
+        self.attribute = "triangle_attribute"
+        self.reference = 10.0
+        self.width = 10.0
+
+        self.req = TriangleRequirement(
+            req_type=RequirementTypes.PERFORMANCE.value,
+            attribute=self.attribute,
+            reference=self.reference,
+            width=self.width
+        )
+
+    def test_constructor(self):
+        # Test creation of a TriangleRequirement        
+        self.assertIsInstance(self.req, TriangleRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(self.req.attribute, self.attribute)
+        self.assertEqual(self.req.strategy, PreferenceStrategies.TRIANGLE.value)
+        self.assertEqual(self.req.reference, self.reference)
+        self.assertEqual(self.req.width, self.width)
+
+        # Test invalid reference and width types
+        self.assertRaises(AssertionError, TriangleRequirement,
+                          req_type="invalid_req", # invalid req type
+                          attribute=self.attribute,
+                          reference=self.reference,
+                          width=self.width)
+        self.assertRaises(AssertionError, TriangleRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=123, # invalid attribute type
+                          reference=self.reference,
+                          width=self.width)
+        self.assertRaises(AssertionError, TriangleRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          reference="not_a_float",  # invalid reference type
+                          width=self.width)
+        self.assertRaises(AssertionError, TriangleRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          reference=self.reference,
+                          width="not_a_float")  # invalid width type
+        self.assertRaises(AssertionError, TriangleRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          reference=self.reference,
+                          width=-1.0)  # invalid width value 
+        self.assertRaises(AssertionError, TriangleRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          reference=self.reference,
+                          width=self.width,
+                          id=123)  # invalid id type
+        self.assertRaises(ValueError, TriangleRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          reference=self.reference,
+                          width=self.width,
+                          id="123")  # invalid id value
+        
+    def test_get_preference(self):
+        # Test preference retrieval
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 10), 1.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 12.5), 0.5)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 7.5), 0.5)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 5), 0.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 15), 0.0)
+        self.assertRaises(AssertionError, self.req.calc_preference, 12345, 10) # wrong attribute type
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", 10) # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, "10") # wrong value type
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, -1) # invalid value
+                
+    def test_representation(self):  
+        # Test string representation
+        expected_str = "MissionRequirement(type=PERFORMANCE, strategy=TRIANGLE, attribute=triangle_attribute, reference=10.0, width=10.0)"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.TRIANGLE.value)
+        self.assertEqual(req_dict["reference"], self.reference)
+        self.assertEqual(req_dict["width"], self.width)
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.PERFORMANCE.value,
+            "strategy" : PreferenceStrategies.TRIANGLE.value,
+            "attribute": self.attribute,
+            "reference": self.reference,
+            "width": self.width
+        }
+        # test class method
+        req_from_dict : TriangleRequirement= TriangleRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, TriangleRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.reference, self.req.reference)
+        self.assertEqual(req_from_dict.width, self.req.width)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : TriangleRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, TriangleRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.reference, self.req.reference)
+        self.assertEqual(req_from_dict.width, self.req.width)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+    def test_copy(self):
+        # Test copying of the requirement
+        req_copy = self.req.copy()
+        self.assertIsInstance(req_copy, TriangleRequirement)
+        self.assertEqual(req_copy.to_dict(), self.req.to_dict())
+        self.assertIsNot(req_copy, self.req)  # Ensure it's a different instance
+            
+class TestStepsRequirement(unittest.TestCase):
+    def setUp(self):
+        self.attribute = "steps_attribute"
+        self.thresholds = [5,   10,   15]
+        self.scores =  [0.0, 0.5,  0.75,  1.0]
+
+        self.req = StepsRequirement(
+            req_type=RequirementTypes.PERFORMANCE.value,
+            attribute=self.attribute,
+            thresholds=self.thresholds,
+            scores=self.scores
+        )
+
+    def test_constructor(self):
+        # Test creation of a StepsRequirement        
+        self.assertIsInstance(self.req, StepsRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(self.req.attribute, self.attribute)
+        self.assertEqual(self.req.strategy, PreferenceStrategies.STEPS.value)
+        self.assertEqual(self.req.thresholds, self.thresholds)
+        self.assertEqual(self.req.scores, self.scores)
+
+        # Test invalid steps and preferences types
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type="invalid_req", # invalid req type
+                          attribute=self.attribute,
+                          thresholds=self.thresholds,
+                          scores=self.scores)
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=123, # invalid attribute type
+                          thresholds=self.thresholds,
+                          scores=self.scores)
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds="not_a_list",  # invalid thresholds type
+                          scores=self.scores)
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds=self.thresholds,
+                          scores="not_a_list")  # invalid scores type
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds=[0, 10, 5],  # invalid thresholds order
+                          scores=self.scores)
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds=[0, 5, 10, 15],  # invalid thresholds length
+                          scores=self.scores)
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds=self.thresholds,
+                          scores=[0.0, 1.2, 0.8])  # invalid scores value 
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds=self.thresholds,
+                          scores=[0.0, -1.2, 0.8])  # invalid scores value 
+        self.assertRaises(AssertionError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds=self.thresholds,
+                          scores=self.scores,
+                          id=123)  # invalid id type
+        self.assertRaises(ValueError, StepsRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds=self.thresholds,
+                          scores=self.scores,
+                          id="123")  # invalid id value
+        
+    def test_get_preference(self):
+        # self.thresholds = [ 5,   10,    15]
+        # self.scores =  [0.0,  0.5,  0.75,  1.0]
+
+        # Test preference retrieval
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 0.0), 0.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 5), 0.5)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 7.5), 0.5)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 10), 0.75)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 12.5), 0.75)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 15), 1.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 20), 1.0)
+        self.assertRaises(AssertionError, self.req.calc_preference, 12345, 10) # wrong attribute type
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", 10) # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, "10") # wrong value type
+
+    def test_representation(self):
+        # Test string representation
+        expected_str = "MissionRequirement(type=PERFORMANCE, strategy=STEPS, attribute=steps_attribute, thresholds=[5, 10, 15], scores=[0.0, 0.5, 0.75, 1.0])"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.STEPS.value)
+        self.assertEqual(req_dict["thresholds"], self.thresholds)
+        self.assertEqual(req_dict["scores"], self.scores)
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.PERFORMANCE.value,
+            "strategy" : PreferenceStrategies.STEPS.value,
+            "attribute": self.attribute,
+            "thresholds": self.thresholds,
+            "scores": self.scores
+        }
+        # test class method
+        req_from_dict : StepsRequirement= StepsRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, StepsRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.thresholds, self.req.thresholds)
+        self.assertEqual(req_from_dict.scores, self.req.scores)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : StepsRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, StepsRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.thresholds, self.req.thresholds)
+        self.assertEqual(req_from_dict.scores, self.req.scores)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+    def test_copy(self):
+        # Test copying of the requirement
+        req_copy = self.req.copy()
+        self.assertIsInstance(req_copy, StepsRequirement)
+        self.assertEqual(req_copy.to_dict(), self.req.to_dict())
+        self.assertIsNot(req_copy, self.req)  # Ensure it's a different instance
+
+class TestIntervalInterpolationRequirement(unittest.TestCase):
+    def setUp(self):
+        self.attribute = "interval_interpolation_attribute"
+        self.thresholds = [0,  10,  20]
+        self.scores =  [0.0, 0.5, 1.0]
+
+        self.req = IntervalInterpolationRequirement(
+            req_type=RequirementTypes.PERFORMANCE.value,
+            attribute=self.attribute,
+            thresholds=self.thresholds,
+            scores=self.scores
+        )
+
+    def test_constructor(self):
+        # Test creation of an IntervalInterpolationRequirement        
+        self.assertIsInstance(self.req, IntervalInterpolationRequirement)
+        self.assertEqual(self.req.req_type, RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(self.req.attribute, self.attribute)
+        self.assertEqual(self.req.strategy, PreferenceStrategies.INTERVAL_INTERP.value)
+        self.assertEqual(self.req.thresholds, self.thresholds)
+        self.assertEqual(self.req.scores, self.scores)
+
+        # Test invalid thresholds and scores types
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type="invalid_req", # invalid req type
+                          attribute=self.attribute,
+                          thresholds=self.thresholds,
+                          scores=self.scores)
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=123, # invalid attribute type
+                          thresholds=self.thresholds,
+                          scores=self.scores)
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds="not_a_list",  # invalid thresholds type
+                          scores=self.scores)
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value, 
+                          attribute=self.attribute,
+                          thresholds=self.thresholds,
+                          scores="not_a_list")  # invalid scores type
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value,  
+                            attribute=self.attribute,
+                            thresholds=[0, 10, 5],  # invalid thresholds order
+                            scores=self.scores)
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value,  
+                            attribute=self.attribute,
+                            thresholds=[0, 10, 20, 30],  # invalid thresholds length
+                            scores=self.scores)
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value,  
+                            attribute=self.attribute,
+                            thresholds=self.thresholds,
+                            scores=[0.0, 1.2, 0.8])  # invalid scores value 
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value,  
+                            attribute=self.attribute,
+                            thresholds=self.thresholds,
+                            scores=[0.0, -1.2, 0.8])  # invalid scores value 
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value,  
+                            attribute=self.attribute,
+                            thresholds=self.thresholds,
+                            scores=[0.0, 0.5, 0.8, 1.0])  # invalid scores length
+        self.assertRaises(AssertionError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value,  
+                            attribute=self.attribute,
+                            thresholds=self.thresholds,
+                            scores=self.scores,
+                            id=123)  # invalid id type
+        self.assertRaises(ValueError, IntervalInterpolationRequirement,
+                          req_type=RequirementTypes.PERFORMANCE.value,  
+                            attribute=self.attribute,
+                            thresholds=self.thresholds,
+                            scores=self.scores,
+                            id="123")  # invalid id value
+
+    def test_get_preference(self):
+        # self.thresholds = [0,  10,  20]
+        # self.scores =  [0.0, 0.5, 1.0]
+
+        # Test preference retrieval
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 0.0), 0.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 5), 0.25)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 10), 0.5)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 15), 0.75)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 20), 1.0)
+        self.assertAlmostEqual(self.req.calc_preference(self.attribute, 25), 1.0)
+        self.assertRaises(AssertionError, self.req.calc_preference, 12345, 10) # wrong attribute type
+        self.assertRaises(AssertionError, self.req.calc_preference, "different_attribute", 10) # wrong attribute
+        self.assertRaises(AssertionError, self.req.calc_preference, self.attribute, "10") # wrong value type
+
+    def test_representation(self):
+        # Test string representation
+        expected_str = "MissionRequirement(type=PERFORMANCE, strategy=INTERVAL_INTERP, attribute=interval_interpolation_attribute, thresholds=[0, 10, 20], scores=[0.0, 0.5, 1.0])"
+        self.assertEqual(repr(self.req), expected_str)
+
+    def test_to_dict(self):
+        # Test dictionary conversion
+        req_dict = self.req.to_dict()
+        self.assertEqual(req_dict["req_type"], RequirementTypes.PERFORMANCE.value)
+        self.assertEqual(req_dict["attribute"], self.attribute)
+        self.assertEqual(req_dict["strategy"], PreferenceStrategies.INTERVAL_INTERP.value)
+        self.assertEqual(req_dict["thresholds"], self.thresholds)
+        self.assertEqual(req_dict["scores"], self.scores)
+        self.assertEqual(req_dict["id"], self.req.id)
+
+    def test_from_dict(self):
+        # Test creation from dictionary
+        req_dict = {
+            "req_type": RequirementTypes.PERFORMANCE.value,
+            "strategy" : PreferenceStrategies.INTERVAL_INTERP.value,
+            "attribute": self.attribute,
+            "thresholds": self.thresholds,
+            "scores": self.scores
+        }
+        # test class method
+        req_from_dict : IntervalInterpolationRequirement = IntervalInterpolationRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, IntervalInterpolationRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.thresholds, self.req.thresholds)
+        self.assertEqual(req_from_dict.scores, self.req.scores)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+        # test parent class method
+        req_from_dict : IntervalInterpolationRequirement = MissionRequirement.from_dict(req_dict)
+        self.assertIsInstance(req_from_dict, IntervalInterpolationRequirement)
+        self.assertEqual(req_from_dict.req_type, self.req.req_type)
+        self.assertEqual(req_from_dict.attribute, self.req.attribute)
+        self.assertEqual(req_from_dict.thresholds, self.req.thresholds)
+        self.assertEqual(req_from_dict.scores, self.req.scores)
+        self.assertNotEqual(req_from_dict.id, self.req.id)  # IDs should differ
+
+    def test_copy(self):
+        # Test copying of the requirement
+        req_copy = self.req.copy()
+        self.assertIsInstance(req_copy, IntervalInterpolationRequirement)
+        self.assertEqual(req_copy.to_dict(), self.req.to_dict())
+        self.assertIsNot(req_copy, self.req)  # Ensure it's a different instance
 
 if __name__ == '__main__':
     # terminal welcome message

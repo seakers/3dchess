@@ -300,7 +300,7 @@ class AbstractPlanner(ABC):
 
             # Evaluate capability requirement
             if capability_req is not None:
-                return capability_req.calc_preference_value(instrument_name) >= 0.5
+                return capability_req.calc_preference(instrument_name) >= 0.5
 
         # No capability objectives specified; check if instrument has general capability
         # TODO replace with better reasoning; currently assumes instrument has general capability

@@ -52,7 +52,7 @@ class MissionObjective(ABC):
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
 
         # Evaluate measurement performance for each requirement attribute
-        pref_values = [req.calc_preference_value(measurement[req.attribute]) \
+        pref_values = [req.calc_preference(measurement[req.attribute]) \
                        if req.attribute in measurement else 0.0
                        for req in self.requirements]
 
