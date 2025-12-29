@@ -52,7 +52,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                        state : SimulationAgentState,
                        specs : object,
                        tasks : List[GenericObservationTask],
-                       current_plan : Plan,
                        orbitdata : OrbitData,
                        mission : Mission,
                        observation_history : ObservationHistory
@@ -74,24 +73,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # create and merge task observation opportunities from scheduled tasks and urgent tasks
         observation_opportunities : List[ObservationOpportunity] = self.create_observation_opportunities_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
 
-        # TEMP filter observation opportunities that were just performed
-        observation_opportunities = [obs_opp for obs_opp in observation_opportunities
-                                     if all(not obs_opp.is_mutually_exclusive(obs) for obs in self.last_performed_observations)]
-        
-
-        
-        for obs in self.last_performed_observations:
-            for obs_opp in observation_opportunities:
-                if obs_opp.is_mutually_exclusive(obs):  
-                    y = obs_opp.is_mutually_exclusive(obs)
-                    x = 1 # breakpoint
-
         # extract already planned task observation opportunities from current plan
-        planned_observation_opportunities = [obs.obs_opp for obs in current_plan if isinstance(obs,ObservationAction)]
+        planned_observation_opportunities = [obs.obs_opp for obs in self.path if isinstance(obs,ObservationAction)]
         
         # filter tasks that are already in the current plan
         observation_opportunities = [obs_opp for obs_opp in observation_opportunities
-                             if obs_opp not in planned_observation_opportunities]
+                                     if obs_opp not in planned_observation_opportunities]
         
         # -------------------------------
         # DEBUG PRINTOUTS
@@ -117,15 +104,15 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # generate new plan according to selected model
         if self.heuristic == self.EARLIEST_ACCESS:
             # use earliest-access heuristic
-            return self.earliest_access_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, observation_opportunities, orbitdata, mission, observation_history)
+            return self.earliest_access_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
         
         elif self.heuristic == self.TASK_VALUE:
             # use task-value heuristic
-            return self.task_value_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, observation_opportunities, orbitdata, mission, observation_history)
+            return self.task_value_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
         
         elif self.heuristic == self.TASK_PRIORITY:
             # use task-priority heuristic
-            return self.task_priority_heuristic_bundle_builder(state, specs, cross_track_fovs, current_plan, observation_opportunities, orbitdata, mission, observation_history)
+            return self.task_priority_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
 
         # Fallback for unsupported heuristic
         raise NotImplementedError(f"Heuristic '{self.heuristic}' not supported.")            
@@ -155,7 +142,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                        state : SimulationAgentState,
                                        specs : object,
                                        cross_track_fovs : dict,
-                                       current_plan : Plan,
                                        observation_opportunities : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
@@ -174,13 +160,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         sorted_observation_opportunities = sorted(observation_opportunities, key=lambda task: task.accessibility)
     
         # build bundle using heuristic insertion method
-        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_observation_opportunities, orbitdata, mission, observation_history, heuristic_evaluator=lambda task: task.accessibility.left)
+        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, sorted_observation_opportunities, orbitdata, mission, observation_history, heuristic_evaluator=lambda task: task.accessibility.left)
 
     def task_value_heuristic_bundle_builder(self,
                                        state : SimulationAgentState,
                                        specs : object,
                                        cross_track_fovs : dict,
-                                       current_plan : Plan,
                                        observation_opportunities : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
@@ -209,13 +194,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         sorted_observation_opportunities = [task for task, _ in sorted(task_values, key=lambda item: (-item[1], item[0].accessibility, item[0].id))]
     
         # build bundle using heuristic insertion method
-        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_observation_opportunities, orbitdata, mission, observation_history)
+        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, sorted_observation_opportunities, orbitdata, mission, observation_history)
 
     def task_priority_heuristic_bundle_builder(self,
                                        state : SimulationAgentState,
                                        specs : object,
                                        cross_track_fovs : dict,
-                                       current_plan : Plan,
                                        observation_opportunities : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
@@ -236,7 +220,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         sorted_observation_opportunities = [task for task, _ in sorted(task_priorities, key=lambda item: (-item[1], item[0].accessibility, item[0].id))]
         
         # build bundle using heuristic insertion method
-        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, current_plan, sorted_observation_opportunities, orbitdata, mission, observation_history)
+        return self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, sorted_observation_opportunities, orbitdata, mission, observation_history)
 
     def _is_task_mutually_exclusive_with_path(self, task : ObservationOpportunity, path : List[ObservationAction]):
         """ Check if task is mutually exclusive with any observations in the given path. """
@@ -246,7 +230,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                        state : SimulationAgentState,
                                        specs : object,
                                        cross_track_fovs : dict,
-                                       current_plan : Plan,
                                        sorted_observation_opportunities : List[ObservationOpportunity],
                                        orbitdata : OrbitData,
                                        mission : Mission,
@@ -270,9 +253,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 [task_tuple for task_tuple in self.bundle]
         
         # initialize proposed path from current plan
-        proposed_path = sorted([action for action in current_plan
-                                if isinstance(action, ObservationAction)], 
-                            key=lambda action: action.t_start)
+        proposed_path : List[ObservationAction] = [obs_action for obs_action in self.path]
         
         # extract existing bids from current bundle
         proposed_bids : Dict[GenericObservationTask, Dict[int, Bid]] = defaultdict(dict)
@@ -282,7 +263,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 existing_bid = self.results[task][n_obs]
 
                 # ensure this bid is assigned to current agent
-                assert existing_bid.winning_bidder == state.agent_name, \
+                assert existing_bid.winner == state.agent_name, \
                           "Existing bids in bundle do not belong to current agent."
                 
                 # add to proposed bids
@@ -834,7 +815,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             
             # count all previously performed observations for this parent task
             performed_obs : list[Tuple[float,str,float,ObservationOpportunity]] = \
-                            [(bid.t_img,bid.bidder,np.NAN,None) 
+                            [(bid.t_img,bid.owner,np.NAN,None) 
                              for bid in self.results[task] 
                              if bid.was_performed()]
             latest_performed_obs_time : Tuple[float,str,float,ObservationOpportunity] \
@@ -843,16 +824,24 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             if performed_obs:
                 x = 1 # debug breakpoint
 
+            # initialize feasible observation sequences for this task
+            available_obs_times : list[Tuple[float,str,float,ObservationOpportunity]] = []
+
             # get all possible observation opportunities from results
-            available_obs_times : list[Tuple[float,str,float,ObservationOpportunity]] = \
-                  [(bid.t_img,bid.bidder,np.NAN,None) for bid in self.results[task] 
-                   if bid.winning_bidder != state.agent_name]
+            scheduled_obs_times : list[Tuple[float,str,float,ObservationOpportunity]] = \
+                  [(bid.t_img,bid.winner,np.NAN,None) for bid in self.results[task] 
+                   if bid.winner != state.agent_name
+                   and not bid.was_performed()]
 
             # include proposed task imaging time 
+            available_obs_times.extend(scheduled_obs_times)
             available_obs_times.extend(modified_task_obs_times[task])
 
             # sort by observation time
             available_obs_times.sort(key=lambda x: x[0])
+            
+            if scheduled_obs_times:
+                x = 1 # debug breakpoint
 
             # collect feasible sequences
             feasible_sequences = self._find_feasible_observation_sequences_for_task(state, task, available_obs_times)
@@ -870,10 +859,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
                 # evaluate sequence value for this agent
                 for seq_idx,(agent_name,t_obs,look_angle,spec_task) in enumerate(zip(obs_names,obs_times,obs_look_angles,obs_tasks)):
-                    # assume specific task was defined
-                    assert isinstance(spec_task, ObservationOpportunity), \
-                        "Task observation opportunity not defined."
-
+                    
                     # get observation number for this observation
                     n_obs = seq_idx + len(performed_obs)
 
@@ -881,22 +867,24 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     t_prev = obs_times[seq_idx-1] if seq_idx > 0 else latest_performed_obs_time[0] if performed_obs else np.NINF
                     
                     # get observation value
-                    if agent_name != state.agent_name: 
-                        # observation is to be performed by another agent; 
-                        #   get matching bid for this observation
+                    if agent_name != state.agent_name: # observation is to be performed by another agent
+                        # get matching bid for this observation
                         matching_bid : Bid = self.results[task][n_obs]
 
                         # ensure matching bid is from correct agent
-                        assert matching_bid.bidder == agent_name, \
-                            "Matching bid bidder does not match agent assigned to observation."
+                        assert matching_bid.winner == agent_name, \
+                            "Matching bid winner does not match agent assigned to observation."
                         assert abs(matching_bid.t_img - t_obs) <= self.EPS, \
                             "Matching bid observation time does not match assigned observation time."
                         
                         # get observation value from winning bid
                         obs_value = matching_bid.winning_bid
 
-                    else:
-                        # observation is to be performed by this agent;
+                    else: # observation is to be performed by this agent
+                        # assume specific task was defined
+                        assert isinstance(spec_task, ObservationOpportunity), \
+                            "Task observation opportunity not defined."
+                        
                         #   estimate task value for this observation
                         obs_value = self._estimate_task_value(task,
                                                             spec_task.instrument_name,
@@ -930,7 +918,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
                             accept_bid = [
                                 # 1) I am the current bid winner
-                                existing_bid.winning_bidder == state.agent_name,
+                                existing_bid.winner == state.agent_name,
                                 # 2) proposed observation value outperforms existing bid
                                 obs_value > existing_bid.winning_bid,
                                 # 3) proposed earlier observation time and optimistic bidding counter allows it
@@ -1031,7 +1019,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     # get matching bid for this observation task
                     matching_bids = [bid for bid in proposed_bids[task].values()
                                     if abs(bid.t_img - obs.t_start) <= self.EPS
-                                    and bid.bidder == state.agent_name]
+                                    and bid.owner == state.agent_name]
                     
                     assert matching_bids, \
                         "Matching bid for observation in path not found in results. Was assigned without updating results."
@@ -1064,6 +1052,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # initialize feasible sequence tracker
         feasible_sequences = []
 
+        # count number of completed observations for this task
+        performed_bids = [bid for bid in self.results[task] if bid.was_performed()]
+
         # count minimum sequence length; use number of occurrences of this agent in available observation times
         min_seq_length = sum(1 for _,agent_name,*_ in available_obs if agent_name == state.agent_name)
 
@@ -1076,28 +1067,32 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # perform dfs to find feasible sequences
         while dfs_queue:
             # pop current sequence from stack
-            current_sequence = dfs_queue.pop()
-
-            # check for available successors
-            successors = [obs for obs in available_obs
-                          if obs[0] > current_sequence[-1][0]]
+            current_sequence = dfs_queue.pop()           
             
-            # base case: no more successors to add to sequence
-            if not successors:
-                # check if min length was achieved 
-                if len(current_sequence) < min_seq_length: continue # min length not met; skip to next sequence 
-
-                # ensure min number of observations from this agent are included
-                n_obs_this_agent = sum(1 for _,agent_name,_,_ in current_sequence if agent_name == state.agent_name)
-                if n_obs_this_agent != min_seq_length: continue # min observations from this agent not met; skip to next sequence
-
-                # add to feasible sequences
+            # evaluate current sequence
+            accept_sequence = [
+                # meets minimum length requirements
+                len(current_sequence) >= min_seq_length, 
+                # includes minimum number of observations from this agent
+                sum(1 for _,agent_name,_,_ in current_sequence 
+                   if agent_name == state.agent_name) >= min_seq_length,               
+            ]
+            if all(accept_sequence):
+                # decompose sequence into component lists
                 obs_names = [agent_name for _,agent_name,_,_ in current_sequence]
                 obs_times = [t_img for t_img,_,_,_ in current_sequence]
                 obs_look_angles = [look_angle for _,_,look_angle,_ in current_sequence]
                 obs_tasks = [spec_task for _,_,_,spec_task in current_sequence]
+                
+                # add to feasible sequences
                 feasible_sequences.append((obs_names, obs_times, obs_look_angles, obs_tasks))               
             
+            
+            # check for available successors
+            successors = [obs for obs in available_obs
+                          if obs[0] > current_sequence[-1][0]]
+
+            # iterate through successors
             for obs_next in successors:
                 # unpack proposed successor observation
                 t_next,agent_next,*_ = obs_next
@@ -1105,12 +1100,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 # if successor is from another agent, check consistency with results
                 if agent_next != state.agent_name:
                     # check successor's bid for this observation exists
-                    n_obs_next = len(current_sequence)
+                    n_obs_next = len(current_sequence) + len(performed_bids)
 
                     if len(self.results[task]) <= n_obs_next:
                         # matching no bids exist for this observation number; cannot add successor
                         continue
-                    elif self.results[task][n_obs_next].bidder != agent_next:
+                    elif self.results[task][n_obs_next].winner != agent_next:
                         # bid for this observation number is from another agent; cannot add successor
                         continue
                     elif abs(self.results[task][n_obs_next].t_img - t_next) > self.EPS:

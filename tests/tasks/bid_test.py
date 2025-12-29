@@ -80,9 +80,9 @@ class TestBids(unittest.TestCase):
 
         self.assertEqual(bid.task.id, reconstructed.task.id)
         self.assertEqual(bid.main_measurement, reconstructed.main_measurement)
-        self.assertEqual(bid.bidder, reconstructed.bidder)
-        self.assertAlmostEqual(bid.bid_value, reconstructed.bid_value)
-        self.assertEqual(bid.winning_bidder, reconstructed.winning_bidder)
+        self.assertEqual(bid.owner, reconstructed.owner)
+        self.assertAlmostEqual(bid.owner_bid, reconstructed.owner_bid)
+        self.assertEqual(bid.winner, reconstructed.winner)
         self.assertAlmostEqual(bid.winning_bid, reconstructed.winning_bid)
         self.assertAlmostEqual(bid.t_img, reconstructed.t_img)
         self.assertEqual(bid.n_obs, reconstructed.n_obs)
@@ -1226,9 +1226,9 @@ class TestBids(unittest.TestCase):
 
         # check updated values
         self.assertAlmostEqual(updated.winning_bid, other_bid.winning_bid)
-        self.assertEqual(updated.winning_bidder, other_bid.winning_bidder)
+        self.assertEqual(updated.winner, other_bid.winner)
         self.assertAlmostEqual(updated.t_img, other_bid.t_img)
-        self.assertAlmostEqual(updated.t_stamps[other_bid.bidder], 3.0)
+        self.assertAlmostEqual(updated.t_stamps[other_bid.owner], 3.0)
 
     def test_set_and_has_winner(self):
         bid = self.make_bid(
@@ -1244,7 +1244,7 @@ class TestBids(unittest.TestCase):
         bid.set(main_measurement='VNIR', bid_value=7.5, t_img=12.0, t_update=3.0)
 
         self.assertTrue(bid.has_winner())
-        self.assertEqual(bid.winning_bidder, "agentA")
+        self.assertEqual(bid.winner, "agentA")
         self.assertEqual(bid.main_measurement, 'VNIR')
         self.assertAlmostEqual(bid.winning_bid, 7.5)
         self.assertAlmostEqual(bid.t_img, 12.0)

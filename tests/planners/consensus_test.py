@@ -20,7 +20,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         ## specific cases
         self.toy_1 = False
-        self.toy_2 = True
+        self.toy_2 = False
+        self.toy_3 = True
 
     def toy_planner_config(self):
         return {
@@ -291,7 +292,73 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ### Expected Outcomes
 
         """
+        # check for case toggle 
+        if not self.toy_3: return
 
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'toy_3'
+        scenario_name = f'toy_3-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_3'
+        mission_name = 'toy_missions'
+
+        # SAT0 : announcer satellite 
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_announcer'
+        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['mission'] = "Algal bloom response"
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config()
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['mission'] = "Algal bloom response"
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_2['@id'] = 'sat2_vnir'
+        ractive_spacecraft_2['name'] = 'sat2'
+        ractive_spacecraft_2['planner'] = self.toy_planner_config()
+        ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_2['orbitState']['state']['ta'] = ractive_spacecraft_1['orbitState']['state']['ta'] - 2.0 # phase offset by 2.0[deg]
+        ractive_spacecraft_2['mission'] = "Algal bloom response"
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                       ractive_spacecraft_1,
+                                                       ractive_spacecraft_2
+                                                    ]
+                                                   )
+
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+    # def test_single_sat_announcer_toy(self):
         # # check for case toggle 
         # if not self.single_sat_announcer_toy: return
 

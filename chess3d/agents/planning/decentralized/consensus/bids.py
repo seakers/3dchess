@@ -39,11 +39,11 @@ class Bid:
 
     def __init__(self,
                  task : GenericObservationTask,
-                 bidder: str,
+                 owner: str,
                  n_obs: int = 0,
-                 bid_value: float = 0,
+                 owner_bid: float = np.NaN,
                  winning_bid: float = 0,
-                 winning_bidder: str = NONE,
+                 winner: str = NONE,
                  t_img : float = np.NINF,
                  t_bid : float = np.NINF,
                  t_stamps: Dict[str,float] = None,
@@ -57,11 +57,11 @@ class Bid:
 
         ### Attributes:
             - task (`GenericObservationTask`): observation task being bid on
-            - bidder (`bidder`): name of the agent keeping track of this bid information
+            - owner (`str`): name of the agent keeping track of this bid information
             - n_obs (`int`): task performance number being bid on (e.g., image observation number for the target task)
-            - bid_value (`float` or `int`): latest bid value from bidder
+            - owner_bid (`float` or `int`): latest bid value from bid owner
             - winning_bid (`float` or `int`): current winning bid value
-            - winning_bidder (`str`): name of current the winning agent
+            - winner (`str`): name of current the winning agent
             - t_img (`float` or `int`): time where the task is set to be performed by the winning agent
             - t_bid (`float` or `int`): time where the bid was generated
             - t_stamps (`Dict[str,float]`): latest time-stamps when this bid was updated for each agent
@@ -73,11 +73,11 @@ class Bid:
 
         # Validate inputs
         assert isinstance(task, GenericObservationTask), f'`task` must be of type `GenericObservationTask`, got `{type(task)}`'
-        assert isinstance(bidder, str), f'`bidder` must be of type `str`, got `{type(bidder)}`'
+        assert isinstance(owner, str), f'`bidder` must be of type `str`, got `{type(owner)}`'
         assert isinstance(n_obs, int) and n_obs >= 0, f'`n_img` must be positive `int`, got `{type(n_obs)}-{n_obs}`'
-        assert isinstance(bid_value, (float, int)), f'`bid_value` must be of type `float` or `int`, got `{type(bid_value)}`'
+        assert isinstance(owner_bid, (float, int)), f'`owner_bid` must be of type `float` or `int`, got `{type(owner_bid)}`'
         assert isinstance(winning_bid, (float, int)), f'`winning_bid` must be of type `float` or `int`, got `{type(winning_bid)}`'
-        assert isinstance(winning_bidder, str), f'`winning_bidder` must be of type `str`, got `{type(winning_bidder)}`'
+        assert isinstance(winner, str), f'`winner` must be of type `str`, got `{type(winner)}`'
         assert isinstance(t_img, (float, int)), f'`t_img` must be of type `float` or `int`, got `{type(t_img)}`'
         assert t_img in task.availability or t_img == np.NINF, f'`t_img` value `{t_img}` not in task availability interval `{task.availability}`'
         assert isinstance(t_bid, (float, int)), f'`t_bid` must be of type `float` or `int`, got `{type(t_bid)}`'
@@ -91,17 +91,17 @@ class Bid:
         self.task = task
         self.n_obs = n_obs
 
-        # Assign bidder information
-        self.bidder = bidder
-        self.bid_value = bid_value
-        self.main_measurement = main_measurement
+        # Assign bid owner information
+        self.owner = owner
+        self.owner_bid = owner_bid
         
         # Assign winning bid information
-        self.winning_bidder = winning_bidder
+        self.winner = winner
         self.winning_bid = winning_bid
         self.t_img = t_img
         self.t_bid = t_bid
         self.t_stamps = t_stamps
+        self.main_measurement = main_measurement
 
         # Other attributes
         self.performed = performed
@@ -119,11 +119,11 @@ class Bid:
         try:
             bid_dict = {
                 'task': self.task.to_dict(),
-                'bidder': self.bidder,
+                'owner': self.owner,
                 'n_obs': self.n_obs,
-                'bid_value': self.bid_value,
+                'owner_bid': self.owner_bid,
                 'winning_bid': self.winning_bid,
-                'winning_bidder': self.winning_bidder,
+                'winner': self.winner,
                 't_img': self.t_img,
                 't_bid': self.t_bid,
                 't_stamps': {key : val for key, val in self.t_stamps.items()},
@@ -133,8 +133,8 @@ class Bid:
             return bid_dict
         finally:
             # check if all required keys are present
-            required_keys = ['task', 'main_measurement', 'bidder', 'bid_value', 
-                             'winning_bidder', 'winning_bid', 't_img', 'n_obs', 
+            required_keys = ['task', 'main_measurement', 'owner', 'owner_bid', 
+                             'winner', 'winning_bid', 't_img', 'n_obs', 
                              't_bid', 't_stamps', 'performed']
             assert all(key in bid_dict for key in required_keys), \
                 f'Bid dictionary is missing required keys. Required keys: {required_keys}'
@@ -146,8 +146,8 @@ class Bid:
         Creates a bid class object from a dictionary
         """
         # check if all required keys are present
-        required_keys = ['task', 'main_measurement', 'bidder', 'bid_value', 
-                         'winning_bidder', 'winning_bid', 't_img', 'n_obs', 
+        required_keys = ['task', 'main_measurement', 'owner', 'owner_bid', 
+                         'winner', 'winning_bid', 't_img', 'n_obs', 
                          't_bid','t_stamps', 'performed']
         assert all(key in bid_dict for key in required_keys), \
             f'Bid dictionary is missing required keys. Required keys: {required_keys}'
@@ -162,10 +162,10 @@ class Bid:
         return cls(
             task=task,
             n_obs=bid_dict['n_obs'],
-            bidder=bid_dict['bidder'],
-            bid_value=bid_dict['bid_value'],
+            owner=bid_dict['owner'],
+            owner_bid=bid_dict['owner_bid'],
             winning_bid=bid_dict['winning_bid'],
-            winning_bidder=bid_dict['winning_bidder'],
+            winner=bid_dict['winner'],
             t_img=bid_dict['t_img'],
             t_bid=bid_dict['t_bid'],
             t_stamps=bid_dict['t_stamps'],
@@ -189,22 +189,22 @@ class Bid:
     @bid_comparison_input_checks
     def __lt__(self, other : 'Bid') -> bool:       
         # check if equal
-        if abs(other.bid_value - self.bid_value) < self.EPS:
+        if abs(other.winning_bid - self.winning_bid) < self.EPS:
             # if there's a tie, use tie-breaker        
             return not self.__wins_tie_breaker(other)
 
         # compare bids
-        return other.bid_value > self.bid_value
+        return other.winning_bid > self.winning_bid
 
     @bid_comparison_input_checks
     def __gt__(self, other : 'Bid') -> bool:
         # check if equal
-        if abs(other.bid_value - self.bid_value) < self.EPS:
+        if abs(other.winning_bid - self.winning_bid) < self.EPS:
             # if there's a tie, use tie-breaker        
             return self.__wins_tie_breaker(other)
 
         # compare bids
-        return other.bid_value < self.bid_value
+        return other.winning_bid < self.winning_bid
 
     @bid_comparison_input_checks
     def __eq__(self, other : 'Bid') -> bool:        
@@ -219,12 +219,12 @@ class Bid:
     @bid_comparison_input_checks
     def __le__(self, other : 'Bid') -> bool:
         # compare bids
-        return other.bid_value >= self.bid_value or abs(other.bid_value - self.bid_value) < self.EPS
+        return other.winning_bid >= self.winning_bid or abs(other.winning_bid - self.winning_bid) < self.EPS
     
     @bid_comparison_input_checks
     def __ge__(self, other : 'Bid') -> bool:
         # compare bids
-        return other.bid_value <= self.bid_value or abs(other.bid_value - self.bid_value) < self.EPS
+        return other.winning_bid <= self.winning_bid or abs(other.winning_bid - self.winning_bid) < self.EPS
 
     def __wins_tie_breaker(self, other: 'Bid') -> bool:
         """ Returns True if, when bids are tied, we should prefer `self` over `other`. """
@@ -240,13 +240,13 @@ class Bid:
 
         # compare bids
         ## Check for NONE winning bidders
-        if bid2.winning_bidder == self.NONE and bid1.winning_bidder != self.NONE:
+        if bid2.winner == self.NONE and bid1.winner != self.NONE:
             return bid2
-        elif bid2.winning_bidder != self.NONE and bid1.winning_bidder == self.NONE:
+        elif bid2.winner != self.NONE and bid1.winner == self.NONE:
             return bid1
 
         ## Compare bidders alphabetically
-        return min(bid1, bid2, key=lambda b: b.winning_bidder)
+        return min(bid1, bid2, key=lambda b: b.winner)
 
     def has_different_winner_values(self, other : 'Bid') -> bool:
         """ Checks if this bid is different from another bid (i.e., any of the winning bid attributes differ) """
@@ -265,7 +265,7 @@ class Bid:
                 
         # Compare winning bid information
         if (
-            self.winning_bidder != other.winning_bidder             # different winning bidder
+            self.winner != other.winner             # different winning bidder
             or abs(self.winning_bid - other.winning_bid) > self.EPS # different winning bid value
             or abs(self.t_img - other.t_img) > self.EPS             # different imaging time
             # or abs(self.t_bid - other.t_bid) > self.EPS             # different bid time
@@ -331,7 +331,7 @@ class Bid:
                 comp_result = self._case_other_has_no_winner(other)
 
             # 5. Fallback (should be unreachable)
-            else: raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.bidder}` and bidder `{other.bidder}`.')
+            else: raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.owner}` and bidder `{other.owner}`.')
 
             # return comparison result
             return comp_result
@@ -345,15 +345,20 @@ class Bid:
 
     def _case_other_thinks_bid_was_performed(self, other : 'Bid') -> BidComparisonResults:
         """ Case: Sending agent claims the bid has been performed. """
-        raise NotImplementedError("`_case_other_thinks_bid_was_performed` method is not implemented yet.")
+        # raise NotImplementedError("`_case_other_thinks_bid_was_performed` method is not implemented yet.")
 
         # 1. Receiving agent also believes the bid was performed.
         if self.was_performed():
-            if self.t_img <= other.t_img:
-                # both agents agree bid was performed and receiver has the earliest known observation time → leave info as is
+            if self.winner == other.winner:
+                # both agents agree bid was performed and winner → leave info as is
+                return BidComparisonResults.LEAVE
+            elif self.t_stamps[self.winner] >= other.t_stamps[other.winner]:
+                # both agents agree bid was performed but disagree on the winner
+                #  receiver has the more recent bid → leave info as is
                 return BidComparisonResults.LEAVE
             else:
-                # both agents agree bid was performed but sender has the earliest known observation time → update info
+                # both agents agree bid was performed but disagree on the winner
+                #  sender has the more recent bid → update
                 return BidComparisonResults.UPDATE
             
         # 0. Receiving agent does not believe the bid was performed.
@@ -379,7 +384,7 @@ class Bid:
 
         # 3. Receiving agent believes some 3rd party is winner.
         if self.believes_third_party_is_winning(other):
-            if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+            if other.t_stamps.get(self.winner, np.NINF) > self.t_stamps[self.winner]:
                 # Sending agent has more recent info on 3rd party winner → update info
                 return BidComparisonResults.UPDATE
             elif other > self:
@@ -411,7 +416,7 @@ class Bid:
 
         # 3. Receiving agent believes some 3rd party is winner.
         if self.believes_third_party_is_winning(other):
-            if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+            if other.t_stamps.get(self.winner, np.NINF) > self.t_stamps[self.winner]:
                 # Sending agent has more recent info on 3rd party winner → reset info
                 return BidComparisonResults.RESET
 
@@ -427,7 +432,7 @@ class Bid:
         """ Handles the case where the other bid thinks a third party is the winner """
         # 1. Receiving agent believes it is the winner too.
         if self.believes_i_am_winning():
-            if other.t_stamps[other.winning_bidder] > self.t_stamps.get(other.winning_bidder, np.NINF):
+            if other.t_stamps[other.winner] > self.t_stamps.get(other.winner, np.NINF):
                 if other > self:  
                     # Sending agent's bid is higher and more updated → update info
                     return BidComparisonResults.UPDATE
@@ -437,7 +442,7 @@ class Bid:
         
         # 2. Receiving agent believes other is the winner already.
         if self.believes_other_is_winning(other):
-            if other.t_stamps[other.winning_bidder] > self.t_stamps.get(other.winning_bidder, np.NINF):
+            if other.t_stamps[other.winner] > self.t_stamps.get(other.winner, np.NINF):
                 # Sending agent has more recent info on 3rd party winner → update info
                 return BidComparisonResults.UPDATE
             else:
@@ -446,14 +451,14 @@ class Bid:
         
         # 3. Receiving agent also believes some 3rd party is winner.
         if self.has_same_winner(other):
-            if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+            if other.t_stamps.get(self.winner, np.NINF) > self.t_stamps[self.winner]:
                 # Sending agent has more recent info on 3rd party winner → update info
                 return BidComparisonResults.UPDATE
         
         # 4. Receiving agent believes some 3rd party is winner.
         if self.believes_third_party_is_winning(other):
-            if other.t_stamps[other.winning_bidder] > self.t_stamps.get(other.winning_bidder, np.NINF):
-                if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+            if other.t_stamps[other.winner] > self.t_stamps.get(other.winner, np.NINF):
+                if other.t_stamps.get(self.winner, np.NINF) > self.t_stamps[self.winner]:
                     # Sending agent's bids from all parties are more updated → update info
                     return BidComparisonResults.UPDATE
                 
@@ -465,13 +470,13 @@ class Bid:
                     # Sending agent is bidding for an earlier observation and is more updated → bidder must be optimistic in its bidding; update info
                     return BidComparisonResults.UPDATE
 
-            elif other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+            elif other.t_stamps.get(self.winner, np.NINF) > self.t_stamps[self.winner]:
                 # Sending agent has older info on 3rd party winner but newer info on receiving agent's winner → reset info
                 return BidComparisonResults.RESET
         
         # 5. Receiving agent bid has no winner.
         if self.believes_no_winner():
-            if other.t_stamps[other.winning_bidder] > self.t_stamps.get(other.winning_bidder, np.NINF):
+            if other.t_stamps[other.winner] > self.t_stamps.get(other.winner, np.NINF):
                 # Sending agent has more recent info on 3rd party winner → update info
                 return BidComparisonResults.UPDATE
 
@@ -492,7 +497,7 @@ class Bid:
         
         # 3. Receiving agent believes some 3rd party is winner.
         if self.believes_third_party_is_winning(other):
-            if other.t_stamps.get(self.winning_bidder, np.NINF) > self.t_stamps[self.winning_bidder]:
+            if other.t_stamps.get(self.winner, np.NINF) > self.t_stamps[self.winner]:
                 # Sending agent has more recent info on 3rd party winner → update info
                 return BidComparisonResults.UPDATE
         
@@ -506,30 +511,30 @@ class Bid:
 
     def believes_i_am_winning(self) -> bool:
         """ Checks if this bid is currently won by the bidder itself """
-        return self.winning_bidder == self.bidder
+        return self.winner == self.owner
 
     def believes_other_is_winning(self, other: 'Bid') -> bool:
         """ Checks if this bid is currently won by the other bidder """
-        return self.winning_bidder == other.bidder
+        return self.winner == other.owner
 
     def believes_third_party_is_winning(self, other: 'Bid') -> bool:
         """ Checks if this bid is currenly won by a 3rd party (neither self nor other) """
-        return self.winning_bidder not in {self.bidder, other.bidder, self.NONE}
+        return self.winner not in {self.owner, other.owner, self.NONE}
 
     def believes_no_winner(self) -> bool:
         """ Checks if this bid has no winner """
         return not self.has_winner()
     
     def has_same_winner(self, other: 'Bid') -> bool:
-        return self.winning_bidder == other.winning_bidder and self.has_winner() and other.has_winner()
+        return self.winner == other.winner and self.has_winner() and other.has_winner()
     
     def has_winner(self) -> bool:    
         """ Checks if this bid has a winner """
-        return self.winning_bidder != Bid.NONE
+        return self.winner != Bid.NONE
 
     def is_bidder_winning(self) -> bool:
         """ Checks if the bidder of this bid is the current winning bidder """
-        return self.bidder == self.winning_bidder
+        return self.owner == self.winner
 
     def was_performed(self) -> bool:
         """ Checks if the winner of this bid has performed the measurement request at hand """
@@ -574,16 +579,16 @@ class Bid:
         assert t_update <= t_img, f'`t_update` time `{t_update}` cannot be later than the proposed imaging time `t_img` `{t_img}`'
 
         # update bidder information
-        self.bid_value = bid_value
+        self.owner_bid = bid_value
         self.main_measurement = main_measurement
 
         # update winning bid information
         self.winning_bid = bid_value
-        self.winning_bidder = self.bidder
+        self.winner = self.owner
         self.t_img = t_img
 
         # update timestamp for this bidder
-        self.t_stamps[self.bidder] = t_update   
+        self.t_stamps[self.owner] = t_update   
 
     def set_performed(self, t_update : float, performed : bool = True, performer : str = None) -> None:
         """
@@ -595,13 +600,13 @@ class Bid:
             - performer (`str`): name of the agent that performed the task
         """
         # update winning bidder information
-        self.winning_bidder = performer if performer is not None else self.bidder
+        self.winner = performer if performer is not None else self.owner
         
         # update performed status
         self.performed = performed
 
         # update timestamp for this bidder
-        self.t_stamps[self.winning_bidder] = t_update
+        self.t_stamps[self.winner] = t_update
 
     def update(self, other : 'Bid', t_comp : float) -> 'Bid':
         """ 
@@ -630,8 +635,8 @@ class Bid:
         else: raise ValueError(f'cannot perform update of type `{comp_result}`')
         
         # check proper update
-        assert new_bid.t_stamps[other.bidder] == t_comp, \
-            f'timestamp for bidder `{other.bidder}` was not properly updated to `{t_comp}`'
+        assert new_bid.t_stamps[other.owner] == t_comp, \
+            f'timestamp for bidder `{other.owner}` was not properly updated to `{t_comp}`'
 
         # return updated bid
         return new_bid
@@ -645,7 +650,7 @@ class Bid:
             - t_comp (`float` or `int`): latest time when this bid was updated
         """
         # check if other bid has valid values
-        assert other.winning_bidder != self.NONE, f'cannot update bid information with a bid that has no winner.'
+        assert other.winner != self.NONE, f'cannot update bid information with a bid that has no winner.'
         assert other.winning_bid > 0, f'cannot update bid information with a bid that has non-positive winning bid value.'
         assert other.t_img in other.task.availability, f'`t_img` value `{other.t_img}` not in task availability interval `{other.task.availability}`'
         assert other.t_bid <= other.t_img, f'bid cannot be generated at a time `t_bid` `{other.t_bid}` later than the desired imaging time `t_img` `{other.t_img}`'
@@ -653,7 +658,7 @@ class Bid:
 
         # update winning bid information
         self.winning_bid = other.winning_bid
-        self.winning_bidder = other.winning_bidder
+        self.winner = other.winner
         
         # update other bid information
         self.t_img = other.t_img
@@ -662,7 +667,7 @@ class Bid:
         self.performed = other.performed or self.performed
 
         # update timestamp for the other bidder       
-        self.t_stamps[other.bidder] = t_comp
+        self.t_stamps[other.owner] = t_comp
 
     def reset(self, other : 'Bid', t_comp : float) -> None:
         """
@@ -673,11 +678,11 @@ class Bid:
             - t_comp (`float` or `int`): latest time when this bid was updated
         """
         # if own bid, update internal bid value to 0
-        if self.winning_bidder == self.bidder: self.bid_value = 0
+        if self.winner == self.owner: self.owner_bid = 0
 
         # reset winning bid information
         self.winning_bid = 0
-        self.winning_bidder = self.NONE
+        self.winner = self.NONE
 
         # reset other bid information
         self.t_img = np.NINF
@@ -685,7 +690,7 @@ class Bid:
         self.main_measurement = self.NONE
 
         # update timestamp for the other bidder       
-        self.t_stamps[other.bidder] = t_comp
+        self.t_stamps[other.owner] = t_comp
 
     def __leave(self, other : 'Bid', t_comp : float) -> None:
         """
@@ -696,7 +701,7 @@ class Bid:
             - t_comp (`float` or `int`): latest time when this bid was updated
         """
         # update timestamp for the other bidder       
-        self.t_stamps[other.bidder] = t_comp
+        self.t_stamps[other.owner] = t_comp
     
     def set_performed(self, t_comp : float, performed : bool = True, performer : str = None) -> None:
         """ Indicates that this action has been performed """
@@ -708,7 +713,7 @@ class Bid:
 
         # update performed status
         self.performed = performed
-        performed = self.bidder if performer is None else performer
+        performed = self.owner if performer is None else performer
         self.t_stamps[performed] = t_comp
     
     """
@@ -726,9 +731,9 @@ class Bid:
         split_id = self.task.id.split('-')
         line_data = {   "task_id" : split_id[0], 
                         "n_obs" : self.n_obs,
-                        "bidder" : self.bidder, 
+                        "bidder" : self.owner, 
                         "bid" : round(self.winning_bid, 3), 
-                        "winner" : self.winning_bidder, 
+                        "winner" : self.winner, 
                         "t_img" : round(self.t_img, 3),
                         "t_update" : round(max(self.t_stamps.values()), 3),
                         "main_measurement" : self.main_measurement, 
@@ -743,9 +748,9 @@ class Bid:
     
     def __repr__(self):
         task_id = self.task.id.split('-')
-        # return f'Bid({task_id[0]},n={self.n_obs},a={self.bidder},w={self.winning_bidder},b={round(self.winning_bid,5)},t_img={round(self.t_img,3)})'
-        return f'Bid({task_id[0]},n={self.n_obs},a={self.bidder},w={self.winning_bidder},b={round(self.winning_bid,5)})'
+        return f'Bid({task_id[0]},n={self.n_obs},a={self.owner},w={self.winner},b={round(self.winning_bid,3)},t_img={round(self.t_img,3)})'
+        # return f'Bid({task_id[0]},n={self.n_obs},a={self.bidder},w={self.winning_bidder},b={round(self.winning_bid,3)})'
 
     def __hash__(self) -> int:
-        return hash(self.task.id) ^ hash(self.n_obs) ^ hash(self.bidder)
+        return hash(self.task.id) ^ hash(self.n_obs) ^ hash(self.owner)
 
