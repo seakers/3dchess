@@ -345,8 +345,7 @@ class Bid:
 
     def _case_other_thinks_bid_was_performed(self, other : 'Bid') -> BidComparisonResults:
         """ Case: Sending agent claims the bid has been performed. """
-        # raise NotImplementedError("`_case_other_thinks_bid_was_performed` method is not implemented yet.")
-
+        
         # 1. Receiving agent also believes the bid was performed.
         if self.was_performed():
             if self.winner == other.winner:

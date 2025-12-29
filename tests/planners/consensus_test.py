@@ -22,6 +22,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_1 = False
         self.toy_2 = False
         self.toy_3 = True
+        self.toy_4 = False
+        self.toy_5 = False
 
     def toy_planner_config(self):
         return {
@@ -81,10 +83,10 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
     
     def test_toy_case_1(self):
         """ 
-        
+        ## TOY CASE 1
         Test case for single satellite performing default mission tasks.
 
-        ### GOALS
+        ### Goals
         - Validate basic functionality of the bundle-building phase of the consensus planner in a simple scenario. 
         - Ensure that the satellite can plan and execute observations of a single target without any events occurring.
         - Ensure repeated obsevations are being tracked properly by planner.
@@ -162,10 +164,10 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
     def test_toy_case_2(self):
         """
-        
+        ## TOY CASE 2
         Test case for single satellite performing event-driven tasks from announcer.
 
-        ### GOALS
+        ### Goals
         - Validate basic functionality of the bundle-building phase of the consensus planner in a reactive scenario. 
         - Ensure that the satellite can plan and execute observations of a single target without any default mission tasks.
         - Ensure event announcements are being processed properly by planner.
@@ -241,7 +243,6 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                                                     ]
                                                    )
 
-
         # initialize mission
         self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
@@ -255,10 +256,10 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
     def test_toy_case_3(self):
         """
-        
+        ## TOY CASE 3
         Test case for two satellite performing event-driven tasks from announcer.
 
-        ### GOALS
+        ### Goals
         - Validate the functionality of the consensus planner in a multi-agent reactive scenario.
         
         ### Mission Details
@@ -283,13 +284,18 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             - no onboard event-detection        
 
         ### Scenario  Description
-        - Duration: 12 hours
+        - Duration: 2 hours
         - Grid: One target at (lat=0.0°, lon=0.0°)
-        - Events: One event occurring at t=2 hours, lasting for 1 hour.
+        - Events: One event occurring at t=5 seconds, lasting for 2 hours.
         - Same instruments for both agents
         - Agents offset by 2 degrees in true anomaly
         
         ### Expected Outcomes
+        - Both satellites should perform 2 observations of the event each, one per each access window.
+        - All observations are successfully scheduled and executed without conflicts.
+        - The planner effectively tracks the bidding and performance of the observations being scheduled.
+        - Final planner results should indicate 2 completed bids per satellite and an empty bundle at the end of the simulation.
+        - The environment results should reflect the successful completion of all scheduled observations.
 
         """
         # check for case toggle 
@@ -348,7 +354,6 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                                                     ]
                                                    )
 
-
         # initialize mission
         self.simulation : Simulation = Simulation.from_dict(scenario_specs)
 
@@ -357,6 +362,73 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         # print results
         self.simulation.print_results()
+
+    def test_toy_case_4(self):
+        """
+        
+        Test case for two satellite performing event-driven tasks from announcer with communication delays.
+
+        ### Goals
+        - Validate basic functionality of the bundle-building phase of the consensus planner in a communications-limited scenario.        
+        
+        ### Mission Details
+        - Default objectives: None
+        - Event-driven objectives: respond to event announcements from an announcer satellite.
+
+        ### Agents
+        - SAT0 : 
+            - announcer satellite
+            - no observation capability
+            - onboard event-announcer planner
+            - no onboard consensus planner
+        - SAT1 : 
+            - reactive satellite with narrow swath instrument
+            - observation capability
+            - onboard consensus planner
+            - no onboard event-detection        
+        - SAT2 : 
+            - reactive satellite with narrow swath instrument
+            - observation capability
+            - onboard consensus planner
+            - no onboard event-detection     
+
+        ### Scenario  Description
+        - Duration: 10 hours
+        - Grid: One target at (lat=0.0°, lon=0.0°)
+        - Events: One event occurring at t=TBD hours, lasting for TBD hours.
+        - Same instruments for both agents
+        - Agents orbits offset in true anomaly by TBD degrees and by inclination by TBD degrees.
+        - Communication windows between agents limited to LOS only.
+        - Communication windows expected to start after SAT1 was able to perform first observation of event.
+
+        ### Expected Outcomes
+        - 
+        
+        """
+        if not self.toy_4: return
+
+    def test_toy_case_5(self):
+        """
+        
+        Test case for optimisting bidding between two satellite performing event-driven tasks from announcer.
+
+        ### Goals
+        - Ensure that the optimistic bidding mechanism in the consensus planner functions correctly in a multi-agent reactive scenario.
+        
+        ### Mission Details
+        - Default objectives: None
+        - Event-driven objectives: respond to event announcements from an announcer satellite.
+
+        ### Agents
+        - SAT0 : 
+            - announcer satellite
+            - no observation capability
+            - onboard event-announcer planner
+            - no onboard consensus planner
+        - SAT1 : 
+            
+        """
+        if not self.toy_5: return
 
     # def test_single_sat_announcer_toy(self):
         # # check for case toggle 

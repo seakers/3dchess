@@ -689,7 +689,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
     def generate_plan(self, 
                       state : SimulationAgentState,
                       specs : object,
-                      current_plan : Plan,
+                      _ : Plan,
                       clock_config : ClockConfig,
                       orbitdata : OrbitData,
                       mission : Mission,
