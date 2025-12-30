@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 import uuid
 
 from chess3d.mission.events import GeophysicalEvent
-from chess3d.mission.objectives import *
+from chess3d.mission.objectives import MissionObjective, EventDrivenObjective, DefaultMissionObjective
+from chess3d.mission.requirements import SpatialCoverageRequirement, SinglePointSpatialRequirement
 from chess3d.utils import Interval
 
 
@@ -56,11 +57,11 @@ class GenericObservationTask(ABC):
 
         if objective is not None:
             # Objective specified; check objective attributes 
-            assert parameter == objective.parameter, "Target parameter must match the objective's parameter."
+            assert parameter.lower() == objective.parameter, "Target parameter must match the objective's parameter."
 
         # Set attributes
         self.task_type : str = task_type
-        self.parameter : str = parameter
+        self.parameter : str = parameter.lower()
         self.location : list[tuple] = location
         self.availability : Interval = availability
         self.priority : float = priority
@@ -242,31 +243,34 @@ class EventObservationTask(GenericObservationTask):
             priority = event.severity if priority is None else priority
 
         elif objective is not None:
-            # Objective specified; use objective attributes
-            assert objective.parameter == parameter, "If objective is specified, target parameter must match the objective's parameter."
+            # TODO: implement objective-based task creation
+            raise NotImplementedError("`EventObservationTask` creation from only an objective is not implemented yet.")
 
-            ## Extract spatial measurement requirements
-            spatial_req = [req for req in objective.requirements
-                           if isinstance(req, SpatialRequirement)]
-            spatial_req : SpatialRequirement = spatial_req[0] if spatial_req else None
-            assert spatial_req is not None or location is not None, \
-                "If no event is specified, either a specified location or a spatial requirement must be provided."
-            
-            if isinstance(spatial_req, PointTargetSpatialRequirement):
-                location = [spatial_req.target] if location is None else location
-            else:
-                raise NotImplementedError(f"Default task creation for spatial requirement type {type(spatial_req)} is not implemented yet")
-            
-            ## Extract temporal measurement requirements
-            availability_req = [req for req in objective.requirements
-                                if isinstance(req, AvailabilityRequirement)]
-            availability_req : AvailabilityRequirement = availability_req[0] if availability_req else None
-            assert availability_req is not None or availability is not None, \
-                "If no event is specified, either a specified availability or an availability requirement must be provided."
-            availability = availability_req.availability if availability is None else availability
+            # # Objective specified; use objective attributes
+            # assert objective.parameter == parameter, "If objective is specified, target parameter must match the objective's parameter."
 
-            ## Validate task priority 
-            assert priority is not None, "If no event is specified, priority must be provided."
+            # ## Extract spatial measurement requirements
+            # spatial_req = [req for req in objective.requirements
+            #                if isinstance(req, SpatialCoverageRequirement)]
+            # spatial_req : SpatialCoverageRequirement = spatial_req[0] if spatial_req else None
+            # assert spatial_req is not None or location is not None, \
+            #     "If no event is specified, either a specified location or a spatial requirement must be provided."
+            
+            # if isinstance(spatial_req, SinglePointSpatialRequirement):
+            #     location = [spatial_req.target] if location is None else location
+            # else:
+            #     raise NotImplementedError(f"Default task creation for spatial requirement type {type(spatial_req)} is not implemented yet")
+            
+            # ## Extract temporal measurement requirements
+            # availability_req = [req for req in objective.requirements
+            #                     if isinstance(req, AvailabilityRequirement)]
+            # availability_req : AvailabilityRequirement = availability_req[0] if availability_req else None
+            # assert availability_req is not None or availability is not None, \
+            #     "If no event is specified, either a specified availability or an availability requirement must be provided."
+            # availability = availability_req.availability if availability is None else availability
+
+            # ## Validate task priority 
+            # assert priority is not None, "If no event is specified, priority must be provided."
 
         # Set attributes
         self.event : GeophysicalEvent = event

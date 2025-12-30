@@ -1,5 +1,6 @@
 import unittest
 
+from chess3d.mission.attributes import TemporalRequirementAttributes
 from chess3d.mission.events import GeophysicalEvent
 from chess3d.mission.requirements import *
 from chess3d.mission.objectives import DefaultMissionObjective, EventDrivenObjective

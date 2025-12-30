@@ -132,16 +132,6 @@ class PerformancePreferenceStrategies(Enum):
     STEPS = 'discrete_steps'
     INTERVAL_INTERP = 'discrete_intervals'
 
-class TemporalRequirementAttributes(Enum):
-    START_TIME = 'start_time'
-    END_TIME = 'end_time'
-    DURATION = 'duration'
-    REVISIT_TIME = 'revisit_time'
-    OBS_TIME = 't_img'
-
-class ObservationRequirementAttributes(Enum):
-    NUM_OBSERVATIONS = 'n_obs'
-
 class PerformanceRequirement(MissionRequirement):
     def __init__(self, 
                  attribute : str, 
@@ -879,7 +869,7 @@ class ExplicitCapabilityRequirement(CapabilityRequirement):
 
         # initiate requirement
         return cls(attribute, valid_values, id)
-    
+
 """
 ---------------------------------
 SPATIAL REQUIREMENT DEFINITIONS

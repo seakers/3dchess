@@ -1,6 +1,6 @@
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Union
+from typing import Dict, Iterator, List, Union
 import uuid
 import numpy as np
 
@@ -86,9 +86,18 @@ class MissionObjective(ABC):
     def __repr__(self) -> str:
         """String representation of the objective."""
 
-    def __iter__(self):
+    def __iter__(self) -> 'Iterator[MissionRequirement]':
         """Iterate over the objectives."""
         return iter(self.requirements.values())
+    
+    def __eq__(self, other):
+        """Check equality of two objectives."""
+        if not isinstance(other, MissionObjective):
+            return False
+        return self.to_dict() == other.to_dict()
+    
+    def __hash__(self):
+        return hash(self.id)
 
 class DefaultMissionObjective(MissionObjective):
     def __init__(self, 

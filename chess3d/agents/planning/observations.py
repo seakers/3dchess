@@ -75,7 +75,10 @@ class ObservationOpportunity:
         # check inputs
         if isinstance(tasks, GenericObservationTask):
             tasks = {tasks}
-        assert isinstance(tasks, set), "parent_tasks must be a set of `GenericObservationTask`"
+        elif isinstance(tasks, list):
+            tasks = set(tasks)
+        assert isinstance(tasks, set), \
+            "parent_tasks must be a set of `GenericObservationTask`"
 
         # Define namespace for UUID generation
         OBS_OPPORTUNITY_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
