@@ -7,30 +7,34 @@ from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.mission.objectives import *
 
 class Mission:
-    def __init__(self, name : str, objectives: list, normalizing_parameter : float = None):
+    def __init__(self, 
+                 name : str, 
+                 objectives: List[MissionObjective], 
+                 weights : List[float]
+                 ):
         # Validate inputs
         assert isinstance(name, str), "Mission name must be a string"
         assert len(objectives) > 0, "At least one objective is needed"
         assert all(isinstance(obj, MissionObjective) for obj in objectives), "All objectives must be instances of `Objective`"
-        assert normalizing_parameter is None or normalizing_parameter > 0, "Normalizing parameter must be None or positive"
+        assert len(objectives) == len(weights), "Objectives and weights must have the same length"
+        assert abs(sum(weights) - 1.0) < 1e-6, "Weights must sum to 1.0"
 
         # Set attributes
         self.name : str = name.lower()
-        self.objectives : list[MissionObjective] = [obj for obj in objectives]
-        self.normalizing_parameter : float = normalizing_parameter if normalizing_parameter is not None else 1e-6
+        self.objectives : Dict[MissionObjective, float] = {o: w for o, w in zip(objectives, weights)}
 
-    def calc_task_utility(self, task : ObservationOpportunity, measurement: dict, prev_state : SimulationAgentState) -> float:
+    def calc_observation_opportunity_utility(self, obs : ObservationOpportunity, measurement: dict, norm_param : float = 1e-6) -> float:
         """Calculate the utility of a task based on the mission's objectives and the measurement."""
         
         # Validate inputs
-        assert isinstance(task, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
+        assert isinstance(obs, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
-        assert isinstance(prev_state, SimulationAgentState), "Previous state must be an instance of `SimulationAgentState`"
+        assert isinstance(norm_param, (int,float)) and norm_param >= 0, "Normalizing parameter must be a positive value"
 
         # Calculate utility = specific_task_value - norm * task_cost
-        return self.calc_specific_task_value(task, measurement) - self.normalizing_parameter * self.calc_task_cost(task, prev_state)
+        return self.calc_observation_opportunity_value(obs, measurement) - norm_param * self.calc_observation_cost(obs)
 
-    def calc_specific_task_value(self, task: ObservationOpportunity, measurement: dict) -> float:
+    def calc_observation_opportunity_value(self, task: ObservationOpportunity, measurement: dict) -> float:
         """Calculate the utility of a specific observation task based on the mission's objectives and the measurement."""
 
         # Validate inputs
@@ -49,8 +53,8 @@ class Mission:
         obj_relevances : Dict[MissionObjective, float] = self.relate_objectives_to_task(task)
 
         # Calculate the value of the task based on the objectives and their relevance
-        values = [objective.weight * obj_relevances[objective] * objective.eval_measurement_performance(measurement)
-                 for objective in self.objectives]
+        values = [weight * obj_relevances[objective] * objective.eval_measurement_performance(measurement)
+                 for objective, weight in self.objectives.items()]
         
         # Return the sum of values for all objectives
         return task.priority * sum(values)
@@ -83,72 +87,27 @@ class Mission:
 
         return obj_relevances
 
-    def calc_task_cost(self, task: ObservationOpportunity, prev_state: SimulationAgentState) -> float:
-        """Calculate the cost of a task based on the previous state."""
+    def calc_observation_cost(self, obs: ObservationOpportunity) -> float:
+        """Calculate the intrinsic cost of a task based on the previous state."""
         
         # Validate Inputs
-        assert isinstance(task, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
-        assert isinstance(prev_state, SimulationAgentState), "Previous state must be an instance of `SimulationAgentState`"
+        assert isinstance(obs, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
 
-        if not isinstance(prev_state, SatelliteAgentState):
-            raise NotImplementedError("Cost calculation is currently only implemented for `SatelliteAgentState`")
+        # Calculate the cost of a specific task by summing the cost of parent tasks
+        costs = [self.calc_task_cost(task) for task in obs.tasks]
 
-        th_i : float = np.average(task.slew_angles.left, task.slew_angles.right)
-        th_prev : float = prev_state.attitude[0]
+        # return the sum of costs for all objectives
+        return sum(costs)
+    
+    def calc_task_cost(self, task: GenericObservationTask) -> float:
+        """Calculate the intrinsic cost of a task."""
+        # TODO Define task cost model
 
-        return np.abs(th_i - th_prev)
+        # Validate Inputs
+        assert isinstance(task, GenericObservationTask), "Task must be an instance of `GenericObservationTask`"
 
-    # def tasks_from_event(self, event: GeophysicalEvent) -> List[GenericObservationTask]:
-    #     """Generate tasks based on a geophysical event."""
-    #     # TODO Allow for more complex relationships using Knowledge Graphs or other methods. Move to science module?
-
-    #     # Validate Inputs
-    #     assert isinstance(event, GeophysicalEvent), "Event must be an instance of `GeophysicalEvent`"
-
-    #     obj_relevances : Dict[MissionObjective, float] = self.relate_events_to_task(event)
-
-    #     # Generate tasks based on objective relevances
-    #     tasks : Dict[MissionObjective, Tuple[float, GenericObservationTask]] = {}
-    #     for obj, relevance in obj_relevances.items():
-    #         if relevance > 0 and (obj not in tasks or relevance > tasks[obj][0]):
-    #             tasks[obj] = (relevance, self.task_from_event(event, obj))
-
-    #     return [task[1] for _,task in tasks.values()]
-
-    # def relate_events_to_task(self, event: GeophysicalEvent) -> Dict[MissionObjective, float]:
-    #     """Relate objectives to a task based on the task's parameters."""
-    #     # TODO Allow for more complex relationships using Knowledge Graphs or other methods. Move to science module?
-
-    #     # Validate event type
-    #     assert isinstance(event, GeophysicalEvent), "event must be an instance of `GeophysicalEvent`"
-
-    #     # # Initialize relevances
-    #     # obj_relevances = {
-    #     #     obj: (1.0 if isinstance(obj, type_map[type(task)]) else 0.5)
-    #     #     if obj.parameter == task.parameter else 0.0
-    #     #     for obj in self.objectives
-    #     # }
-
-    #     # # Validate outputs
-    #     # assert all(0 <= val <= 1 for val in obj_relevances.values()), "Objective relevance values must be between 0 and 1"
-
-    #     # return obj_relevances
-    #     # TODO event task from objective and events
-    #     raise NotImplementedError("Task generation from event is not implemented yet")
-
-    # def task_from_event(self, event: GeophysicalEvent, objective : MissionObjective) -> GenericObservationTask:
-    #     """Generate a task from a geophysical event."""
-
-    #     # Validate inputs
-    #     assert isinstance(event, GeophysicalEvent), "Event must be an instance of `GeophysicalEvent`"
-    #     assert isinstance(objective, MissionObjective), "Objective must be an instance of `MissionObjective`"
-
-    #     availability = Interval(event.t_start, event.t_start+event.d_exp)
-    #     return EventObservationTask(objective.parameter, event.location, availability, event.severity, event, objective)
-
-    # def get_required_attributes(self) -> List[str]:
-    #     """Returns a list of all required attributes across all mission requirements."""
-    #     return list({req.attribute for req in self.requirements})
+        # For now, return 0.0 as a placeholder
+        return 0.0
 
     def __repr__(self):
         """String representation of the mission."""
