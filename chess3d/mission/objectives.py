@@ -58,7 +58,9 @@ class MissionObjective(ABC):
 
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the objective to a dictionary."""
-        return dict(self.__dict__)
+        d = dict(self.__dict__)
+        d['requirements'] = [req.to_dict() for req in self.requirements.values()]
+        return d
 
     @classmethod
     def from_dict(cls, obj_dict: Dict[str, Union[str, float]]) -> 'MissionObjective':
@@ -75,9 +77,9 @@ class MissionObjective(ABC):
         
         raise ValueError(f"Unknown objective type: {obj_dict['objective_type']}")
 
-    @abstractmethod
     def copy(self) -> 'MissionObjective':
         """Create a copy of the objective."""
+        return self.from_dict(self.to_dict())
     
     @abstractmethod
     def __repr__(self) -> str:
@@ -109,12 +111,6 @@ class DefaultMissionObjective(MissionObjective):
             raise ValueError("No performance requirement found, please add a performance requirement to objective definition.")
 
         super().__init__(MissionObjective.DEFAULT, parameter, requirements, id)
-
-    def copy(self) -> 'DefaultMissionObjective':
-        """Create a copy of the objective."""
-        return DefaultMissionObjective(self.parameter, 
-                                       [req.copy() for req in self.requirements.values()], 
-                                       self.id)
 
     def __repr__(self) -> str:
         """String representation of the objective."""
@@ -180,48 +176,40 @@ class EventDrivenObjective(MissionObjective):
         # Set attributes
         self.event_type = event_type.lower() 
         self.synergistic_parameters = [param.lower() for param in synergistic_parameters]
-
-    def copy(self):
-        return EventDrivenObjective(self.event_type, 
-                                    self.parameter, 
-                                    [req.copy() for req in self.requirements.values()], 
-                                    self.synergistic_parameters, 
-                                    self.id)
     
     def __repr__(self):
         return f"EventDrivenObjective({self.parameter}, event_type={self.event_type}, id={self.id.split('-')[0]})"
 
     @classmethod
-    def from_dict(cls, obj_dict: Dict[str, Union[str, float]]) -> 'EventDrivenObjective':
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'EventDrivenObjective':
         """Create an event-driven objective from a dictionary."""
-        assert 'objective_type' in obj_dict and obj_dict['objective_type'] == MissionObjective.EVENT, "Objective type must be 'event' for EventDrivenObjective"
-        assert 'parameter' in obj_dict, "Parameter must be specified in the dictionary"
-        assert 'requirements' in obj_dict, "Requirements must be specified in the dictionary"
-        assert 'event_type' in obj_dict, "Event type must be specified in the dictionary"
+        assert 'objective_type' in d and d['objective_type'] == MissionObjective.EVENT, "Objective type must be 'event' for EventDrivenObjective"
+        assert 'parameter' in d, "Parameter must be specified in the dictionary"
+        assert 'requirements' in d, "Requirements must be specified in the dictionary"
+        assert 'event_type' in d, "Event type must be specified in the dictionary"
         
         # Convert requirements to MissionRequirement instances
-        if all(isinstance(req, dict) for req in obj_dict['requirements']):
-            requirements = [MissionRequirement.from_dict(req) for req in obj_dict['requirements']]
-        elif all(isinstance(req, MissionRequirement) for req in obj_dict['requirements']):
-            requirements = obj_dict['requirements']
+        if all(isinstance(req, dict) for req in d['requirements']):
+            requirements = [MissionRequirement.from_dict(req) for req in d['requirements']]
+        elif all(isinstance(req, MissionRequirement) for req in d['requirements']):
+            requirements = d['requirements']
         else:
             raise ValueError("Requirements must be a list of dictionaries or `MissionRequirement` instances")
         
-        return EventDrivenObjective(event_type=obj_dict['event_type'],
-                                    parameter=obj_dict['parameter'],
+        return EventDrivenObjective(event_type=d['event_type'],
+                                    parameter=d['parameter'],
                                     requirements=requirements,
-                                    synergistic_parameters=obj_dict.get('synergistic_parameters', []),
-                                    id=obj_dict.get('id', None))
+                                    synergistic_parameters=d.get('synergistic_parameters', []),
+                                    id=d.get('id', None))
 
     @classmethod
-    def from_default_objective(cls, event : GeophysicalEvent, default_objective: DefaultMissionObjective, synergistic_parameters : list = [], weight : float = None) -> 'EventDrivenObjective':
+    def from_default_objective(cls, event : GeophysicalEvent, default_objective: DefaultMissionObjective, synergistic_parameters : list = []) -> 'EventDrivenObjective':
         """Create an `EventDrivenObjective` from a default objective and an event."""
 
         # Validate Inputs
         assert isinstance(event, GeophysicalEvent), "Event must be an instance of GeophysicalEvent"
         assert isinstance(default_objective, DefaultMissionObjective), "Default objective must be an instance of DefaultMissionObjective"
         assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
-        assert weight is None or isinstance(weight, (int, float)), "weight must be a number or None"
 
         # Return Event Objective
         return cls(event_type=event.event_type,
