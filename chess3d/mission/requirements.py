@@ -1135,6 +1135,8 @@ class MultiPointSpatialRequirement(SpatialCoverageRequirement):
         return cls(targets, distance_threshold, id)
 
 class GridSpatialRequirement(SpatialCoverageRequirement):
+    # TODO load grid definitions from file or external source and evaluate accordingly
+
     def __init__(self, 
                  grid_name : str,
                  grid_index : int,
