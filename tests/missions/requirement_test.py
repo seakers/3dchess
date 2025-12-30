@@ -1399,7 +1399,7 @@ class TestGridSpatialRequirement(unittest.TestCase):
 
 if __name__ == '__main__':
     # terminal welcome message
-    print_welcome('Requirement Definition Test')
+    print_welcome('Mission Requirement Definition Test')
     
     # run tests
     unittest.main()

@@ -435,7 +435,7 @@ class TestEventDrivenObjectives(unittest.TestCase):
 
 if __name__ == '__main__':
     # terminal welcome message
-    print_welcome('Mission Definitions Test')
+    print_welcome('Mission Objective Definitions Test')
     
     # run tests
     unittest.main()
