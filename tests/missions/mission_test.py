@@ -55,6 +55,24 @@ class TestMission(unittest.TestCase):
         self.assertRaises(AssertionError, Mission, name='InvalidMission', objectives=[self.event_objective, self.default_objective], weights=[0.6, 0.2, 0.2]) # mismatched objective and weight lengths
         self.assertRaises(AssertionError, Mission, name='InvalidMission', objectives=[self.event_objective, self.default_objective], weights=[0.6, 0.5]) # weights don't sum to 1.0
 
+    def test_observation_opportunity_utility(self):
+        # Create a mock observation opportunity and measurement
+        class MockObservationOpportunity:
+            def __init__(self):
+                self.tasks = []
+        
+        obs_opportunity = MockObservationOpportunity()
+        measurement = {self.parameter: 5.0}  # Example measurement data
+
+        # Test utility calculation
+        utility = self.mission.calc_observation_opportunity_utility(obs_opportunity, measurement, norm_param=0.01)
+        self.assertIsInstance(utility, float)
+
+        # Test invalid inputs
+        self.assertRaises(AssertionError, self.mission.calc_observation_opportunity_utility, obs='invalid_obs', measurement=measurement, norm_param=0.01) # invalid obs type
+        self.assertRaises(AssertionError, self.mission.calc_observation_opportunity_utility, obs=obs_opportunity, measurement='invalid_measurement', norm_param=0.01) # invalid measurement type
+        self.assertRaises(AssertionError, self.mission.calc_observation_opportunity_utility, obs=obs_opportunity, measurement=measurement, norm_param=-0.01) # invalid norm_param type
+
 if __name__ == '__main__':
     # terminal welcome message
     print_welcome('Mission Definitions Test')
