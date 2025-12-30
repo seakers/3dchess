@@ -27,7 +27,7 @@ from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
 from chess3d.mission.mission import Mission
 from chess3d.mission.objectives import DefaultMissionObjective
-from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
+from chess3d.mission.requirements import GridSpatialRequirement, SinglePointSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
 from chess3d.orbitdata import OrbitData
 
 class AbstractAgent(Agent):
@@ -677,13 +677,15 @@ class SimulatedAgent(AbstractAgent):
                 if not isinstance(req, SpatialCoverageRequirement): 
                     req_targets = []
                 
-                elif isinstance(req, PointTargetSpatialRequirement):
-                    raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                elif isinstance(req, SinglePointSpatialRequirement):
+                    # collect specified target
+                    req_targets = [req.target]
                 
                 elif isinstance(req, MultiPointSpatialRequirement):
-                    raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
+                    # collect all specified targets
+                    req_targets = [target for target in req.targets]
                 
-                elif isinstance(req, GridTargetSpatialRequirement):
+                elif isinstance(req, GridSpatialRequirement):
                     # collect all targets matching this grid requirement
                     req_targets = [
                         (lat, lon, grid_index, gp_index)
@@ -695,6 +697,7 @@ class SimulatedAgent(AbstractAgent):
                 else: 
                     raise TypeError(f"Unknown spatial requirement type: {type(req)}")
             
+                # add to list of targets for this objective
                 targets.extend(req_targets)
         
         # iterate through each mission objective

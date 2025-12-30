@@ -7,7 +7,7 @@ class GeophysicalEvent:
                  location : list,
                  t_detect : float,
                  d_exp : float,
-                 severity : str,
+                 severity : float,
                  t_start : float = None,
                  id : str = None
                  ):

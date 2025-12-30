@@ -36,7 +36,7 @@ class MissionObjective(ABC):
 
         # Set attributes
         self.objective_type : str = objective_type.lower()
-        self.parameter : str = parameter
+        self.parameter : str = parameter.lower()
         self.requirements : Dict[str, MissionRequirement] = {requirement.attribute: requirement for requirement in requirements}
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
@@ -45,11 +45,12 @@ class MissionObjective(ABC):
 
         # Validate measurement input
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
+        assert all(isinstance(k, str) for k in measurement.keys()), "Measurement keys must be strings"
+        assert all(attribute in measurement for attribute in self.requirements.keys()), "Measurement must contain all requirement attributes"
 
         # Evaluate measurement performance for each requirement attribute
         pref_values = [
             req.calc_preference(attribute, measurement[attribute]) 
-                if attribute in measurement else np.NAN # If attribute not in measurement, set preference to NaN
             for attribute,req in self.requirements.items()
         ]
 
@@ -87,7 +88,7 @@ class MissionObjective(ABC):
 
     def __iter__(self):
         """Iterate over the objectives."""
-        return iter(self.requirements)
+        return iter(self.requirements.values())
 
 class DefaultMissionObjective(MissionObjective):
     def __init__(self, 
@@ -114,7 +115,7 @@ class DefaultMissionObjective(MissionObjective):
 
     def __repr__(self) -> str:
         """String representation of the objective."""
-        return f"DefaultMissionObjective({self.parameter}, n_reqs={len(self.requirements)}, id={self.id.split('-')[0]})"
+        return f"DefaultMissionObjective(parameter={self.parameter}, n_reqs={len(self.requirements)}, id={self.id.split('-')[0]})"
 
     @classmethod
     def from_dict(cls, obj_dict: Dict[str, Union[str, float]]) -> 'DefaultMissionObjective':
@@ -145,7 +146,7 @@ class EventDrivenObjective(MissionObjective):
                  event_type: str,
                  parameter: str,
                  requirements: List[MissionRequirement], 
-                 synergistic_parameters: List[str] = [],
+                #  synergistic_parameters: List[str] = [],
                  id : str = None
                  ):
         """ 
@@ -155,7 +156,7 @@ class EventDrivenObjective(MissionObjective):
         - :`event_type`: The type of geophysical event associated with the objective.
         - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
-        - :`synergistic_parameters`: A list of additional parameters that are synergistic with the main parameter.
+        # - :`synergistic_parameters`: A list of additional parameters that are synergistic with the main parameter.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
         # Validate inputs
@@ -169,24 +170,24 @@ class EventDrivenObjective(MissionObjective):
         
         # Validate inputs
         assert isinstance(event_type, str), "Event type must be a string"
-        assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
-        assert all(isinstance(param, str) for param in synergistic_parameters), "Synergistic parameters must be strings"
-        assert parameter not in synergistic_parameters, "Main parameter cannot be in list of synergistic parameters."
+        # assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
+        # assert all(isinstance(param, str) for param in synergistic_parameters), "Synergistic parameters must be strings"
+        # assert parameter not in synergistic_parameters, "Main parameter cannot be in list of synergistic parameters."
         
         # Set attributes
         self.event_type = event_type.lower() 
-        self.synergistic_parameters = [param.lower() for param in synergistic_parameters]
+        # self.synergistic_parameters = [param.lower() for param in synergistic_parameters]
     
     def __repr__(self):
-        return f"EventDrivenObjective({self.parameter}, event_type={self.event_type}, id={self.id.split('-')[0]})"
+        return f"EventDrivenObjective(parameter={self.parameter}, event_type={self.event_type}, id={self.id.split('-')[0]})"
 
     @classmethod
     def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'EventDrivenObjective':
         """Create an event-driven objective from a dictionary."""
         assert 'objective_type' in d and d['objective_type'] == MissionObjective.EVENT, "Objective type must be 'event' for EventDrivenObjective"
+        assert 'event_type' in d, "Event type must be specified in the dictionary"
         assert 'parameter' in d, "Parameter must be specified in the dictionary"
         assert 'requirements' in d, "Requirements must be specified in the dictionary"
-        assert 'event_type' in d, "Event type must be specified in the dictionary"
         
         # Convert requirements to MissionRequirement instances
         if all(isinstance(req, dict) for req in d['requirements']):
@@ -199,20 +200,25 @@ class EventDrivenObjective(MissionObjective):
         return EventDrivenObjective(event_type=d['event_type'],
                                     parameter=d['parameter'],
                                     requirements=requirements,
-                                    synergistic_parameters=d.get('synergistic_parameters', []),
+                                    # synergistic_parameters=d.get('synergistic_parameters', []),
                                     id=d.get('id', None))
 
     @classmethod
-    def from_default_objective(cls, event : GeophysicalEvent, default_objective: DefaultMissionObjective, synergistic_parameters : list = []) -> 'EventDrivenObjective':
+    def from_default_objective(cls, 
+                               event : GeophysicalEvent, 
+                               default_objective: DefaultMissionObjective, 
+                            #    synergistic_parameters : list = []
+                            ) -> 'EventDrivenObjective':
         """Create an `EventDrivenObjective` from a default objective and an event."""
 
         # Validate Inputs
         assert isinstance(event, GeophysicalEvent), "Event must be an instance of GeophysicalEvent"
         assert isinstance(default_objective, DefaultMissionObjective), "Default objective must be an instance of DefaultMissionObjective"
-        assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
+        # assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
 
         # Return Event Objective
         return cls(event_type=event.event_type,
                    parameter=default_objective.parameter,
-                   requirements=default_objective.requirements,
-                   synergistic_parameters=synergistic_parameters)
+                   requirements=[req for req in default_objective],
+                #    synergistic_parameters=synergistic_parameters
+                   )

@@ -132,6 +132,16 @@ class PerformancePreferenceStrategies(Enum):
     STEPS = 'discrete_steps'
     INTERVAL_INTERP = 'discrete_intervals'
 
+class TemporalRequirementAttributes(Enum):
+    START_TIME = 'start_time'
+    END_TIME = 'end_time'
+    DURATION = 'duration'
+    REVISIT_TIME = 'revisit_time'
+    OBS_TIME = 't_img'
+
+class ObservationRequirementAttributes(Enum):
+    NUM_OBSERVATIONS = 'n_obs'
+
 class PerformanceRequirement(MissionRequirement):
     def __init__(self, 
                  attribute : str, 
@@ -668,7 +678,6 @@ class StepsRequirement(PerformanceRequirement):
             f"Dictionary must contain the keys: {required_keys}"
         
         # unpack dictionary
-        req_type = dict.get("req_type")
         attribute = dict.get("attribute")
         thresholds = dict.get("thresholds")
         scores = dict.get("scores")
