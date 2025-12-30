@@ -27,7 +27,7 @@ from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
 from chess3d.mission.mission import Mission
 from chess3d.mission.objectives import DefaultMissionObjective
-from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
+from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
 from chess3d.orbitdata import OrbitData
 
 class AbstractAgent(Agent):
@@ -674,13 +674,13 @@ class SimulatedAgent(AbstractAgent):
         for objective,targets in objective_targets.items():     
             for req in objective:
                 # ignore non-spatial requirements
-                if not isinstance(req, SpatialRequirement): 
+                if not isinstance(req, SpatialCoverageRequirement): 
                     req_targets = []
                 
                 elif isinstance(req, PointTargetSpatialRequirement):
                     raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
                 
-                elif isinstance(req, TargetListSpatialRequirement):
+                elif isinstance(req, MultiPointSpatialRequirement):
                     raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
                 
                 elif isinstance(req, GridTargetSpatialRequirement):

@@ -21,7 +21,7 @@ from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.messages import  AgentStateMessage, PlanMessage
 from chess3d.mission.mission import Mission
 from chess3d.mission.objectives import DefaultMissionObjective
-from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
+from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
@@ -355,12 +355,12 @@ class DealerPlanner(AbstractPeriodicPlanner):
             for objective in objective_targets:         
                 for req in objective:
                     # ignore non-spatial requirements
-                    if not isinstance(req, SpatialRequirement): continue
+                    if not isinstance(req, SpatialCoverageRequirement): continue
                     
                     elif isinstance(req, PointTargetSpatialRequirement):
                         raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
                     
-                    elif isinstance(req, TargetListSpatialRequirement):
+                    elif isinstance(req, MultiPointSpatialRequirement):
                         raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
                     
                     elif isinstance(req, GridTargetSpatialRequirement):

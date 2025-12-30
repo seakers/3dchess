@@ -92,7 +92,7 @@ class AbstractPlanner(ABC):
         raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(planning_horizon.left, planning_horizon.right)
 
         # initiate access times
-        access_opportunities = {}
+        access_opportunities : Dict[int, Dict[int, Dict[str, List]]] = {}
         
         for i in tqdm(range(len(raw_coverage_data['time [s]'])), 
                         desc=f'{state.agent_name}/PREPLANNER: Compiling access opportunities', 

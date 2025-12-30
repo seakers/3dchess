@@ -1,11 +1,11 @@
 
-from typing import Dict, Union
+from abc import ABC, abstractmethod
+from typing import Dict, List, Union
 import uuid
 import numpy as np
 
 from chess3d.mission.events import GeophysicalEvent
-from chess3d.mission.requirements import *
-
+from chess3d.mission.requirements import MissionRequirement
 
 class MissionObjective(ABC):
     DEFAULT = "default_mission"
@@ -14,8 +14,7 @@ class MissionObjective(ABC):
     def __init__(self, 
                  objective_type: str,
                  parameter: str, 
-                 weight: float, 
-                 requirements: list, 
+                 requirements: List[MissionRequirement], 
                  id : str = None):
         """ 
         ### Objective
@@ -23,7 +22,7 @@ class MissionObjective(ABC):
         Initialize an objective with a parameter, weight, and requirements.
         - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
         - :`weight`: The relative objective weight.
-        - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
+        - :`requirements`: A list of `MissionRequirement` instances that define the requirements for the objective.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
 
@@ -31,18 +30,14 @@ class MissionObjective(ABC):
         assert isinstance(objective_type, str), "Objective type must be a string"
         assert objective_type in [self.DEFAULT, self.EVENT], f"Objective type must be one of {self.DEFAULT} or {self.EVENT}"
         assert isinstance(parameter, str), "Parameter must be a string"
-        assert isinstance(weight, (int, float)), "Weight must be a number"
         assert len(requirements) > 0, "At least one requirement is needed"
         assert all(isinstance(req, MissionRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
-        assert any(isinstance(req, TemporalRequirement) for req in requirements), "At least one requirement must be a `TemporalRequirement`"
-        assert any(isinstance(req, SpatialRequirement) for req in requirements), "At least one requirement must be a `SpatialRequirement`"
         assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
 
         # Set attributes
         self.objective_type : str = objective_type.lower()
-        self.weight : float = weight
         self.parameter : str = parameter
-        self.requirements : list[MissionRequirement] = [requirement for requirement in requirements]
+        self.requirements : Dict[str, MissionRequirement] = {requirement.attribute: requirement for requirement in requirements}
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def eval_measurement_performance(self, measurement: dict) -> float:
@@ -52,9 +47,11 @@ class MissionObjective(ABC):
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
 
         # Evaluate measurement performance for each requirement attribute
-        pref_values = [req.calc_preference(measurement[req.attribute]) \
-                       if req.attribute in measurement else 0.0
-                       for req in self.requirements]
+        pref_values = [
+            req.calc_preference(attribute, measurement[attribute]) 
+                if attribute in measurement else np.NAN # If attribute not in measurement, set preference to NaN
+            for attribute,req in self.requirements.items()
+        ]
 
         # Return product of all preference values
         return np.prod(pref_values)
@@ -64,8 +61,7 @@ class MissionObjective(ABC):
         return {
             "objective_type": self.objective_type,
             "parameter": self.parameter,
-            "weight": self.weight,
-            "requirements": [req.to_dict() for req in self.requirements],
+            "requirements": [req.to_dict() for req in self.requirements.values()],
             "id": self.id
         }
 
@@ -99,7 +95,6 @@ class MissionObjective(ABC):
 class DefaultMissionObjective(MissionObjective):
     def __init__(self, 
                  parameter: str, 
-                 weight: float = 1.0, 
                  requirements: list = [], 
                  id : str = None,
                  outputFlag : bool = False
@@ -121,13 +116,12 @@ class DefaultMissionObjective(MissionObjective):
             if outputFlag: print("WARNING: No temporal requirement found, adding default temporal requirement.")
             requirements.append(RevisitTemporalRequirement([3600, 3600*4, 24*3600], [1, 0.5, 0.0]))
 
-        super().__init__(MissionObjective.DEFAULT, parameter, weight, requirements, id)
+        super().__init__(MissionObjective.DEFAULT, parameter, requirements, id)
 
     def copy(self) -> 'DefaultMissionObjective':
         """Create a copy of the objective."""
         return DefaultMissionObjective(self.parameter, 
-                                       self.weight, 
-                                       [req.copy() for req in self.requirements], 
+                                       [req.copy() for req in self.requirements.values()], 
                                        self.id)
 
     def __repr__(self) -> str:
@@ -137,6 +131,8 @@ class DefaultMissionObjective(MissionObjective):
     @classmethod
     def from_dict(cls, obj_dict: Dict[str, Union[str, float]]) -> 'DefaultMissionObjective':
         """Create a default mission objective from a dictionary."""
+
+        # validate input dictionary
         assert 'objective_type' in obj_dict and obj_dict['objective_type'] == MissionObjective.DEFAULT, "Objective type must be 'default' for DefaultMissionObjective"
         assert 'parameter' in obj_dict, "Parameter must be specified in the dictionary"
         assert 'weight' in obj_dict, "Weight must be specified in the dictionary"
@@ -150,17 +146,20 @@ class DefaultMissionObjective(MissionObjective):
         else:
             raise ValueError("Requirements must be a list of dictionaries or `MissionRequirement` instances")
 
+        # Unpack other attributes
+        parameter = obj_dict.get('parameter')
+        weight = obj_dict.get('weight')
         id = obj_dict.get('id', None)
 
-        return cls(obj_dict['parameter'], obj_dict['weight'], requirements, id)
+        # Return DefaultMissionObjective
+        return cls(parameter, weight, requirements, id)
 
 class EventDrivenObjective(MissionObjective):
     def __init__(self, 
                  event_type: str,
                  parameter: str,
-                 weight: float, 
-                 requirements: list, 
-                 synergistic_parameters: list = [],
+                 requirements: List[MissionRequirement], 
+                 synergistic_parameters: List[str] = [],
                  id : str = None,
                  outputFlag : bool = False
                  ):
@@ -170,7 +169,6 @@ class EventDrivenObjective(MissionObjective):
         Initialize an event-driven objective with a weight, parameter, and requirements.
         - :`event_type`: The type of geophysical event associated with the objective.
         - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
-        - :`weight`: The weight of the objective.
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
         - :`synergistic_parameters`: A list of additional parameters that are synergistic with the main parameter.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
@@ -200,7 +198,7 @@ class EventDrivenObjective(MissionObjective):
         return EventDrivenObjective(self.event_type, 
                                     self.parameter, 
                                     self.weight, 
-                                    [req.copy() for req in self.requirements], 
+                                    [req.copy() for req in self.requirements.values()], 
                                     self.synergistic_parameters, 
                                     self.id)
     
