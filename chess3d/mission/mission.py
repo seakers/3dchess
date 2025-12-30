@@ -5,6 +5,7 @@ from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.agents.planning.tasks import GenericObservationTask, DefaultMissionTask, EventObservationTask
 from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.mission.objectives import *
+from chess3d.mission.requirements import TemporalRequirementAttributes
 
 class Mission:
     def __init__(self, 
@@ -32,7 +33,7 @@ class Mission:
         assert isinstance(norm_param, (int,float)) and norm_param >= 0, "Normalizing parameter must be a positive value"
 
         # Calculate utility = specific_task_value - norm * task_cost
-        return self.calc_observation_opportunity_value(obs, measurement) - norm_param * self.calc_observation_cost(obs)
+        return self.calc_observation_opportunity_value(obs, measurement) - norm_param * self.calc_measurement_cost(measurement)
 
     def calc_observation_opportunity_value(self, task: ObservationOpportunity, measurement: dict) -> float:
         """Calculate the utility of a specific observation task based on the mission's objectives and the measurement."""
@@ -56,7 +57,7 @@ class Mission:
         values = [weight * obj_relevances[objective] * objective.eval_measurement_performance(measurement)
                  for objective, weight in self.objectives.items()]
         
-        # Return the sum of values for all objectives
+        # Return the sum of values for all objectives times the task priority
         return task.priority * sum(values)
 
     def relate_objectives_to_task(self, task: GenericObservationTask) -> Dict[MissionObjective, float]:
@@ -87,28 +88,16 @@ class Mission:
 
         return obj_relevances
 
-    def calc_observation_cost(self, obs: ObservationOpportunity) -> float:
-        """Calculate the intrinsic cost of a task based on the previous state."""
+    def calc_measurement_cost(self, measurement: dict) -> float:
+        """Calculate the intrinsic cost of a measurement."""
         
         # Validate Inputs
-        assert isinstance(obs, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
+        assert isinstance(measurement, dict), "Measurement must be a dictionary"
 
         # Calculate the cost of a specific task by summing the cost of parent tasks
-        costs = [self.calc_task_cost(task) for task in obs.tasks]
-
-        # return the sum of costs for all objectives
-        return sum(costs)
+        # TODO Define cost model; currently using duration as a placeholder
+        return measurement.get(TemporalRequirementAttributes.DURATION.value, 0.0)        
     
-    def calc_task_cost(self, task: GenericObservationTask) -> float:
-        """Calculate the intrinsic cost of a task."""
-        # TODO Define task cost model
-
-        # Validate Inputs
-        assert isinstance(task, GenericObservationTask), "Task must be an instance of `GenericObservationTask`"
-
-        # For now, return 0.0 as a placeholder
-        return 0.0
-
     def __repr__(self):
         """String representation of the mission."""
         return f"Mission({self.name}, objectives={self.objectives})"

@@ -1,141 +1,59 @@
 import unittest
 
 from chess3d.mission.events import GeophysicalEvent
-from chess3d.mission.mission import *
-from chess3d.mission.requirements import *
-from chess3d.mission.objectives import *
+from chess3d.mission.requirements import SinglePointSpatialRequirement, IntervalInterpolationRequirement, TemporalRequirementAttributes
+from chess3d.mission.objectives import EventDrivenObjective, DefaultMissionObjective
+from chess3d.mission.mission import Mission
 from chess3d.utils import print_welcome
 
 
 class TestMission(unittest.TestCase):
     def setUp(self):
-        reqs_1 = [
-            ContinuousRequirement(
-                attribute="horizontal_spatial_resolution",
-                thresholds=[10, 30, 100],
-                scores=[1.0, 0.7, 0.1]
-            ),
-            CategoricalRequirement(
-                attribute="spectral_resolution",
-                thresholds=["Hyperspectral", "Multispectral"],
-                scores=[1, 0.5]
-            ),
-            CapabilityRequirement(
-                attribute="instrument",
-                valid_values=["VNIR", "TIR"]
-            ),
-            RevisitTemporalRequirement(
-                thresholds=[3600, 14400, 86400],
-                scores=[1.0, 0.5, 0.0]
-            ),
-            GridTargetSpatialRequirement(
-                grid_name="grid_1",
-                grid_index=0,
-                grid_size=10
-            )
-        ]
-
-        reqs_2 = [
-            ContinuousRequirement(
-                attribute="horizontal_spatial_resolution",
-                thresholds=[30, 100],
-                scores=[1.0, 0.3]
-            ),
-            CapabilityRequirement(
-                attribute="instrument",
-                valid_values=["TIR"]
-            ),
-            RevisitTemporalRequirement(
-                thresholds=[3600, 14400, 86400],
-                scores=[1.0, 0.5, 0.0]
-            ),
-            GridTargetSpatialRequirement(
-                grid_name="grid_1",
-                grid_index=0,
-                grid_size=10
-            )
-        ]
-
-        reqs_3 = [
-            ContinuousRequirement(
-                attribute="horizontal_spatial_resolution",
-                thresholds=[30, 100],
-                scores=[1.0, 0.5]
-            ),
-            ContinuousRequirement(
-                attribute="accuracy",
-                thresholds=[1, 5, 10],
-                scores=[1.0, 0.5, 0.1]
-            ),
-            CapabilityRequirement(
-                attribute="instrument",
-                valid_values=["Altimeter"]
-            ),
-            RevisitTemporalRequirement(
-                thresholds=[3600, 14400, 86400],
-                scores=[1.0, 0.5, 0.0]
-            ),
-            GridTargetSpatialRequirement(
-                grid_name="grid_1",
-                grid_index=0,
-                grid_size=10
-            )
-        ]
+        # Define event details
+        self.event_type = 'Algal Bloom'
+        self.parameter = "Chlorophyll-A"
+        self.target_1 = (34.0522, -118.2437, 0, 0)  # Example target: (lat, lon, grid_index, gp_index)
+        self.event = GeophysicalEvent(self.event_type, self.target_1, 0.0, 1000, 1.0)
         
-        default_objective_1 = DefaultMissionObjective(
-            parameter="Chlorophyll-A",
-            weight=1,
-            requirements=reqs_1
+        # Define requirements
+        self.req_1_1 = SinglePointSpatialRequirement(target=self.target_1, distance_threshold=10.0)
+        self.req_1_2 = IntervalInterpolationRequirement(TemporalRequirementAttributes.REVISIT_TIME.value, [0, 10], [1.0, 0.0])
+
+        # Define objectives
+        self.event_objective = EventDrivenObjective(
+            event_type=self.event_type,
+            parameter=self.parameter,
+            requirements=[self.req_1_1, self.req_1_2]
+        )
+        self.default_objective = DefaultMissionObjective(
+            parameter=self.parameter,
+            requirements=[self.req_1_1, self.req_1_2]
         )
 
-        default_objective_2 = DefaultMissionObjective(
-            parameter="Water temperature",
-            weight=1,
-            requirements=reqs_2
+        # Create a mission with these objectives
+        self.mission = Mission(
+            name='TestMission',
+            objectives=[self.event_objective, self.default_objective],
+            weights=[0.6, 0.4]
         )
 
-        default_objective_3 = DefaultMissionObjective(
-            parameter="Water level",
-            weight=1,
-            requirements=reqs_3
-        )
-
-        self.objectives = [
-            default_objective_1,
-            default_objective_2,
-            default_objective_3
-        ]
-    def test_default_mission_initialization(self):
-        mission = Mission(
-            name="Test Mission",
-            objectives=self.objectives,
-            normalizing_parameter=1.0
-        )
-        self.assertEqual(mission.name, "Test Mission".lower())
-        self.assertEqual(len(mission.objectives), 3)
-        self.assertTrue(all(isinstance(obj, DefaultMissionObjective) for obj in mission.objectives))
-        self.assertTrue(all(obj in self.objectives for obj in mission.objectives))
-        self.assertEqual(mission.normalizing_parameter, 1.0)
-
-        self.assertRaises(AssertionError, Mission, name=123, objectives=self.objectives, normalizing_parameter=1.0)
-        self.assertRaises(AssertionError, Mission, name="Test Mission", objectives=[], normalizing_parameter=1.0)
-        self.assertRaises(AssertionError, Mission, name="Test Mission", objectives=['objective'], normalizing_parameter=1.0)
-        self.assertRaises(AssertionError, Mission, name="Test Mission", objectives=self.objectives, normalizing_parameter=-1.0)
-
-    # def calc_
-
-    def test_objectives_from_event(self):
-        pass
-        # TODO
-        # event = GeophysicalEvent(
-        #     event_type="algal bloom",
-        #     severity=5.0,
-        #     location=(34.0522, -118.2437, 0, 0),  # Example lat-lon-grid index-gp index
-        #     t_detect=1622547800.0,  # Example detection time
-        #     d_exp=3600.0,  # Example duration in seconds
-        #     t_start=None,
-        #     id=None
-        # )
+    def test_constructor(self):
+        # Test mission attributes
+        self.assertIsInstance(self.mission, Mission)
+        self.assertEqual(self.mission.name, 'testmission')
+        self.assertIn(self.event_objective, self.mission.objectives)
+        self.assertIn(self.default_objective, self.mission.objectives)
+        self.assertAlmostEqual(self.mission.objectives[self.event_objective], 0.6)
+        self.assertAlmostEqual(self.mission.objectives[self.default_objective], 0.4)
+        self.assertEqual(len(self.mission.objectives), 2)
+        self.assertEqual(sum(self.mission.objectives.values()), 1.0)
+        
+        # Test invalid preferences
+        self.assertRaises(AssertionError, Mission, name=12345, objectives=[self.event_objective, self.default_objective], weights=[0.6, 0.4]) # invalid mission name
+        self.assertRaises(AssertionError, Mission, name='InvalidMission', objectives=[], weights=[]) # No objectives
+        self.assertRaises(AssertionError, Mission, name='InvalidMission', objectives=[self.event_objective, self.default_objective, 'invalid_objective'], weights=[0.6, 0.4]) # invalid objective type
+        self.assertRaises(AssertionError, Mission, name='InvalidMission', objectives=[self.event_objective, self.default_objective], weights=[0.6, 0.2, 0.2]) # mismatched objective and weight lengths
+        self.assertRaises(AssertionError, Mission, name='InvalidMission', objectives=[self.event_objective, self.default_objective], weights=[0.6, 0.5]) # weights don't sum to 1.0
 
 if __name__ == '__main__':
     # terminal welcome message
