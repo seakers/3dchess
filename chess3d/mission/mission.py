@@ -1,7 +1,6 @@
 
-from typing import  Dict, Union
+from typing import  Dict
 
-from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.agents.planning.tasks import GenericObservationTask, DefaultMissionTask, EventObservationTask
 from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.mission.objectives import *
@@ -42,14 +41,15 @@ class Mission:
         assert isinstance(obs, ObservationOpportunity), "Task must be an instance of `SpecificObservationTask`"
         assert isinstance(measurement, dict), "Measurement must be a dictionary"        
 
-        # Calculate the value of a specific task by summing the value of parent tasks
-        values = [task.priority * self.calc_task_value(task, measurement) for task in obs.tasks]
+        # Calculate the value of a specific task by summing the value of each task
+        values = [self.calc_task_value(task, measurement) for task in obs.tasks]
 
         # return sum of values
         return sum(values)
 
     def calc_task_value(self, task: GenericObservationTask, measurement : dict) -> float:
         """Calculate the value of a task based on the mission's objectives."""
+        # Validate inputs
         assert isinstance(task, GenericObservationTask), "Task must be an instance of `GenericObservationTask`"
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
         assert 't_img' in measurement, "Measurement must contain 't_img' key for observation time"
@@ -57,17 +57,31 @@ class Mission:
         # Maps objectives to their relevance to the task at hand
         obj_relevances : Dict[MissionObjective, float] = self.relate_objectives_to_task(task)
 
+        # Check for availability of measurement at observation time
+        if measurement.get('t_img') not in task.availability: return 0.0
+
+        # Clip duration to task availability if applicable
+        if TemporalRequirementAttributes.DURATION.value in measurement:
+            d_prev = measurement[TemporalRequirementAttributes.DURATION.value]
+            measurement[TemporalRequirementAttributes.DURATION.value] = min(
+                measurement[TemporalRequirementAttributes.DURATION.value], 
+                task.availability.right - measurement.get('t_img')
+            )
+
         # Calculate the value of the task based on the objectives and their relevance
-        task_values = {objective : np.prod([
+        task_values = {objective : [
                             weight,                                             # weight of the objective
                             obj_relevances[objective],                          # relevance of the objective to the task
                             objective.eval_measurement_performance(measurement),# performance of the measurement for the objective
-                            float(measurement['t_img'] in task.availability)    # whether measurement time is within task availability
-                        ])
-                 for objective, weight in self.objectives.items()}
+                        ]
+                for objective, weight in self.objectives.items()}
         
+        # Restore original duration if it was modified
+        if TemporalRequirementAttributes.DURATION.value in measurement and 'd_prev' in locals():
+            measurement[TemporalRequirementAttributes.DURATION.value] = d_prev
+    
         # Return the sum of values for all objectives times the task priority
-        return sum(task_values.values())
+        return task.priority * sum([np.prod(values) for values in task_values.values()])
 
     def relate_objectives_to_task(self, task: GenericObservationTask) -> Dict[MissionObjective, float]:
         """Relate objectives to a task based on the task's parameters."""
@@ -80,7 +94,21 @@ class Mission:
         obj_relevances = dict()
 
         # Check if task has a defined objective
-        if task.objective is not None:
+        if task.objective is None:
+            # No specific objective; relate based on parameter matching
+            for obj in self.objectives:                
+                if obj.parameter == task.parameter:
+                    if (isinstance(task, DefaultMissionTask) and isinstance(obj, DefaultMissionObjective)) or \
+                       (isinstance(task, EventObservationTask) and isinstance(obj, EventDrivenObjective)):
+                        # if same parameter and objective type matches task type -> 0.50
+                        obj_relevances[obj] = 0.50
+                    else:
+                        # if same parameter but objective type does not match task type -> 0.25
+                        obj_relevances[obj] = 0.25
+                else:
+                    # else -> 0.0
+                    obj_relevances[obj] = 0.0
+        else:
             # Task has a specific objective defined; directly relate task objective to mission objectives
             for obj in self.objectives:
                 if obj == task.objective:
@@ -102,21 +130,7 @@ class Mission:
                 else:
                     # else it must be a different objective with different parameter and type -> 0.0
                     obj_relevances[obj] = 0.0
-                    
-        else:
-            # No specific objective; relate based on parameter matching
-            for obj in self.objectives:                
-                if obj.parameter == task.parameter:
-                    if (isinstance(task, DefaultMissionTask) and isinstance(obj, DefaultMissionObjective)) or \
-                       (isinstance(task, EventObservationTask) and isinstance(obj, EventDrivenObjective)):
-                        # if same parameter and objective type matches task type -> 0.50
-                        obj_relevances[obj] = 0.50
-                    else:
-                        # if same parameter but objective type does not match task type -> 0.25
-                        obj_relevances[obj] = 0.25
-                else:
-                    # else -> 0.0
-                    obj_relevances[obj] = 0.0
+            
 
         # Validate outputs
         assert all(0 <= val <= 1 for val in obj_relevances.values()), "Objective relevance values must be between 0 and 1"
