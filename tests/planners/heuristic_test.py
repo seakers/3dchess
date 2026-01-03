@@ -20,7 +20,7 @@ class TestHeuristic(PlannerTester, unittest.TestCase):
                 "@type": "heuristic",
                 "debug": "False",
                 # "horizon": 1000,
-                "period" : 500,
+                "period" : 200,
             }
         }
     
@@ -30,7 +30,7 @@ class TestHeuristic(PlannerTester, unittest.TestCase):
                 "@type": "heuristic",
                 "debug": "False",
                 # "horizon": 1000,
-                "period" : 500,
+                "period" : 100,
             }
         }
 

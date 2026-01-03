@@ -291,7 +291,7 @@ class ObservationAction(AgentAction):
 
     def to_dict(self):
         out = super().to_dict()
-        out['obs_opp'] = self.obs_opp.to_dict() if self.obs_opp else None
+        out['obs_opp'] = self.obs_opp.to_dict() if self.obs_opp else 'None'
         return out
 
 class WaitForMessages(AgentAction):

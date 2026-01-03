@@ -21,7 +21,7 @@ from chess3d.agents.planning.tracker import ObservationHistory, ObservationTrack
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
-from chess3d.mission.attributes import CapabilityRequirementAttributes, ObservationRequirementAttributes, TemporalRequirementAttributes
+from chess3d.mission.attributes import CapabilityRequirementAttributes, ObservationRequirementAttributes, SpatialCoverageRequirementAttributes, TemporalRequirementAttributes
 from chess3d.mission.mission import Mission
 from chess3d.mission.requirements import CapabilityRequirement, CategoricalRequirement, ConstantValueRequirement, ExpDecayRequirement, ExpSaturationRequirement, GaussianRequirement, IntervalInterpolationRequirement, LogThresholdRequirement, PerformancePreferenceStrategies, PerformanceRequirement, StepsRequirement, TriangleRequirement
 from chess3d.orbitdata import OrbitData
@@ -363,7 +363,7 @@ class AbstractPlanner(ABC):
 
             # Evaluate capability requirement
             if capability_req is not None:
-                return capability_req.calc_preference(instrument_name) >= 0.5
+                return capability_req.calc_preference(CapabilityRequirementAttributes.INSTRUMENT.value, instrument_name) >= 0.5
 
         # No capability objectives specified; check if instrument has general capability
         return True
@@ -672,8 +672,8 @@ class AbstractPlanner(ABC):
             # unpack observed target location information
             lat = observation_performances['lat [deg]'][i]
             lon = observation_performances['lon [deg]'][i]
-            grid_index = observation_performances['grid index'][i]
-            gp_index = observation_performances['GP index'][i]
+            grid_index = int(observation_performances['grid index'][i])
+            gp_index = int(observation_performances['GP index'][i])
 
             # define location indices
             loc = (lat,lon,grid_index,gp_index)
@@ -719,7 +719,7 @@ class AbstractPlanner(ABC):
             
             # update observation information
             obs.update({ 
-                "location" : [loc],
+                SpatialCoverageRequirementAttributes.LOCATION.value : [loc],
                 TemporalRequirementAttributes.OBS_TIME.value : t_img,
                 TemporalRequirementAttributes.RELATIVE_OBS_TIME.value : t_img - task.availability.left,
                 TemporalRequirementAttributes.DURATION.value : d_img,

@@ -248,6 +248,8 @@ class AbstractPeriodicPlanner(AbstractPlanner):
         
         finally:
             assert isinstance(broadcasts, list)
+            assert all([isinstance(broadcast, BroadcastMessageAction) for broadcast in broadcasts]), \
+                f'Broadcasts not scheduled correctly. Is of type `{type(broadcasts)}`.'
 
     @runtime_tracker
     def _schedule_periodic_replan(self, state : SimulationAgentState, prelim_plan : Plan, t_next : float) -> list:

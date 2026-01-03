@@ -145,6 +145,12 @@ class ObservationResultsMessage(SimulationMessage):
             raise AttributeError(f'`observation_action` must be of type `dict`; is of type {type(observation_action)}.')
         if not isinstance(agent_state, dict):
             raise AttributeError(f'`agent_state` must be of type `dict`; is of type {type(agent_state)}.')
+        if not isinstance(instrument, dict):
+            raise AttributeError(f'`instrument` must be of type `dict`; is of type {type(instrument)}.')
+        if not isinstance(observation_data, list):
+            raise AttributeError(f'`observation_data` must be of type `list`; is of type {type(observation_data)}.')
+        if not all(isinstance(data, dict) for data in observation_data):
+            raise AttributeError(f'elements of `observation_data` must be of type `dict`.')
 
         self.agent_state = agent_state
         self.observation_action = observation_action

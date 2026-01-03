@@ -850,6 +850,11 @@ class ExplicitCapabilityRequirement(CapabilityRequirement):
         # return preference value
         return 1.0 if value in self.valid_values else 0.0
     
+    def to_dict(self):
+        d = super().to_dict()
+        d.update({"valid_values": list(self.valid_values)})
+        return d
+
     @classmethod
     def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'ExplicitCapabilityRequirement':
         """Create an explicit capability requirement from a dictionary."""
@@ -1179,7 +1184,8 @@ class GridSpatialRequirement(SpatialCoverageRequirement):
             assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), "Latitude and longitude must be numeric"
             assert -90.0 <= lat <= 90.0, "Latitude must be in [-90, 90]"
             assert -180.0 <= lon <= 180.0, "Longitude must be in [-180, 180]"
-            assert isinstance(grid_idx, int) and isinstance(gp_idx, int), "Grid index and GP index must be integers"
+            assert isinstance(grid_idx, int) and isinstance(gp_idx, int), \
+                "Grid index and GP index must be integers"
             assert grid_idx >= 0, "Grid index must be non-negative"
             assert gp_idx >= 0, "GP index must be non-negative"
 

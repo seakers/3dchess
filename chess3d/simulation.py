@@ -26,6 +26,7 @@ from dmas.clocks import *
 from chess3d.agents.agents import *
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission.mission import *
+from chess3d.mission.requirements import CapabilityRequirement, ExplicitCapabilityRequirement
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
@@ -714,7 +715,7 @@ class Simulation:
                 if (isinstance(objective, EventDrivenObjective) 
                     and objective.event_type.lower() == event_type.lower()):
                     for req in objective:
-                        if isinstance(req, CapabilityRequirement) and req.attribute == 'instrument':
+                        if isinstance(req, ExplicitCapabilityRequirement) and req.attribute == 'instrument':
                             observations_reqs.update(set(req.valid_values))
 
         # find accesses that overlook a given event's location
