@@ -27,11 +27,6 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
     DISCRETE = 'discrete'
     CONTINUOUS = 'continuous'
     EARLIEST = 'earliest'
-    MODELS = [
-                # DISCRETE, 
-                # CONTINUOUS, 
-                EARLIEST
-            ]
 
     def __init__(self, 
                  horizon: float, 
@@ -48,7 +43,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                          logger)
         
         # validate inputs
-        assert model in self.MODELS, f'Invalid `model` type `{model}`. Must be one of {self.MODELS}.'
+        assert model in [self.DISCRETE, self.CONTINUOUS, self.EARLIEST], f'Invalid `model` type `{model}`. Must be one of {[self.DISCRETE, self.CONTINUOUS, self.EARLIEST]}.'
 
         # set planner parameters
         self.model = model
@@ -155,26 +150,32 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                                                                         d_imgs, 
                                                                         slew_times)
 
+        # compute rewards for all observation-time pairs
+        rewards : Dict[tuple, float] = {(j,pair_j): self.estimate_observation_opportunity_value(observation_opportunities[j], 
+                                                            pair_j[1], 
+                                                            d_imgs[pair_j[0]], 
+                                                            specs, 
+                                                            cross_track_fovs, 
+                                                            orbitdata, 
+                                                            mission, 
+                                                            observation_history)
+                                    for j,pair_j in tqdm(enumerate(observation_pairs), 
+                                                        desc=f'{state.agent_name}-PLANNER: Estimating Observation Rewards',
+                                                        leave=False,
+                                                        total=len(observation_pairs))
+        }
+
         # perform DAG DP pull to get optimal path
-        observation_sequence, _ = self.__dag_dp_pull(state, 
-                                                     specs,
-                                                     observation_opportunities, 
-                                                     adjacency_dict, 
-                                                     (0,observation_pairs[0]),
-                                                     cross_track_fovs,
-                                                     orbitdata,
-                                                     mission,
-                                                     observation_history
-                                                     )
+        observation_sequence, _ = self.__dag_dp_pull(state, observation_opportunities, adjacency_dict, rewards, (0,observation_pairs[0]))
 
         # return observations matching observation actions
-        return [ObservationAction(observation_opportunities[obs_idx].instrument_name,
-                                                    th_imgs[obs_idx],
-                                                    t_img,
-                                                    d_imgs[obs_idx],
-                                                    observation_opportunities[obs_idx]
+        return [ObservationAction(observation_opportunities[pair_k[0]].instrument_name,
+                                                    th_imgs[pair_k[0]],
+                                                    pair_k[1],
+                                                    d_imgs[pair_k[0]],
+                                                    observation_opportunities[pair_k[0]]
                                                     )
-                                    for _,(obs_idx,t_img) in observation_sequence]
+                                    for _,pair_k in observation_sequence]
 
     def __get_graph_topography(self, preds_map : Dict[tuple, list] ) -> Tuple[list, dict]:
         """Return a topological order given a predecessor map {v: [u1,u2,...]}."""
@@ -214,14 +215,10 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
     
     def __dag_dp_pull(self, 
                       state : SimulationAgentState, 
-                      specs : object, 
                       observation_opportunities : List[ObservationOpportunity], 
-                      preds_map : Dict[tuple, list],                       
-                      src : tuple,
-                      cross_track_fovs : Dict[str, float],
-                      orbitdata : OrbitData,
-                      mission : Mission,
-                      observation_history : ObservationHistory
+                      preds_map : Dict[tuple, list], 
+                      rewards : Dict[tuple, float], 
+                      src : tuple
                     ) -> Tuple[list, float]:
         """
             preds_map: {node: [pred1, pred2, ...]}
@@ -232,17 +229,12 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
         topography_order, preds = self.__get_graph_topography(preds_map)
 
         # initialize DP tables
-        prev_obs_information : Dict[Tuple[int,float], Tuple[Dict[GenericObservationTask, int], Dict[GenericObservationTask, float]]] = {
-            (i,(obs_idx,t_img)) : self._count_previous_observations_from_history(observation_opportunities[obs_idx], t_img, observation_history)
-            for i,(obs_idx,t_img) in preds
-        }
-
         cummulative_rewards : Dict[tuple, float] = {v: np.NINF  for v in preds}
-        cummulative_rewards[src] = 0.0  # only source is initialized; forces paths to include src
+        cummulative_rewards[src] = rewards[src]  # only source is initialized; forces paths to include src
         
         preceeding_observations : Dict[tuple, list] = {v: None for v in preds}
         
-        preceeding_observation_paths = {}  # node -> `frozenset` of chosen nodes on best path to node
+        preceeding_observation_paths = {}  # node -> frozenset of chosen nodes on best path to node
         preceeding_observation_paths[src] = frozenset({src})
 
         # process nodes in topographical order
@@ -256,62 +248,35 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
             # get observation for v
             tv : ObservationOpportunity = observation_opportunities[v[1][0]]
 
-            # count previous observations for this target before current image time
-            task_n_obs, task_t_prev = prev_obs_information[v]
-
             # initialize values for best predecessor search
             best_val = np.NINF
             best_u = None
             best_sig = None
             
             # find best predecessor
-            for u in preds[v]:
+            # for u in preds[v]:
+            for u in tqdm(preds[v], 
+                      desc=f'{state.agent_name}-PLANNER: Evaluating predecessors for obs={v[1][0]} at t={v[1][1]:.2f}s',
+                      leave=False):
                 # check if unreachable from src
                 if np.isneginf(cummulative_rewards[u]): 
+                    continue
+
+                # calculate new cumulative reward
+                val = cummulative_rewards[u] + rewards[v]
+
+                # check if best cummulative reward so far
+                if val <= best_val:
                     continue
 
                 # check if mutually exclusive with any in path to u
                 if any([tv.is_mutually_exclusive(observation_opportunities[k[1][0]]) 
                         for k in preceeding_observation_paths[u]]): continue
 
-                # count observations of tasks in path to u
-                task_n_obs_u = None
-                task_t_prev_u = None
-                for _,(k,t_img_k) in preceeding_observation_paths[u]:
-                    tk : ObservationOpportunity = observation_opportunities[k]
-                    for task in tk.tasks:
-                        if task in tv.tasks:  # only count observations of tasks also in tv
-                            if task_n_obs_u is None:
-                                task_n_obs_u = task_n_obs.copy()
-                                task_t_prev_u = task_t_prev.copy()
-
-                            task_n_obs_u[task] += 1
-                            task_t_prev_u[task] = max(task_t_prev_u[task], t_img_k)  # k[1][1] is t_img for observation k
-                if task_n_obs_u is None:
-                    task_n_obs_u = task_n_obs
-                    task_t_prev_u = task_t_prev
-
-                # estimate observation value of observation j if done after i
-                reward_j = self.estimate_observation_opportunity_value(tv, 
-                                                                        tv.accessibility.left, 
-                                                                        tv.min_duration, 
-                                                                        specs, 
-                                                                        cross_track_fovs, 
-                                                                        orbitdata, 
-                                                                        mission, 
-                                                                        observation_history,
-                                                                        task_n_obs_u,
-                                                                        task_t_prev_u
-                                                                        )
-
-                # calculate new cumulative reward
-                val = cummulative_rewards[u] + reward_j
-
-                # update if best predecessor
-                if val > best_val: 
-                    best_val = val
-                    best_u = u
-                    best_sig = preceeding_observation_paths[u] | {v}
+                # update best predecessor
+                best_val = val
+                best_u = u
+                best_sig = preceeding_observation_paths[u] | {v}
 
             # update DP tables if best predecessor was found
             if best_u is not None:
@@ -508,17 +473,14 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                 # add pair to list                
                 observation_pairs.append((i, t_img))
                 
-            else:
-                raise NotImplementedError(f'Model type `{self.model}` not yet implemented in `__generate_discret_time_pairs` method.')
-            # TODO
-            # elif self.model == self.DISCRETE:
-            #     # iterate through all possible imaging times for observation i with time step of orbitdata
-            #     while t_img + obs_i.min_duration <= min(obs_i.accessibility.right, state.t + self.horizon):
-            #         # add pair to list                
-            #         observation_pairs.append((i, t_img))
+            elif self.model == self.DISCRETE:
+                # iterate through all possible imaging times for observation i with time step of orbitdata
+                while t_img + obs_i.min_duration <= min(obs_i.accessibility.right, state.t + self.horizon):
+                    # add pair to list                
+                    observation_pairs.append((i, t_img))
 
-            #         # update imaging time
-            #         t_img += orbitdata.time_step
+                    # update imaging time
+                    t_img += orbitdata.time_step
         
         # sort pairs by start time, observation index and return
         return sorted(observation_pairs, key=lambda x: (x[1], x[0]))
