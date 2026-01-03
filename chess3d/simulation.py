@@ -39,7 +39,7 @@ from chess3d.agents.planning.centralized.worker import WorkerPlanner
 from chess3d.agents.planning.decentralized.nadir import NadirPointingPlanner
 from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
 from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
-from chess3d.agents.planning.decentralized.milp import SingleSatMILP
+# from chess3d.agents.planning.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.decentralized.dynamic import DynamicProgrammingPlanner
 from chess3d.agents.planning.decentralized.announcer import EventAnnouncerPlanner
 from chess3d.agents.planning.decentralized.consensus.heuristic import HeuristicInsertionConsensusPlanner
@@ -312,6 +312,9 @@ class Simulation:
                 event_detections = events_detected_temp
             else:
                 event_detections = pd.concat([event_detections, events_detected_temp], axis=0)
+
+        assert event_detections is not None, \
+            "Coundn't load Event Detection file for any agent."
 
         # compile mesurement requests
         print('Collecting measurement request data...')
@@ -1242,8 +1245,10 @@ class SimulationElementFactory:
         mission : Mission = copy.deepcopy(missions[agent_dict['mission'].lower()])
         
         # ensure deep copy 
-        assert mission == missions[agent_dict['mission'].lower()], "mission copy failed."
-        assert mission is not missions[agent_dict['mission'].lower()], "mission deep copy failed."
+        assert mission == missions[agent_dict['mission'].lower()], \
+            "mission copy failed."
+        assert mission is not missions[agent_dict['mission'].lower()], \
+            "mission deep copy failed."
 
         if isinstance(clock_config, RealTimeClockConfig):    
             raise NotImplementedError("Real-time clock not yet supported in agent factory.")

@@ -12,7 +12,7 @@ class EarliestAccessPlanner(HeuristicInsertionPlanner):
                         *_ : Any
                         ) -> tuple:
         """ Heuristic function to sort observation opportunities by their earliest access time. """
-        # return to sort using: earliest start time >> longest duration
+        # return to sort using: earliest accessibility time >> longest duration >> highest priority
         return (
                 observation_opportunity.accessibility.left, 
                 -observation_opportunity.min_duration, 

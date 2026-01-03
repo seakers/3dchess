@@ -1,7 +1,7 @@
 {
     "missions" : [
         {
-            "name": "Algal blooms comprehensive",
+            "name": "Algal bloom comprehensive",
             "objectives" : [
                 {
                     "objective_type" : "default_mission",
@@ -88,7 +88,7 @@
                     "objective_type" : "event_driven",
                     "event_type" : "algal bloom",
                     "parameter": "Chlorophyll-A",
-                    "weight": 0.6,
+                    "weight": 1.0,
                     "requirements" : [
                         {
                             "req_type": "performance",
@@ -130,7 +130,7 @@
                 {
                     "objective_type" : "default_mission",
                     "parameter": "Chlorophyll-A",
-                    "weight": 0.4,
+                    "weight": 1.0,
                     "requirements" : [
                         {
                             "req_type": "performance",

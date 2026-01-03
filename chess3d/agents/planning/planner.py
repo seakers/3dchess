@@ -651,6 +651,11 @@ class AbstractPlanner(ABC):
                             n_obs : int = 0,
                             t_prev : float = np.NINF
                         ) -> float:
+        
+        assert isinstance(n_obs, int) and n_obs >= 0, "Number of previous observations must be a non-negative integer."
+        assert isinstance(t_prev, (int,float)) and (t_prev <= t_img), "Previous observation time must be less than or equal to the current image time."
+        if n_obs > 0: assert t_prev >= 0.0, "Previous observation time must be non-negative if there are previous observations."
+
         measurement_performance : dict = self.__estimate_task_performance_metrics(task, 
                                                                                  instrument_name, 
                                                                                  th_img, 

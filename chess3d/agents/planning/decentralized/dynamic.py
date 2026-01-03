@@ -234,7 +234,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
         
         preceeding_observations : Dict[tuple, list] = {v: None for v in preds}
         
-        preceeding_observation_paths  = {}  # node -> frozenset of chosen nodes on best path to node
+        preceeding_observation_paths = {}  # node -> `frozenset` of chosen nodes on best path to node
         preceeding_observation_paths[src] = frozenset({src})
 
         # process nodes in topographical order
