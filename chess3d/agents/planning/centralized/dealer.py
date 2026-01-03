@@ -354,15 +354,17 @@ class DealerPlanner(AbstractPeriodicPlanner):
             objective_targets = { objective : [] for objective in mission 
                                 # ignore non-default objectives
                                 if isinstance(objective, DefaultMissionObjective)
-                                }
-            
-            for objective,targets in objective_targets.items():     
-                for req in objective:
-                    # ignore non-spatial requirements
-                    if not isinstance(req, SpatialCoverageRequirement): 
-                        req_targets = []
-                    
-                    elif isinstance(req, SinglePointSpatialRequirement):
+                                }            
+
+            # iterate through each mission objective
+            for objective,targets in objective_targets.items():  
+                # collect spatial coverage requirements
+                spatial_requirements = [req for req in objective.requirements
+                                        if isinstance(req, SpatialCoverageRequirement)]
+
+                # iterate through each spatial requirement
+                for req in spatial_requirements:
+                    if isinstance(req, SinglePointSpatialRequirement):
                         # collect specified target
                         req_targets = [req.target]
                     
@@ -378,11 +380,21 @@ class DealerPlanner(AbstractPeriodicPlanner):
                             for lat,lon,grid_index,gp_index in grid.values
                             if grid_index == req.grid_index and gp_index < req.grid_size
                         ]
-                        
                     else: 
                         raise TypeError(f"Unknown spatial requirement type: {type(req)}")
-                
+                        
                     # add to list of targets for this objective
+                    targets.extend(req_targets)
+
+                # check if any spatial coverage requirements were found
+                if not spatial_requirements:
+                    # no spatial coverage requirements found; 
+                    #   collect all targets from all grids known to this agent
+                    req_targets = list({
+                        (lat, lon, grid_index, gp_index)
+                        for grid in grids
+                        for lat,lon,grid_index,gp_index in grid.values
+                    })
                     targets.extend(req_targets)
             
             # iterate through each mission objective

@@ -38,9 +38,9 @@ class TestDefaultObjectives(unittest.TestCase):
         self.assertRaises(ValueError, DefaultMissionObjective,
                           parameter=self.parameter,
                           requirements=[self.req_1_1]) # missing temporal requirement
-        self.assertRaises(ValueError, DefaultMissionObjective,
-                          parameter=self.parameter,
-                          requirements=[self.req_1_2]) # missing spatial requirement
+        # self.assertRaises(ValueError, DefaultMissionObjective,
+        #                   parameter=self.parameter,
+        #                   requirements=[self.req_1_2]) # missing spatial requirement
         self.assertRaises(AssertionError, DefaultMissionObjective,
                           parameter=self.parameter,
                           requirements=[self.req_1_1, self.req_1_2, 'invalid_requirement'])  # invalid requirement type
@@ -123,22 +123,22 @@ class TestDefaultObjectives(unittest.TestCase):
         self.assertIsInstance(new_objective.requirements[TemporalRequirementAttributes.REVISIT_TIME.value], IntervalInterpolationRequirement)
         self.assertEqual(new_objective.id, self.objective.id)
 
-        obj_dict = {
-            "objective_type": "default_mission",
-            "parameter": self.parameter.lower(),
-            "requirements": [
-                {
-                    "req_type": RequirementTypes.PERFORMANCE.value,
-                    "attribute": TemporalRequirementAttributes.REVISIT_TIME.value,
-                    "strategy": PerformancePreferenceStrategies.INTERVAL_INTERP.value,   
-                    "thresholds": [0, 10],
-                    "scores": [1.0, 0.0]
-                }
-                # missing spatial coverage requirement
-            ],
-            "id": self.objective.id
-        }
-        self.assertRaises(ValueError, DefaultMissionObjective.from_dict, obj_dict)
+        # obj_dict = {
+        #     "objective_type": "default_mission",
+        #     "parameter": self.parameter.lower(),
+        #     "requirements": [
+        #         {
+        #             "req_type": RequirementTypes.PERFORMANCE.value,
+        #             "attribute": TemporalRequirementAttributes.REVISIT_TIME.value,
+        #             "strategy": PerformancePreferenceStrategies.INTERVAL_INTERP.value,   
+        #             "thresholds": [0, 10],
+        #             "scores": [1.0, 0.0]
+        #         }
+        #         # missing spatial coverage requirement
+        #     ],
+        #     "id": self.objective.id
+        # }
+        # self.assertRaises(ValueError, DefaultMissionObjective.from_dict, obj_dict)
 
         obj_dict = {
             "objective_type": "default_mission",

@@ -29,15 +29,7 @@
                             "attribute": "instrument",
                             "strategy" : "explicit",
                             "valid_values": ["VNIR hyper", "TIR"]
-                        },
-                        {
-                            "req_type" : "spatial",
-                            "attribute" : "location",
-                            "strategy" : "grid",
-                            "grid_name" : "lake_event_points",
-                            "grid_index" : 0,
-                            "grid_size" : 5001
-                        }                     
+                        }                
                     ]
                 },
 

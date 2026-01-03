@@ -115,8 +115,8 @@ class DefaultMissionObjective(MissionObjective):
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
         # Validate inputs
-        if not any(isinstance(req, SpatialCoverageRequirement) for req in requirements):
-            raise ValueError("No spatial requirement found, please add a spatial coverage requirement to objective definition.")
+        # if not any(isinstance(req, SpatialCoverageRequirement) for req in requirements):
+        #     raise ValueError("No spatial requirement found, please add a spatial coverage requirement to objective definition.")
         if not any(isinstance(req, PerformanceRequirement) for req in requirements):
             raise ValueError("No performance requirement found, please add a performance requirement to objective definition.")
 

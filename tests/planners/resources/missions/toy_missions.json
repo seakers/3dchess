@@ -6,75 +6,78 @@
                 {
                     "objective_type" : "default_mission",
                     "parameter": "Chlorophyll-A",
-                    "weight": 1,
+                    "weight": 0.4,
                     "requirements" : [
                         {
-                            "requirement_type": "continuous",
-                            "attribute": "horizontal_spatial_resolution",
+                            "req_type": "performance",
+                            "attribute": "ground pixel cross-track resolution [m]",
+                            "strategy" : "discrete_intervals",
                             "thresholds": [10, 30, 100],
                             "scores": [1.0, 0.7, 0.1]
                         },
                         {
-                            "requirement_type": "categorical",
+                            "req_type": "performance",
                             "attribute": "spectral_resolution",
-                            "thresholds": ["Hyperspectral", "Multispectral"],
-                            "scores": [1, 0.5]
+                            "strategy" : "categorical",
+                            "preferences" : {
+                                "Hyperspectral": 1,
+                                "Multispectral": 0.5
+                            }
                         },
                         {
-                            "requirement_type": "capability",
+                            "req_type": "capability",
                             "attribute": "instrument",
+                            "strategy" : "explicit",
                             "valid_values": ["VNIR hyper", "TIR"]
                         },
                         {
-                            "requirement_type": "temporal",
-                            "attribute": "revisit_time",
-                            "thresholds": [30, 100, 1000],
-                            "scores": [0.1, 0.7, 1.0]
-                        },
-                        {
-                            "requirement_type": "temporal",
-                            "attribute": "n_observations",
-                            "strategy" : "no_change"
-                        }
+                            "req_type" : "spatial",
+                            "attribute" : "location",
+                            "strategy" : "grid",
+                            "grid_name" : "lake_event_points",
+                            "grid_index" : 0,
+                            "grid_size" : 5001
+                        }                     
                     ]
                 },
 
                 {
                     "objective_type" : "event_driven",
+                    "event_type" : "algal bloom",
                     "parameter": "Chlorophyll-A",
-                    "weight": 10,
+                    "weight": 0.6,
                     "requirements" : [
                         {
-                            "requirement_type": "continuous",
-                            "attribute": "horizontal_spatial_resolution",
+                            "req_type": "performance",
+                            "attribute": "ground pixel cross-track resolution [m]",
+                            "strategy" : "discrete_intervals",
                             "thresholds": [10, 30, 100],
                             "scores": [1.0, 0.7, 0.1]
                         },
                         {
-                            "requirement_type": "categorical",
+                            "req_type": "performance",
                             "attribute": "spectral_resolution",
-                            "thresholds": ["Hyperspectral", "Multispectral"],
-                            "scores": [1, 0.5]
+                            "strategy" : "categorical",
+                            "preferences" : {
+                                "Hyperspectral": 1,
+                                "Multispectral": 0.5
+                            }
                         },
                         {
-                            "requirement_type": "capability",
+                            "req_type": "capability",
                             "attribute": "instrument",
+                            "strategy" : "explicit",
                             "valid_values": ["VNIR hyper", "TIR"]
                         },
                         {
-                            "requirement_type": "temporal",
-                            "attribute": "revisit_time",
-                            "thresholds": [60, 100, 1000],
-                            "scores": [1.0, 0.7, 0.1]
-                        },
-                        {
-                            "requirement_type": "temporal",
-                            "attribute": "n_observations",
-                            "strategy" : "exp_saturation",
-                            "saturation_rate" : 0.5
+                            "req_type" : "spatial",
+                            "attribute" : "location",
+                            "strategy" : "grid",
+                            "grid_name" : "lake_event_points",
+                            "grid_index" : 0,
+                            "grid_size" : 5001
                         }
-                    ],
-                    "event_type" : "algal bloom"
+                    ]
                 }
             ]
         },
@@ -85,36 +88,37 @@
                     "objective_type" : "event_driven",
                     "event_type" : "algal bloom",
                     "parameter": "Chlorophyll-A",
-                    "weight": 10,
+                    "weight": 0.6,
                     "requirements" : [
                         {
-                            "requirement_type": "continuous",
-                            "attribute": "horizontal_spatial_resolution",
+                            "req_type": "performance",
+                            "attribute": "ground pixel cross-track resolution [m]",
+                            "strategy" : "discrete_intervals",
                             "thresholds": [10, 30, 100],
                             "scores": [1.0, 0.7, 0.1]
                         },
                         {
-                            "requirement_type": "categorical",
+                            "req_type": "performance",
                             "attribute": "spectral_resolution",
-                            "thresholds": ["Hyperspectral", "Multispectral"],
-                            "scores": [1, 0.5]
+                            "strategy" : "categorical",
+                            "preferences" : {
+                                "Hyperspectral": 1,
+                                "Multispectral": 0.5
+                            }
                         },
                         {
-                            "requirement_type": "capability",
+                            "req_type": "capability",
                             "attribute": "instrument",
+                            "strategy" : "explicit",
                             "valid_values": ["VNIR hyper", "TIR"]
                         },
                         {
-                            "requirement_type": "temporal",
-                            "attribute": "revisit_time",
-                            "thresholds": [60, 100, 1000],
-                            "scores": [1.0, 0.7, 0.1]
-                        },
-                        {
-                            "requirement_type": "temporal",
-                            "attribute": "n_observations",
-                            "strategy" : "exp_saturation",
-                            "saturation_rate" : 0.5
+                            "req_type" : "spatial",
+                            "attribute" : "location",
+                            "strategy" : "grid",
+                            "grid_name" : "lake_event_points",
+                            "grid_index" : 0,
+                            "grid_size" : 5001
                         }
                     ]
                 }
@@ -126,36 +130,38 @@
                 {
                     "objective_type" : "default_mission",
                     "parameter": "Chlorophyll-A",
-                    "weight": 1,
+                    "weight": 0.4,
                     "requirements" : [
                         {
-                            "requirement_type": "continuous",
-                            "attribute": "horizontal_spatial_resolution",
+                            "req_type": "performance",
+                            "attribute": "ground pixel cross-track resolution [m]",
+                            "strategy" : "discrete_intervals",
                             "thresholds": [10, 30, 100],
                             "scores": [1.0, 0.7, 0.1]
                         },
                         {
-                            "requirement_type": "categorical",
+                            "req_type": "performance",
                             "attribute": "spectral_resolution",
-                            "thresholds": ["Hyperspectral", "Multispectral"],
-                            "scores": [1, 0.5]
+                            "strategy" : "categorical",
+                            "preferences" : {
+                                "Hyperspectral": 1,
+                                "Multispectral": 0.5
+                            }
                         },
                         {
-                            "requirement_type": "capability",
+                            "req_type": "capability",
                             "attribute": "instrument",
+                            "strategy" : "explicit",
                             "valid_values": ["VNIR hyper", "TIR"]
                         },
                         {
-                            "requirement_type": "temporal",
-                            "attribute": "revisit_time",
-                            "thresholds": [30, 100, 1000],
-                            "scores": [0.1, 0.7, 1.0]
-                        },
-                        {
-                            "requirement_type": "temporal",
-                            "attribute": "n_observations",
-                            "strategy" : "no_change"
-                        }
+                            "req_type" : "spatial",
+                            "attribute" : "location",
+                            "strategy" : "grid",
+                            "grid_name" : "lake_event_points",
+                            "grid_index" : 0,
+                            "grid_size" : 5001
+                        }                     
                     ]
                 }
             ]
