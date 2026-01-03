@@ -358,7 +358,6 @@ class ExpSaturationRequirement(PerformanceRequirement):
             f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.EXP_SATURATION.value}'"
         
         # unpack dictionary
-        req_type = dict.get("req_type")
         attribute = dict.get("attribute")
         sat_rate = dict.get("sat_rate")
         id = dict.get("id", None) 

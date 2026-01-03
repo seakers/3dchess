@@ -7,7 +7,7 @@ from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTa
 from chess3d.mission.attributes import TemporalRequirementAttributes
 from chess3d.mission.events import GeophysicalEvent
 from chess3d.mission.requirements import SinglePointSpatialRequirement, IntervalInterpolationRequirement, SpatialCoverageRequirement
-from chess3d.mission.objectives import EventDrivenObjective, DefaultMissionObjective
+from chess3d.mission.objectives import EventDrivenObjective, DefaultMissionObjective, MissionObjective
 from chess3d.mission.mission import Mission
 from chess3d.utils import Interval, print_welcome
 
@@ -655,6 +655,56 @@ class TestMission(unittest.TestCase):
         task_2_val = 0.0
         obs_val = self.mission.calc_observation_opportunity_utility(obs, perf, norm_param)
         self.assertAlmostEqual(obs_val, 1.0 * task_1_val + 10.0 * task_2_val - 1.0) # priority * task value - cost
+
+    def test_representation(self):
+        # test string representation
+        mission_str = str(repr(self.mission))
+        expected_str = f"Mission(name='testmission', n_objectives={len(self.mission.objectives)})"
+        self.assertEqual(mission_str, expected_str)
+
+    def test_iterator(self):
+        # test iterator over mission objectives
+        objs = list(self.mission)
+        self.assertEqual(len(objs), len(self.mission.objectives))        
+        for obj in self.mission:
+            self.assertIsInstance(obj, MissionObjective)
+
+    def test_to_dict(self):
+        # test conversion to dictionary
+        mission_dict = self.mission.to_dict()
+        self.assertIsInstance(mission_dict, dict)
+        self.assertEqual(mission_dict['name'], self.mission.name)
+        self.assertEqual(len(mission_dict['objectives']), len(self.mission.objectives))
+        for obj_dict, obj in zip(mission_dict['objectives'], self.mission.objectives):
+            # compare objectives
+            for key,val in obj.to_dict().items():
+                self.assertEqual(obj_dict[key], val)
+
+            # compare weights
+            weight = self.mission.objectives[obj]
+            self.assertAlmostEqual(obj_dict['weight'], weight)
+
+    def test_from_dict(self):
+        # test creation from dictionary
+        mission_dict = self.mission.to_dict()
+        mission_from_dict = Mission.from_dict(mission_dict)
+        self.assertIsInstance(mission_from_dict, Mission)
+        self.assertEqual(mission_from_dict.name, self.mission.name)
+        self.assertEqual(len(mission_from_dict.objectives), len(self.mission.objectives))
+        for obj_original, obj_from_dict in zip(self.mission.objectives, mission_from_dict.objectives):
+            self.assertEqual(obj_original, obj_from_dict)
+            self.assertAlmostEqual(self.mission.objectives[obj_original], mission_from_dict.objectives[obj_from_dict])
+
+    def test_copy(self):
+        # test deep copy of mission
+        mission_copy = self.mission.copy()
+        self.assertIsNot(mission_copy, self.mission)
+        self.assertEqual(mission_copy.name, self.mission.name)
+        self.assertEqual(len(mission_copy.objectives), len(self.mission.objectives))
+        for original_obj, copied_obj in zip(self.mission.objectives, mission_copy.objectives):
+            self.assertIsNot(original_obj, copied_obj)
+            self.assertEqual(original_obj, copied_obj)
+
 
 
 if __name__ == '__main__':

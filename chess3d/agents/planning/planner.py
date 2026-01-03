@@ -21,8 +21,9 @@ from chess3d.agents.planning.tracker import ObservationHistory, ObservationTrack
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
+from chess3d.mission.attributes import CapabilityRequirementAttributes, ObservationRequirementAttributes, TemporalRequirementAttributes
 from chess3d.mission.mission import Mission
-from chess3d.mission.requirements import CapabilityRequirement, MeasurementDurationRequirement
+from chess3d.mission.requirements import CapabilityRequirement, CategoricalRequirement, ConstantValueRequirement, ExpDecayRequirement, ExpSaturationRequirement, GaussianRequirement, IntervalInterpolationRequirement, LogThresholdRequirement, PerformancePreferenceStrategies, PerformanceRequirement, StepsRequirement, TriangleRequirement
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
@@ -184,7 +185,7 @@ class AbstractPlanner(ABC):
 
         # return tasks
         return filtered_observation_opps        
-    
+        
     @runtime_tracker
     def single_task_observation_opportunity_from_accesses(self,
                                    available_tasks : List[GenericObservationTask],
@@ -202,15 +203,10 @@ class AbstractPlanner(ABC):
         # create one instance of an observation opportunity per each access opportunity
         for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
             
-            # determine minimum duration requirement for this task
-            if task.objective is not None:
-                duration_reqs = [req for req in task.objective
-                                if isinstance(req, MeasurementDurationRequirement)]
-                duration_req : MeasurementDurationRequirement = duration_reqs[0] if duration_reqs else None
-            else:
-                duration_req = None
-            # TODO improve minimum and maximum measurement duration requirement calculation
-            min_duration_req : float = min(duration_req.thresholds) if duration_req is not None else orbitdata.time_step
+            # extract minimum duration requirement for this task
+            min_duration_req : float = self.__extract_minimum_duration_req(task, orbitdata)
+
+            # ensure minimum duration requirement is a positive number
             assert isinstance(min_duration_req, (int,float)) and min_duration_req >= 0.0, "minimum duration requirement must be a positive number."
 
             # collect access interval information for each target location for this task
@@ -286,16 +282,83 @@ class AbstractPlanner(ABC):
         
         # return list of task observation opportunities
         return observation_opps
+    
+    def __extract_minimum_duration_req(self, task : GenericObservationTask, orbitdata : OrbitData) -> float:
+        """ Extracts the minimum duration requirement for a given task. """
+        
+        # check if task has any objectives
+        if task.objective is None:
+            return orbitdata.time_step # no objectives assigned to this task; assume default minimum duration requirement
+
+        # extract any duration requirements from the task objective
+        duration_reqs = [req for req in task.objective
+                        if req.attribute == TemporalRequirementAttributes.DURATION.value]
+        
+        # check if any duration requirements were found
+        if not duration_reqs: return orbitdata.time_step # no duration requirement found; return default minimum duration requirement
+
+        # get duration requirement
+        duration_req : PerformanceRequirement = duration_reqs[0]
+
+        # extract minimum duration requirement based on requirement type
+        if isinstance(duration_req, CategoricalRequirement):
+            raise ValueError('Categorical duration requirements are not supported.')
+        
+        elif isinstance(duration_req, ConstantValueRequirement):
+            return duration_req.value # return constant duration requirement value
+        
+        elif isinstance(duration_req, ExpSaturationRequirement):
+            return - (1 / duration_req.sat_rate) * np.log(1 - 0.01) # return duration requirement at 1% saturation
+
+        elif isinstance(duration_req, LogThresholdRequirement):
+            return duration_req.threshold # return log threshold duration requirement value
+
+        elif isinstance(duration_req, ExpDecayRequirement):
+            return - (1 / duration_req.decay_rate) * np.log(0.01) # return duration requirement at 1% decay
+
+        elif isinstance(duration_req, GaussianRequirement):
+            # TODO implement gaussian requirement extraction
+            raise NotImplementedError('Gaussian duration requirements are not supported yet.')
+        
+        elif isinstance(duration_req, TriangleRequirement):
+            min_duration = duration_req.reference - (duration_req.width / 2) * (1 - 0.01) # 1% of the triangle height
+            return max(min_duration, 0.0) # ensure non-negative duration requirement
+
+        elif isinstance(duration_req, StepsRequirement):
+            # filter non-zero scores
+            positive_scores = [(idx, score) for idx,score in enumerate(duration_req.scores) if score > 0]
+
+            # check if there are any positive scores        
+            if not positive_scores:
+                raise ValueError('No positive scores found in `StepsRequirement` for duration requirement.')
+
+            # get interval with minimum positive score
+            min_idx, _ = min(positive_scores, key=lambda x: x[1])
+
+            if min_idx == 0:
+                return max(duration_req.thresholds[0], 0.0)
+            elif min_idx == len(duration_req.thresholds):
+                return max(duration_req.thresholds[-1], 0.0)
+            else:
+                return max(min(duration_req.thresholds[min_idx + 1], duration_req.thresholds[min_idx]), 0.0)
+        
+        elif isinstance(duration_req, IntervalInterpolationRequirement):
+            # TODO implement interval interpolation requirement extraction
+            raise NotImplementedError('Interval interpolation duration requirements are not supported yet.')     
+       
+        # unsupported requirement type; should not reach here
+        raise ValueError('Unsupported duration requirement type.')
             
     def can_perform_task(self, task : GenericObservationTask, instrument_name : str) -> bool:
         """ Checks if the agent can perform the task at hand with the given instrument """
-        # TODO Replace this with KG for better reasoning capabilities
+        # TODO Replace this with KG for better reasoning capabilities; currently assumes instrument has general capability
 
         # Check if task has specified objectives
         if task.objective is not None:
             # Extract capability requirements from the objective
             capability_reqs = [req for req in task.objective
-                               if isinstance(req, CapabilityRequirement)]
+                               if isinstance(req, CapabilityRequirement)
+                               and req.attribute == CapabilityRequirementAttributes.INSTRUMENT.value]
             capability_req: CapabilityRequirement = capability_reqs[0] if capability_reqs else None
 
             # Evaluate capability requirement
@@ -303,7 +366,6 @@ class AbstractPlanner(ABC):
                 return capability_req.calc_preference(instrument_name) >= 0.5
 
         # No capability objectives specified; check if instrument has general capability
-        # TODO replace with better reasoning; currently assumes instrument has general capability
         return True
         
     @runtime_tracker
@@ -658,22 +720,23 @@ class AbstractPlanner(ABC):
             # update observation information
             obs.update({ 
                 "location" : [loc],
-                "t_start" : t_img,
+                TemporalRequirementAttributes.OBS_TIME.value : t_img,
+                TemporalRequirementAttributes.RELATIVE_OBS_TIME.value : t_img - task.availability.left,
+                TemporalRequirementAttributes.DURATION.value : d_img,
+                TemporalRequirementAttributes.REVISIT_TIME.value : t_img - t_last,
                 "t_end" : t_img + d_img,
-                "duration" : d_img,
-                "n_observations" : n_obs + 1, # including this observation
-                "revisit_time" : t_img - t_last,
-                "horizontal_spatial_resolution" : observation_performance_metrics[loc]['ground pixel cross-track resolution [m]'],
+                ObservationRequirementAttributes.OBSERVATION_NUMBER.value : n_obs + 1, # including this observation
+                # ObservationRequirementAttributes.SPATIAL_RESOLUTION_CROSS_TRACK.value : observation_performance_metrics[loc][ObservationRequirementAttributes.SPATIAL_RESOLUTION_CROSS_TRACK.value],
             })
 
             # package observation performance information
             if 'vnir' in instrument_name.lower() or 'tir' in instrument_name.lower():
                 obs.update({
-                    'spectral_resolution' : instrument_spec.spectral_resolution.lower()
+                    ObservationRequirementAttributes.SPECTRAL_RESOLUTION.value : instrument_spec.spectral_resolution.lower()
                 })
             elif 'altimeter' in instrument_name.lower():
                 obs.update({
-                    "accuracy" : observation_performance_metrics[loc]['accuracy [m]'],
+                    ObservationRequirementAttributes.ACCURACY.value : observation_performance_metrics[loc][ObservationRequirementAttributes.ACCURACY.value],
                 })
             else:
                 raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')

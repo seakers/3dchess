@@ -21,7 +21,7 @@ from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.messages import  AgentStateMessage, PlanMessage
 from chess3d.mission.mission import Mission
 from chess3d.mission.objectives import DefaultMissionObjective
-from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
+from chess3d.mission.requirements import GridSpatialRequirement, SpatialCoverageRequirement, SinglePointSpatialRequirement, MultiPointSpatialRequirement
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
@@ -347,23 +347,31 @@ class DealerPlanner(AbstractPeriodicPlanner):
 
         # for each mission and targets, generate default tasks
         for mission,grids in mission_grids.items():
-            # gather targets for default mission tasks
-            objective_targets = { objective for objective in mission
-                                 # ignore non-default objectives
-                                 if isinstance(objective, DefaultMissionObjective)
-                                 }
-            for objective in objective_targets:         
+             # initialize task list
+            mission_tasks = []
+
+            # gather targets for each default mission objective
+            objective_targets = { objective : [] for objective in mission 
+                                # ignore non-default objectives
+                                if isinstance(objective, DefaultMissionObjective)
+                                }
+            
+            for objective,targets in objective_targets.items():     
                 for req in objective:
                     # ignore non-spatial requirements
-                    if not isinstance(req, SpatialCoverageRequirement): continue
+                    if not isinstance(req, SpatialCoverageRequirement): 
+                        req_targets = []
                     
-                    elif isinstance(req, PointTargetSpatialRequirement):
-                        raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                    elif isinstance(req, SinglePointSpatialRequirement):
+                        # collect specified target
+                        req_targets = [req.target]
                     
                     elif isinstance(req, MultiPointSpatialRequirement):
-                        raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
+                        # collect all specified targets
+                        req_targets = [target for target in req.targets]
                     
-                    elif isinstance(req, GridTargetSpatialRequirement):
+                    elif isinstance(req, GridSpatialRequirement):
+                        # collect all targets matching this grid requirement
                         req_targets = [
                             (lat, lon, grid_index, gp_index)
                             for grid in grids
@@ -373,18 +381,64 @@ class DealerPlanner(AbstractPeriodicPlanner):
                         
                     else: 
                         raise TypeError(f"Unknown spatial requirement type: {type(req)}")
-                        
+                
+                    # add to list of targets for this objective
+                    targets.extend(req_targets)
+            
+            # iterate through each mission objective
+            for objective,targets in objective_targets.items():                           
                 # create monitoring tasks from each location in this mission objective
-                mission_tasks = [DefaultMissionTask(objective.parameter,
+                objective_tasks = [DefaultMissionTask(objective.parameter,
                                             location=(lat, lon, grid_index, gp_index),
                                             mission_duration=mission_durations[mission]*24*3600,
                                             objective=objective,
                                             )
-                            for lat,lon,grid_index,gp_index in req_targets
+                            for lat,lon,grid_index,gp_index in targets
                         ]
                 
                 # add to list of known tasks
-                tasks[mission] = mission_tasks
+                mission_tasks.extend(objective_tasks)
+
+            tasks[mission] = mission_tasks
+
+            # # gather targets for default mission tasks
+            # objective_targets = { objective for objective in mission
+            #                      # ignore non-default objectives
+            #                      if isinstance(objective, DefaultMissionObjective)
+            #                      }
+            # for objective in objective_targets:         
+            #     for req in objective:
+            #         # ignore non-spatial requirements
+            #         if not isinstance(req, SpatialCoverageRequirement): continue
+                    
+            #         elif isinstance(req, SinglePointSpatialRequirement):
+            #             raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                    
+            #         elif isinstance(req, MultiPointSpatialRequirement):
+            #             raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
+                    
+            #         elif isinstance(req, GridSpatialRequirement):
+            #             req_targets = [
+            #                 (lat, lon, grid_index, gp_index)
+            #                 for grid in grids
+            #                 for lat,lon,grid_index,gp_index in grid.values
+            #                 if grid_index == req.grid_index and gp_index < req.grid_size
+            #             ]
+                        
+            #         else: 
+            #             raise TypeError(f"Unknown spatial requirement type: {type(req)}")
+                        
+            #     # create monitoring tasks from each location in this mission objective
+            #     mission_tasks = [DefaultMissionTask(objective.parameter,
+            #                                 location=(lat, lon, grid_index, gp_index),
+            #                                 mission_duration=mission_durations[mission]*24*3600,
+            #                                 objective=objective,
+            #                                 )
+            #                 for lat,lon,grid_index,gp_index in req_targets
+            #             ]
+                
+            #     # add to list of known tasks
+            #     tasks[mission] = mission_tasks
 
         return tasks
 

@@ -31,8 +31,8 @@ class Mission:
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
         assert isinstance(norm_param, (int,float)) and norm_param >= 0, "Normalizing parameter must be a positive value"
 
-        # Calculate utility = specific_task_value - norm * task_cost
-        return self.calc_observation_opportunity_value(obs, measurement) - norm_param * self.calc_measurement_cost(measurement)
+        # Calculate utility = value - cost
+        return self.calc_observation_opportunity_value(obs, measurement) - self.calc_measurement_cost(measurement, norm_param)
 
     def calc_observation_opportunity_value(self, obs: ObservationOpportunity, measurement: dict) -> float:
         """Calculate the utility of a specific observation opportunity based on its predicted performance compared to the mission's objectives."""
@@ -52,20 +52,20 @@ class Mission:
         # Validate inputs
         assert isinstance(task, GenericObservationTask), "Task must be an instance of `GenericObservationTask`"
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
-        assert 't_img' in measurement, "Measurement must contain 't_img' key for observation time"
+        assert TemporalRequirementAttributes.OBS_TIME.value in measurement, "Measurement must contain 't_img [s]' key for observation time"
 
         # Maps objectives to their relevance to the task at hand
         obj_relevances : Dict[MissionObjective, float] = self.relate_objectives_to_task(task)
 
         # Check for availability of measurement at observation time
-        if measurement.get('t_img') not in task.availability: return 0.0
+        if measurement.get(TemporalRequirementAttributes.OBS_TIME.value) not in task.availability: return 0.0
 
         # Clip duration to task availability if applicable
         if TemporalRequirementAttributes.DURATION.value in measurement:
             d_prev = measurement[TemporalRequirementAttributes.DURATION.value]
             measurement[TemporalRequirementAttributes.DURATION.value] = min(
                 measurement[TemporalRequirementAttributes.DURATION.value], 
-                task.availability.right - measurement.get('t_img')
+                task.availability.right - measurement.get(TemporalRequirementAttributes.OBS_TIME.value)
             )
 
         # Calculate the value of the task based on the objectives and their relevance
@@ -138,7 +138,7 @@ class Mission:
         # Return objective relevances
         return obj_relevances
 
-    def calc_measurement_cost(self, measurement: dict) -> float:
+    def calc_measurement_cost(self, measurement: dict, norm_param: float) -> float:
         """Calculate the intrinsic cost of a measurement."""
         
         # Validate Inputs
@@ -146,11 +146,11 @@ class Mission:
 
         # Calculate the cost of a specific task by summing the cost of parent tasks
         # TODO Define cost model; currently using measurement duration as a placeholder
-        return measurement.get(TemporalRequirementAttributes.DURATION.value, 0.0)        
+        return norm_param * measurement.get(TemporalRequirementAttributes.DURATION.value, 0.0)        
     
     def __repr__(self):
         """String representation of the mission."""
-        return f"Mission({self.name}, n_objectives={len(self.objectives)})"
+        return f"Mission(name='{self.name}', n_objectives={len(self.objectives)})"
  
     def __iter__(self):
         """Iterate over the objectives."""
@@ -179,17 +179,17 @@ class Mission:
         assert isinstance(d, dict), "Input must be a dictionary"
         assert 'name' in d, "Name is a required field"
         assert 'objectives' in d, "Objectives are a required field"
+        assert all("weight" in obj for obj in d.get("objectives")), "All objectives must have a weight field"
 
         # unpack dictionary
-        objective_dicts : List[Dict] = d.get("objectives", [])
+        objective_dicts : List[Dict] = d.get("objectives")
         objectives = [MissionObjective.from_dict(obj) 
                         for obj in objective_dicts]
-        weights = [obj.get("weight", 0.0) for obj in objective_dicts]
+        weights = [obj.get("weight") for obj in objective_dicts]
 
         # return mission instance
         return cls(
-            name=d.get("name", ""),
+            name=d.get("name"),
             objectives=objectives,
-            weights=weights,
-            normalizing_parameter=d.get("normalizing_parameter", None)
+            weights=weights
         )
