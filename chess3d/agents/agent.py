@@ -1073,7 +1073,7 @@ class SimulatedAgent(AbstractAgent):
                                                     state.agent_name, 
                                                     state.to_dict(), 
                                                     {}, 
-                                                    instrument,
+                                                    {"name" : instrument},
                                                     state.t,
                                                     state.t,
                                                     observations

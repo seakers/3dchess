@@ -197,3 +197,7 @@ class Mission:
     def __eq__(self, value : 'Mission') -> bool:
         assert isinstance(value, Mission), "Can only compare Mission instances"
         return self.to_dict() == value.to_dict()
+    
+    def __hash__(self):
+        ids = [obj.id for obj in self.objectives]
+        return hash((self.name, tuple(sorted(ids))))

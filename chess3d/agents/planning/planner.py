@@ -586,7 +586,7 @@ class AbstractPlanner(ABC):
         if task_n_obs is None or task_t_prevs is None:
             # no previous observation counts and times provided;
             #  count previous observations for each task in the observation opportunity
-            task_n_obs, task_t_prevs = self.__count_previous_observations_from_history(obs, t_img, observation_history)
+            task_n_obs, task_t_prevs = self._count_previous_observations_from_history(obs, t_img, observation_history)
         
         # estimate measurment look angle 
         th_img = np.average([obs.slew_angles.left, obs.slew_angles.right])
@@ -608,7 +608,7 @@ class AbstractPlanner(ABC):
         # return total reward
         return sum(rewards.values())    
     
-    def __count_previous_observations_from_history(self,
+    def _count_previous_observations_from_history(self,
                                                    obs : ObservationOpportunity,
                                                    t_img : float,
                                                    observation_history : ObservationHistory,
@@ -627,6 +627,9 @@ class AbstractPlanner(ABC):
 
                 # get past observations for this target before current image time
                 target_observation : ObservationTracker = observation_history.get_observation_history(grid_index, gp_index)
+
+                # check if there are no previous observations for this target
+                if target_observation is None: continue  
 
                 # count number of previous observations and observation time for this task
                 task_n_obs[task] += target_observation.n_obs

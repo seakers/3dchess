@@ -67,7 +67,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         dealer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         dealer_spacecraft['name'] = 'dealer-sat'
         dealer_spacecraft['@id'] = 'dealer-sat_0'
-        dealer_spacecraft['planner'] = self.planner_config()
+        dealer_spacecraft['planner'] = self.toy_planner_config()
         dealer_spacecraft['orbitState']['state']['inc'] = 0.0
         dealer_spacecraft['instrument'] = []
         dealer_spacecraft['science'] = {
@@ -129,7 +129,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         dealer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         dealer_spacecraft['name'] = 'dealer-sat'
         dealer_spacecraft['@id'] = 'dealer-sat_0'
-        dealer_spacecraft['planner'] = self.lake_planner_config()
+        dealer_spacecraft['planner'] = self.lakes_planner_config()
         dealer_spacecraft['instrument'] = []
         dealer_spacecraft['orbitState']['state']['ta'] = np.average([95,93])  # between both workers
         dealer_spacecraft['science'] = {
