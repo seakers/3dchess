@@ -1117,6 +1117,8 @@ class OrbitData:
                         scenario_sat.pop("notifier") 
                     if "missionProfile" in scenario_sat:
                         scenario_sat.pop("missionProfile")
+                    if "mission" in scenario_sat:
+                        scenario_sat.pop("mission")
 
                     if "planner" in mission_sat:
                         mission_sat.pop("planner")
@@ -1126,6 +1128,8 @@ class OrbitData:
                         mission_sat.pop("notifier") 
                     if "missionProfile" in mission_sat:
                         mission_sat.pop("missionProfile")
+                    if "mission" in mission_sat:
+                        mission_sat.pop("mission")
 
                     if scenario_sat != mission_sat:
                         return True

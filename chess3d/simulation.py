@@ -1239,8 +1239,11 @@ class SimulationElementFactory:
                                      if instruments_dict else []
 
         # load specific mission assigned to this satellite
-        mission : Mission = missions[agent_dict['mission'].lower()]
-        mission = copy.deepcopy(mission)
+        mission : Mission = copy.deepcopy(missions[agent_dict['mission'].lower()])
+        
+        # ensure deep copy 
+        assert mission == missions[agent_dict['mission'].lower()], "mission copy failed."
+        assert mission is not missions[agent_dict['mission'].lower()], "mission deep copy failed."
 
         if isinstance(clock_config, RealTimeClockConfig):    
             raise NotImplementedError("Real-time clock not yet supported in agent factory.")

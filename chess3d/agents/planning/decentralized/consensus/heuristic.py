@@ -895,7 +895,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                                             cross_track_fovs,
                                                             orbitdata,
                                                             mission,
-                                                            observation_history,
                                                             n_obs,
                                                             t_prev
                                                             )

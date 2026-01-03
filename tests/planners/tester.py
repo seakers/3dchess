@@ -81,7 +81,7 @@ class PlannerTester(ABC):
                     #     "@type": "lookup", 
                     #     "eventsPath" : "./tests/planners/resources/events/toy_events.csv"
                     # },
-                    "mission" : "Algal blooms fulls comprehensive"
+                    "mission" : "Algal bloom comprehensive"
             }
         
         # set outdir

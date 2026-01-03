@@ -454,7 +454,7 @@ class AbstractPlanner(ABC):
         v = [obs for obs in observation_opportunities if len(adj[obs.id]) > 0]
         
         # sort observation opportunities by degree of adjacency 
-        v : list[ObservationOpportunity] = self.sort_by_degree(observation_opportunities, adj)
+        v : list[ObservationOpportunity] = self.__sort_by_degree(observation_opportunities, adj)
         
         # combine observation opportunities into clusters
         combined_obs : list[ObservationOpportunity] = []
@@ -465,7 +465,7 @@ class AbstractPlanner(ABC):
                 p : ObservationOpportunity = v.pop()
 
                 # get list of neighbors of p sorted by number of common neighbors
-                n_p : list[ObservationOpportunity] = self.sort_observation_opportunities_by_common_neighbors(p, list(adj[p.id]), adj)
+                n_p : list[ObservationOpportunity] = self.__sort_observation_opportunities_by_common_neighbors(p, list(adj[p.id]), adj)
 
                 # initialize clique with p
                 clique = set()
@@ -498,7 +498,7 @@ class AbstractPlanner(ABC):
                     v.remove(q)
 
                     # Reset neighbor collection N_p for the new p;
-                    n_p : list[ObservationOpportunity] = self.sort_observation_opportunities_by_common_neighbors(p, list(adj[p.id]), adj)               
+                    n_p : list[ObservationOpportunity] = self.__sort_observation_opportunities_by_common_neighbors(p, list(adj[p.id]), adj)               
 
                 for q in clique: 
                     # TODO: look into ID being used. Ideally we would want a new ID for the combined task.
@@ -518,13 +518,13 @@ class AbstractPlanner(ABC):
                 combined_obs.append(p) 
 
                 # sort remaining task observation opportunities by degree of adjacency 
-                v : list[ObservationOpportunity] = self.sort_by_degree(v, adj)
+                v : list[ObservationOpportunity] = self.__sort_by_degree(v, adj)
         
         # return only observation opportunities that have multiple parents (avoid generating duplicate observation opportunities)
         return [obs for obs in combined_obs if len(obs.tasks) > 1] 
 
     @runtime_tracker
-    def sort_by_degree(self, obs_opportunities : List[ObservationOpportunity], adjacency : dict) -> list:
+    def __sort_by_degree(self, obs_opportunities : List[ObservationOpportunity], adjacency : dict) -> list:
         """ Sorts observation opportunities by degree of adjacency. """
         # calculate degree of each observation opportunity
         degrees : dict = {obs : len(adjacency[obs.id]) for obs in obs_opportunities}
@@ -532,7 +532,7 @@ class AbstractPlanner(ABC):
         # sort observation opportunities by degree and return
         return sorted(obs_opportunities, key=lambda p: (degrees[p], sum([parent_task.priority for parent_task in p.tasks]), -p.accessibility.left))
 
-    def sort_observation_opportunities_by_common_neighbors(self, p : ObservationOpportunity, n_p : list, adjacency : dict) -> list:
+    def __sort_observation_opportunities_by_common_neighbors(self, p : ObservationOpportunity, n_p : list, adjacency : dict) -> list:
         # specify types
         n_p : list[ObservationOpportunity] = n_p
         adjacency : Dict[str, set[ObservationOpportunity]] = adjacency
@@ -557,15 +557,37 @@ class AbstractPlanner(ABC):
                                      obs : ObservationOpportunity, 
                                      t_img : float,
                                      d_img : float,
-                                     specs : Spacecraft, 
-                                     cross_track_fovs : dict,
+                                     specs : object, 
+                                     cross_track_fovs : Dict[str, float],
                                      orbitdata : OrbitData,
                                      mission : Mission,
                                      observation_history : ObservationHistory,
-                                     n_obs_in_plan : Dict[GenericObservationTask,int] = defaultdict(int),
-                                     t_prev_in_plan : Dict[GenericObservationTask,int] = defaultdict(lambda: np.NINF)
+                                     task_n_obs : Dict[GenericObservationTask,int] = None,
+                                     task_t_prevs : Dict[GenericObservationTask,int] = None
                                 ) -> float:
-        """ Estimates task value based on predicted observation performance. """
+        """ 
+        
+        Estimates task value based on predicted observation performance. 
+        
+        #### Arguments
+        - `obs` : The observation opportunity to estimate the value for.
+        - `t_img` : The time of the observation [s].
+        - `d_img` : The duration of the observation [s].
+        - `specs` : The agent or spacecraft specifications.
+        - `cross_track_fovs` : The cross-track fields of view for each instrument.
+        - `orbitdata` : The pre-computed orbit and coverage data for the mission.
+        - `mission` : The mission assigned to the agent performing the observation.
+        - `observation_history` : The observation history tracker for the agent.
+        - `task_n_obs` : A dictionary mapping tasks being observed by this agent to the number of observations planned for them.
+        - `task_t_prevs` : A dictionary mapping tasks being observed by this agent to the time of the previous observation planned for them.
+        """
+        
+        # check if previous observation counts and times are provided
+        if task_n_obs is None or task_t_prevs is None:
+            # no previous observation counts and times provided;
+            #  count previous observations for each task in the observation opportunity
+            task_n_obs, task_t_prevs = self.__count_previous_observations_from_history(obs, t_img, observation_history)
+        
         # estimate measurment look angle 
         th_img = np.average([obs.slew_angles.left, obs.slew_angles.right])
 
@@ -579,37 +601,43 @@ class AbstractPlanner(ABC):
                                                             cross_track_fovs,
                                                             orbitdata,
                                                             mission,
-                                                            observation_history,
-                                                            n_obs_in_plan[parent_task],
-                                                            t_prev_in_plan[parent_task])
+                                                            task_n_obs[parent_task],
+                                                            task_t_prevs[parent_task])
                      for parent_task in obs.tasks}
 
         # return total reward
-        return sum(rewards.values()) 
-
-        # # estimate measurement performance metrics
-        # task_performance_metrics : Dict[GenericObservationTask, Dict[tuple, dict]] = \
-        #         {parent_task : self._estimate_task_performance_metrics(parent_task, 
-        #                                                                 task.instrument_name, 
-        #                                                                 th_img, 
-        #                                                                 t_img, 
-        #                                                                 d_img, 
-        #                                                                 specs, 
-        #                                                                 cross_track_fovs, 
-        #                                                                 orbitdata, 
-        #                                                                 observation_history, 
-        #                                                                 n_obs_in_plan[parent_task], 
-        #                                                                 t_prev_in_plan[parent_task])
-        #          for parent_task in task.parent_tasks}
-
-        # # calculate task reward per target observed
-        # rewards = {parent_task : max([mission.calc_task_value(parent_task, measurement) 
-        #                               for measurement in measurements.values()]) if len(measurements.values()) > 0 else 0.0
-        #            for parent_task,measurements in task_performance_metrics.items()}
-        
-        # # return total reward
-        # return sum(rewards.values())    
+        return sum(rewards.values())    
     
+    def __count_previous_observations_from_history(self,
+                                                   obs : ObservationOpportunity,
+                                                   t_img : float,
+                                                   observation_history : ObservationHistory,
+                                                ) -> Tuple[Dict[GenericObservationTask,int], Dict[GenericObservationTask,float]]:
+        """ Counts the number of previous observations for each task in the observation opportunity. """
+        # initialize observation counts and previous observation times
+        task_n_obs : Dict[GenericObservationTask,int] = {task : 0 for task in obs.tasks} 
+        task_t_prev : Dict[GenericObservationTask,int] = {task : np.NINF for task in obs.tasks} 
+
+        # Find tergets per task
+        for task in obs.tasks:
+            # iterate through task targets
+            for *_,grid_index,gp_index in task.location:
+                # unpack grid and gp indices
+                grid_index,gp_index = int(grid_index), int(gp_index)
+
+                # get past observations for this target before current image time
+                target_observation : ObservationTracker = observation_history.get_observation_history(grid_index, gp_index)
+
+                # count number of previous observations and observation time for this task
+                task_n_obs[task] += target_observation.n_obs
+                task_t_prev[task] = max(task_t_prev[task], target_observation.t_last) if target_observation.t_last <= t_img else task_t_prev[task]
+
+                # validate previous observation time
+                if task_n_obs[task] > 0: assert task_t_prev[task] >= 0.0, "Previous observation time must be non-negative."
+                    
+        # return observation counts and previous observation times
+        return task_n_obs, task_t_prev
+
     def _estimate_task_value(self,
                             task : GenericObservationTask,
                             instrument_name : str,
@@ -620,9 +648,8 @@ class AbstractPlanner(ABC):
                             cross_track_fovs : dict,
                             orbitdata : OrbitData,
                             mission : Mission,
-                            observation_history : ObservationHistory,
-                            n_obs_in_plan : int = 0,
-                            t_prev_in_plan : float = np.NINF
+                            n_obs : int = 0,
+                            t_prev : float = np.NINF
                         ) -> float:
         measurement_performance : dict = self.__estimate_task_performance_metrics(task, 
                                                                                  instrument_name, 
@@ -632,9 +659,8 @@ class AbstractPlanner(ABC):
                                                                                  specs, 
                                                                                  cross_track_fovs, 
                                                                                  orbitdata, 
-                                                                                 observation_history, 
-                                                                                 n_obs_in_plan, 
-                                                                                 t_prev_in_plan)
+                                                                                 n_obs, 
+                                                                                 t_prev)
 
         return max([mission.calc_task_value(task, measurement) 
                     for measurement in measurement_performance.values()]) \
@@ -650,15 +676,26 @@ class AbstractPlanner(ABC):
                                             specs : Spacecraft, 
                                             cross_track_fovs : dict,
                                             orbitdata : OrbitData,
-                                            observation_history : ObservationHistory,
-                                            n_obs_in_plan : int,
-                                            t_prev_in_plan : float,  
+                                            n_obs : int,
+                                            t_prev : float,  
                                         ) -> dict:
 
-        # get unique task targets
-        task_targets : List[tuple] = list({(grid_idx,gp_idx) for *_,grid_idx,gp_idx in task.location})
+        # validate inputs
+        assert isinstance(task, GenericObservationTask), "Task must be of type `GenericObservationTask`."
+        assert isinstance(instrument_name, str), "Instrument name must be a string."
+        assert isinstance(th_img, (int,float)), "Image look angle must be a numeric value."
+        assert isinstance(t_img, (int,float)), "Image time must be a numeric value."
+        assert t_img >= 0, "Image time must be non-negative."
+        assert isinstance(d_img, (int,float)), "Image duration must be a numeric value."
+        assert d_img >= 0, "Image duration must be non-negative."
+        assert all(isinstance(instr, str) for instr in cross_track_fovs.keys()), "Cross-track FOV instrument names must be strings."
+        assert all(isinstance(fov, (int,float)) for fov in cross_track_fovs.values()), "Cross-track FOVs must be numeric values."
+        assert all(fov >= 0 for fov in cross_track_fovs.values()), "Cross-track FOVs must be non-negative."
+        assert isinstance(orbitdata, OrbitData), "Orbit data must be of type `OrbitData`."
+        assert n_obs >= 0, "Number of observations must be non-negative."
+        assert t_prev <= t_img, "Last observation time must be before the current image time."
 
-        # get available access metrics
+        # get access metrics for given observation time, instrument, and look angle
         observation_performances = self.get_available_accesses(task, instrument_name, th_img, t_img, d_img, orbitdata, cross_track_fovs)
 
         # check if there are no valid observations for this task
@@ -684,62 +721,55 @@ class AbstractPlanner(ABC):
         
         # sort groups by measurement time 
         for loc in observed_location_groups: observed_location_groups[loc].sort(key=lambda a : a['time [s]'])
+        
+        # get unique task targets
+        task_targets : List[tuple] = list({(grid_idx,gp_idx) 
+                                           for *_,grid_idx,gp_idx in task.location})
 
         # keep only one of the observations per location group that matches the task target
         observation_performance_metrics : Dict[tuple[int,int], dict] = {loc : observed_location_groups[loc][0] # keep only first observation
                                                  for loc in observed_location_groups
                                                  if (loc[2],loc[3]) in task_targets
-                                                 }
-        
-        # get previous observation hisotry for observed locations
-        obs_histories : dict[tuple[int,int], ObservationTracker] \
-            = {(*_,grid_index,gp_index) : observation_history.get_observation_history(grid_index, gp_index)
-                for *_,grid_index,gp_index in observation_performance_metrics}
-        
+                                                 }       
+
         # get instrument specifications
         instrument_spec : BasicSensorModel = next(instr 
                                                   for instr in specs.instrument
                                                   if instr.name.lower() == instrument_name.lower()).mode[0]
 
-        # count previous observations of this task
-        n_obs = sum([obs_histories[loc].n_obs for loc in observation_performance_metrics])
-        n_obs += n_obs_in_plan
-
-        # get latest observation time of this task
-        t_last = max([obs_histories[loc].t_last for loc in observation_performance_metrics])
-        t_last = max(t_last, t_prev_in_plan)
-
-        assert n_obs >= 0, "Number of observations must be non-negative."
-        assert t_last <= t_img, "Last observation time must be before the current image time."
-
         # include additional observation information 
-        for loc,obs in observation_performance_metrics.items():
-            if obs_histories[loc].n_obs > 0:
-                x = 1 # breakpoint
+        for loc,obs_perf in observation_performance_metrics.items():
             
-            # update observation information
-            obs.update({ 
+            # update observation performance information
+            obs_perf.update({ 
                 SpatialCoverageRequirementAttributes.LOCATION.value : [loc],
                 TemporalRequirementAttributes.OBS_TIME.value : t_img,
                 TemporalRequirementAttributes.RELATIVE_OBS_TIME.value : t_img - task.availability.left,
                 TemporalRequirementAttributes.DURATION.value : d_img,
-                TemporalRequirementAttributes.REVISIT_TIME.value : t_img - t_last,
+                TemporalRequirementAttributes.REVISIT_TIME.value : t_img - t_prev,
                 "t_end" : t_img + d_img,
                 ObservationRequirementAttributes.OBSERVATION_NUMBER.value : n_obs + 1, # including this observation
-                # ObservationRequirementAttributes.SPATIAL_RESOLUTION_CROSS_TRACK.value : observation_performance_metrics[loc][ObservationRequirementAttributes.SPATIAL_RESOLUTION_CROSS_TRACK.value],
             })
 
-            # package observation performance information
+            # update instrument-specific observation performance information
             if 'vnir' in instrument_name.lower() or 'tir' in instrument_name.lower():
-                obs.update({
-                    ObservationRequirementAttributes.SPECTRAL_RESOLUTION.value : instrument_spec.spectral_resolution.lower()
-                })
+                if isinstance(instrument_spec.spectral_resolution, str):
+                    obs_perf.update({
+                        ObservationRequirementAttributes.SPECTRAL_RESOLUTION.value : instrument_spec.spectral_resolution.lower()
+                    })
+                elif isinstance(instrument_spec.spectral_resolution, (int,float)):
+                    obs_perf.update({
+                        ObservationRequirementAttributes.SPECTRAL_RESOLUTION.value : instrument_spec.spectral_resolution
+                    })
+                else:
+                    raise ValueError('Unsupported type for spectral resolution in instrument specification.')
+                
             elif 'altimeter' in instrument_name.lower():
-                obs.update({
+                obs_perf.update({
                     ObservationRequirementAttributes.ACCURACY.value : observation_performance_metrics[loc][ObservationRequirementAttributes.ACCURACY.value],
                 })
             else:
-                raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
+                raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{instrument_name.lower()}`.')
 
         return observation_performance_metrics
     

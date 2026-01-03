@@ -193,3 +193,7 @@ class Mission:
             objectives=objectives,
             weights=weights
         )
+    
+    def __eq__(self, value : 'Mission') -> bool:
+        assert isinstance(value, Mission), "Can only compare Mission instances"
+        return self.to_dict() == value.to_dict()
