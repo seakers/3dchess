@@ -27,6 +27,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
     DISCRETE = 'discrete'
     CONTINUOUS = 'continuous'
     EARLIEST = 'earliest'
+    MODELS = [DISCRETE, CONTINUOUS, EARLIEST]
 
     def __init__(self, 
                  horizon: float, 
@@ -43,7 +44,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                          logger)
         
         # validate inputs
-        assert model in [self.DISCRETE, self.CONTINUOUS, self.EARLIEST], f'Invalid `model` type `{model}`. Must be one of {[self.DISCRETE, self.CONTINUOUS, self.EARLIEST]}.'
+        assert model in self.MODELS, f'Invalid `model` type `{model}`. Must be one of {self.MODELS}.'
 
         # set planner parameters
         self.model = model
@@ -266,8 +267,7 @@ class DynamicProgrammingPlanner(AbstractPeriodicPlanner):
                 val = cummulative_rewards[u] + rewards[v]
 
                 # check if best cummulative reward so far
-                if val <= best_val:
-                    continue
+                if val <= best_val: continue
 
                 # check if mutually exclusive with any in path to u
                 if any([tv.is_mutually_exclusive(observation_opportunities[k[1][0]]) 
