@@ -388,6 +388,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
 
                 # check if any spatial coverage requirements were found
                 if not spatial_requirements:
+                    raise NotImplementedError("Default task creation for missions without spatial coverage requirements is not implemented yet.")
                     # no spatial coverage requirements found; 
                     #   collect all targets from all grids known to this agent
                     req_targets = list({
