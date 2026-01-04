@@ -562,6 +562,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
                 # reset invalid bid along with all subsequent bids  
                 for bid_idx in range(n_obs, len(self.results[task])):
+                    if self.results[task][bid_idx] is None:
+                        x= 1 # debug breakpoint
+                    
                     # check if this agent is still listed as the winning bidder
                     if not self.results[task][bid_idx].is_bidder_winning():
                         continue # another agent is winning this bid; skip
@@ -570,13 +573,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     bid_to_reset : Bid = self.results[task][bid_idx]
 
                     # reset bid
-                    reset_bid = bid_to_reset.reset(state.t)
+                    bid_to_reset.reset(state.t)
 
                     # update results
-                    self.results[task][bid_idx] = reset_bid
+                    self.results[task][bid_idx] = bid_to_reset
 
                     # add to list of resets
-                    bids_reset.append(reset_bid)
+                    bids_reset.append(bid_to_reset)
 
                 # add to violations list
                 bundle_updates.append(bids_reset)

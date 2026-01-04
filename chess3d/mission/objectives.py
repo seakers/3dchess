@@ -32,6 +32,8 @@ class MissionObjective(ABC):
         assert isinstance(parameter, str), "Parameter must be a string"
         assert len(requirements) > 0, "At least one requirement is needed"
         assert all(isinstance(req, MissionRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
+        if not any(isinstance(req, PerformanceRequirement) for req in requirements):
+            raise ValueError("No performance requirement found, please add a performance requirement to objective definition.")
         assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
 
         # Set attributes
@@ -114,12 +116,7 @@ class DefaultMissionObjective(MissionObjective):
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
-        # Validate inputs
-        # if not any(isinstance(req, SpatialCoverageRequirement) for req in requirements):
-        #     raise ValueError("No spatial requirement found, please add a spatial coverage requirement to objective definition.")
-        if not any(isinstance(req, PerformanceRequirement) for req in requirements):
-            raise ValueError("No performance requirement found, please add a performance requirement to objective definition.")
-
+        # Validate inputs      
         super().__init__(MissionObjective.DEFAULT, parameter, requirements, id)
 
     def __repr__(self) -> str:
@@ -168,12 +165,6 @@ class EventDrivenObjective(MissionObjective):
         # - :`synergistic_parameters`: A list of additional parameters that are synergistic with the main parameter.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
-        # Validate inputs
-        if not any(isinstance(req, SpatialCoverageRequirement) for req in requirements):
-            raise ValueError("No spatial requirement found, please add a spatial coverage requirement to objective definition.")
-        if not any(isinstance(req, PerformanceRequirement) for req in requirements):
-            raise ValueError("No performance requirement found, please add a performance requirement to objective definition.")
-
         # Initialize the parent class
         super().__init__(MissionObjective.EVENT, parameter, requirements, id)
         

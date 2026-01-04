@@ -1242,7 +1242,7 @@ class SimulationElementFactory:
                                      if instruments_dict else []
 
         # load specific mission assigned to this satellite
-        mission : Mission = copy.deepcopy(missions[agent_dict['mission'].lower()])
+        mission : Mission = missions[agent_dict['mission'].lower()].copy()
         
         # ensure deep copy 
         assert mission == missions[agent_dict['mission'].lower()], \

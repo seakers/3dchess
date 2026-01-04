@@ -124,7 +124,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         scenario_name = f'toy_1-{self.planner_name()}'
         connectivity = 'LOS'
         event_name = 'toy_1'
-        mission_name = 'toy_missions'
+        mission_database = 'toy_missions'
 
         # SAT1 : reactive satellite with narrow swath instrument
         ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
@@ -133,7 +133,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1['planner'] = self.toy_planner_config()
         ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
-        ractive_spacecraft_1['mission'] = "Algal bloom monitoring"
+        ractive_spacecraft_1['mission'] = "toy_mission_1"
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` PLANNER TEST')
@@ -144,7 +144,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                                                    scenario_name, 
                                                    connectivity,
                                                    event_name,
-                                                   mission_name,
+                                                   mission_database,
                                                    spacecraft=[
                                                        ractive_spacecraft_1
                                                     ]
@@ -193,9 +193,11 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         - Duration: 12 hours
         - Grid: One target at (lat=0.0°, lon=0.0°)
         - Events: One event occurring at t=1000 s, lasting for 2 hours.
+        - Only one observation opportunity should be available during the event duration.
 
         ### Expected Outcomes
-
+        - Satellite performs 1 observation of the event.
+        - The observation is successfully scheduled and executed without conflicts.
         """
 
         # check for case toggle 
@@ -216,7 +218,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
-        announcer_spacecraft['mission'] = "Algal bloom response"
+        announcer_spacecraft['mission'] = "toy_mission_2"
 
         # SAT1 : reactive satellite with narrow swath instrument
         ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
@@ -225,7 +227,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1['planner'] = self.toy_planner_config()
         ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
-        ractive_spacecraft_1['mission'] = "Algal bloom response"
+        ractive_spacecraft_1['mission'] = "toy_mission_2"
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` PLANNER TEST')
@@ -316,7 +318,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
-        announcer_spacecraft['mission'] = "Algal bloom response"
+        announcer_spacecraft['mission'] = "toy_mission_2"
 
         # SAT1 : reactive satellite with narrow swath instrument
         ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
@@ -325,7 +327,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1['planner'] = self.toy_planner_config()
         ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
-        ractive_spacecraft_1['mission'] = "Algal bloom response"
+        ractive_spacecraft_1['mission'] = "toy_mission_2"
 
         # SAT1 : reactive satellite with narrow swath instrument
         ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
@@ -335,7 +337,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
         ractive_spacecraft_2['orbitState']['state']['ta'] = ractive_spacecraft_1['orbitState']['state']['ta'] - 2.0 # phase offset by 2.0[deg]
-        ractive_spacecraft_2['mission'] = "Algal bloom response"
+        ractive_spacecraft_2['mission'] = "toy_mission_2"
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` PLANNER TEST')

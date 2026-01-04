@@ -759,6 +759,10 @@ class AbstractPlanner(ABC):
                 ObservationRequirementAttributes.OBSERVATION_NUMBER.value : n_obs + 1, # including this observation
             })
 
+            # handle special case of first observation
+            if n_obs == 0:
+                obs_perf[TemporalRequirementAttributes.REVISIT_TIME.value] = 0.0
+
             # update instrument-specific observation performance information
             if 'vnir' in instrument_name.lower() or 'tir' in instrument_name.lower():
                 if isinstance(instrument_spec.spectral_resolution, str):

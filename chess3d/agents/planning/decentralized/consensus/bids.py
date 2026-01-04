@@ -668,13 +668,13 @@ class Bid:
         # update timestamp for the other bidder       
         self.t_stamps[other.owner] = t_comp
 
-    def reset(self, other : 'Bid', t_comp : float) -> None:
+    def reset(self, t_comp : float, other : 'Bid' = None) -> None:
         """
         Resets the values of this bid while keeping track of lates update time
         
         ### Arguments:
-            - other (`Bid`): equivalent bid being used to update information
             - t_comp (`float` or `int`): latest time when this bid was updated
+            - other (`Bid`): equivalent bid being used to update information
         """
         # if own bid, update internal bid value to 0
         if self.winner == self.owner: self.owner_bid = 0
@@ -688,8 +688,9 @@ class Bid:
         self.t_bid = np.NINF
         self.main_measurement = self.NONE
 
-        # update timestamp for the other bidder       
-        self.t_stamps[other.owner] = t_comp
+        # update timestamp for the other bidder if given
+        if other is not None:
+            self.t_stamps[other.owner] = t_comp
 
     def __leave(self, other : 'Bid', t_comp : float) -> None:
         """
