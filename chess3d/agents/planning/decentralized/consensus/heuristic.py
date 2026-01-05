@@ -867,9 +867,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             # sort by observation time
             available_obs_times.sort(key=lambda x: x[0])
 
-            if "2" in state.agent_name and len(available_obs_times) > 2:
-                x= 1 # debug breakpoint
-
             # collect feasible sequences
             feasible_sequences = self._find_feasible_observation_sequences_for_task(state, task, available_obs_times)
             
