@@ -25,9 +25,15 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_4 = False
         self.toy_5 = False
         self.toy_6 = False
-        self.toy_7 = True
+        self.toy_7 = False
         self.toy_8 = False
         self.toy_9 = False
+        self.toy_10 = False
+        self.toy_11 = False
+        self.toy_12 = False
+        self.toy_13 = False
+        self.toy_14 = False
+        self.toy_15 = False
 
     def toy_planner_config(self):
         return {
@@ -728,8 +734,21 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             - observation capability
             - onboard consensus planner
             - no onboard event-detection
-        ### Scenario  Description
+        
+        ### Scenario Description
         - Duration: 2 hours
+        - Grid: two targets at (lat=-5.0°, lon=0.0°) and (lat=5.0°, lon=0.0°)
+        - Events: Two event occurring at t=TBD hours, lasting for 2 hours.
+        - Same instruments for both agents
+        - Agents orbits offset in true anomaly by 2.0 degrees.
+        - Communication between agents is constant.
+
+        ### Expected Outcomes
+        - Agent 1 has earlier observation opportunities for both events due to orbit configuration.
+        - Agents can only perform one task at a time due to observation constraints.
+        - Both agents compete for the first event, with Agent 1 expected to perform the observation due to earlier access.
+        - Agent 2 wins the bid for the second observation of the first event as it occurs later in time and thus better according to the mission objectives.
+        - For the second event, Agent 1 is expected to perform the observation as Agent 2 has already scheduled an observation for the first event and cannot perform both due to observation constraints.
         """
 
         if not self.toy_7: return
@@ -809,12 +828,118 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         """
 
+        if not self.toy_8: return
+
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'toy_8'
+        scenario_name = f'toy_8-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_8'
+        mission_name = 'toy_missions'
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config()
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 0.8 # slower maneuverability
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = -2.0 # phase offset by 2.0[deg]
+        ractive_spacecraft_1['mission'] = "toy_mission_8"
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       ractive_spacecraft_1
+                                                    ]
+                                                   )
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
+
     def test_toy_case_9(self):
         """
         ## TOY CASE 9
         Test case for multiple satellites performing multiple default mission tasks without events.
 
         """
+        if not self.toy_9: return
+
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'toy_9'
+        scenario_name = f'toy_9-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_9'
+        mission_name = 'toy_missions'
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config()
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 0.8 # slower maneuverability
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = -2.0 # phase offset by 2.0[deg]
+        ractive_spacecraft_1['mission'] = "toy_mission_9"
+
+        # SAT2 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_2['@id'] = 'sat2_vnir'
+        ractive_spacecraft_2['name'] = 'sat2'
+        ractive_spacecraft_2['planner'] = self.toy_planner_config()
+        ractive_spacecraft_2['spacecraftBus']['components']['adcs']['maxRate'] = 0.8 # slower maneuverability
+        ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_2['orbitState']['state']['ta'] = ractive_spacecraft_1['orbitState']['state']['ta'] - 2.0 # phase offset by 2.0[deg]
+        ractive_spacecraft_2['mission'] = "toy_mission_9"
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       ractive_spacecraft_1,
+                                                       ractive_spacecraft_2
+                                                    ]
+                                                   )
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
+        
 
     def test_toy_case_10(self):
         """
@@ -822,6 +947,47 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         Test case for single satellite performing two event-driven tasks with short expiration times from announcer with communication delays.       
 
         """
+        if not self.toy_10: return
+
+    def test_toy_case_11(self):
+        """
+        ## TOY CASE 11
+        Test case for multiple satellites performing two event-driven tasks with short expiration times from announcer with communication delays.       
+
+        """
+        if not self.toy_11: return
+
+    def test_toy_case_12(self):
+        """
+        ## TOY CASE 12
+        Test case for a single satellite performing default mission tasks from a pre-planner without any event announcements.
+
+        """
+        if not self.toy_12: return
+
+    def test_toy_case_13(self):
+        """
+        ## TOY CASE 13
+        Test case for multiple satellites performing default mission tasks from a pre-planner without any event announcements.
+
+        """
+        if not self.toy_13: return
+
+    def test_toy_case_14(self):
+        """
+        ## TOY CASE 14
+        Test case for a single satellite reacting to event announcements from an announcer with an existing pre-planned schedule.
+
+        """
+        if not self.toy_14: return
+
+    def test_toy_case_15(self):
+        """
+        ## TOY CASE 15
+        Test case for multiple satellites reacting to event announcements from an announcer with an existing pre-planned schedule.
+
+        """
+        if not self.toy_15: return
 
     # def test_single_sat_announcer_toy(self):
         # # check for case toggle 
