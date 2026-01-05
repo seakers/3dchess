@@ -14,7 +14,7 @@ from chess3d.agents.planning.plan import PeriodicPlan, Plan
 from chess3d.agents.planning.tasks import EventObservationTask
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
-from chess3d.messages import MeasurementRequestMessage
+from chess3d.messages import BusMessage, MeasurementRequestMessage
 from chess3d.mission.events import GeophysicalEvent
 from chess3d.mission.mission import Mission
 from chess3d.mission.objectives import EventDrivenObjective
@@ -131,38 +131,55 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
                 # update list of generated requests 
                 task_requests.append(task_request)
 
-        # create broadcasts for each request
-        for req in tqdm(task_requests, 
+        # check if no comms links are available
+        if len(orbitdata.comms_links.keys()) == 0: 
+            # set broadcast time to immediate
+            t_broadcast : float = state.t # immediate broadcast if no comms links available
+
+            # initiate broadcasts list 
+            task_requests_msgs : List[MeasurementRequestMessage] = []
+
+            # create broadcasts for each future request
+            for req in tqdm(task_requests, 
                         desc=f'{state.agent_name}/PREPLANNER: Scheduling broadcasts for generated task requests',
                         leave=False):
-            if len(orbitdata.comms_links.keys()) == 0: 
-                # get last access interval and calculate broadcast time
-                t_broadcast : float = state.t # immediate broadcast if no comms links available
 
                 # generate plan message to share any task requests generated
                 task_requests_msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
 
-                # create broadcast action and add to client broadcast list
-                broadcasts.append(BroadcastMessageAction(task_requests_msg.to_dict(), t_broadcast))
+                # add to list of task request messages
+                task_requests_msgs.append(task_requests_msg.to_dict())
 
-            # get access intervals with the client agent within the planning horizon
+            # compile all requests into single broadcast
+            bus_broadcast = BusMessage(state.agent_name, state.agent_name, task_requests_msgs)
+
+            # create single broadcast action for all requests
+            broadcasts.append(BroadcastMessageAction(bus_broadcast.to_dict(), t_broadcast))
+
+        # create broadcasts for each request
+        for req in tqdm(task_requests, 
+                        desc=f'{state.agent_name}/PREPLANNER: Scheduling broadcasts for generated task requests',
+                        leave=False):
+            
+            # schedule broadcasts to all available agents
             for target in orbitdata.comms_links.keys():
+                # get access intervals with the client agent within the planning horizon
                 access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, req.t_req, include_current=True)
 
                 # create broadcast actions for each access interval
                 for next_access in access_intervals:
-                    next_access : Interval
-
                     # if no access opportunities in this planning horizon, skip scheduling
                     if next_access.is_empty(): continue
 
                     # get last access interval and calculate broadcast time
-                    t_broadcast : float = next_access.left
+                    t_broadcast : float = max(next_access.left, req.t_req)
 
                     # generate plan message to share any task requests generated
                     task_requests_msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
 
                     # create broadcast action and add to client broadcast list
-                    broadcasts.append(BroadcastMessageAction(task_requests_msg.to_dict(), t_broadcast))
+                    broadcast = BroadcastMessageAction(task_requests_msg.to_dict(), t_broadcast)
+
+                    broadcasts.append(broadcast)
 
         return broadcasts

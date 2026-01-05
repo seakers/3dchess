@@ -450,43 +450,120 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # initialize list of updates done to results
         results_updates = []        
 
-        # process incoming bids
-        for incoming_bid in incoming_bids:
+        # group bids by bidding agent 
+        grouped_bids : Dict[str, Dict[GenericObservationTask, List[Bid]]] \
+              = defaultdict(lambda: defaultdict(list))
 
-            # check if bid is for a new task or higher observation number
-            new_task : bool = incoming_bid.task not in self.results
-            new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
+        for bid in incoming_bids:
+            grouped_bids[bid.owner][bid.task].append(bid)
 
-            # if new task or observation number, initialize in results
-            if new_task or new_observation_number:
-                # check if new task is even available at this time
-                if not incoming_bid.task.is_available(state.t):
-                    # task not available; skip bid consideration
-                    continue
+        # sort bids for each task by observation number
+        for other_agent,incoming_results in grouped_bids.items():
+            for task,bids in incoming_results.items():
+                incoming_results[task] = sorted(bids, key=lambda b: b.n_obs)
 
-                # assume bids are received in order of observation numbers
-                assert len(self.results[incoming_bid.task]) == incoming_bid.n_obs , \
-                      "Received bids for non-consecutive observation numbers."
+        if grouped_bids:
+            x = 1 # debug breakpoint
 
-                # add an empty bid for each missing observation number
-                empty_bid = Bid(incoming_bid.task, state.agent_name, incoming_bid.n_obs)
-                self.results[incoming_bid.task].append(empty_bid)
+        for other_agent,incoming_results in grouped_bids.items():
+            for task,bids in incoming_results.items():
+                for incoming_bid in bids:
+                    # check if bid is for a new task or higher observation number
+                    new_task : bool = task not in self.results
+                    new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
 
-                # initialize optimistic bidding counter for new bid
-                self.optimistic_bidding_counters[incoming_bid.task].append(self.optimistic_bidding_threshold)
+                    # if new task or observation number, initialize in results
+                    if new_task or new_observation_number:
+                        # check if new task is even available at this time
+                        if not incoming_bid.task.is_available(state.t):
+                            # task not available; skip bid consideration
+                            continue
 
-            # get current bid for this task and observation number
-            current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
+                        # assume bids are received in order of observation numbers
+                        assert len(self.results[incoming_bid.task]) == incoming_bid.n_obs , \
+                            "Received bids for non-consecutive observation numbers."
 
-            # compare incoming bid with existing bids for the same task
-            updated_bid : Bid = current_bid.update(incoming_bid, state.t)
+                        # add an empty bid for each missing observation number
+                        empty_bid = Bid(incoming_bid.task, state.agent_name, incoming_bid.n_obs)
+                        self.results[incoming_bid.task].append(empty_bid)
 
-            # update results with modified bid
-            self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
+                        # initialize optimistic bidding counter for new bid
+                        self.optimistic_bidding_counters[incoming_bid.task].append(self.optimistic_bidding_threshold)
 
-            # if bid was changed; add updated bid to results updates
-            if updated_bid.has_different_winner_values(current_bid): 
-                results_updates.append(updated_bid)
+                    # get current bid for this task and observation number
+                    current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
+
+                    # compare incoming bid with existing bids for the same task
+                    updated_bid : Bid = current_bid.update(incoming_bid, state.t)
+
+                    # update results with modified bid
+                    self.results[task][incoming_bid.n_obs] = updated_bid
+
+                    # if bid was changed; add updated bid to results updates
+                    if updated_bid.has_different_winner_values(current_bid): 
+                        results_updates.append(updated_bid)
+
+                assert len(bids) <= len(self.results[task]), \
+                    "Results update error: More incoming bids than existing bids in results for this task."
+
+                # check for any missing observation numbers in bids
+                n_obs_l = len(bids)
+                n_obs_u = len(self.results[task])
+
+                if n_obs_l == n_obs_u: continue # no further bids to process
+
+                for current_bid in self.results[task][n_obs_l:n_obs_u]:
+                    # create empty bid for missing observation numbers
+                    empty_bid = Bid(task, other_agent, current_bid.n_obs)
+
+                    # compare incoming bid with existing bids for the same task
+                    updated_bid : Bid = current_bid.update(empty_bid, state.t)
+
+                    # update results with modified bid
+                    self.results[task][current_bid.n_obs] = updated_bid
+
+                    # if bid was changed; add updated bid to results updates
+                    if updated_bid.has_different_winner_values(current_bid): 
+                        results_updates.append(updated_bid)
+            
+        # BKP TEMP disabled block processing incoming bids one by one. Remove after testing
+        # # process incoming bids
+        # for incoming_bid in incoming_bids:
+
+        #     # check if bid is for a new task or higher observation number
+        #     new_task : bool = incoming_bid.task not in self.results
+        #     new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
+
+        #     # if new task or observation number, initialize in results
+        #     if new_task or new_observation_number:
+        #         # check if new task is even available at this time
+        #         if not incoming_bid.task.is_available(state.t):
+        #             # task not available; skip bid consideration
+        #             continue
+
+        #         # assume bids are received in order of observation numbers
+        #         assert len(self.results[incoming_bid.task]) == incoming_bid.n_obs , \
+        #               "Received bids for non-consecutive observation numbers."
+
+        #         # add an empty bid for each missing observation number
+        #         empty_bid = Bid(incoming_bid.task, state.agent_name, incoming_bid.n_obs)
+        #         self.results[incoming_bid.task].append(empty_bid)
+
+        #         # initialize optimistic bidding counter for new bid
+        #         self.optimistic_bidding_counters[incoming_bid.task].append(self.optimistic_bidding_threshold)
+
+        #     # get current bid for this task and observation number
+        #     current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
+
+        #     # compare incoming bid with existing bids for the same task
+        #     updated_bid : Bid = current_bid.update(incoming_bid, state.t)
+
+        #     # update results with modified bid
+        #     self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
+
+        #     # if bid was changed; add updated bid to results updates
+        #     if updated_bid.has_different_winner_values(current_bid): 
+        #         results_updates.append(updated_bid)
         
         # TEMP ensure all bids have this agent as the bidder and task matches. Remove after testing
         assert all(bid.owner == state.agent_name and bid.task == task
@@ -509,7 +586,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     continue # already marked or has no winner; skip
                 
                 # check if imaging time has passed
-                if bid.t_img < state.t:
+                if np.NINF < bid.t_img < state.t:
                     # assume bid has a winner different from this agent
                     assert bid.has_winner(), "Cannot mark bid as performed if it has no winner."
                     assert bid.winner != state.agent_name, "Bid should have been marked as performed by parent agent in previous step."
@@ -609,6 +686,17 @@ class ConsensusPlanner(AbstractReactivePlanner):
             # assume the index of every bid matches their observation number
             assert all(bid.n_obs == i_obs for i_obs, bid in enumerate(bids)), \
                 "Results bids are not sorted by observation number."
+            
+            # check if last bid has no winner
+            if bids and not bids[-1].has_winner():
+                # get bid to reset and remove from results
+                bid_to_reset : Bid = bids.pop(-1)
+
+                # reset bid
+                reset_bid = bid_to_reset.reset(state.t)
+
+                # add to violations list
+                bids_in_violation.append(reset_bid) 
 
             if len(bids) <= 1: continue # no observation sequence to check for constraints
             
@@ -636,7 +724,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     invalid_bid_idx = n_obs_idx
 
                     # stop searching for constraint violations for this task
-                    break
+                    break                
             
             # check if invalid bid was found
             if invalid_bid_idx is None: continue # no violations for this task; continue to next task
@@ -707,10 +795,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # -------------------------------
 
         # DEBUG PRINTOUTS----------------
-        if self._debug:
-            # self._log_results('PLANNING PHASE - RESULTS (BEFORE)', state, self.results)
-            # self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
-            x = 1 # breakpoint
+        # if self._debug:
+        #     self._log_results('PLANNING PHASE - RESULTS (BEFORE)', state, self.results)
+        #     self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
+        #     x = 1 # breakpoint
         # -------------------------------
 
         # build new bundle and path according to replanning model

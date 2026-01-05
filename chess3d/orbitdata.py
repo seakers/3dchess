@@ -1119,6 +1119,8 @@ class OrbitData:
                         scenario_sat.pop("missionProfile")
                     if "mission" in scenario_sat:
                         scenario_sat.pop("mission")
+                    if "spacecraftBus" in scenario_sat and "components" in scenario_sat["spacecraftBus"]:
+                        scenario_sat["spacecraftBus"].pop("components")
 
                     if "planner" in mission_sat:
                         mission_sat.pop("planner")
@@ -1130,6 +1132,8 @@ class OrbitData:
                         mission_sat.pop("missionProfile")
                     if "mission" in mission_sat:
                         mission_sat.pop("mission")
+                    if "spacecraftBus" in mission_sat and "components" in mission_sat["spacecraftBus"]:
+                        mission_sat["spacecraftBus"].pop("components")
 
                     if scenario_sat != mission_sat:
                         return True

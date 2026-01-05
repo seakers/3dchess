@@ -295,7 +295,7 @@ class EventObservationTask(GenericObservationTask):
         )
 
     def __repr__(self):
-        return f'EventObservationTask({self.id.split("-")[0]})'
+        return self.id
     
     def to_dict(self) -> dict:
         """ Convert the task to a dictionary. """

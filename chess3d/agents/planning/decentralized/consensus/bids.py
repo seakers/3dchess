@@ -629,7 +629,7 @@ class Bid:
 
         # update copy according to comparison result
         if comp_result is BidComparisonResults.UPDATE:      new_bid.__update_info(other, t_comp)
-        elif comp_result is BidComparisonResults.RESET:     new_bid.reset(other, t_comp)
+        elif comp_result is BidComparisonResults.RESET:     new_bid.reset(t_comp, other=other)
         elif comp_result is BidComparisonResults.LEAVE:     new_bid.__leave(other, t_comp)
         else: raise ValueError(f'cannot perform update of type `{comp_result}`')
         
@@ -649,9 +649,9 @@ class Bid:
             - t_comp (`float` or `int`): latest time when this bid was updated
         """
         # check if other bid has valid values
-        assert other.winner != self.NONE, f'cannot update bid information with a bid that has no winner.'
-        assert other.winning_bid > 0, f'cannot update bid information with a bid that has non-positive winning bid value.'
-        assert other.t_img in other.task.availability, f'`t_img` value `{other.t_img}` not in task availability interval `{other.task.availability}`'
+        # assert other.winner != self.NONE, f'cannot update bid information with a bid that has no winner.'
+        # assert other.winning_bid > 0, f'cannot update bid information with a bid that has non-positive winning bid value.'
+        assert other.winner == self.NONE or other.t_img in other.task.availability, f'`t_img` value `{other.t_img}` not in task availability interval `{other.task.availability}`'
         assert other.t_bid <= other.t_img, f'bid cannot be generated at a time `t_bid` `{other.t_bid}` later than the desired imaging time `t_img` `{other.t_img}`'
 
 
