@@ -113,9 +113,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if (incoming_bids or self.incoming_event_tasks) and self._debug:
-            self._log_results('CONSENSUS PHASE - RESULTS (BEFORE)', state, self.results)
-            self._log_bundle('CONSENSUS PHASE - BUNDLE (BEFORE)', state, self.bundle)
+        # if (incoming_bids or self.incoming_event_tasks) and self._debug:
+        #     self._log_results('CONSENSUS PHASE - RESULTS (BEFORE)', state, self.results)
+        #     self._log_bundle('CONSENSUS PHASE - BUNDLE (BEFORE)', state, self.bundle)
 
         if performed_observations and self._debug:
             x = 1 # debug breakpoint
@@ -708,8 +708,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # DEBUG PRINTOUTS----------------
         if self._debug:
-            self._log_results('PLANNING PHASE - RESULTS (BEFORE)', state, self.results)
-            self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
+            # self._log_results('PLANNING PHASE - RESULTS (BEFORE)', state, self.results)
+            # self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
             x = 1 # breakpoint
         # -------------------------------
 
@@ -725,7 +725,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if self._debug:
+        if self._debug and new_bids:
             self._log_results('PLANNING PHASE - RESULTS (AFTER)', state, self.results)
             self._log_bundle('PLANNING PHASE - BUNDLE (AFTER)', state, self.bundle)
             x = 1 # breakpoint

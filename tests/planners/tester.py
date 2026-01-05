@@ -70,8 +70,8 @@ class PlannerTester(ABC):
                             "ecc": 0.01,
                             "inc": 60.0,
                             "raan": 0.0,
-                            "aop": 0.0,
-                            "ta": 98.0
+                            "aop": 98.0,
+                            "ta": 0.0
                         }
                     },
                     "planner" : {

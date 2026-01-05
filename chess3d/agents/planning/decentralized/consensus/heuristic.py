@@ -808,6 +808,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         obs_names_best : Dict[GenericObservationTask, list[str]] = defaultdict(list)
         vals_best : Dict[GenericObservationTask, list[float]] = defaultdict(list)
 
+        # initialize search for best sequence for each task
+        best_values : dict = {task : np.NINF for task in modified_tasks}
+
         # find best observation sequences for each parent task
         for task in modified_tasks:
             # assume parent task has been considered in results
@@ -839,16 +842,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
             # sort by observation time
             available_obs_times.sort(key=lambda x: x[0])
-            
-            if scheduled_obs_times:
-                x = 1 # debug breakpoint
 
             # collect feasible sequences
             feasible_sequences = self._find_feasible_observation_sequences_for_task(state, task, available_obs_times)
-
-            # initialize search for best sequence
-            best_value = np.NINF
-
+            
             # find sequence that maximizes value for this agent
             for obs_names,obs_times,obs_look_angles,obs_tasks in feasible_sequences:
                 # initiate sequence value tracker
@@ -915,11 +912,21 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                             except KeyError:
                                 existing_bid : Bid = self.results[task][n_obs]
 
+                            # get mutex bids for this observation
+                            following_bids = [
+                                                mutex_bid
+                                                for mutex_bid in self.results[task]
+                                                if mutex_bid.n_obs > n_obs
+                                                and mutex_bid.winner != state.agent_name
+                                            ]
+                            mutex_bids = [existing_bid] + following_bids
+
+                            # determine if bid is accepted
                             accept_bid = [
-                                # 1) I am the current bid winner
-                                existing_bid.winner == state.agent_name,
-                                # 2) proposed observation value outperforms existing bid
-                                obs_value > existing_bid.winning_bid,
+                                # 1) I am the current bid winner and proposed observation value is positive
+                                existing_bid.winner == state.agent_name and obs_value > 0.0,
+                                # 2) proposed observation value outperforms existing winning bids for all mutex bids
+                                all(obs_value > mutex_bid.winning_bid for mutex_bid in mutex_bids),
                                 # 3) proposed earlier observation time and optimistic bidding counter allows it
                                 t_obs < existing_bid.t_img 
                                     and self.optimistic_bidding_counters[task][n_obs] > 0
@@ -948,9 +955,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 total_seq_value = sum(seq_values)                
 
                 # check if this sequence outperforms previous best
-                if total_seq_value > best_value:
+                if total_seq_value > best_values[task]:
                     # update best sequence value and sequence
-                    best_value = total_seq_value
+                    best_values[task] = total_seq_value
 
                     # update to best sequence trackers
                     n_obs_best[task] = n_obs_seq
@@ -959,8 +966,8 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     obs_names_best[task] = obs_names
                     vals_best[task] = seq_values  
 
-        # check if a best sequence was found for all modified parent tasks
-        if best_value < 0.0:
+        # check if a sequence was found for all modified parent tasks
+        if any(value < 0.0 for value in best_values.values()):
             return None, None, None
 
         # -------------------------------
@@ -1066,18 +1073,37 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # perform dfs to find feasible sequences
         while dfs_queue:
             # pop current sequence from stack
-            current_sequence = dfs_queue.pop()           
-            
-            # evaluate current sequence
-            accept_sequence = [
-                # meets minimum length requirements
-                len(current_sequence) >= min_seq_length, 
-                # includes minimum number of observations from this agent
-                sum(1 for _,agent_name,_,_ in current_sequence 
-                   if agent_name == state.agent_name) >= min_seq_length,               
-            ]
-            if all(accept_sequence):
-                # decompose sequence into component lists
+            current_sequence = dfs_queue.pop()
+
+            # unpack last proposed observation in sequence
+            t_img,agent_obs,*_ = current_sequence[-1]            
+    
+            # if last observation is from another agent, check consistency with known results
+            if agent_obs != state.agent_name:
+                # determine observation number for this observation
+                n_obs = len(current_sequence) + len(performed_bids) - 1
+
+                # check if bid for this observation exists
+                if task not in self.results:
+                    # no matching bids exist for this task; cannot add as start point
+                    continue
+                elif len(self.results[task]) <= n_obs:
+                    # matching no bids exist for this observation number; cannot add successor
+                    continue
+                elif self.results[task][n_obs].winner != agent_obs:
+                    # known bid for this observation number is from another agent; cannot add as start point
+                    continue
+                elif abs(self.results[task][n_obs].t_img - t_img) > self.EPS:
+                    # observation time for this observation number does not match; cannot add as start point
+                    continue
+                # --- IGNORE AND PRUNE ---
+
+            # check if current sequence can be accepted
+            if (len(current_sequence) >= min_seq_length                 # meets minimum length requirements
+                and sum(1 for _,agent_name,_,_ in current_sequence      # includes minimum number of observations from this agent
+                   if agent_name == state.agent_name) >= min_seq_length 
+                ):
+                # sequence can be accepted; decompose sequence into component lists
                 obs_names = [agent_name for _,agent_name,_,_ in current_sequence]
                 obs_times = [t_img for t_img,_,_,_ in current_sequence]
                 obs_look_angles = [look_angle for _,_,look_angle,_ in current_sequence]
@@ -1085,37 +1111,95 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 
                 # add to feasible sequences
                 feasible_sequences.append((obs_names, obs_times, obs_look_angles, obs_tasks))               
-            
-            
+
             # check for available successors
             successors = [obs for obs in available_obs
                           if obs[0] > current_sequence[-1][0]]
 
-            # iterate through successors
+            # queue successors
             for obs_next in successors:
-                # unpack proposed successor observation
-                t_next,agent_next,*_ = obs_next
-                
-                # if successor is from another agent, check consistency with results
-                if agent_next != state.agent_name:
-                    # check successor's bid for this observation exists
-                    n_obs_next = len(current_sequence) + len(performed_bids)
-
-                    if len(self.results[task]) <= n_obs_next:
-                        # matching no bids exist for this observation number; cannot add successor
-                        continue
-                    elif self.results[task][n_obs_next].winner != agent_next:
-                        # bid for this observation number is from another agent; cannot add successor
-                        continue
-                    elif abs(self.results[task][n_obs_next].t_img - t_next) > self.EPS:
-                        # bid for this observation number does not match successor; cannot add successor
-                        continue
-                    # --- IGNORE ---
-
                 # create new sequence with successor added
                 new_sequence = [obs for obs in current_sequence] + [obs_next]
 
                 # add new sequence to dfs stack
-                dfs_queue.append(new_sequence)            
+                dfs_queue.append(new_sequence)
 
+        # return feasible sequences
         return feasible_sequences
+
+        # BKP: previous version below
+        # # seed dfs with initial observations from this agent
+        # for obs in available_obs: 
+            # # unpack proposed initial observation
+            # t_img,agent_obs,*_ = obs
+            # n_obs = 0
+    
+            # # if observing is from another agent, check consistency with results
+            # if agent_obs != state.agent_name:
+            #     if task not in self.results:
+            #         # no matching bids exist for this task; cannot add as start point
+            #         continue
+            #     elif self.results[task][n_obs].winner != agent_obs:
+            #         # known bid for this observation number is from another agent; cannot add as start point
+            #         continue
+            #     elif abs(self.results[task][n_obs].t_img - t_img) > self.EPS:
+            #         # observation time for this observation number does not match; cannot add as start point
+            #         continue
+            #     # --- IGNORE ---
+
+        #     dfs_queue.append([obs])
+
+        # # perform dfs to find feasible sequences
+        # while dfs_queue:
+            # # pop current sequence from stack
+            # current_sequence = dfs_queue.pop()           
+            
+            # # evaluate current sequence
+            # accept_sequence = [
+            #     # meets minimum length requirements
+            #     len(current_sequence) >= min_seq_length, 
+            #     # includes minimum number of observations from this agent
+            #     sum(1 for _,agent_name,_,_ in current_sequence 
+            #        if agent_name == state.agent_name) >= min_seq_length,               
+            # ]
+            # if all(accept_sequence):
+            #     # decompose sequence into component lists
+            #     obs_names = [agent_name for _,agent_name,_,_ in current_sequence]
+            #     obs_times = [t_img for t_img,_,_,_ in current_sequence]
+            #     obs_look_angles = [look_angle for _,_,look_angle,_ in current_sequence]
+            #     obs_tasks = [spec_task for _,_,_,spec_task in current_sequence]
+                
+            #     # add to feasible sequences
+            #     feasible_sequences.append((obs_names, obs_times, obs_look_angles, obs_tasks))               
+            
+            
+            # # check for available successors
+            # successors = [obs for obs in available_obs
+            #               if obs[0] > current_sequence[-1][0]]
+
+            # # iterate through successors
+            # for obs_next in successors:
+        #         # unpack proposed successor observation
+        #         t_img,agent_next,*_ = obs_next
+                
+        #         # if successor is from another agent, check consistency with results
+        #         if agent_next != state.agent_name:
+                    # # check successor's bid for this observation exists
+                    # n_obs_next = len(current_sequence) + len(performed_bids)
+
+                    # if len(self.results[task]) <= n_obs_next:
+                    #     # matching no bids exist for this observation number; cannot add successor
+                    #     continue
+        #             elif self.results[task][n_obs_next].winner != agent_next:
+        #                 # bid for this observation number is from another agent; cannot add successor
+        #                 continue
+        #             elif abs(self.results[task][n_obs_next].t_img - t_img) > self.EPS:
+        #                 # bid for this observation number does not match successor; cannot add successor
+        #                 continue
+        #             # --- IGNORE ---
+
+                # # create new sequence with successor added
+                # new_sequence = [obs for obs in current_sequence] + [obs_next]
+
+                # # add new sequence to dfs stack
+                # dfs_queue.append(new_sequence)            
