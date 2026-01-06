@@ -1245,6 +1245,32 @@ class SimulationElementFactory:
         mission : Mission = missions[agent_dict['mission'].lower()].copy()
         
         # ensure deep copy 
+        if mission != missions[agent_dict['mission'].lower()]:
+            mission_a_dict = mission.to_dict()
+            mission_b_dict = missions[agent_dict['mission'].lower()].to_dict()
+
+            keys_a = set(mission_a_dict.keys())
+            keys_b = set(mission_b_dict.keys())
+
+            if len(keys_a) != len(keys_b) or keys_a != keys_b:
+                raise AssertionError("mission deep copy failed due to key mismatch.")
+            
+            for key in keys_a:
+                val_a = mission_a_dict[key]
+                val_b = mission_b_dict[key]
+
+                if isinstance(val_a, list) and isinstance(val_b, list):
+                    if len(val_a) != len(val_b):
+                        raise AssertionError(f"mission deep copy failed due to list length mismatch for key `{key}`: {len(val_a)} != {len(val_b)}")
+                    for item_a, item_b in zip(val_a, val_b):
+                        if item_a != item_b:
+                            for subkey in item_a.keys():
+                                if item_a[subkey] != item_b[subkey]:
+                                    raise AssertionError(f"mission deep copy failed due to list item mismatch for key `{key}`: {item_a} != {item_b}")
+                else:
+                    if val_a != val_b:
+                        raise AssertionError(f"mission deep copy failed due to value mismatch for key `{key}`: {val_a} != {val_b}")
+
         assert mission == missions[agent_dict['mission'].lower()], \
             f"mission copy failed. {mission} != {missions[agent_dict['mission'].lower()]}"
         assert mission is not missions[agent_dict['mission'].lower()], \

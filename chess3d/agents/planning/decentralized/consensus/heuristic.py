@@ -47,11 +47,68 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # set parameters
         self.heuristic = heuristic
 
+    def _build_bundle_from_preplan(self,
+                                    state : SimulationAgentState,
+                                    specs : object,
+                                    current_plan : Plan,
+                                    clock_config : ClockConfig,
+                                    orbitdata : OrbitData,
+                                    mission : Mission,
+                                    observation_history : ObservationHistory
+                                    ) -> tuple:    
+        """ Build bundle from latest periodic preplan. """
+        # compile instrument field of view specifications   
+        cross_track_fovs : dict = self._collect_fov_specs(specs)
+
+        # extract observations from plan
+        preplan_path : List[ObservationAction] = [action for action in current_plan if isinstance(action, ObservationAction)]
+        
+        # restrict observation opportunities access and look angles to match those in preplan
+        sorted_observation_opportunities : List[ObservationOpportunity] = []
+        for obs_action in preplan_path:
+            # create new observation opportunity with restricted access and look angles
+            restricted_obs_opp = ObservationOpportunity(
+                obs_action.obs_opp.tasks,
+                obs_action.instrument_name,
+                Interval(obs_action.t_start, obs_action.t_end),
+                obs_action.t_end-obs_action.t_start,
+                Interval(obs_action.look_angle, obs_action.look_angle),
+                obs_action.obs_opp.id
+            )
+
+            # add to sorted observation opportunities
+            sorted_observation_opportunities.append(restricted_obs_opp)
+
+        # build bundle using heuristic insertion method
+        proposed_bundle, proposed_path, proposed_bids = \
+              self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, sorted_observation_opportunities, orbitdata, mission, observation_history)
+        
+        # restore original observation opportunities in proposed bundle
+        for i_path,(obs_action,bundle_element,path_action) in enumerate(zip(preplan_path, proposed_bundle, proposed_path)):
+            # type hints
+            obs_action : ObservationAction
+            bundle_element : Tuple[ObservationOpportunity, Dict[GenericObservationTask, int]]
+            path_action : ObservationAction
+
+            # restore original observation opportunity in bundle
+            proposed_bundle[i_path] = (obs_action.obs_opp.copy(), bundle_element[1].copy())
+
+            # restore original observation opportunity in path
+            path_action.obs_opp = obs_action.obs_opp.copy()
+
+            # match id for scheduled actions
+            path_action.id = obs_action.id
+        
+        # return proposed bundle and path
+        return proposed_bundle, proposed_path, proposed_bids
+
     @runtime_tracker
-    def bundle_building_phase(self,
+    def _bundle_building_phase(self,
                        state : SimulationAgentState,
                        specs : object,
+                       current_plan : Plan,
                        tasks : List[GenericObservationTask],
+                       _ : ClockConfig,
                        orbitdata : OrbitData,
                        mission : Mission,
                        observation_history : ObservationHistory
@@ -61,7 +118,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         cross_track_fovs : dict = self._collect_fov_specs(specs)
 
         # Outline planning horizon interval
-        t_next = self.preplan.t_next if self.preplan is not None else np.Inf
+        t_next = current_plan.t_next
         planning_horizon = Interval(state.t, t_next)
 
         # get only available tasks from existing plan and urgent tasks
@@ -1061,7 +1118,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     prev_bids_self = [bid for bid in proposed_bids[task].values()
                                         if bid.t_img < obs.t_start]
                     previous_bids_other = [bid for bid in self.results[task]
-                                        if bid.winner != state.agent_name
+                                        if (bid.winner != state.agent_name)
                                         and bid.t_img < obs.t_start]
                     prev_bids = prev_bids_self + previous_bids_other
 

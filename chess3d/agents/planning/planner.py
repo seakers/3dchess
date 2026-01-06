@@ -184,7 +184,7 @@ class AbstractPlanner(ABC):
             f"Tasks have slew angles larger than the maximum allowed field of view."
 
         # return tasks
-        return filtered_observation_opps        
+        return sorted(filtered_observation_opps, key=lambda x: x.accessibility)
         
     @runtime_tracker
     def single_task_observation_opportunity_from_accesses(self,

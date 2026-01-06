@@ -308,7 +308,7 @@ class ObservationOpportunity:
         )
     
     def __eq__(self, other : 'ObservationOpportunity') -> bool:
-        assert isinstance(other, ObservationOpportunity), "Can only compare with another `ObservationOpportunity`."
+        assert isinstance(other, ObservationOpportunity), f"Can only compare with another `ObservationOpportunity`. is of type {type(other)}."
         return self.to_dict() == other.to_dict()
     
     def __hash__(self):
