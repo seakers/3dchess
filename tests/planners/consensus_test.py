@@ -19,7 +19,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.multiple_sat_lakes = False
 
         ## specific cases
-        self.toy_1 = True
+        self.toy_1 = False
         self.toy_2 = False
         self.toy_3 = False
         self.toy_4 = False
@@ -29,7 +29,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_8 = False
         self.toy_9 = False
         self.toy_10 = False
-        self.toy_11 = False
+        self.toy_11 = True
         self.toy_12 = False
         self.toy_13 = False
         self.toy_14 = False

@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from collections import defaultdict
 from itertools import chain
-from typing import Dict, List, Tuple
+from typing import Dict, List, Set, Tuple
 
 import logging
 
@@ -519,32 +519,57 @@ class ConsensusPlanner(AbstractReactivePlanner):
         for bid in incoming_bids:
             grouped_bids[bid.owner][bid.task].append(bid)
 
+        # sort incoming bids by observation number within each task
+        for other_agent,incoming_results in grouped_bids.items():
+            for task,bids in incoming_results.items():
+                # ensure incoming bids are sorted by observation number within each task
+                n_obs_max : Set[int] = set(range(max(bid.n_obs for bid in bids)+1))
+                n_obs_curr : Set[int] = {bid.n_obs for bid in bids}
+
+                # determine missing observation numbers
+                missing_n_obs : Set[int] = n_obs_max - n_obs_curr
+
+                # add empty bids as needed to fill in missing observation numbers
+                for n_obs in missing_n_obs:
+                    # add empty bid for missing observation number
+                    bids.append(Bid(task, other_agent, n_obs))
+
+                # sort bids by observation number
+                incoming_results[task] = sorted(bids, key=lambda b: b.n_obs)
+
         # iterate through grouped bids and compare with existing results
         for other_agent,incoming_results in grouped_bids.items():
             for task,bids in incoming_results.items():
-                # sort bids for each task by observation number and iterate through them
-                for incoming_bid in sorted(bids, key=lambda b: b.n_obs):
-                    # check if bid is for a new task or higher observation number
-                    new_task : bool = task not in self.results
-                    new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
+                # count number of existing and incoming bids
+                n_existing_bids = len(self.results[task]) if task in self.results else 0
+                n_incoming_bids = len(bids)
 
-                    # if new task or observation number, initialize in results
-                    if new_task or new_observation_number:
-                        # check if new task is even available at this time
-                        if not incoming_bid.task.is_available(state.t):
-                            # task not available; skip bid consideration
-                            continue
+                # check if task and bid observation numbers align with existing results
+                if task in self.results and n_incoming_bids < n_existing_bids:
+                    # task already exists and number of bids match existing results for this task;
+                    # add empty bids to incoming results for each missing observation numbers
+                    bids.extend([
+                        Bid(task, other_agent, n_obs) 
+                        for n_obs in range(n_incoming_bids, n_existing_bids)
+                    ])
+                elif task not in self.results or n_incoming_bids > n_existing_bids:
+                    # task does not they exist in results or more incoming bids than existing; 
+                    #  initialize missing elements in results with empty bids
+                    self.results[task].extend([
+                        Bid(task, state.agent_name, n_obs) 
+                        for n_obs in range(n_existing_bids, n_incoming_bids)
+                    ])
 
-                        # assume bids are received in order of observation numbers
-                        assert len(self.results[incoming_bid.task]) == incoming_bid.n_obs , \
-                            "Received bids for non-consecutive observation numbers."
-
-                        # add an empty bid for each missing observation number
-                        empty_bid = Bid(incoming_bid.task, state.agent_name, incoming_bid.n_obs)
-                        self.results[incoming_bid.task].append(empty_bid)
-
-                        # initialize optimistic bidding counter for new bid
-                        self.optimistic_bidding_counters[incoming_bid.task].append(self.optimistic_bidding_threshold)
+                    # initialize optimistic bidding counter for new bids
+                    self.optimistic_bidding_counters[task].extend([
+                        self.optimistic_bidding_threshold 
+                        for _ in range(n_existing_bids, n_incoming_bids)
+                    ])
+                
+                # process incoming bids
+                while bids:
+                    # get next incoming bid
+                    incoming_bid : Bid = bids.pop(0)
 
                     # get current bid for this task and observation number
                     current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
@@ -553,35 +578,36 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     updated_bid : Bid = current_bid.update(incoming_bid, state.t)
 
                     # update results with modified bid
-                    self.results[task][incoming_bid.n_obs] = updated_bid
+                    self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
 
-                    # if bid was changed; add updated bid to results updates
+                    # check if bid was changed
                     if updated_bid.has_different_winner_values(current_bid): 
+                        # add updated bid to results updates
                         results_updates.append(updated_bid)
+                    
+                    # check if both bids corresponded to a performed observation
+                    if current_bid.was_performed() and incoming_bid.was_performed():
+                        # both bids were performed; check which bid was the one that won the comparison
+                        if updated_bid.has_different_winner_values(current_bid):
+                            # current bid lost
+                            loser_bid : Bid = current_bid 
+                        elif updated_bid.has_different_winner_values(incoming_bid):
+                            # incoming bid lost
+                            loser_bid : Bid = incoming_bid
+                        else:
+                            # both bids are identical; skip
+                            continue
 
-                assert len(bids) <= len(self.results[task]), \
-                    "Results update error: More incoming bids than existing bids in results for this task."
+                        # there was a bid conflict; both need to be reflected in results
+                        # TODO test following lines
+                        raise NotImplementedError("Handling of conflicting performed bids not yet tested.")
+                        
+                        # modify losing bid to reflect updated observation number 
+                        loser_bid.n_obs += 1
 
-                # check for any missing observation numbers in bids
-                n_obs_l = len(bids)
-                n_obs_u = len(self.results[task])
+                        # add updated bid to list of bids to be processed
+                        bids.append(loser_bid)
 
-                if n_obs_l == n_obs_u: continue # no further bids to process
-
-                for current_bid in self.results[task][n_obs_l:n_obs_u]:
-                    # create empty bid for missing observation numbers
-                    empty_bid = Bid(task, other_agent, current_bid.n_obs)
-
-                    # compare incoming bid with existing bids for the same task
-                    updated_bid : Bid = current_bid.update(empty_bid, state.t)
-
-                    # update results with modified bid
-                    self.results[task][current_bid.n_obs] = updated_bid
-
-                    # if bid was changed; add updated bid to results updates
-                    if updated_bid.has_different_winner_values(current_bid): 
-                        results_updates.append(updated_bid)
-        
         # TEMP ensure all bids have this agent as the bidder and task matches. Remove after testing
         assert all(bid.owner == state.agent_name and bid.task == task
                    for task, bids in self.results.items() for bid in bids)
@@ -706,8 +732,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
             assert all(bid.n_obs == i_obs for i_obs, bid in enumerate(bids)), \
                 "Results bids are not sorted by observation number."
             
-            # check if last bid has no winner
-            if bids and not bids[-1].has_winner():
+            # remove any trailing bids without a winner
+            while bids and not bids[-1].has_winner():
                 # get bid to reset and remove from results
                 bid_to_reset : Bid = bids.pop(-1)
 
@@ -717,11 +743,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 # add to violations list
                 bids_in_violation.append(reset_bid) 
 
-            if any(not bid.has_winner() for bid in bids):
-                x = 1 # debug breakpoint
-                raise AssertionError("All bids except possibly the last one must have a winner.")
-
             if len(bids) <= 1: continue # no observation sequence to check for constraints
+            assert all(bid.has_winner() for bid in bids), \
+                "All bids in results must have a winner after comparing bids."
             
             # initialize search for constraint violations
             invalid_bid_idx : int = None

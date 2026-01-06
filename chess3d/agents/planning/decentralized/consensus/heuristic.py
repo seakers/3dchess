@@ -52,7 +52,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                     state : SimulationAgentState,
                                     specs : object,
                                     current_plan : Plan,
-                                    clock_config : ClockConfig,
+                                    _ : ClockConfig,
                                     orbitdata : OrbitData,
                                     mission : Mission,
                                     observation_history : ObservationHistory

@@ -852,7 +852,7 @@ class ExplicitCapabilityRequirement(CapabilityRequirement):
     
     def to_dict(self):
         d = super().to_dict()
-        d.update({"valid_values": list(self.valid_values)})
+        d.update({"valid_values": sorted(self.valid_values)})
         return d
 
     @classmethod

@@ -1266,6 +1266,10 @@ class SimulationElementFactory:
                         if item_a != item_b:
                             for subkey in item_a.keys():
                                 if item_a[subkey] != item_b[subkey]:
+                                    if isinstance(item_a[subkey],list):
+                                        for subitem_a, subitem_b in zip(item_a[subkey], item_b[subkey]):
+                                            if subitem_a != subitem_b:
+                                                raise AssertionError(f"mission deep copy failed due to list item mismatch for key `{key}` subkey `{subkey}`: {subitem_a} != {subitem_b}")
                                     raise AssertionError(f"mission deep copy failed due to list item mismatch for key `{key}`: {item_a} != {item_b}")
                 else:
                     if val_a != val_b:
