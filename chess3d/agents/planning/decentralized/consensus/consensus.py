@@ -175,10 +175,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
         expired_tasks = self._remove_expired_tasks(state)
 
         # check if new base plan is available
-        self.bundle, self.path, preplan_updates = self.__update_bundle_from_preplan(state, current_plan)
+        self.bundle, self.path, preplan_updates \
+            = self.__update_bundle_from_preplan(state, current_plan)
         
         # check if tasks in the bundle were performed by parent agent
-        self.bundle, self.path, performed_bundle_updates = self._update_performed_bundle(state, performed_observations)
+        self.bundle, self.path, performed_bundle_updates \
+            = self._update_performed_bundle(state, performed_observations)
 
         # compare results with incoming bids and update bundle
         comparison_updates = self._compare_incoming_bids(state, incoming_bids)
@@ -204,7 +206,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # update bundle and enforce constraints iteratively on results
         while True:
             # update bundle from results updates
-            self.bundle, self.path, constraint_bundle_updates = self._update_bundle_from_results(state)
+            self.bundle, self.path, constraint_bundle_updates \
+                = self._update_bundle_from_results(state)
 
             # enforce constraints in results
             constraint_violations = self._check_results_constraints(state)
@@ -220,7 +223,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # collect performed observation opportunities
         performed_observation_opportunities : List[ObservationOpportunity] \
             = [obs_opp for obs_opp,_ in performed_bundle_updates]
-        
+                
         # return lists of updates
         return results_updates, bundle_updates, performed_observation_opportunities   
 
@@ -292,13 +295,15 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # no new preplan available; return no updates
         return self.bundle, self.path, []
     
-    def _process_default_tasks(self, state: SimulationAgentState, tasks: List[DefaultMissionTask]) -> List[Bid]:
+    def _process_default_tasks(self, state: SimulationAgentState, tasks: List[GenericObservationTask]) -> List[Bid]:
         """ Processes new default mission tasks and updates results accordingly. """
         # initialize list of newly added bids from new tasks
         new_task_added = []
 
         # identify new default tasks
-        unknown_tasks = [task for task in tasks if task not in self.results]
+        unknown_tasks = [task for task in tasks 
+                         if isinstance(task, DefaultMissionTask)
+                         and task not in self.results]
         
         # process each default task
         for task in unknown_tasks:
@@ -328,9 +333,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
         self.incoming_event_tasks.extend(active_tasks)
                 
         # remove unavailable tasks from known task lists
-        if any([not task.is_available(state.t) for task in self.known_event_tasks]):
-            raise NotImplementedError("Removal of unavailable urgent tasks not yet implemented.")
-        self.known_event_tasks = {task for task in self.known_event_tasks if task.is_available(state.t)}
+        # if any([not task.is_available(state.t) for task in self.known_event_tasks]):
+        #     raise NotImplementedError("Removal of unavailable urgent tasks not yet implemented.")
+        # self.known_event_tasks = {task for task in self.known_event_tasks if task.is_available(state.t)}
         
         # identify new urgent tasks
         new_event_tasks = [task for task in self.incoming_event_tasks 
@@ -368,20 +373,34 @@ class ConsensusPlanner(AbstractReactivePlanner):
         expired_tasks = [task for task in self.results 
                          if not task.is_available(state.t)]
         
-        if expired_tasks: 
-            # TODO implement removal of expired tasks
-            raise NotImplementedError("Removal of expired tasks not yet tested.")
+        # if expired_tasks: 
+        #     # TODO implement removal of expired tasks
+        #     raise NotImplementedError("Removal of expired tasks not yet tested.")
         
         # remove expired tasks from results
         for task in expired_tasks:
             # remove task from results
             bids_removed = self.results.pop(task)
 
+            # # reset bids to empty list in results
+            # self.results[task] = []
+
             # remove optimistic bidding counters
             self.optimistic_bidding_counters.pop(task, None)
 
             # add removed bids to list
             removed_bids.extend(bids_removed)
+
+            # check if expired task was in the bundle
+            bundle_idx_to_remove = None
+            for bundle_idx,(_,tasks) in enumerate(self.bundle):
+                if task in tasks:
+                    bundle_idx_to_remove = bundle_idx
+                    break
+            
+            if bundle_idx_to_remove is not None:
+                # TODO ensure that this is not needed. Bids should not be placed for tasks that will expire before they are performed.
+                raise NotImplementedError("Removal of expired tasks from bundle not yet implemented.")
 
         # return list of removed bids
         return removed_bids
@@ -697,6 +716,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
                 # add to violations list
                 bids_in_violation.append(reset_bid) 
+
+            if any(not bid.has_winner() for bid in bids):
+                x = 1 # debug breakpoint
+                raise AssertionError("All bids except possibly the last one must have a winner.")
 
             if len(bids) <= 1: continue # no observation sequence to check for constraints
             
@@ -1224,9 +1247,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
         for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
 
+        # sort tasks by ID for consistent logging
+        tasks = sorted(results.keys(), key=lambda t: repr(t))
+
         i = 1
-        for task, bids in results.items():
+        for task in tasks:
             task : GenericObservationTask
+            bids : List[Bid] = results[task]
 
             if isinstance(task, EventObservationTask):
                 req_id_short = task.id.split('-')[-1]

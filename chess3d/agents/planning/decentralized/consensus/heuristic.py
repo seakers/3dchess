@@ -279,7 +279,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # DEBUG PRINTOUTS
         if self._debug:
         #     self._log_results('PROPOSED BIDS (DURING BUNDLE-BUILDING PHASE)', state, proposed_bids)
-            self._log_path('CURRENT PATH (DURING BUNDLE-BUILDING PHASE)', state, proposed_path)
+            # self._log_path('CURRENT PATH (DURING BUNDLE-BUILDING PHASE)', state, proposed_path)
             # self._log_bundle('BUNDLE (DURING BUNDLE-BUILDING PHASE)', state, proposed_bundle)
             x = 1
         # ------------------------------- 
@@ -306,15 +306,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             best_path : List[ObservationAction] = None
             best_path_utility : float = current_path_utility # must outperform current path
             best_bids : Dict[ObservationOpportunity, Dict[GenericObservationTask,Bid]] = None
-            
-            if "1" in state.agent_name:
-                x = 1 # debug breakpoint
 
             # Generate proposed paths using heuristic insertion path builder
             candidate_paths = self.__heuristic_insertion_path_builder(state, specs, proposed_path, proposed_observation)
-
-            if "1" in state.agent_name:
-                x = 1 # debug breakpoint
 
             # Find best placement in path   
             for candidate_path, path_changes in candidate_paths:

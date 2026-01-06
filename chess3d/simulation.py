@@ -1246,7 +1246,7 @@ class SimulationElementFactory:
         
         # ensure deep copy 
         assert mission == missions[agent_dict['mission'].lower()], \
-            "mission copy failed."
+            f"mission copy failed. {mission} != {missions[agent_dict['mission'].lower()]}"
         assert mission is not missions[agent_dict['mission'].lower()], \
             "mission deep copy failed."
 

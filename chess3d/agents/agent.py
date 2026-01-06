@@ -841,6 +841,9 @@ class SimulatedAgent(AbstractAgent):
                 # x = 1 # breakpoint
                 # -------------------------------------
 
+                # update tasks for only tasks that are available
+                self.__update_tasks(available_only=True)
+
                 # Modify current Plan      
                 self.plan : ReactivePlan = self.replanner.generate_plan(state, 
                                                                 self.specs,
