@@ -30,10 +30,12 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_9 = False
         self.toy_10 = False
         self.toy_11 = False
-        self.toy_12 = True
+        self.toy_12 = False
         self.toy_13 = False
-        self.toy_14 = False
+        self.toy_14 = True
         self.toy_15 = False
+        self.toy_16 = False
+        self.toy_17 = False
 
     def toy_planner_config(self):
         return {
@@ -1213,18 +1215,89 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
     def test_toy_case_14(self):
         """
         ## TOY CASE 14
-        Test case for a single satellite reacting to event announcements from an announcer with an existing pre-planned schedule.
+        Test case for a single satellite reacting to event announcements from an announcer with an existing pre-planned schedule with infinite planning horizon.
 
         """
         if not self.toy_14: return
 
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'toy_14'
+        scenario_name = f'toy_14-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_14'
+        mission_name = 'toy_missions'
+
+        # SAT0 : announcer satellite 
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_announcer'
+        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['mission'] = "toy_mission_14"
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_combined_planner_config()
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.0
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = -2.0
+        ractive_spacecraft_1['mission'] = "toy_mission_14"
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                       ractive_spacecraft_1
+                                                    ]
+                                                   )
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
+
     def test_toy_case_15(self):
         """
         ## TOY CASE 15
-        Test case for multiple satellites reacting to event announcements from an announcer with an existing pre-planned schedule.
+        Test case for multiple satellites reacting to event announcements from an announcer with an existing pre-planned schedule with infinite planning horizon.
 
         """
         if not self.toy_15: return
+
+    def test_toy_case_16(self):
+        """
+        ## TOY CASE 16
+        Test case for a single satellite reacting to event announcements from an announcer with an existing pre-planned schedule with a short planning horizon.
+
+        """
+        if not self.toy_16: return
+
+    def test_toy_case_17(self):
+        """
+        ## TOY CASE 17
+        Test case for multiple satellites reacting to event announcements from an announcer with an existing pre-planned schedule with a short planning horizon.
+
+        """
+        if not self.toy_17: return
 
     # def test_single_sat_announcer_toy(self):
         # # check for case toggle 

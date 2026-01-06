@@ -784,7 +784,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
     """
     BUNDLE-BUILDING PHASE - Bid Generation Methods
-    """
+    """    
     def _assign_best_observations_and_revisit_times_to_proposed_path(self,
                                                                      state : SimulationAgentState,  
                                                                      candidate_path : List[ObservationAction],
@@ -803,7 +803,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             - n_obs_best : Dict[int, Dict[GenericObservationTask, int]] - Best observation numbers for each observation in the proposed path.
             - t_prev_best : Dict[int, Dict[GenericObservationTask, float]] - Best previous observation times for each observation in the proposed path.
         """
-
         # extract modified task observation opportunities from path changes
         modified_observation_opportunities : List[ObservationOpportunity] = [obs_action.obs_opp for obs_action in path_changes]   
         modified_tasks : List[GenericObservationTask] =\
@@ -896,7 +895,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                             "Matching bid observation time does not match assigned observation time."
                         
                         # get observation value from winning bid
-                        obs_value = matching_bid.winning_bid
+                        task_value = matching_bid.winning_bid
 
                     else: # observation is to be performed by this agent
                         # assume specific task was defined
@@ -904,7 +903,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                             "Task observation opportunity not defined."
                         
                         #   estimate task value for this observation
-                        obs_value = self._estimate_task_value(task,
+                        task_value = self._estimate_task_value(task,
                                                             spec_task.instrument_name,
                                                             look_angle, 
                                                             t_obs,
@@ -919,11 +918,11 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                         
                         # compare task value estimate against existing bids for this observation number
 
-                        # if no existing bid, accept if:
+                        # if no existing bid for this observation number, accept if:
                         if n_obs >= len(self.results[task]):
                             accept_bid = [
                                 # 1) proposed observation value is positive 
-                                obs_value > 0.0
+                                task_value > 0.0
                             ]
                         # if there is an existing bid, accept if either:
                         else:
@@ -945,10 +944,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                             # determine if bid is accepted
                             accept_bid = [
                                 # 1) I am the current bid winner and proposed observation value is positive
-                                existing_bid.winner == state.agent_name and obs_value > 0.0,
-                                # 2) proposed observation value outperforms existing winning bids for all mutex bids
-                                all(obs_value > mutex_bid.winning_bid for mutex_bid in mutex_bids),
-                                # 3) proposed earlier observation time and optimistic bidding counter allows it
+                                existing_bid.winner == state.agent_name and task_value > 0.0,
+                                # 2) or if proposed observation value outperforms existing winning bids for all mutex bids
+                                all(task_value > mutex_bid.winning_bid for mutex_bid in mutex_bids),
+                                # 3) or if proposed earlier observation time and optimistic bidding counter allows it
                                 t_obs < existing_bid.t_img 
                                     and self.optimistic_bidding_counters[task][n_obs] > 0
                             ]
@@ -960,7 +959,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                             break
 
                     # accumulate sequence value
-                    seq_values.append(obs_value)     
+                    seq_values.append(task_value)     
                     t_prev_seq.append(t_prev) 
                     n_obs_seq.append(n_obs)     
 

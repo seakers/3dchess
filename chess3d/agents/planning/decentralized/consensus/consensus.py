@@ -233,67 +233,80 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                     ) -> Tuple[list, List[Bid]]:
         """ Update latest preplan if new plan is available. """
         # check if new periodic plan is available
-        if isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS:
-            # save new preplan
-            self.preplan : PeriodicPlan = current_plan.copy()
+        if not isinstance(current_plan, PeriodicPlan) or abs(state.t - current_plan.t) > self.EPS:
+            # no new preplan available; return no updates
+            return self.bundle, self.path, []
+    
+        # save new preplan
+        self.preplan : PeriodicPlan = current_plan.copy()
 
-            # obtain observations path from new preplan
-            preplan_path : List[ObservationAction] = \
-                  [action for action in current_plan if isinstance(action, ObservationAction)]
+        # obtain observations path from new preplan
+        preplan_path : List[ObservationAction] = \
+                [action for action in current_plan if isinstance(action, ObservationAction)]
 
-            # ensure all tasks in preplan observations are known in results
-            assert all((task in self.results for obs_action in preplan_path for task in obs_action.obs_opp.tasks)), \
-                "All tasks in preplan observations must be known in results."
-            
-            if any((isinstance(task, EventObservationTask) for obs_action in preplan_path for task in obs_action.obs_opp.tasks)):
-                raise NotImplementedError("Updating preplan bids with urgent tasks not yet implemented.")
+        # ensure all tasks in preplan observations are known in results
+        assert all((task in self.results for obs_action in preplan_path for task in obs_action.obs_opp.tasks)), \
+            "All tasks in preplan observations must be known in results."
+        
+        if any((isinstance(task, EventObservationTask) for obs_action in preplan_path for task in obs_action.obs_opp.tasks)):
+            raise NotImplementedError("Updating preplan bids with urgent tasks not yet implemented.")
+        
+        # check if there are observations in the bundle that have not been performed yet
+        if self.bundle:
+            # TODO release all tasks from current bundle
 
-            # get series of observation number and time for each task in preplan
-            n_obs, _ = self._count_observations_and_revisit_times_from_path(preplan_path)
+            # update results for removed tasks from current bundle
 
-            # calculate observation values for each preplanned observation
-            obs_values = [{task : obs_action.obs_opp.get_priority() # TODO implement preplan observation value calculation
-                           for task in obs_action.obs_opp.tasks}
-                          for _, obs_action in enumerate(preplan_path)]
+            # add changes to results updates
 
-            # create bundle from list of bids from new preplan observations
-            preplan_bundle_bids = [(obs_action.obs_opp, [Bid(task, state.agent_name, 
-                                                   n_obs[obs_idx][task], 
-                                                   obs_values[obs_idx][task],
-                                                   obs_values[obs_idx][task],
-                                                   state.agent_name, 
-                                                   obs_action.t_start, 
-                                                   current_plan.t, 
-                                                   {state.agent_name: current_plan.t}, 
-                                                   obs_action.instrument_name)
-                                  for task in obs_action.obs_opp.tasks] )
-                                  for obs_idx,obs_action in enumerate(preplan_path)]
-            
-            preplanned_bundle = [ (obs_opp, {bid.task: bid.n_obs for bid in bids}) 
-                                 for obs_opp, bids in preplan_bundle_bids]
+            # TEMP raise error for now
+            raise NotImplementedError("Releasing tasks from bundle not in new preplan not yet implemented.")
 
-            # update results with new preplan bids
-            for _, bids in preplan_bundle_bids:
-                for bid in bids:
-                    # add bid to results
-                    if bid.n_obs >= len(self.results[bid.task]):
-                        # assume bids are received in order of observation numbers
-                        assert len(self.results[bid.task]) == bid.n_obs, \
-                              "Received bids for non-consecutive observation numbers."
-                        # add an empty bid for each missing observation number
-                        self.results[bid.task].append(bid)
-                    else:
-                        # update existing bid
-                        self.results[bid.task][bid.n_obs] = bid
+        # get series of observation number and time for each task in preplan
+        n_obs,_ = self._count_observations_and_revisit_times_from_path(preplan_path)
 
-                    # initialize optimistic bidding counter for new bid
-                    self.optimistic_bidding_counters[bid.task].append(self.optimistic_bidding_threshold)
+        # calculate observation values for each preplanned observation
+        obs_values = [{task : 1e-6 # set to small value to avoid zero-division errors; will be updated later
+                        for task in obs_action.obs_opp.tasks}
+                        for _, obs_action in enumerate(preplan_path)]
 
-            # return new bundle and list of preplan updates
-            return preplanned_bundle, preplan_path, [bid for _, bids in preplan_bundle_bids for bid in bids]
+        # create bundle from list of bids from new preplan observations
+        preplan_bundle_bids = [(obs_action.obs_opp, [Bid(task, state.agent_name, 
+                                                n_obs[obs_idx][task], 
+                                                obs_values[obs_idx][task],
+                                                obs_values[obs_idx][task],
+                                                state.agent_name, 
+                                                obs_action.t_start, 
+                                                current_plan.t, 
+                                                {state.agent_name: current_plan.t}, 
+                                                obs_action.instrument_name)
+                                for task in obs_action.obs_opp.tasks] )
+                                for obs_idx,obs_action in enumerate(preplan_path)]
+        
+        preplanned_bundle = [ (obs_opp, {bid.task: bid.n_obs for bid in bids}) 
+                                for obs_opp, bids in preplan_bundle_bids]
 
-        # no new preplan available; return no updates
-        return self.bundle, self.path, []
+        # update results with new preplan bids
+        for _, bids in preplan_bundle_bids:
+            for bid in bids:
+                # add bid to results
+                if bid.n_obs >= len(self.results[bid.task]):
+                    # assume bids are received in order of observation numbers
+                    assert len(self.results[bid.task]) == bid.n_obs, \
+                            "Received bids for non-consecutive observation numbers."
+                    # add an empty bid for each missing observation number
+                    self.results[bid.task].append(bid)
+                else:
+                    # update existing bid
+                    self.results[bid.task][bid.n_obs] = bid
+
+                # initialize optimistic bidding counter for new bid
+                self.optimistic_bidding_counters[bid.task].append(self.optimistic_bidding_threshold)
+
+        # return new bundle and list of preplan updates
+        return preplanned_bundle, preplan_path, [bid for _, bids in preplan_bundle_bids for bid in bids]
+
+        
     
     def _process_default_tasks(self, state: SimulationAgentState, tasks: List[GenericObservationTask]) -> List[Bid]:
         """ Processes new default mission tasks and updates results accordingly. """
@@ -481,9 +494,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
             for task,bids in incoming_results.items():
                 incoming_results[task] = sorted(bids, key=lambda b: b.n_obs)
 
-        if grouped_bids:
-            x = 1 # debug breakpoint
-
         for other_agent,incoming_results in grouped_bids.items():
             for task,bids in incoming_results.items():
                 for incoming_bid in bids:
@@ -544,45 +554,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     # if bid was changed; add updated bid to results updates
                     if updated_bid.has_different_winner_values(current_bid): 
                         results_updates.append(updated_bid)
-            
-        # BKP TEMP disabled block processing incoming bids one by one. Remove after testing
-        # # process incoming bids
-        # for incoming_bid in incoming_bids:
-
-        #     # check if bid is for a new task or higher observation number
-        #     new_task : bool = incoming_bid.task not in self.results
-        #     new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
-
-        #     # if new task or observation number, initialize in results
-        #     if new_task or new_observation_number:
-        #         # check if new task is even available at this time
-        #         if not incoming_bid.task.is_available(state.t):
-        #             # task not available; skip bid consideration
-        #             continue
-
-        #         # assume bids are received in order of observation numbers
-        #         assert len(self.results[incoming_bid.task]) == incoming_bid.n_obs , \
-        #               "Received bids for non-consecutive observation numbers."
-
-        #         # add an empty bid for each missing observation number
-        #         empty_bid = Bid(incoming_bid.task, state.agent_name, incoming_bid.n_obs)
-        #         self.results[incoming_bid.task].append(empty_bid)
-
-        #         # initialize optimistic bidding counter for new bid
-        #         self.optimistic_bidding_counters[incoming_bid.task].append(self.optimistic_bidding_threshold)
-
-        #     # get current bid for this task and observation number
-        #     current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
-
-        #     # compare incoming bid with existing bids for the same task
-        #     updated_bid : Bid = current_bid.update(incoming_bid, state.t)
-
-        #     # update results with modified bid
-        #     self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
-
-        #     # if bid was changed; add updated bid to results updates
-        #     if updated_bid.has_different_winner_values(current_bid): 
-        #         results_updates.append(updated_bid)
         
         # TEMP ensure all bids have this agent as the bidder and task matches. Remove after testing
         assert all(bid.owner == state.agent_name and bid.task == task
@@ -803,7 +774,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
     def generate_plan(self, 
                       state : SimulationAgentState,
                       specs : object,
-                      _ : Plan,
+                      current_plan : Plan,
                       clock_config : ClockConfig,
                       orbitdata : OrbitData,
                       mission : Mission,
@@ -816,6 +787,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # do not modify plan
         # return current_plan.copy()
         # -------------------------------
+
+        # update bids for new preplan if available
+        self.__update_results_from_preplan(state, current_plan)
+
 
         # DEBUG PRINTOUTS----------------
         # if self._debug:
@@ -856,6 +831,16 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # return final plan
         return self.plan.copy()
+    
+    def __update_results_from_preplan(self,
+                                      state : SimulationAgentState,
+                                      current_plan : Plan):
+        """ Update results from preplan if available. """
+        # check if new periodic plan is available
+        if not isinstance(current_plan, PeriodicPlan) or abs(state.t - current_plan.t) > self.EPS:
+            return # no new preplan available; skip update
+        
+        raise NotImplementedError("Updating results from preplan not yet implemented.")
     
     @abstractmethod
     def bundle_building_phase(self,
