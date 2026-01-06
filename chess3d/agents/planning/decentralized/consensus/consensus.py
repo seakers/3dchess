@@ -634,7 +634,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     assert bid.has_winner(), \
                         "Cannot mark bid as performed if it has no winner."
                     assert bid.winner != state.agent_name, \
-                        "Bid should have been marked as performed by parent agent in previous step."
+                        "Bid should have been marked as performed by parent agent in previous steps."
                     
                     # mark bid as performed
                     bid.set_performed(state.t, performed=True, performer=bid.winner)
