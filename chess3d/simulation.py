@@ -1757,10 +1757,11 @@ class SimulationElementFactory:
                 model = replanner_dict.get('model', 'heuristicInsertion')
                 replan_threshold = replanner_dict.get('replanThreshold', 1)
                 optimistic_bidding_threshold = replanner_dict.get('optimisticBiddingThreshold', 1)
+                periodic_overwrite = bool(replanner_dict.get('periodicOverwrite', 'false').lower() in ['true', 't'])
 
                 if 'heuristic' in model:
                     heuristic = replanner_dict.get('heuristic', 'earliestAccess')
-                    replanner = HeuristicInsertionConsensusPlanner(heuristic, replan_threshold, optimistic_bidding_threshold, debug, logger)
+                    replanner = HeuristicInsertionConsensusPlanner(heuristic, replan_threshold, optimistic_bidding_threshold, periodic_overwrite, debug, logger)
                 else:
                     raise NotImplementedError(f'replanner model `{model}` not yet supported.')
             

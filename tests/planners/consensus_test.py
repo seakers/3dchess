@@ -19,7 +19,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.multiple_sat_lakes = False
 
         ## specific cases
-        self.toy_1 = False
+        self.toy_1 = True
         self.toy_2 = False
         self.toy_3 = False
         self.toy_4 = False
@@ -32,7 +32,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_11 = False
         self.toy_12 = False
         self.toy_13 = False
-        self.toy_14 = True
+        self.toy_14 = False
         self.toy_15 = False
         self.toy_16 = False
         self.toy_17 = False
@@ -49,7 +49,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             }
         }
     
-    def toy_combined_planner_config(self):
+    def toy_hollistic_planner_config(self):
         return {
             "preplanner": {
                 "@type": "heuristic",
@@ -65,6 +65,25 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                 "debug": "True"
             }
         }
+    
+    def toy_combined_planner_config(self):
+        return {
+            "preplanner": {
+                "@type": "worker",
+                "dealerName" : -1, # TODO need to define dealer name
+                "debug": "False",
+            },
+            "replanner": {
+                "@type": "consensus",
+                "model": "heuristicInsertion",
+                "heuristic" : "taskPriority",
+                "replanThreshold": 1,
+                "optimisticBiddingThreshold": 1,
+                "periodicOverwrite": "True",
+                "debug": "True"
+            }
+        }
+    
     
     def lakes_planner_config(self):
         return {
@@ -1113,7 +1132,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         ractive_spacecraft_1['@id'] = 'sat1_vnir'
         ractive_spacecraft_1['name'] = 'sat1'
-        ractive_spacecraft_1['planner'] = self.toy_combined_planner_config()
+        ractive_spacecraft_1['planner'] = self.toy_hollistic_planner_config()
         ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.0
         ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
@@ -1166,7 +1185,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         ractive_spacecraft_1['@id'] = 'sat1_vnir'
         ractive_spacecraft_1['name'] = 'sat1'
-        ractive_spacecraft_1['planner'] = self.toy_combined_planner_config()
+        ractive_spacecraft_1['planner'] = self.toy_hollistic_planner_config()
         ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 0.8 # slower maneuverability
         ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
@@ -1178,7 +1197,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
         ractive_spacecraft_2['@id'] = 'sat2_vnir'
         ractive_spacecraft_2['name'] = 'sat2'
-        ractive_spacecraft_2['planner'] = self.toy_combined_planner_config()
+        ractive_spacecraft_2['planner'] = self.toy_hollistic_planner_config()
         ractive_spacecraft_2['spacecraftBus']['components']['adcs']['maxRate'] = 0.8 # slower maneuverability
         ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
@@ -1241,7 +1260,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         ractive_spacecraft_1['@id'] = 'sat1_vnir'
         ractive_spacecraft_1['name'] = 'sat1'
-        ractive_spacecraft_1['planner'] = self.toy_combined_planner_config()
+        ractive_spacecraft_1['planner'] = self.toy_hollistic_planner_config()
         ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.0
         ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0

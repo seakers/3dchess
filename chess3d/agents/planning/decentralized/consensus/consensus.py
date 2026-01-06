@@ -39,18 +39,29 @@ class ConsensusPlanner(AbstractReactivePlanner):
                  model : str,
                  replan_threshold : int,
                  optimistic_bidding_threshold : int,
+                 periodic_overwrite : bool,
                  debug : bool = False,
                  logger: logging.Logger = None
                  ) -> None:
         super().__init__(debug, logger)
         """
-        # Consensus Couple-Constrained Planner
+        ## Consensus Couple-Constrained Planner
         
+        ### Arguments
+        - `model` (str): The consensus replanning model to use. Must be one of the defined models in `MODELS`.
+        - `replan_threshold` (int): The minimum number of new urgent tasks required to trigger replanning.
+        - `optimistic_bidding_threshold` (int): The number of consensus rounds to wait before abandoning optimistic bids for tasks without new bids.        
+        - `periodic_overwrite` (bool): Whether to overwrite results upon the generation of a new periodic plan.
+
+
         ## Bundle
         The Bundle is defined as a list of a tuple indicating the specific observation opportunity that was added to the plan, 
         and a dictionary that maps the observation number being bid on.
         
         """
+
+        # TODO implement periodic overwrite functionality
+        if periodic_overwrite: raise NotImplementedError("Periodic overwrite functionality not yet implemented.")
 
         # validate inputs
         assert isinstance(model, str), "Model must be a string."
@@ -78,6 +89,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         self.model = model
         self.replan_threshold = replan_threshold
         self.optimistic_bidding_threshold = optimistic_bidding_threshold
+        self.periodic_overwrite = periodic_overwrite
         self.t_share = -1   
 
         # replanning flags 
@@ -146,15 +158,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
     def __collect_incoming_bids(self, misc_messages : List[SimulationMessage]) -> List[Bid]:
         """ Collect bids from incoming messages and requests. """
-        # TODO include support for BidResultsMessage when re-enabled
+        # TODO include support for BidResultsMessage when re-enabled?
         
-        # TEMP use only MeasurementBidMessages. Disable after `BidResultsMessage` is supported
+        # TEMP use only MeasurementBidMessages. Disable after `BidResultsMessage` is supported?
         incoming_bids = [Bid.from_dict(msg.bid) 
                             for msg in misc_messages 
                             if isinstance(msg, MeasurementBidMessage)]
-
-        # sort bids by bid owner, task id, n_obs, t_img
-        return sorted(incoming_bids, key=lambda b: (b.owner, b.task.id, b.n_obs, b.t_img))
+        return incoming_bids
 
     def _consensus_phase(self,
                         state : SimulationAgentState,
@@ -506,18 +516,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # group bids by bidding agent 
         grouped_bids : Dict[str, Dict[GenericObservationTask, List[Bid]]] \
               = defaultdict(lambda: defaultdict(list))
-
         for bid in incoming_bids:
             grouped_bids[bid.owner][bid.task].append(bid)
 
-        # sort bids for each task by observation number
+        # iterate through grouped bids and compare with existing results
         for other_agent,incoming_results in grouped_bids.items():
             for task,bids in incoming_results.items():
-                incoming_results[task] = sorted(bids, key=lambda b: b.n_obs)
-
-        for other_agent,incoming_results in grouped_bids.items():
-            for task,bids in incoming_results.items():
-                for incoming_bid in bids:
+                # sort bids for each task by observation number and iterate through them
+                for incoming_bid in sorted(bids, key=lambda b: b.n_obs):
                     # check if bid is for a new task or higher observation number
                     new_task : bool = task not in self.results
                     new_observation_number : bool = (not new_task) and (incoming_bid.n_obs >= len(self.results[incoming_bid.task]))
@@ -828,15 +834,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
             self.bundle, self.path, new_bids = \
                 self._build_bundle_from_preplan(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
 
-            # ensure all observations in periodic plan have been added to the bundle
-            current_path = [action for action in current_plan if isinstance(action, ObservationAction)]
-            assert len(current_path) == len(self.path), \
-                "Not all observations from periodic plan were added to the bundle."
-            for obs_action, current_obs_action in zip(self.path, current_path):
-                assert obs_action.obs_opp == current_obs_action.obs_opp, \
-                    "Observation opportunities in new path do not match those in periodic plan."
-                assert obs_action == current_obs_action, \
-                    "Observations in new path do not match those in periodic plan."
+            # TODO ensure bids that were able to be added to bundle match observations in preplan
+            #   Not all observations from preplan will be added as some tasks may be outbid by other agents according to current results.
+
         else:
             # build new bundle and path according to replanning model
             self.bundle, self.path, new_bids = \

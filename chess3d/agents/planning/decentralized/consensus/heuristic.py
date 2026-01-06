@@ -37,9 +37,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                  heuristic : str = EARLIEST_ACCESS,
                  replan_threshold : int = 1, 
                  optimistic_bidding_threshold : int = 1,
+                 periodic_overwrite : bool = False,
                  debug : bool = False, 
                  logger : bool = None):
-        super().__init__(ConsensusPlanner.HEURISTIC_INSERTION, replan_threshold, optimistic_bidding_threshold, debug, logger)
+        super().__init__(ConsensusPlanner.HEURISTIC_INSERTION, replan_threshold, optimistic_bidding_threshold, periodic_overwrite, debug, logger)
 
         # validate inputs
         assert heuristic in self.HEURISTICS, f"Invalid heuristic '{heuristic}'. Must be one of {self.HEURISTICS}."
@@ -83,21 +84,49 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         proposed_bundle, proposed_path, proposed_bids = \
               self.__heuristic_insertion_bundle_builder(state, specs, cross_track_fovs, sorted_observation_opportunities, orbitdata, mission, observation_history)
         
+        if len(preplan_path) != proposed_path:
+            raise NotImplementedError("Testing for cases where not all observations from preplan are added to bundle not yet performed.")
+
+        # ensure that proposed bundle and path are of same length
+        assert len(proposed_bundle) == len(proposed_path), \
+            "Proposed bundle and path lengths do not match after building from preplan."
+
         # restore original observation opportunities in proposed bundle
-        for i_path,(obs_action,bundle_element,path_action) in enumerate(zip(preplan_path, proposed_bundle, proposed_path)):
+        for i_path,(bundle_element,path_action) in enumerate(zip(proposed_bundle, proposed_path)):
             # type hints
-            obs_action : ObservationAction
             bundle_element : Tuple[ObservationOpportunity, Dict[GenericObservationTask, int]]
             path_action : ObservationAction
 
+            # ensure observation opportunities match
+            assert bundle_element[0] == path_action.obs_opp, \
+                "Observation opportunities in proposed bundle and path do not match after building from preplan."
+
+            # find matching observation action in preplan
+            matching_obs_action = None
+            while preplan_path:
+                # get next observation action in the preplan path
+                obs_action : ObservationAction = preplan_path.pop(0)
+
+                # see if it matches the current proposed path action
+                if abs(obs_action.t_start-path_action.t_start) < 1e-6 and \
+                   abs(obs_action.t_end-path_action.t_end) < 1e-6 and \
+                     abs(obs_action.look_angle - path_action.look_angle) < 1e-6 and \
+                        obs_action.instrument_name == path_action.instrument_name:
+                    matching_obs_action = obs_action
+                    break
+
+            # ensure matching action was scheduled and found
+            assert matching_obs_action is not None, \
+                "Could not find matching observation action in preplan for proposed path action."
+
             # restore original observation opportunity in bundle
-            proposed_bundle[i_path] = (obs_action.obs_opp.copy(), bundle_element[1].copy())
+            proposed_bundle[i_path] = (matching_obs_action.obs_opp.copy(), bundle_element[1].copy())
 
             # restore original observation opportunity in path
-            path_action.obs_opp = obs_action.obs_opp.copy()
+            path_action.obs_opp = matching_obs_action.obs_opp.copy()
 
             # match id for scheduled actions
-            path_action.id = obs_action.id
+            path_action.id = matching_obs_action.id
         
         # return proposed bundle and path
         return proposed_bundle, proposed_path, proposed_bids
