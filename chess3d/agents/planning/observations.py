@@ -238,7 +238,7 @@ class ObservationOpportunity:
                 slew_angles_overlap,                                # slew angles overlap
                 not merged_accessibility.is_empty(),                # there exist a valid joint accessibility window 
                 # and not self.is_mutually_exclusive(other_task)      # TODO tasks with common parent tasks cannot be merged
-                not location_overlap                                # tasks do not observe the same target(s)
+                # not location_overlap                                # tasks do not observe the same target(s)
         ]   
 
         # Return if merge can occur

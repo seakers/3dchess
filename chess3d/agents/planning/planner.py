@@ -168,13 +168,14 @@ class AbstractPlanner(ABC):
                if all(not obs.is_mutually_exclusive(performed_obs) 
                       for performed_obs in self.last_performed_observations)] \
                 if self.last_performed_observations else observation_opps
-
+        
         # check if tasks are clusterable
         task_adjacency : Dict[str, set[ObservationOpportunity]] \
             = self.check_task_observation_opportunity_clusterability(filtered_observation_opps, must_overlap, threshold)
    
         # cluster tasks based on adjacency
-        combined_obs : list[ObservationOpportunity] = self.cluster_task_observation_opportunities(filtered_observation_opps, task_adjacency, must_overlap, threshold)
+        combined_obs : list[ObservationOpportunity] \
+            = self.cluster_task_observation_opportunities(filtered_observation_opps, task_adjacency, must_overlap, threshold)
 
         # add clustered tasks to the final list of tasks available for scheduling
         filtered_observation_opps.extend(combined_obs) 

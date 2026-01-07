@@ -146,7 +146,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # DEBUG PRINTOUTS
         if (results_updates or bundle_updates) and self._debug:
             self._log_results('CONSENSUS PHASE - RESULTS (AFTER)', state, self.results)
-            self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
+            # self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
+            self._log_path('CONSENSUS PHASE - PATH (AFTER)', state, self.path)
             x = 1 # debug breakpoint
         # -------------------------------
 
@@ -265,65 +266,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         return preplan_path
 
-        # # TODO add case for when there are urgent tasks in the preplan
-        # if any((isinstance(task, EventObservationTask) for obs_action in preplan_path for task in obs_action.obs_opp.tasks)):
-        #     raise NotImplementedError("Updating preplan bids with urgent tasks not yet implemented.")
-        
-        # # check if there are observations in the bundle that have not been performed yet
-        # if self.bundle:
-        #     # TODO release all tasks from current bundle
-
-        #     # update results for removed tasks from current bundle
-
-        #     # add changes to results updates
-
-        #     # TEMP raise error for now
-        #     raise NotImplementedError("Releasing tasks from bundle not in new preplan not yet implemented.")
-
-        # # get series of observation number and time for each task in preplan
-        # n_obs,_ = self._count_observations_and_revisit_times_from_path(preplan_path)
-
-        # # calculate observation values for each preplanned observation
-        # obs_values = [{task : 1e-6 # set to small value to avoid zero-division errors; will be updated later
-        #                 for task in obs_action.obs_opp.tasks}
-        #                 for _, obs_action in enumerate(preplan_path)]
-
-        # # create bundle from list of bids from new preplan observations
-        # preplan_bundle_bids = [(obs_action.obs_opp, [Bid(task, state.agent_name, 
-        #                                         n_obs[obs_idx][task], 
-        #                                         obs_values[obs_idx][task],
-        #                                         obs_values[obs_idx][task],
-        #                                         state.agent_name, 
-        #                                         obs_action.t_start, 
-        #                                         current_plan.t, 
-        #                                         {state.agent_name: current_plan.t}, 
-        #                                         obs_action.instrument_name)
-        #                         for task in obs_action.obs_opp.tasks] )
-        #                         for obs_idx,obs_action in enumerate(preplan_path)]
-        
-        # preplanned_bundle = [ (obs_opp, {bid.task: bid.n_obs for bid in bids}) 
-        #                         for obs_opp, bids in preplan_bundle_bids]
-
-        # # update results with new preplan bids
-        # for _, bids in preplan_bundle_bids:
-        #     for bid in bids:
-        #         # add bid to results
-        #         if bid.n_obs >= len(self.results[bid.task]):
-        #             # assume bids are received in order of observation numbers
-        #             assert len(self.results[bid.task]) == bid.n_obs, \
-        #                     "Received bids for non-consecutive observation numbers."
-        #             # add an empty bid for each missing observation number
-        #             self.results[bid.task].append(bid)
-        #         else:
-        #             # update existing bid
-        #             self.results[bid.task][bid.n_obs] = bid
-
-        #         # initialize optimistic bidding counter for new bid
-        #         self.optimistic_bidding_counters[bid.task].append(self.optimistic_bidding_threshold)
-
-        # # return new bundle and list of preplan updates
-        # return preplanned_bundle, preplan_path, [bid for _, bids in preplan_bundle_bids for bid in bids]       
-    
     def _process_default_tasks(self, state: SimulationAgentState, tasks: List[GenericObservationTask]) -> List[Bid]:
         """ Processes new default mission tasks and updates results accordingly. """
         # initialize list of newly added bids from new tasks
@@ -458,12 +400,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         performed_bundle_tasks = [ (obs_opp, obs_tasks) 
                                     for obs_opp, obs_tasks in self.bundle
-                                    if obs_opp in observed_opportunities ]
-
-        if performed_observations:
-            a = observed_opportunities[0]
-            b,_ = self.bundle[0]
-            x= 1 # debug breakpoint
+                                    if obs_opp in observed_opportunities]
 
         # iterate through performed bundle to mark bids as performed
         for obs_opp, obs_tasks in performed_bundle_tasks:     
@@ -710,7 +647,48 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         assert len(revised_bundle) + len(self.bundle[min_updated_idx:]) == init_bundle_size, \
             "Revised bundle size does not match initial bundle size."
+
+        # ensure number of bids match bundle entries
+        ## get bids won by this agent from results
+        winning_bids = [bid for bids in self.results.values()
+                        for bid in bids if bid.winner == state.agent_name
+                        and not bid.was_performed()]
+        bids_in_bundle = [self.results[task][n_obs] 
+                            for _,obs_tasks in revised_bundle
+                            for task,n_obs in obs_tasks.items()]
         
+        ## count and compare with bundle size
+        total_won_bids = len(winning_bids)
+        total_bundle_entries = len(bids_in_bundle)
+        
+        # DEBUG PRINTOUTS --------
+        if self._debug and total_bundle_entries != total_won_bids:
+            print(f'ERROR: Mismatch between winning bids ({total_won_bids}) and bundle entries ({total_bundle_entries}):')
+            self._log_results('CONSENSUS PHASE - RESULTS (INVALID)', state, self.results)
+            self._log_bundle('CONSENSUS PHASE - BUNDLE (INVALID)', state, revised_bundle)        
+
+            if total_bundle_entries < total_won_bids:                
+                missing_bids : Set[Bid] = set(winning_bids) - set(bids_in_bundle)
+                out = f'Bids in results but not in bundle ({len(missing_bids)}):\n'
+            else:
+                missing_bids : Set[Bid] = set(bids_in_bundle) - set(winning_bids)
+                out = f'Bids in bundle but not in results ({len(missing_bids)}):\n'
+
+            for bid in missing_bids:
+                out += f' - {repr(bid)}\n'
+            print(out)
+        #-------------------------
+
+        assert total_won_bids == total_bundle_entries, \
+            "Number of winning bids does not match number of bundle entries."
+        
+        ## check that every bundle entry corresponds to a winning bid
+        for _, obs_tasks in revised_bundle:
+            for task, n_obs in obs_tasks.items():
+                bid : Bid = self.results[task][n_obs]
+                assert bid.winner == state.agent_name, \
+                    "Bundle entry does not correspond to a winning bid."
+
         # collect list of observation opportunities in the revised bundle 
         obs_opps_in_revised_bundle = {obs_opp for obs_opp,_ in revised_bundle}
         
@@ -858,8 +836,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             self.bundle, self.path, new_bids = \
                 self._build_bundle_from_preplan(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
 
-            # TODO ensure bids that were able to be added to bundle match observations in preplan
-            #   Not all observations from preplan will be added as some tasks may be outbid by other agents according to current results.
+            # TODO ensure bids that all observations that were able to be added to bundle match observations in preplan
 
         else:
             # build new bundle and path according to replanning model
@@ -954,7 +931,11 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     previous_bid : Bid = self.results[task][n_obs]
 
                     # reduce any optimistic bidding counters if needed  
-                    if previous_bid > bid and previous_bid.t_img > bid.t_img:
+                    if (previous_bid > bid                          # lower bid value
+                        and previous_bid.t_img > bid.t_img          # earlier imaging time
+                        and previous_bid.winner != state.agent_name # was not winning bid
+                        and bid.winner == state.agent_name          # is now winning bid
+                        ):
                         # bid was worsened; reduce optimistic bidding counter
                         self.optimistic_bidding_counters[task][n_obs] -= 1
 
@@ -965,11 +946,69 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     # update existing bid
                     self.results[task][n_obs] = bid
 
-        # ensure all bids meet requirements
+        # remove any trailing bids without a winner
         for task, bids in self.results.items():
-            # remove any trailing bids without a winner
             while bids and not bids[-1].has_winner():
                 bids.pop(-1)
+                
+        # ensure number of bids match bundle entries
+        try:
+            ## get bids won by this agent from results
+            winning_bids = [bid for bids in self.results.values()
+                            for bid in bids if bid.winner == state.agent_name
+                            and not bid.was_performed()]
+            bids_in_bundle = [self.results[task][n_obs] 
+                                for _,obs_tasks in self.bundle 
+                                for task,n_obs in obs_tasks.items()]
+        except IndexError as e:
+            print(f'ERROR: Mismatch between winning bids and bundle entries:')
+            self._log_results('CONSENSUS PHASE - RESULTS (INVALID)', state, self.results)
+            self._log_bundle('CONSENSUS PHASE - BUNDLE (INVALID)', state, self.bundle)
+
+            for _,obs_tasks in self.bundle:
+                for task,n_obs in obs_tasks.items():
+                    if n_obs >= len(self.results[task]):
+                        bid_in_results = task in new_bids and n_obs in new_bids[task]
+                        bid_with_winner = bid_in_results and new_bids[task][n_obs].has_winner()
+                        print(f' - Bundle entry for task {repr(task)} with n_obs={n_obs} exceeds results length {len(self.results[task])}.')
+                
+            x = 1
+            raise e
+        
+        ## count and compare with bundle size
+        total_won_bids = len(winning_bids)
+        total_bundle_entries = len(bids_in_bundle)
+        
+        # DEBUG PRINTOUTS --------
+        if self._debug and total_bundle_entries != total_won_bids:
+            print(f'ERROR: Mismatch between winning bids ({total_won_bids}) and bundle entries ({total_bundle_entries}):')
+            self._log_results('CONSENSUS PHASE - RESULTS (INVALID)', state, self.results)
+            self._log_bundle('CONSENSUS PHASE - BUNDLE (INVALID)', state, self.bundle)        
+
+            if total_bundle_entries < total_won_bids:                
+                missing_bids : Set[Bid] = set(winning_bids) - set(bids_in_bundle)
+                out = f'Bids in results but not in bundle ({len(missing_bids)}):\n'
+            else:
+                missing_bids : Set[Bid] = set(bids_in_bundle) - set(winning_bids)
+                out = f'Bids in bundle but not in results ({len(missing_bids)}):\n'
+
+            for bid in missing_bids:
+                out += f' - {repr(bid)}\n'
+            print(out)
+        #-------------------------
+
+        assert total_won_bids == total_bundle_entries, \
+            "Number of winning bids does not match number of bundle entries."
+        
+        ## check that every bundle entry corresponds to a winning bid
+        for _, obs_tasks in self.bundle:
+            for task, n_obs in obs_tasks.items():
+                bid : Bid = self.results[task][n_obs]
+                assert bid.winner == state.agent_name, \
+                    "Bundle entry does not correspond to a winning bid."
+
+        # ensure all bids meet requirements
+        for task, bids in self.results.items():
 
             # check every bid in results for this task
             for n_obs_idx, bid in enumerate(bids[1:], start=1):
@@ -987,30 +1026,16 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         or (prev_bid.t_img < bid.t_img and bid.winner == state.agent_name)
                 ]
                     
+                # DEBUG PRINTOUTS --------
                 if self._debug and not all(constraints):
+                    print(f'ERROR: generated invalid bids during bundle-building phase:')
                     self._log_results('INVALID GENERATED BIDS', state, self.results)
+                    x = 1 # breakpoint
+                #-------------------------
 
                 # check if any constraint is violated
                 assert all(constraints), \
                     "Generated bids violate constraints; cannot update results."
-                
-        # ensure number of bids match bundle entries
-        ## get bids won by this agent from results
-        winning_bids = {task : [bid for bid in bids if bid.winner == state.agent_name] 
-                        for task,bids in self.results.items()}
-        
-        ## count and compare with bundle size
-        total_won_bids = sum(len(bids) for bids in winning_bids.values())
-        total_bundle_entries = sum(len(obs_tasks) for _,obs_tasks in self.bundle)
-        assert total_won_bids == total_bundle_entries, \
-            "Number of winning bids does not match number of bundle entries."
-        
-        ## check that every bundle entry corresponds to a winning bid
-        for _, obs_tasks in self.bundle:
-            for task, n_obs in obs_tasks.items():
-                bid : Bid = self.results[task][n_obs]
-                assert bid.winner == state.agent_name, \
-                    "Bundle entry does not correspond to a winning bid."
         
         return        
 
@@ -1161,10 +1186,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 matching_bids = [bid for bid in self.results[task]
                                 if abs(bid.t_img - obs_act.t_start) <= self.EPS]
                 
-                assert matching_bids, \
-                   "Matching bid for observation in path not found in results. Was assigned without updating results."
-                assert len(matching_bids) <= 1, \
-                    "There should be at most one matching bid for the current time step."
+                # assert  (matching_bids), \
+                #    "Matching bid for observation in path not found in results. Was assigned without updating results."
+                assert len(matching_bids) == 1, \
+                    "There should only be one matching bid for the current time step."
 
                 matching_bid : Bid = matching_bids.pop()
 
@@ -1355,7 +1380,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 if bid.winner != bid.NONE:
                     line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t{bid.winner[0].lower()}{bid.winner[-1]}\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
                 else:
-                    line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\tn/a\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
+                    line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t\tn/a\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
                 out += line
                 i +=1
 
