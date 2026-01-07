@@ -871,7 +871,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         assert self.is_observation_path_valid(state, self.path, None, None, specs), "New observation path is not valid."   
 
         # update results
-        self.__update_results_from_bundle(new_bids)
+        self.__update_results_from_bundle(state, new_bids)
 
         # -------------------------------
         # DEBUG PRINTOUTS
@@ -929,8 +929,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         """
     
     def __update_results_from_bundle(self, 
+                                     state : SimulationAgentState,
                                      new_bids : Dict[GenericObservationTask, Dict[int, Bid]]
-                                    #  ) -> Dict[GenericObservationTask, List[Bid]]
                                     ) -> None:
         """ Update results dictionary from new bundle. """
         
@@ -966,10 +966,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     self.results[task][n_obs] = bid
 
         # ensure all bids meet requirements
-        # 1) previous task must be assigned
-        # 2) observation numbers must be consecutive
-        # 3) imaging times must be after previous imaging time
         for task, bids in self.results.items():
+            # remove any trailing bids without a winner
+            while bids and not bids[-1].has_winner():
+                bids.pop(-1)
+
+            # check every bid in results for this task
             for n_obs_idx, bid in enumerate(bids[1:], start=1):
                 # get previous bid to compare constraints with
                 prev_bid : Bid = bids[n_obs_idx - 1]
@@ -981,15 +983,35 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     # Constraint 1: Observation number must be consecutive
                     prev_bid.n_obs + 1 == bid.n_obs,
                     # Constraint 2: Imaging time must be after previous imaging time
-                    prev_bid.t_img <= bid.t_img
+                    (prev_bid.t_img <= bid.t_img and bid.winner != state.agent_name) \
+                        or (prev_bid.t_img < bid.t_img and bid.winner == state.agent_name)
                 ]
                     
+                if self._debug and not all(constraints):
+                    self._log_results('INVALID GENERATED BIDS', state, self.results)
+
                 # check if any constraint is violated
                 assert all(constraints), \
                     "Generated bids violate constraints; cannot update results."
+                
+        # ensure number of bids match bundle entries
+        ## get bids won by this agent from results
+        winning_bids = {task : [bid for bid in bids if bid.winner == state.agent_name] 
+                        for task,bids in self.results.items()}
         
-        # TODO enforce any constraints        
-
+        ## count and compare with bundle size
+        total_won_bids = sum(len(bids) for bids in winning_bids.values())
+        total_bundle_entries = sum(len(obs_tasks) for _,obs_tasks in self.bundle)
+        assert total_won_bids == total_bundle_entries, \
+            "Number of winning bids does not match number of bundle entries."
+        
+        ## check that every bundle entry corresponds to a winning bid
+        for _, obs_tasks in self.bundle:
+            for task, n_obs in obs_tasks.items():
+                bid : Bid = self.results[task][n_obs]
+                assert bid.winner == state.agent_name, \
+                    "Bundle entry does not correspond to a winning bid."
+        
         return        
 
     def _calculate_path_utility(self,
@@ -1308,7 +1330,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             bids : List[Bid] = results[task]
 
             if isinstance(task, EventObservationTask):
-                req_id_short = task.id.split('-')[-1]
+                req_id_short = f"{task.id.split('-')[-1]}    "
             else:
                 req_id_short = f'Default({int(task.location[0][-2])},{int(task.location[0][-1])})'
 

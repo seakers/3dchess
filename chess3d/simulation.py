@@ -780,15 +780,17 @@ class Simulation:
         # find observations that overlooked a given event's location
         matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)
                                  
-                                    # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],observation range [km],
-                                    # look angle [deg],incidence angle [deg],ground pixel along-track resolution [m],
-                                    # ground pixel cross-track resolution [m],grid index,instrument,agent name,time [s]  
-                                    for observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*_,instrument,agent_name,_ in observations_performed.values
+                                    # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],
+                                    # observation range [km],look angle [deg],incidence angle [deg],
+                                    # off-nadir axis angle [deg],ground pixel along-track resolution [m],
+                                    # ground pixel cross-track resolution [m],grid index,instrument,agent name,time [s]
+                                    for observer,gp_index_img,t_img,pnt_opt,lat_img,lon_img,*_,instrument,agent_name,_ in observations_performed.values
                                     
                                     if self.str2interval(t_img).overlaps(Interval(t_start, t_start+duration))
-                                    and abs(lat - lat_img) < 1e-3 
-                                    and abs(lon - lon_img) < 1e-3
+                                    and gp_index_img == gp_index
                                     and instrument.lower() in observations_reqs
+                                    and abs(lat - lat_img) <= 1e-3 
+                                    and abs(lon - lon_img) <= 1e-3
                                 ]
         matching_observations.sort(key= lambda a : a[6])
 

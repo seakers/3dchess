@@ -463,7 +463,7 @@
                             "req_type": "performance",
                             "attribute": "n_obs",
                             "strategy" : "discrete_intervals",
-                            "thresholds": [1, 10],
+                            "thresholds": [1, 100],
                             "scores": [0.1, 1.0]
                         },
                         {
@@ -471,7 +471,7 @@
                             "attribute": "revisit_time [s]",
                             "strategy" : "discrete_intervals",
                             "thresholds": [0, 7200],
-                            "scores": [0.1, 1.0]
+                            "scores": [0.1, 0.2]
                         }
                     ]
                 }
