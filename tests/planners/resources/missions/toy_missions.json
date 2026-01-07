@@ -531,7 +531,7 @@
                             "attribute": "revisit_time [s]",
                             "strategy" : "discrete_intervals",
                             "thresholds": [0, 7200],
-                            "scores": [0.1, 1.0]
+                            "scores": [0.1, 0.2]
                         }
                     ]
                 }

@@ -32,8 +32,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_11 = False
         self.toy_12 = False
         self.toy_13 = False
-        self.toy_14 = True
-        self.toy_15 = False
+        self.toy_14 = False
+        self.toy_15 = True
         self.toy_16 = False
         self.toy_17 = False
 
