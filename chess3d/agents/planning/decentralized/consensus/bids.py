@@ -313,6 +313,10 @@ class Bid:
             # 0. Sending agent claims the bid has been performed.
             if other.was_performed():
                 comp_result = self._case_other_thinks_bid_was_performed(other)
+            # 0.5. Receiving agent has marked bid as performed.
+            elif self.was_performed():
+                # receiving agent has marked bid as performed → leave info as is
+                comp_result = BidComparisonResults.LEAVE
 
             # 1. Sending agent claims itself as winner of this bid.
             elif other.believes_i_am_winning():
@@ -331,7 +335,8 @@ class Bid:
                 comp_result = self._case_other_has_no_winner(other)
 
             # 5. Fallback (should be unreachable)
-            else: raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.owner}` and bidder `{other.owner}`.')
+            else: 
+                raise ValueError(f'could not compare bids. Unknown case encountered between bids from bidder `{self.owner}` and bidder `{other.owner}`.')
 
             # return comparison result
             return comp_result

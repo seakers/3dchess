@@ -1438,6 +1438,102 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## TOY CASE 17
         Test case for multiple satellites with outdated information reacting to event announcements from an announcer.
 
+
+        Targets:
+        1) latitude,longitude = 0.0°, 0.0°
+
+        Contacts:
+        - Sat 1 and 3 contact: 2531.02[s] - 7200.0[s]
+        - Sat 1 target 1 access 1: 33.67[s] - 34.27[s]
+        - Sat 1 target 1 access 2: 5914.70[s] - 5915.32[s]
+        - Sat 2 and 3 contact: 0[s] - 5187.22[s]
+        - Sat 2 target 1 access 1: 755.61[s] - 756.19[s]
+        - Sat 2 target 1 access 2: 6636.75[s] - 6637.[s]
+
+        Timeline:
+        - T:0[s] Sat 2 and 3 contact starts
+
+        - T:0.001[s] Event 1 starts
+        - T:0.001[s] Event 1 announced to Satellites 1, 2, and 3
+
+        - T:0.001[s] Sat 1 determines it is winning n=1 for event 1 for t=33.67[s] 
+        - T:0.001[s] Sat 1 determines it is winning n=2 for event 1 for t=5914.70[s] 
+
+        - T:0.001[s] Sat 2 determines it is winning n=1 for event 1 for t=755.61[s]
+        - T:0.001[s] Sat 2 determines it is winning n=2 for event 1 for t=6636.75[s]
+
+        - T:0.001[s] Sat 2 informs Sat 3 that it is winning n=1 for event 1 for t=755.61[s]
+        - T:0.001[s] Sat 2 informs Sat 3 that it is winning n=2 for event 1 for t=6636.75[s]
+
+        - T:0.001[s] Sat 3 determines Sat 2 is winning n=1 for event 1 for t=755.61[s]
+        - T:0.001[s] Sat 3 determines Sat 2 is winning n=2 for event 1 for t=6636.75[s]
+
+        - T:33.67[s] Sat 1 performs observation n=1 of event 1
+
+        - T:755.61[s] Sat 2 performs observation n=1 of event 1
+        - T:755.61[s] Sat 2 informs Sat 3 that it performed n=1 for event 1 for t=755.61[s]
+        - T:755.61[s] Sat 3 determines that Sat 2 won n=1 for event 1 for t=755.61[s]
+        - T:755.61[s] Sat 3 determines Sat 2 is winning n=2 for event 1 for t=6636.75[s]
+
+        - T:2531.02[s] Sat 1 and 3 contact starts
+        - T:2531.02[s] Sat 1 informs Sat 3 that it performed n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 3 informs Sat 1 that Sat 2 performed n=1 for event 1 for t=755.61[s]
+
+        - T:2531.02[s] Sat 1 determines that it won n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 1 determines that Sat 2 won n=2 for event 1 for t=755.61[s]
+        - T:2531.02[s] Sat 1 determines it is winning n=3 for event 1 for t=5914.70[s]
+
+        - T:2531.02[s] Sat 3 determines that Sat 1 won n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 3 determines that Sat 2 won n=2 for event 1 for t=755.61[s]
+        - T:2531.02[s] Sat 3 determines that Sat 1 is winning n=3 for event 1 for t=5914.70[s]
+
+        - T:2531.02[s] Sat 3 informs Sat 2 that Sat 1 performed n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 3 informs Sat 2 that Sat 2 won n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 3 informs Sat 2 that Sat 1 is winning n=3 for event 1 for t=5914.70[s]
+
+        - T:2531.02[s] Sat 2 determines that Sat 1 won n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 2 determines that Sat 2 won n=2 for event 1 for t=755.61[s]
+        - T:2531.02[s] Sat 2 abandons n=2 for event 1 for t=6636.75[s]
+        - T:2531.02[s] Sat 2 determines that Sat 1 is winning n=3 for event 1 for t=5914.70[s]
+        - T:2531.02[s] Sat 2 determines it is winning n=4 for event 1 for t=6636.75[s]
+
+        - T:2531.02[s] Sat 2 informs Sat 3 that Sat 1 won n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 2 informs Sat 3 that it won n=2 for event 1 for t=755.61[s]
+        - T:2531.02[s] Sat 2 informs Sat 3 that it abandoned n=2 for event 1 for t=6636.75[s]
+        - T:2531.02[s] Sat 2 informs Sat 3 that Sat 1 is winning n=3 for event 1 for t=5914.70[s]
+        - T:2531.02[s] Sat 2 informs Sat 3 it is winning n=4 for event 1 for t=6636.75[s]
+
+        - T:2531.02[s] Sat 3 determines that Sat 1 won n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 3 determines that Sat 2 won n=2 for event 1 for t=755.61[s]
+        - T:2531.02[s] Sat 3 determines that Sat 1 is winning n=3 for event 1 for t=5914.70[s]
+        - T:2531.02[s] Sat 3 determines that Sat 2 is winning n=4 for event 1 for t=6636.75[s]
+
+        - T:2531.02[s] Sat 3 informs Sat 1 that Sat 1 won n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 3 informs Sat 1 that Sat 2 won n=2 for event 1 for t=755.61[s]
+        - T:2531.02[s] Sat 3 informs Sat 1 that Sat 1 is winning n=3 for event 1 for t=5914.70[s]
+        - T:2531.02[s] Sat 3 informs Sat 1 that Sat 2 is winning n=4 for event 1 for t=6636.75[s]
+
+        - T:2531.02[s] Sat 1 determines that Sat 1 won n=1 for event 1 for t=33.67[s]
+        - T:2531.02[s] Sat 1 determines that Sat 2 won n=2 for event 1 for t=755.61[s]
+        - T:2531.02[s] Sat 1 determines that Sat 1 is winning n=3 for event 1 for t=5914.70[s]
+        - T:2531.02[s] Sat 1 determines that Sat 2 is winning n=4 for event 1 for t=6636.75[s]
+
+        - T:5187.22[s] Sat 2 and 3 contact ends
+
+        - T:5914.70[s] Sat 1 performs observation n=3 of event 1
+        - T:5914.70[s] Sat 1 informs Sat 3 that it performed n=3 for event 1 for t=5914.70[s]
+
+        - T:5914.70[s] Sat 3 determines that Sat 1 won n=3 for event 1 for t=5914.70[s]
+        - T:5914.70[s] Sat 3 informs Sat 1 that Sat 1 performed n=3 for event 1 for t=5914.70[s]
+        - T:5914.70[s] Sat 3 informs Sat 1 that Sat 1 won n=3 for event 1 for t=5914.70[s]
+
+        - T:6636.75[s] Sat 2 performs observation n=4 of event 1
+        - T:6636.75[s] Sat 1 assumes Sat 2 performed observation n=4 of event 1 for t=6636.75[s]
+        - T:6636.75[s] Sat 3 assumes Sat 2 performed observation n=4 of event 1 for t=6636.75[s]
+
+        - T:7200.00[s] Event 2 ends
+        - T:7200.00[s] Sat 1 and 3 contact ends
+        - T:7200.00[s] Simulation ends
         """
         if not self.toy_17: return
 
