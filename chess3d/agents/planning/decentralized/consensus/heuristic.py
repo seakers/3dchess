@@ -818,7 +818,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 th_next = new_path[conflict_idx + 1].look_angle
             except IndexError:
                 t_next = np.inf # no next observation; set to infinity
-                t_next = th_img # no next observation; set to new task look angle
+                th_next = th_img # no next observation; set to new task look angle
 
             # calculate maneuver time between new task and next observation
             m_next = abs(th_next - th_img) / max_slew_rate

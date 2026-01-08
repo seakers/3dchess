@@ -25,7 +25,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_3 = False
         self.toy_4 = False
         self.toy_5 = False
-        self.toy_6 = False
+        self.toy_6 = True
         self.toy_7 = False
         self.toy_8 = False
         self.toy_9 = False
@@ -36,7 +36,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_14 = False
         self.toy_15 = False
         self.toy_16 = False
-        self.toy_17 = True
+        self.toy_17 = False
         # self.toy_18 = False
 
     def toy_planner_config(self):
