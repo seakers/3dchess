@@ -867,7 +867,8 @@ class SimulatedAgent(AbstractAgent):
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 self.__log_plan(self.plan, "REPLAN", logging.WARNING)
-                x = 1 # breakpoint
+                if "3" in state.agent_name:
+                    x = 1 # breakpoint
                 # -------------------------------------
 
         plan_out = self.get_next_actions(state)

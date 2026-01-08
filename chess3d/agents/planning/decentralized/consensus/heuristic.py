@@ -1117,7 +1117,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             if l_seq_curr > l_seq_best:
                 # shorter sequence; add empty bids to `new_bids` to cancel existing bids in results
                 for n_obs in range(l_seq_best, l_seq_curr):
-                    abandoned_bids[task][n_obs] = Bid(task, state.agent_name, n_obs)
+                    abandoned_bids[task][n_obs] = Bid(task, state.agent_name, n_obs, t_bid=state.t)
 
         # initiate bid lists for tasks in the proposed path based on best observation numbers and previous observation times
         new_bids : Dict[ObservationOpportunity, Dict[GenericObservationTask, Bid]] = defaultdict(dict)

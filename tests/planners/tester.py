@@ -6,6 +6,8 @@ from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
 class PlannerTester(ABC):
+    R = 6357.0 # Radius of the Earth [km]
+
     def setUp(self) -> None:        
         # test case toggles
         self.single_sat_toy : bool = False
@@ -66,7 +68,7 @@ class PlannerTester(ABC):
                         },
                         "state": {
                             "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                            "sma": 7078,
+                            "sma": 7078, # ~700 km altitude
                             "ecc": 0.01,
                             "inc": 60.0,
                             "raan": 0.0,

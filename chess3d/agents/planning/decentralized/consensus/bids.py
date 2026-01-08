@@ -351,14 +351,30 @@ class Bid:
             if self.winner == other.winner:
                 # both agents agree bid was performed and winner → leave info as is
                 return BidComparisonResults.LEAVE
-            elif self.t_stamps[self.winner] >= other.t_stamps[other.winner]:
-                # both agents agree bid was performed but disagree on the winner
-                #  receiver has the more recent bid → leave info as is
-                return BidComparisonResults.LEAVE
-            else:
-                # both agents agree bid was performed but disagree on the winner
-                #  sender has the more recent bid → update
+            elif abs(self.t_img - other.t_img) <= 1e-6 and not self.__wins_tie_breaker(other):
+                # both agents agree bid was performed and at what time but disagree on the winner;
+                #  sender wins the tie-breaker → update
                 return BidComparisonResults.UPDATE
+            elif abs(self.t_img - other.t_img) <= 1e-6 and self.__wins_tie_breaker(other):
+                # both agents agree bid was performed and at what time but disagree on the winner;
+                #  receiver wins the tie-breaker → leave info as is
+                return BidComparisonResults.LEAVE
+            elif self.t_img > other.t_img:
+                # both agents agree bid was performed but disagree on the winner and imaging time;
+                #  sender has an earlier imaging time → update
+                return BidComparisonResults.UPDATE
+            elif self.t_img < other.t_img:
+                # both agents agree bid was performed but disagree on the winner and imaging time;
+                #  receiver has an earlier imaging time → leave info as is
+                return BidComparisonResults.LEAVE
+            # elif self.t_stamps[self.winner] >= other.t_stamps[other.winner]:
+            #     # both agents agree bid was performed but disagree on the winner
+            #     #  receiver has the more recent bid → leave info as is
+            #     return BidComparisonResults.LEAVE
+            else:
+                # both agents agree bid was performed but disagree on the winner and imaging time;
+                #  receiver has an earlier imaging time → leave info as is
+                return BidComparisonResults.LEAVE
             
         # 0. Receiving agent does not believe the bid was performed.
         else:
