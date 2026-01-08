@@ -1449,6 +1449,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         - Sat 2 and 3 contact: 0[s] - 5187.22[s]
         - Sat 2 target 1 access 1: 755.61[s] - 756.19[s]
         - Sat 2 target 1 access 2: 6636.75[s] - 6637.[s]
+        - Sat 3 as relay: 2531.02[s] - 5187.22[s]
 
         Timeline:
         - T:0[s] Sat 2 and 3 contact starts
@@ -1471,6 +1472,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         - T:33.67[s] Sat 1 performs observation n=1 of event 1
 
         - T:755.61[s] Sat 2 performs observation n=1 of event 1
+        - T:755.61[s] Sat 3 determines it won n=1 for event 1 for t=755.61[s]
+
         - T:755.61[s] Sat 2 informs Sat 3 that it performed n=1 for event 1 for t=755.61[s]
         - T:755.61[s] Sat 3 determines that Sat 2 won n=1 for event 1 for t=755.61[s]
         - T:755.61[s] Sat 3 determines Sat 2 is winning n=2 for event 1 for t=6636.75[s]

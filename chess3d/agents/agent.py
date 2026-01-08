@@ -312,6 +312,57 @@ class AbstractAgent(Agent):
             return AgentAction.COMPLETED
         
         else: # no messages in inbox; wait for incoming messages
+            
+            # # check type of simulation clock
+            # if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
+            #     or isinstance(self._clock_config, EventDrivenClockConfig)) 
+            #     and self.external_inbox.empty()
+            #     ):
+            #     # clock is not real-time based; wait until incoming message transmissions are completed
+            #     receive_broadcast = asyncio.create_task(self.__wait_for_messages(t_curr))
+            # else:
+            #     # clock is real-time based; wait until actions are received or timeout expires
+            #     receive_broadcast = asyncio.create_task(self.external_inbox.get())
+
+            # # initiate broadcast timeout tasks
+            # timeout = asyncio.create_task(self.sim_wait(action.t_end - t_curr))
+
+            # # wait for first task to be completed
+            # done, _ = await asyncio.wait([timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
+
+            # # check which task was finished first 
+            # if receive_broadcast in done:
+            #     # messages were received before timeout
+            #     try:
+            #         # cancel timeout timer and end wait
+            #         timeout.cancel()
+            #         await timeout
+
+            #     except asyncio.CancelledError:
+            #         # get broadcast reception routine results
+            #         result = receive_broadcast.result()
+
+            #         # restore message to inbox so it can be processed during `sense()`
+            #         if result is not None:
+            #             await self.external_inbox.put(result)    
+
+            #         # update action completion status
+            #         return AgentAction.COMPLETED                
+
+            # else:
+            #     # timeout ended
+            #     try:
+            #         # cancel message wait
+            #         receive_broadcast.cancel()
+            #         await receive_broadcast
+
+            #     except asyncio.CancelledError:
+            #         # update action completion status
+            #         if self.external_inbox.empty():
+            #             return AgentAction.ABORTED
+            #         else:
+            #             return AgentAction.COMPLETED
+
 
             # check type of simulation clock
             if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
@@ -319,7 +370,7 @@ class AbstractAgent(Agent):
                 and self.external_inbox.empty()
                 ):
                 # give the agent time to finish processing messages before submitting a tic-request
-                t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
+                t_wait = 5e-3 if t_curr <= 1e-3 else 1e-5
                 await asyncio.sleep(t_wait)
 
             # initiate broadcast wait and timeout tasks
@@ -338,6 +389,10 @@ class AbstractAgent(Agent):
                     await timeout
 
                 except asyncio.CancelledError:
+                    # give the agent time to finish processing messages before continuing
+                    t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
+                    await asyncio.sleep(t_wait)
+
                     # restore message to inbox so it can be processed during `sense()`
                     await self.external_inbox.put(receive_broadcast.result())    
 
@@ -345,7 +400,7 @@ class AbstractAgent(Agent):
                     return AgentAction.COMPLETED                
 
             else:
-                # timouet ended
+                # timeout ended
                 try:
                     # cancel message wait
                     receive_broadcast.cancel()
@@ -357,6 +412,49 @@ class AbstractAgent(Agent):
                         return AgentAction.ABORTED
                     else:
                         return AgentAction.COMPLETED
+
+    async def __wait_for_messages(self, t_curr : float) -> None:
+        """ Waits for all incoming messages to be received at fixed time intervals. """
+        # initate received message list
+        msgs = []
+
+        # wait for messages until timeout
+        while True:
+            # set timeout time 
+            t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
+            await asyncio.sleep(t_wait)
+
+            # initiate broadcast wait and timeout tasks
+            receive_broadcast = asyncio.create_task(self.external_inbox.get())
+            real_clock_timeout = asyncio.create_task(asyncio.sleep(t_wait))
+
+            # wait for first task to be completed
+            done, _ = await asyncio.wait([real_clock_timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
+
+            # check which task was finished first
+            if receive_broadcast in done:
+                # messages were received before timeout; some might still be transmitted
+                try:
+                    # cancel timeout timer and end wait task
+                    real_clock_timeout.cancel()
+                    await real_clock_timeout
+
+                except asyncio.CancelledError:
+                    # restore message to inbox so it can be processed during `sense()`
+                    msgs.append(receive_broadcast.result())    
+            else:
+                # timeout ended before messages were received; no more messages expected
+                try:
+                    # cancel message wait task
+                    receive_broadcast.cancel()
+                    await receive_broadcast
+
+                except asyncio.CancelledError:
+                    # forward all received messages to inbox
+                    for msg in msgs: await self.external_inbox.put(msg)
+                    
+                    # return
+                    return 
                     
     @runtime_tracker
     async def perform_observation(self, action : ObservationAction) -> str:

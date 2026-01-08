@@ -418,21 +418,6 @@ class Simulation:
                     # ['Simulation Start Date', self.environment._clock_config.start_date], 
                     # ['Simulation End Date', self.environment._clock_config.end_date], 
 
-                    # Coverage Metrics #TODO add more
-                    ['Ground Points', n_gps],
-                    ['Ground Points Accessible', n_gps_accessible],
-                    ['Ground Points Observed', n_gps_observed],
-                    ['Ground Points Reobserved', n_gps_reobserved],
-                    ['Ground Point Observations', n_observations],
-                    ['Ground Points with Events', n_gps_with_events],
-
-                    ['Average GP Reobservation Time [s]', t_gp_reobservation['mean']],
-                    ['Standard Deviation of GP Reobservation Time [s]', t_gp_reobservation['std']],
-                    ['Median GP Reobservation Time [s]', t_gp_reobservation['median']],
-                    ['Average Event Reobservation Time [s]', t_event_reobservation['mean']],
-                    ['Standard Deviation of Event Reobservation Time [s]', t_event_reobservation['std']],
-                    ['Median Event Reobservation Time [s]', t_event_reobservation['median']],
-
                     # Counters
                     ['Events', n_events],
                     ['Events Observable', n_events_observable],
@@ -452,6 +437,21 @@ class Simulation:
                     ['Events Only Partially Co-observable', n_events_co_observable_partially],
                     ['Events Partially Co-observed', n_events_partially_co_obs],
                     ['Event Partial Co-observations', n_total_event_partially_co_obs],
+
+                    # Coverage Metrics #TODO add more
+                    ['Ground Points', n_gps],
+                    ['Ground Points Accessible', n_gps_accessible],
+                    ['Ground Points Observed', n_gps_observed],
+                    ['Ground Points Reobserved', n_gps_reobserved],
+                    ['Ground Point Observations', n_observations],
+                    ['Ground Points with Events', n_gps_with_events],
+
+                    ['Average GP Reobservation Time [s]', t_gp_reobservation['mean']],
+                    ['Standard Deviation of GP Reobservation Time [s]', t_gp_reobservation['std']],
+                    ['Median GP Reobservation Time [s]', t_gp_reobservation['median']],
+                    ['Average Event Reobservation Time [s]', t_event_reobservation['mean']],
+                    ['Standard Deviation of Event Reobservation Time [s]', t_event_reobservation['std']],
+                    ['Median Event Reobservation Time [s]', t_event_reobservation['median']],
 
                     # Ground-Point Coverage Probabilities
                     ['P(Ground Point Accessible)', np.round(p_gp_accessible,n_decimals)],

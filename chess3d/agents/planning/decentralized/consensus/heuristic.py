@@ -363,11 +363,11 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if self._debug:
+        # if self._debug:
         #     self._log_results('PROPOSED BIDS (DURING BUNDLE-BUILDING PHASE)', state, proposed_bids)
             # self._log_path('CURRENT PATH (DURING BUNDLE-BUILDING PHASE)', state, proposed_path)
             # self._log_bundle('BUNDLE (DURING BUNDLE-BUILDING PHASE)', state, proposed_bundle)
-            x = 1
+            # x = 1
         # ------------------------------- 
 
         # Add tasks to path iteratively based on heuristic
@@ -392,7 +392,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             best_path : List[ObservationAction] = None
             best_path_utility : float = current_path_utility # must outperform current path
             best_bids : Dict[ObservationOpportunity, Dict[GenericObservationTask,Bid]] = None
-            best_abandoned : Dict[GenericObservationTask, Dict[int, Bid]] = None
+            # best_abandoned : Dict[GenericObservationTask, Dict[int, Bid]] = None
 
             # Generate proposed paths using heuristic insertion path builder
             candidate_paths = self.__heuristic_insertion_path_builder(state, specs, proposed_path, proposed_observation)
@@ -408,7 +408,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 # -------------------------------
 
                 # find best observation sequence for each parent task of the proposed task in this candidate path
-                n_obs_candidate, t_prev_candidate, bids_candidate, abandoned_bids_candidate \
+                n_obs_candidate, t_prev_candidate, bids_candidate \
                     = self._assign_best_observations_and_revisit_times_to_proposed_path(state, candidate_path, path_changes, proposed_bids, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
                 # check if valid bids were found for proposed task
@@ -424,7 +424,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 best_path_utility = proposed_path_utility
                 best_path = candidate_path
                 best_bids = bids_candidate
-                best_abandoned = abandoned_bids_candidate
+                # best_abandoned = abandoned_bids_candidate
 
             # if no best path was found, continue to next proposed task
             if best_path is None: continue
@@ -468,15 +468,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 "Proposed path and bundle lengths do not match after bundle building phase."
 
             # compile list of updated proposed bids
-            updated_proposed_bids = defaultdict(dict)
-
-            # carryover proposed bids for previously abandoned bids
-            for task,bids in proposed_bids.items():
-                for bid in bids.values():
-                    # only add abandoned bids
-                    if bid.has_winner(): continue
-                    # add to updated proposed bids
-                    updated_proposed_bids[task][bid.n_obs] = bid.copy()
+            updated_proposed_bids : Dict[GenericObservationTask, Dict[int, Bid]] = defaultdict(dict)
 
             # iterate through new proposed bundle and update proposed bids
             for obs,tasks in proposed_bundle:
@@ -485,18 +477,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                     if obs in best_bids:
                         # observation was modified; update bids
                         updated_proposed_bids[task][n_obs] = best_bids[obs][task].copy()
+
+                        assert abs(updated_proposed_bids[task][n_obs].t_bid - state.t) < self.EPS, \
+                            "Bid time in updated proposed bids does not match current state time."
                     else:
                         # observation was not modified; retain existing proposed bids
                         updated_proposed_bids[task][n_obs] = proposed_bids[task][n_obs].copy()
-
-            # iterate through newly abandoned bids and update proposed bids
-            for task,bids in best_abandoned.items():
-                for n_obs,bid in bids.items():
-                    if task in updated_proposed_bids and n_obs in updated_proposed_bids[task]:
-                        # detected an abandoned bid already exists in proposed bids
-                        raise ValueError("Abandoned bid already exists in proposed bids.")
-                    
-                    updated_proposed_bids[task][n_obs] = bid.copy()
 
             # update list of proposed bids
             proposed_bids = updated_proposed_bids
@@ -1078,12 +1064,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
         # check if a sequence was found for all modified parent tasks
         if any(value < 0.0 for value in best_values.values()):
-            return None, None, None, None
+            return None, None, None #, None
 
         # -------------------------------
         # DEBUG BREAKPOINT
-        if self._debug:
-            x = 1
+        # if self._debug:
+        #     x = 1
         # -------------------------------
             
         # filter out observations from other agents in best sequences
@@ -1104,20 +1090,20 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                    for task in modified_tasks]), \
                "Not all observations from other agents were removed from best sequences."
         
-        # initiate list of abandoned bids
-        abandoned_bids : Dict[GenericObservationTask, Dict[int, Bid]] = defaultdict(dict)
+        # # initiate list of abandoned bids
+        # abandoned_bids : Dict[GenericObservationTask, Dict[int, Bid]] = defaultdict(dict)
 
-        # compare modified number of assigned observations for each modified task
-        for task in modified_tasks:
-            # count current sequence length for bids owned by this agent for a given task
-            l_seq_curr = len([bid for bid in self.results[task] if bid.winner == state.agent_name])
-            l_seq_best = len(n_obs_best[task])
+        # # compare modified number of assigned observations for each modified task
+        # for task in modified_tasks:
+        #     # count current sequence length for bids owned by this agent for a given task
+        #     l_seq_curr = len([bid for bid in self.results[task] if bid.winner == state.agent_name])
+        #     l_seq_best = len(n_obs_best[task])
 
-            # check if best sequence is shorter than sequence currently in results
-            if l_seq_curr > l_seq_best:
-                # shorter sequence; add empty bids to `new_bids` to cancel existing bids in results
-                for n_obs in range(l_seq_best, l_seq_curr):
-                    abandoned_bids[task][n_obs] = Bid(task, state.agent_name, n_obs, t_bid=state.t)
+        #     # check if best sequence is shorter than sequence currently in results
+        #     if l_seq_curr > l_seq_best:
+        #         # shorter sequence; add empty bids to `new_bids` to cancel existing bids in results
+        #         for n_obs in range(l_seq_best, l_seq_curr):
+        #             abandoned_bids[task][n_obs] = Bid(task, state.agent_name, n_obs, t_bid=state.t)
 
         # initiate bid lists for tasks in the proposed path based on best observation numbers and previous observation times
         new_bids : Dict[ObservationOpportunity, Dict[GenericObservationTask, Bid]] = defaultdict(dict)
@@ -1142,7 +1128,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                         "Previous observation time is not defined for observation number greater than zero."
 
                     # generate new bids for this observation if it is part of path changes
-                    new_bid = Bid(task, state.agent_name, n_obs, val, val, state.agent_name, t_img, state.t, main_measurement=obs.instrument_name)
+                    new_bid = Bid(task, state.agent_name, n_obs, val, val, state.agent_name, t_img, state.t, None, obs.instrument_name)
                     new_bids[obs.obs_opp][task] = new_bid
 
                     # assign best observation number and previous observation time
@@ -1184,18 +1170,18 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         
         # TODO assure assignments are consistent within candidate path
 
-        # ensure abandoned bids and new bids do not overlap
-        for _,bids in new_bids.items():
-            for task,bid in bids.items():
-                # check if bid is in abandoned bids but bid on in new bundle
-                if task in abandoned_bids and bid.n_obs in abandoned_bids[task]:
-                    # task belonged to an observation opportunity that was abandoned but 
-                    #  was rescheduled in new one when generating the new bundle; remove 
-                    #  bid from abandoned bids
-                    abandoned_bids[task].pop(bid.n_obs)
+        # # ensure abandoned bids and new bids do not overlap
+        # for _,bids in new_bids.items():
+        #     for task,bid in bids.items():
+        #         # check if bid is in abandoned bids but bid on in new bundle
+        #         if task in abandoned_bids and bid.n_obs in abandoned_bids[task]:
+        #             # task belonged to an observation opportunity that was abandoned but 
+        #             #  was rescheduled in new one when generating the new bundle; remove 
+        #             #  bid from abandoned bids
+        #             abandoned_bids[task].pop(bid.n_obs)
 
         # return updated observation numbers and previous observation times
-        return n_obs_candidate, t_prev_candidate, new_bids, abandoned_bids
+        return n_obs_candidate, t_prev_candidate, new_bids #, abandoned_bids
 
     def _find_feasible_observation_sequences_for_task(self,
                                                       state : SimulationAgentState,
