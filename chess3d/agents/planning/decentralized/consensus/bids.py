@@ -82,6 +82,8 @@ class Bid:
         assert t_img in task.availability or t_img == np.NINF, f'`t_img` value `{t_img}` not in task availability interval `{task.availability}`'
         assert isinstance(t_bid, (float, int)), f'`t_bid` must be of type `float` or `int`, got `{type(t_bid)}`'
         assert t_bid >= 0.0 or t_bid == np.NINF, f'`t_bid` must be non-negative, got `{t_bid}`'
+        assert t_bid <= t_img or t_img == np.NINF, \
+            f'bid cannot be generated at a time `t_bid` `{t_bid}` later than the desired imaging time `t_img` `{t_img}`'
         assert isinstance(t_stamps, dict), f'`t_stamps` must be of type `dict`, got `{type(t_stamps)}`'
         assert all(isinstance(k, str) and isinstance(v, (float, int)) for k,v in t_stamps.items()), f'`t_stamps` keys must be of type `str` and values of type `float` or `int`'
         assert isinstance(main_measurement, str), f'`main_measurement` must be of type `str`, got `{type(main_measurement)}`'
@@ -676,6 +678,8 @@ class Bid:
         # check proper update
         assert abs(new_bid.t_stamps[other.owner] - t_comp) < 1e-6, \
             f'timestamp for bidder `{other.owner}` was not properly updated to `{t_comp}` [s]'
+        assert new_bid.t_bid <= new_bid.t_img or new_bid.t_img == np.NINF, \
+            f'bid cannot be generated at a time `t_bid` `{new_bid.t_bid}` later than the desired imaging time `t_img` `{new_bid.t_img}`'
 
         # return updated bid
         return new_bid
@@ -691,9 +695,10 @@ class Bid:
         # check if other bid has valid values
         # assert other.winner != self.NONE, f'cannot update bid information with a bid that has no winner.'
         # assert other.winning_bid > 0, f'cannot update bid information with a bid that has non-positive winning bid value.'
-        assert other.winner == self.NONE or other.t_img in other.task.availability, f'`t_img` value `{other.t_img}` not in task availability interval `{other.task.availability}`'
-        assert other.t_bid <= other.t_img, f'bid cannot be generated at a time `t_bid` `{other.t_bid}` later than the desired imaging time `t_img` `{other.t_img}`'
-
+        assert other.winner == self.NONE or other.t_img in other.task.availability, \
+            f'`t_img` value `{other.t_img}` not in task availability interval `{other.task.availability}`'
+        assert other.t_bid <= other.t_img or other.t_img == np.NINF, \
+            f'bid cannot be generated at a time `t_bid` `{other.t_bid}` later than the desired imaging time `t_img` `{other.t_img}`'
 
         # update winning bid information
         self.winning_bid = other.winning_bid

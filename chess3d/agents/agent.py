@@ -1188,7 +1188,7 @@ class SimulatedAgent(AbstractAgent):
                     msgs.extend([MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
                             for req in self.known_reqs
                             if req.task.is_available(state.t)       # only active or future events
-                            and req.requester == state.agent_name   # only requests created by myself
+                            # and req.requester == state.agent_name   # only requests created by myself
                             ])
 
                 else: # unsupported broadcast type

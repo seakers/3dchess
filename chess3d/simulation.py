@@ -712,6 +712,7 @@ class Simulation:
         gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,event_id = event
 
         # get matching objectives
+        # TODO group reqs and agents by mission to avoid double counting
         observations_reqs = set()
         for _,mission in self.missions.items():
             for objective in mission:
