@@ -131,7 +131,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         #     self._log_bundle('CONSENSUS PHASE - BUNDLE (BEFORE)', state, self.bundle)
         #     print(f'`{state.agent_name}` - Received {len(incoming_bids)} incoming bids and {len(self.incoming_event_tasks)} task requests.')
 
-        # if self._debug and state.t > 2531.0:
+        # if self._debug:
         #     x = 1 # debug breakpoint
         # -------------------------------
 
@@ -145,7 +145,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if (results_updates or bundle_updates or state.t > 2531.0) and self._debug:
+        if (results_updates or bundle_updates) and self._debug:
             self._log_results('CONSENSUS PHASE - RESULTS (AFTER)', state, self.results)
             self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
             # self._log_path('CONSENSUS PHASE - PATH (AFTER)', state, self.path)
@@ -318,8 +318,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
             return new_task_added # threshold not met; skip processing
 
         # DEBUG PRINTOUTS --------
-        if self._debug and self.incoming_event_tasks:
-            out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\nReceived incoming urgent tasks:\n'
+        # if self._debug and self.incoming_event_tasks:
+        #     out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\nReceived incoming urgent tasks:\n'
         #-------------------------
 
         # threshold met; process new tasks
@@ -336,11 +336,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
             # create empty bid for new task and add to list of changes
             new_task_added.append(Bid(task, state.agent_name, t_bid=state.t))
 
-            if self._debug:
-                out += f'\t - {repr(task)}\n'
+        # DEBUG PRINTOUTS --------
+        #     if self._debug:
+        #         out += f'\t - {repr(task)}\n'
 
-        if self._debug and new_event_tasks:
-            print(out)
+        # if self._debug and new_event_tasks:
+        #     print(out)
+        # -------------------------
 
         # return list of new task bids added to results
         return new_task_added
@@ -354,10 +356,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # identify expired tasks
         expired_tasks = [task for task in self.results 
                          if not task.is_available(state.t)]
-        
-        # if expired_tasks: 
-        #     # TODO implement removal of expired tasks
-        #     raise NotImplementedError("Removal of expired tasks not yet tested.")
         
         # remove expired tasks from results
         for task in expired_tasks:
@@ -515,8 +513,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 assert all(n_obs == bid.n_obs for n_obs,bid in enumerate(incoming_results[task])), \
                     "Incoming bids must be sorted by observation number within each task."
 
-        midified_completed_bids = False # debug flag
-
         # iterate through grouped bids and compare with existing results
         for other_agent,incoming_results in grouped_bids.items():
             for task,bids in incoming_results.items():
@@ -600,8 +596,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         # add updated bid to list of bids to be processed
                         bids.append(loser_bid)
 
-                        midified_completed_bids = True
-
         # TEMP ensure all bids have this agent as the bidder and task matches. Remove after testing
         assert all(bid.owner == state.agent_name and bid.task == task
                    for task, bids in self.results.items() for bid in bids)
@@ -613,9 +607,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
         #         if not bid.has_winner():
         #             x=1 # debug breakpoint    
         
-        if midified_completed_bids and self._debug:
-            self._log_results('CONSENSUS PHASE - RESULTS (AFTER COMPARISON)', state, self.results)
-            x = 1 # debug breakpoint
+        # if midified_completed_bids and self._debug:
+        #     self._log_results('CONSENSUS PHASE - RESULTS (AFTER COMPARISON)', state, self.results)
+        #     x = 1 # debug breakpoint
         # -------------------------------
 
         # return result changes
@@ -660,10 +654,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                     state : SimulationAgentState
                                     ) -> Tuple[list, List[List[Bid]]]:
         """ Update bundle according to latest results. """
-        
-        if state.t > 2531.0 and self._debug and "2" in state.agent_name:
-            x = 1 # debug breakpoint
-        
+                
         # initialize list of bundle updates
         bundle_updates = []
 
@@ -748,9 +739,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
         #         if not bid.has_winner():
         #             x=1 # debug breakpoint    
         
-        if bundle_updates and self._debug:
-            self._log_results('CONSENSUS PHASE - RESULTS (AFTER BUNDLE UPDATE)', state, self.results)
-            x = 1 # debug breakpoint
+        # if bundle_updates and self._debug:
+        #     self._log_results('CONSENSUS PHASE - RESULTS (AFTER BUNDLE UPDATE)', state, self.results)
+        #     x = 1 # debug breakpoint
         # -------------------------------
 
         # ensure number of bids match bundle entries
@@ -767,21 +758,21 @@ class ConsensusPlanner(AbstractReactivePlanner):
         total_bundle_entries = len(bids_in_bundle)
         
         # DEBUG PRINTOUTS --------
-        if self._debug and total_bundle_entries != total_won_bids:
-            print(f'ERROR: Mismatch between winning bids ({total_won_bids}) and bundle entries ({total_bundle_entries}):')
-            self._log_results('CONSENSUS PHASE - RESULTS (INVALID)', state, self.results)
-            self._log_bundle('CONSENSUS PHASE - BUNDLE (INVALID)', state, revised_bundle)        
+        # if self._debug and total_bundle_entries != total_won_bids:
+        #     print(f'ERROR: Mismatch between winning bids ({total_won_bids}) and bundle entries ({total_bundle_entries}):')
+        #     self._log_results('CONSENSUS PHASE - RESULTS (INVALID)', state, self.results)
+        #     self._log_bundle('CONSENSUS PHASE - BUNDLE (INVALID)', state, revised_bundle)        
 
-            if total_bundle_entries < total_won_bids:                
-                missing_bids : Set[Bid] = set(winning_bids) - set(bids_in_bundle)
-                out = f'Bids in results but not in bundle ({len(missing_bids)}):\n'
-            else:
-                missing_bids : Set[Bid] = set(bids_in_bundle) - set(winning_bids)
-                out = f'Bids in bundle but not in results ({len(missing_bids)}):\n'
+        #     if total_bundle_entries < total_won_bids:                
+        #         missing_bids : Set[Bid] = set(winning_bids) - set(bids_in_bundle)
+        #         out = f'Bids in results but not in bundle ({len(missing_bids)}):\n'
+        #     else:
+        #         missing_bids : Set[Bid] = set(bids_in_bundle) - set(winning_bids)
+        #         out = f'Bids in bundle but not in results ({len(missing_bids)}):\n'
 
-            for bid in missing_bids:
-                out += f' - {repr(bid)}\n'
-            print(out)
+        #     for bid in missing_bids:
+        #         out += f' - {repr(bid)}\n'
+        #     print(out)
         #-------------------------
 
         assert total_won_bids == total_bundle_entries, \
@@ -1129,26 +1120,37 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 assert bid.winner == state.agent_name, \
                     "Bundle entry does not correspond to a winning bid."
 
-        # ensure all bids meet requirements
-        for task, bids in self.results.items():
+        # ensure all bundle bids meet requirements 
+        # assumes bids outside the bundle will be dealt with durin consensus-phase result updates
+        for _, obs_tasks in self.bundle:    
+            for task, n_obs in obs_tasks.items():
+                bid : Bid = self.results[task][n_obs]
 
-            # check every bid in results for this task
-            for n_obs_idx, bid in enumerate(bids[1:], start=1):
-                # get previous bid to compare constraints with
-                prev_bid : Bid = bids[n_obs_idx - 1]
-
-                # define constraints
-                constraints : List[bool] = [
-                    # Constraint 0: Previous bid must be assigned to a winner
-                    prev_bid.has_winner(),
-                    # Constraint 0.5: Current bid must be assigned to a winner
-                    bid.has_winner(),
-                    # Constraint 1: Observation number must be consecutive
-                    prev_bid.n_obs + 1 == bid.n_obs,
-                    # Constraint 2: Imaging time must be after previous imaging time
-                    (prev_bid.t_img <= bid.t_img and bid.winner != state.agent_name) \
-                        or (prev_bid.t_img < bid.t_img and bid.winner == state.agent_name)
-                ]
+                # check if there is a previous bid to compare with
+                if n_obs == 0:
+                    # there is no previous bid to compare with; define independent constraints
+                    constraints : List[bool] = [
+                        # Constraint 0: Current bid must be assigned to a winner
+                        bid.has_winner(),
+                        # Constraint 1: Observation number must match bundle entry
+                        bid.n_obs == n_obs
+                    ]
+                else:
+                    # there is a previous bid to compare with; get previous bid
+                    prev_bid : Bid = bids[n_obs - 1]
+                    
+                    # define dependent constraints
+                    constraints : List[bool] = [
+                        # Constraint 0: Previous bid must be assigned to a winner
+                        prev_bid.has_winner(),
+                        # Constraint 0.5: Current bid must be assigned to a winner
+                        bid.has_winner(),
+                        # Constraint 1: Observation number must be consecutive
+                        prev_bid.n_obs + 1 == bid.n_obs,
+                        # Constraint 2: Imaging time must be after previous imaging time
+                        (prev_bid.t_img <= bid.t_img and bid.winner != state.agent_name) \
+                            or (prev_bid.t_img < bid.t_img and bid.winner == state.agent_name)
+                    ]
                     
                 # DEBUG PRINTOUTS --------
                 # if self._debug and not all(constraints):
@@ -1159,9 +1161,40 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
                 # check if any constraint is violated
                 assert all(constraints), \
-                    "Generated bids violate constraints; cannot update results."
-        
-        return        
+                    "Generated bids violate constraints; cannot update results."  
+
+
+        # # ensure all bids meet requirements
+        # for task, bids in self.results.items():
+
+        #     # check every bid in results for this task
+        #     for n_obs_idx, bid in enumerate(bids[1:], start=1):
+        #         # get previous bid to compare constraints with
+        #         prev_bid : Bid = bids[n_obs_idx - 1]
+
+        #         # define constraints
+                # constraints : List[bool] = [
+                #     # Constraint 0: Previous bid must be assigned to a winner
+                #     prev_bid.has_winner(),
+                #     # Constraint 0.5: Current bid must be assigned to a winner
+                #     bid.has_winner(),
+                #     # Constraint 1: Observation number must be consecutive
+                #     prev_bid.n_obs + 1 == bid.n_obs,
+                #     # Constraint 2: Imaging time must be after previous imaging time
+                #     (prev_bid.t_img <= bid.t_img and bid.winner != state.agent_name) \
+                #         or (prev_bid.t_img < bid.t_img and bid.winner == state.agent_name)
+                # ]
+                    
+        #         # DEBUG PRINTOUTS --------
+        #         if self._debug and not all(constraints):
+        #             print(f'ERROR: generated invalid bids during bundle-building phase:')
+        #             self._log_results('INVALID GENERATED BIDS', state, self.results)
+        #             x = 1 # breakpoint
+        #         #-------------------------
+
+        #         # check if any constraint is violated
+                # assert all(constraints), \
+                #     "Generated bids violate constraints; cannot update results."         
 
     def _calculate_path_utility(self,
                                 state : SimulationAgentState,
@@ -1375,13 +1408,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
             # initialize list of broadcasts to be done
             broadcasts = []       
-
-            # ensure all results are up to date and have a winner
-            if self._debug:
-                for _, bids in self.results.items():
-                    for bid in bids:
-                        assert bid.has_winner(), \
-                            "All bids in results must have a winner before scheduling broadcasts."
 
             # generate bid messages to share bids in results
             compiled_bid_msgs = [
