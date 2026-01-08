@@ -705,20 +705,22 @@ class Bid:
         self.main_measurement = other.main_measurement
         self.performed = other.performed or self.performed
 
-        # update timestamp for the other bidder
-        # self.t_stamps[other.owner] = t_comp
-        self.t_stamps[other.owner] = max(self.t_stamps.get(other.owner, np.NINF), t_comp)
-
-        if other.owner != other.winner:
-            # self.t_stamps[other.winner] = other.t_bid
-            self.t_stamps[other.winner] = max(self.t_stamps.get(other.winner, np.NINF), other.t_bid)
-
         # check if bid came from the owner agent
         if other.owner == self.owner:
-            # bid comes from the owner agent; update all timestamps
+            # bid comes from the owner agent; carryover all timestamps
             for key,t_other in other.t_stamps.items():
+                if key in [other.owner, other.winner]: 
+                    continue
+
                 # ensure all timestamps are the most recent ones
                 self.t_stamps[key] = max(self.t_stamps.get(key, np.NINF), t_other)              
+
+        # update timestamp for the other bidder
+        self.t_stamps[other.owner] = max(self.t_stamps.get(other.owner, np.NINF), t_comp)
+
+        # if the winner is different from the owner, update timestamp for the winner as well
+        if other.owner != other.winner:
+            self.t_stamps[other.winner] = max(self.t_stamps.get(other.winner, np.NINF), other.t_bid)
 
     def reset(self, t_comp : float, other : 'Bid' = None) -> None:
         """

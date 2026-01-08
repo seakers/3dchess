@@ -567,7 +567,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         ### Expected Outcomes
         - Agent 1 has earlier observation opportunities for both events due to orbit configuration.
-        - Agent 1 is immediately informed of tasks from announcer due to constant communication link.
+        - Agent 1 is immediately informed of tasks from the announcer due to constant communication link with the announcer.
         - Agent 2 experiences delays in receiving task information due to intermittent communication link with Agent 
         - Agent 1 has already performed an observation before Agent 2 gets notified of the existance of any tasks.
         - Agent 2 should only be able to perform one observation due to observation constraints and communication delays.

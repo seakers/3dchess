@@ -1137,7 +1137,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     ]
                 else:
                     # there is a previous bid to compare with; get previous bid
-                    prev_bid : Bid = bids[n_obs - 1]
+                    prev_bid : Bid = self.results[task][n_obs-1]
                     
                     # define dependent constraints
                     constraints : List[bool] = [
@@ -1162,7 +1162,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 # check if any constraint is violated
                 assert all(constraints), \
                     "Generated bids violate constraints; cannot update results."  
-
 
         # # ensure all bids meet requirements
         # for task, bids in self.results.items():
