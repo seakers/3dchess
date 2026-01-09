@@ -1191,7 +1191,11 @@ class AbstractPlanner(ABC):
                     observation_parameters.append((t_i, d_i, th_i, t_j, d_j, th_j, max_slew_rate))
 
                 # check if observations sequence is valid
-                if not all([self.is_observation_pair_valid(*params) for params in observation_parameters]):
+                if any([not self.is_observation_pair_valid(*params) 
+                            for params in observation_parameters]):
+                    for idx, params in enumerate(observation_parameters):
+                        if not self.is_observation_pair_valid(*params):
+                            x = 1   
                     return False
 
                 # ensure no mutually exclusive tasks are present in observation sequence
@@ -1227,11 +1231,6 @@ class AbstractPlanner(ABC):
         
         # calculate time between measuremnets
         dt_measurements = t_j - (t_i + d_i)
-
-        if (dt_measurements < dt_maneuver):
-            x = 1
-        if dt_measurements < -1e-6:
-            x = 1
 
         return ((dt_measurements > dt_maneuver 
                 or abs(dt_measurements - dt_maneuver) < 1e-6)   # there is enough time to maneuver

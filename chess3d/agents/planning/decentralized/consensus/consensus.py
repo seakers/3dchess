@@ -972,7 +972,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         
         # check if new path is valid
         assert len(self.bundle) == len(self.path), "New bundle and path lengths do not match."
-        assert self.is_observation_path_valid(state, self.path, None, None, specs), "New observation path is not valid."   
+        assert self.is_observation_path_valid(state, self.path, None, None, specs), \
+            "New observation path is not valid."   
         # Dict[GenericObservationTask, Dict[int, Bid]]
         assert all(bid.t_bid <= state.t for bids in new_bids.values() for bid in bids.values()), \
             "New bids must be assigned the correct bid time."
@@ -1550,13 +1551,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
                      state : SimulationAgentState, 
                      results : Dict[GenericObservationTask, List[Bid]],
                      level=logging.DEBUG, 
-                     n : int = 50) -> None:
+                     n_tasks : int = 20) -> None:
         out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'Task ID\t n_obs\tins\t\twinner\tbid\tt_img\tt_bid\tv_opt\tperformed\n'
         
         # count characters in line for formatting
         L_LINE = len(line)
-        L_LINE_PADding = 20
+        L_LINE_PADding = 25
 
         # header
         out += line 
@@ -1567,9 +1568,20 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # sort tasks by ID for consistent logging
         tasks = sorted(results.keys(), key=lambda t: repr(t))
+        if len(tasks) <= n_tasks:
+            tasks_to_print = tasks
+        else:
+            non_empty_tasks = [task for task in tasks if results[task]]
+            empty_tasks = [task for task in tasks if not results[task]]
 
-        i = 1
-        for task in tasks:
+            n_empties_to_print = n_tasks - len(non_empty_tasks)
+            if n_empties_to_print > 0:
+                tasks_to_print = sorted(non_empty_tasks + empty_tasks[:n_empties_to_print],
+                                        key=lambda t: repr(t))
+            else:
+                tasks_to_print = non_empty_tasks[:n_tasks]
+
+        for i_tasks,task in enumerate(tasks_to_print):
             task : GenericObservationTask
             bids : List[Bid] = results[task]
 
@@ -1577,22 +1589,15 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 req_id_short = f"{task.id.split('-')[-1]}    "
             else:
                 req_id_short = f'Default({int(task.location[0][-2])},{int(task.location[0][-1])})'
-
-            # if all([bid.winner == bid.NONE for _,bid in bids.items()]): continue
-
-            if not bids:
-                out += f'{req_id_short} <none>\n'
-
+            
             if isinstance(bids, dict):
                 printed_bids = sorted(bids.values(), key=lambda b: b.n_obs)
             elif isinstance(bids, list):
-                printed_bids = bids
+                printed_bids = sorted(bids, key=lambda b: b.n_obs)
             else:
                 raise TypeError("Bids in results must be either a list or a dictionary.")   
-
-            for bid in printed_bids:
-                # if i > n: break
-
+           
+            for i_bid,bid in enumerate(printed_bids):
                 bid : Bid
                 # if bid.winner == bid.NONE: continue
 
@@ -1601,18 +1606,19 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 else:
                     line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t\tn/a\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
                 out += line
-                i +=1
 
-            for _ in range(L_LINE + L_LINE_PADding):
-                out += '-'
-            out += '\n'
+            if not bids:
+                out += f'{req_id_short} <none>\n'        
 
-            if i > n:
-                out += '\t\t\t...\n'
-                for _ in range(L_LINE + L_LINE_PADding):
-                    out += '-'
+            if i_tasks < len(tasks_to_print) - 1:
+                for _ in range(L_LINE + L_LINE_PADding):out += '-'
                 out += '\n'
-                break
+
+        if len(tasks) > n_tasks: 
+            out += '...\n'   
+         
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
 
         print(out)
 
@@ -1671,6 +1677,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     dsc : str, 
                     state : SimulationAgentState, 
                     bundle : List[Tuple[GenericObservationTask, Dict[GenericObservationTask, int]]], 
+                    n_rows : int = 15,
                     level=logging.DEBUG) -> None:
         out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'i\t Task IDs\n'
@@ -1691,7 +1698,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             for _ in range(L_LINE + L_LINE_PADding): out += '-'
             out += '\n'
 
-        n = 15
+        
         for i,(_,tasks) in enumerate(bundle):
             line = f'{i}\t['
             for task,n_obs in tasks.items():
@@ -1710,11 +1717,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 out += '-'
             out += '\n'
 
-            if i > n:
-                out += '\t\t\t...\n'
-                for _ in range(L_LINE + L_LINE_PADding):
-                    out += '-'
-                out += '\n'
+            if i > n_rows:
+                out += '\t\t...\n'
                 break
+        
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
+        
+        # stats
+        out += f'Bundle size: {len(bundle)} observations\n'
 
         print(out)

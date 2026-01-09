@@ -16,10 +16,10 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## common cases
         self.single_sat_toy = False
         self.multiple_sat_toy = False
-        self.single_sat_lakes = False
+        self.single_sat_lakes = True
         self.multiple_sat_lakes = False
 
-        ## specific cases
+        ## toy cases
         self.toy_1 = False
         self.toy_2 = False
         self.toy_3 = False
@@ -39,7 +39,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_17 = False
         self.toy_18 = False
         self.toy_19 = False
-        self.toy_20 = True
+        self.toy_20 = False
 
     def toy_planner_config(self):
         return {
@@ -101,7 +101,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                 "model": "heuristicInsertion",
                 "heuristic" : "taskValue",
                 "replanThreshold": 1,
-                "debug": "False"
+                "debug": "True"
             }
         }
         
@@ -1870,6 +1870,65 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         print(f"{scenario_name}: DONE")
 
+    # def test_toy_case_21(self):
+    #     """
+    #     ## TOY CASE 21
+    #     Test case for a single satellite responding to a plan generated from a ground station.
+    #     """
+
+    #     if not self.toy_21: return
+
+    # def test_toy_case_22(self):
+    #     """
+    #     ## TOY CASE 22
+    #     Test case for multiple satellites responding to a plan generated from a ground station.
+    #     """
+    
+    #     if not self.toy_22: return
+
+    def test_single_sat_lakes(self):
+        """ Test case for a single satellite in a lake-monitoring scenario. """
+        # check for case toggle 
+        if not self.single_sat_lakes: return
+
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'lake_event_points'
+        scenario_name = f'single_sat_lake_scenario-{self.planner_name()}'
+        connectivity = 'FULL'
+        event_name = 'lake_events_seed-1000'
+        mission_name = 'lake_missions'
+
+        spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        spacecraft['planner'] = self.lakes_planner_config()
+        spacecraft['planner']['preplanner']['period'] = 250 # fixed replanning period
+        # spacecraft['planner']['preplanner']['horizon'] = 500 # longer planning horizon
+        spacecraft['mission'] = "Algal bloom comprehensive"
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[spacecraft]
+                                                   )
+
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print('DONE')
 
     # def test_single_sat_announcer_toy(self):
         # # check for case toggle 
