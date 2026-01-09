@@ -231,7 +231,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             # Fallback for unsupported heuristic
             raise NotImplementedError(f"Heuristic '{self.heuristic}' not supported.")            
 
-
         # -------------------------------
         # DEBUG PRINTOUTS
         if self._debug:
@@ -436,7 +435,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             candidate_paths = self.__incremental_path_builder(state, specs, proposed_path, proposed_observation)
 
             # Find best placement in path   
-            for candidate_path, obs_added, obs_removed in candidate_paths:
+            for candidate_path, obs_added, obs_removed in tqdm(candidate_paths, 
+                                                               desc=f'{state.agent_name}-REPLANNER: Evaluating placements for observation {proposed_observation.id.split("-")[0]}', 
+                                                               leave=False):
                 # -------------------------------
                 # DEBUG PRINTOUTS
                 # if self._debug:
@@ -448,11 +449,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 # find best observation sequence for each parent task of the proposed task in this candidate path
                 n_obs_candidate, t_prev_candidate, bids_candidate \
                     = self._assign_best_observations_and_revisit_times_to_proposed_path(state, candidate_path, obs_added, obs_removed, proposed_bids, specs, cross_track_fovs, orbitdata, mission, observation_history)
-
-                # for obs_opp, bid_dict in bids_candidate.items():
-                #     for task in obs_opp.tasks:
-                #         assert task in bid_dict, \
-                #             f"Task {task.id} in observation opportunity {obs_opp.id} has no valid bid assigned in candidate path."
 
                 # check if valid bids were found for proposed task
                 if bids_candidate is None: continue # no valid bids found; skip
@@ -467,7 +463,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 best_path_utility = proposed_path_utility
                 best_path = candidate_path
                 best_bids = bids_candidate
-                # best_abandoned = abandoned_bids_candidate
 
             # if no best path was found, continue to next proposed task
             if best_path is None: continue
@@ -548,9 +543,19 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             #     self._log_path('CURRENT PATH (DURING BUNDLE-BUILDING PHASE)', state, proposed_path)
             #     self._log_bundle('BUNDLE (DURING BUNDLE-BUILDING PHASE)', state, proposed_bundle)
             #     x = 1
+            if self._debug:
+                if not self.is_observation_path_valid(state, proposed_path, None, None, specs):
+                    x =1
             # -------------------------------               
-        
-        # temp return
+
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        if self._debug:
+            if not self.is_observation_path_valid(state, proposed_path, None, None, specs):
+                x =1
+        # -------------------------------
+
+        # return proposed bundle and path
         return proposed_bundle, proposed_path, proposed_bids
         
     """

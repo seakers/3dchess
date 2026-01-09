@@ -1042,7 +1042,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         preplan_waits : list = self._schedule_periodic_replan(state, prelim_plan, t_next)
 
         # compile final plan
-        self.plan = ReactivePlan(maneuvers, self.path, broadcasts, preplan_waits, t=state.t, t_next=t_next)
+        self.plan = ReactivePlan(prelim_plan.actions, preplan_waits, t=state.t, t_next=t_next)
 
         # clear new urgent tasks
         self.incoming_event_tasks = list()
@@ -1684,6 +1684,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     state : SimulationAgentState, 
                     bundle : List[Tuple[GenericObservationTask, Dict[GenericObservationTask, int]]], 
                     n_rows : int = 15,
+                    n_tasks : int = 3,
                     level=logging.DEBUG) -> None:
         out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
         line = 'i\t Task IDs\n'
@@ -1707,8 +1708,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
         
         for i,(_,tasks) in enumerate(bundle):
             line = f'{i}\t['
+            i_task = 0
             for task,n_obs in tasks.items():
-                # if i > n: break
+                if i_task >= n_tasks: break
 
                 if isinstance(task, EventObservationTask):
                     req_id_short = task.id.split('-')[-1]
@@ -1716,6 +1718,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     req_id_short = f'Default({int(task.location[0][-2])},{int(task.location[0][-1])})'
 
                 line += f'({req_id_short},{n_obs}),'
+                i_task += 1 
+
+            if len(tasks) > n_tasks: line += f' ..., (n_tasks={len(tasks)}),'
+
             line = line[:-1] + ']\n'
             out += line
 
@@ -1724,7 +1730,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             out += '\n'
 
             if i > n_rows:
-                out += '\t\t...\n'
+                out += f'\t\t...\n'
                 break
         
         for _ in range(L_LINE + L_LINE_PADding): out += '='

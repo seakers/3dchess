@@ -1892,7 +1892,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         if not self.single_sat_lakes: return
 
         # setup scenario parameters
-        duration = 2.0 / 24.0
+        # duration = 2.0 / 24.0
+        duration = 110.0 / 3600.0 / 20.0
         grid_name = 'lake_event_points'
         scenario_name = f'single_sat_lake_scenario-{self.planner_name()}'
         connectivity = 'FULL'
@@ -1901,7 +1902,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         spacecraft['planner'] = self.lakes_planner_config()
-        spacecraft['planner']['preplanner']['period'] = 250 # fixed replanning period
+        spacecraft['planner']['preplanner']['period'] = 120 # fixed replanning period
         # spacecraft['planner']['preplanner']['horizon'] = 500 # longer planning horizon
         spacecraft['mission'] = "Algal bloom comprehensive"
 
