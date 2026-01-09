@@ -207,13 +207,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                                     new_urgent_task_added, 
                                                     expired_tasks, 
                                                     preplan_obs,
-                                                    performed_bundle_updates,
+                                                    # performed_bundle_updates,
                                                     comparison_updates, 
                                                     performed_updates,
                                                    ]))   
         bundle_updates = list(chain.from_iterable([
                                                     preplan_resets,
-                                                    performed_bundle_updates
+                                                    # performed_bundle_updates
                                                 ]))
 
         # update bundle and enforce constraints iteratively on results
@@ -618,10 +618,19 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     # update results with modified bid
                     self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
 
-                    # check if bid was changed
+                    # check if bid, winner, or observation time were modified
                     if updated_bid.has_different_winner_values(current_bid): 
                         # add updated bid to results updates
                         results_updates.append(updated_bid)
+                    
+                    # check if bid was performed 
+                    elif not current_bid.was_performed() and incoming_bid.was_performed():
+                        # check if the winner of the performed bid matches current known winner
+                        if incoming_bid.was_performed() and incoming_bid.winner != current_bid.winner:
+                            # winner changed due to performed bid; add updated bid to results updates
+                            results_updates.append(updated_bid)
+                        else:
+                            x = 1 # debug breakpoint                        
                     
                     # check if both bids corresponded to a performed observation
                     if current_bid.was_performed() and incoming_bid.was_performed():
@@ -1570,8 +1579,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
 
-        # sort tasks by ID for consistent logging
-        tasks = sorted(results.keys(), key=lambda t: repr(t))
+        # sort tasks by if they are event-driven and by ID for consistent logging
+        tasks = sorted(results.keys(), key=lambda t: (-int(isinstance(t,EventObservationTask)), repr(t)))
         if len(tasks) <= n_tasks:
             tasks_to_print = tasks
         else:
@@ -1581,7 +1590,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
             n_empties_to_print = n_tasks - len(non_empty_tasks)
             if n_empties_to_print > 0:
                 tasks_to_print = sorted(non_empty_tasks + empty_tasks[:n_empties_to_print],
-                                        key=lambda t: repr(t))
+                                        key=lambda t: (-int(isinstance(t,EventObservationTask)), repr(t)))
             else:
                 tasks_to_print = non_empty_tasks[:n_tasks]
 

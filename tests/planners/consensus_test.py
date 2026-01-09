@@ -16,17 +16,17 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## common cases
         self.single_sat_toy = False
         self.multiple_sat_toy = False
-        self.single_sat_lakes = True
+        self.single_sat_lakes = False
         self.multiple_sat_lakes = False
 
         ## toy cases
-        self.toy_1 = False
-        self.toy_2 = False
-        self.toy_3 = False
-        self.toy_4 = False
-        self.toy_5 = False
-        self.toy_6 = False
-        self.toy_7 = False
+        self.toy_1 = False  # single sat, default mission, no events
+        self.toy_2 = False  # single sat, no default mission, one event
+        self.toy_3 = False  # two sats, no default mission, one event
+        self.toy_4 = False  # two sats, no default mission, one event, optimistic bidding
+        self.toy_5 = False  # two sats, no default mission, one event, comm delays
+        self.toy_6 = False  # two sats, no default mission, two events
+        self.toy_7 = True  # two sats, no default mission, two events at different times
         self.toy_8 = False
         self.toy_9 = False
         self.toy_10 = False
@@ -1892,8 +1892,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         if not self.single_sat_lakes: return
 
         # setup scenario parameters
-        # duration = 2.0 / 24.0
-        duration = 110.0 / 3600.0 / 20.0
+        duration = 2.0 / 24.0
+        # duration = 110.0 / 3600.0 / 20.0
         grid_name = 'lake_event_points'
         scenario_name = f'single_sat_lake_scenario-{self.planner_name()}'
         connectivity = 'FULL'
@@ -1902,7 +1902,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         spacecraft['planner'] = self.lakes_planner_config()
-        spacecraft['planner']['preplanner']['period'] = 120 # fixed replanning period
+        spacecraft['planner']['preplanner']['period'] = 100 # fixed replanning period
         # spacecraft['planner']['preplanner']['horizon'] = 500 # longer planning horizon
         spacecraft['mission'] = "Algal bloom comprehensive"
 

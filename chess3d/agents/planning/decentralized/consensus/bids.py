@@ -261,14 +261,6 @@ class Bid:
         # validate inputs
         assert isinstance(other, Bid), f'can only compare bids to other bids.'
         assert self.task == other.task and self.n_obs == other.n_obs, f'can only compare bids for the same task and observation number (expected task id: {self.task.id}, given id: {other.task.id})'
-
-        # Compare bidder information
-        # if (
-        #     self.bidder != other.bidder                         # different bidder
-        #     or abs(self.bid_value - other.bid_value) > self.EPS # different bid value
-        #     or self.main_measurement != other.main_measurement  # different main measurement
-        #     ):
-        #     return True
                 
         # Compare winning bid information
         if (
@@ -280,9 +272,9 @@ class Bid:
             ):
             return True
 
-        # Compare other attributes
-        if self.performed != other.performed:                   # different performed status
-            return True
+        # # Compare other attributes
+        # if self.performed != other.performed:                   # different performed status
+        #     return True
         
         # Fallback → bids are the same
         return False
