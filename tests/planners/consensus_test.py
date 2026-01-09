@@ -16,7 +16,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## common cases
         self.single_sat_toy = False
         self.multiple_sat_toy = False
-        self.single_sat_lakes = False
+        self.single_sat_lakes = True
         self.multiple_sat_lakes = False
 
         ## toy cases
@@ -1885,6 +1885,22 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
     #     """
     
     #     if not self.toy_22: return
+
+    # def test_toy_case_23(self):
+    #     """
+    #     ## TOY CASE 23
+    #     Single satellite with default mission with event detection and response using toy scenario.
+    #     """
+    
+    #     if not self.toy_23: return
+
+    # def test_toy_case_24(self):
+    #     """
+    #     ## TOY CASE 24
+    #     Multiple satellites with default mission with event detection and response using toy scenario.
+    #     """
+    
+    #     if not self.toy_24: return
 
     def test_single_sat_lakes(self):
         """ Test case for a single satellite in a lake-monitoring scenario. """
