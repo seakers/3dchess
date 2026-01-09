@@ -287,9 +287,13 @@ class ObservationOpportunity:
         return f"ObservationOpportunity_{self.id.split('-')[0]}"
             
     def to_dict(self) -> dict:
+        # sort tasks by id for consistent serialization
+        sorted_tasks = sorted(self.tasks, key=lambda task: task.id)
+        
+        # return dictionary representation
         return {
             "id": self.id,
-            "tasks": [task.to_dict() for task in self.tasks],
+            "tasks": [task.to_dict() for task in sorted_tasks],
             "instrument_name": self.instrument_name,
             "accessibility": self.accessibility.to_dict(),
             "min_duration": self.min_duration,

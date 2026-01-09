@@ -167,6 +167,13 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             # match id for scheduled actions
             path_action.id = matching_obs_action.id       
         
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        if self._debug:
+            if not self.is_observation_path_valid(state, proposed_path, None, None, specs):
+                x =1
+        # -------------------------------
+
         # return proposed bundle and path
         return proposed_bundle, proposed_path, proposed_bids
 
@@ -174,9 +181,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
     def _bundle_building_phase(self,
                        state : SimulationAgentState,
                        specs : object,
-                       current_plan : Plan,
+                       _ : Plan,
                        tasks : List[GenericObservationTask],
-                       _ : ClockConfig,
+                       __ : ClockConfig,
                        orbitdata : OrbitData,
                        mission : Mission,
                        observation_history : ObservationHistory
@@ -205,42 +212,34 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         observation_opportunities = [obs_opp for obs_opp in observation_opportunities
                                      if obs_opp not in planned_observation_opportunities]
         
-        # -------------------------------
-        # DEBUG PRINTOUTS
-        # if self._debug:
-        #     out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n'
-        #     out += 'OBS OPPORTUNITIES CONSIDERED FOR BUNDLE BUILDING:\n'
-        #     # header
-        #     line = 'i\tSpecTaskID\tAccess Start\tParentID(s)\t\n'
-        #     out += line
-        #     L_LINE = len(line)
-        #     L_LINE_PADding = 30
-        #     # divider 
-        #     for _ in range(L_LINE + L_LINE_PADding): out += '='
-        #     out += '\n'
-        #     # task entries
-        #     for task_idx,task in enumerate(observation_opportunities):
-        #         out += f'{task_idx}\t{task.id.split("-")[0]}\t{np.round(task.accessibility.left,1)}\t\t{[str(p) for p in task.parent_tasks]}\n'
-        #     out += f'Total Observations Considered: {len(observation_opportunities)}\n'
-        #     # print to console
-        #     print(out)
-        # -------------------------------
-
         # generate new plan according to selected model
         if self.heuristic == self.EARLIEST_ACCESS:
             # use earliest-access heuristic
-            return self.earliest_access_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
+            proposed_bundle, proposed_path, proposed_bids = \
+                 self.earliest_access_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
         
         elif self.heuristic == self.TASK_VALUE:
             # use task-value heuristic
-            return self.task_value_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
+            proposed_bundle, proposed_path, proposed_bids = \
+                 self.task_value_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
         
         elif self.heuristic == self.TASK_PRIORITY:
             # use task-priority heuristic
-            return self.task_priority_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
+            proposed_bundle, proposed_path, proposed_bids = \
+                 self.task_priority_heuristic_bundle_builder(state, specs, cross_track_fovs, observation_opportunities, orbitdata, mission, observation_history)
+        else:
+            # Fallback for unsupported heuristic
+            raise NotImplementedError(f"Heuristic '{self.heuristic}' not supported.")            
 
-        # Fallback for unsupported heuristic
-        raise NotImplementedError(f"Heuristic '{self.heuristic}' not supported.")            
+
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        if self._debug:
+            if not self.is_observation_path_valid(state, proposed_path, None, None, specs):
+                x =1
+        # -------------------------------
+
+        return proposed_bundle, proposed_path, proposed_bids
     
     def get_available_tasks(self, tasks: List[GenericObservationTask], planning_horizon : Interval) -> list:
         """ Get only tasks that are available within the planning horizon. """
@@ -480,9 +479,37 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             current_path_utility : float = best_path_utility
 
             # update bundle
+            # updated_proposed_bundle : List[Tuple[ObservationOpportunity, 
+            #                                     Dict[GenericObservationTask, int]]] = []
+            # # get existing proposed bundle elements if they are still in the proposed path
+            # for obs_opp,obs_dict in proposed_bundle:
+            #     if any([obs_opp == path_action.obs_opp for path_action in proposed_path]):
+            #         updated_proposed_bundle.append((obs_opp, obs_dict))
+
             ## add new observations to proposed bundle
             obs_dict = {task: bid.n_obs for task,bid in best_bids[proposed_observation].items()}
             proposed_bundle.append((proposed_observation, obs_dict))
+
+            ## collect all observation opportunities in proposed path
+            obs_opps_in_path = [obs_action.obs_opp for obs_action in proposed_path]
+            
+            # find indices of bundle elements not in proposed path
+            bundle_elements_to_remove = [
+                bundle_idx for bundle_idx,(obs_opp,_) in enumerate(proposed_bundle)
+                if obs_opp not in obs_opps_in_path
+            ]
+            # bundle_elements_to_remove = [ 
+            #     bundle_idx for bundle_idx,(obs_opp,_) in enumerate(proposed_bundle)
+            #     if all(obs_opp != obs_action.obs_opp for obs_action in proposed_path)
+            # ]
+
+            ## remove any existing bids for observations that were removed from the path
+            for bundle_idx in sorted(bundle_elements_to_remove, reverse=True):
+                proposed_bundle.pop(bundle_idx)
+
+            ## ensure path and bundle lengths match
+            assert len(proposed_path) == len(proposed_bundle), \
+                "Proposed path and bundle lengths do not match after bundle building phase."
 
             ## map tasks in bundle to best bids
             matching_bundle_indices = {obs_opp : idx 
@@ -493,23 +520,6 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             for obs_opp,idx in matching_bundle_indices.items():
                 for task,proposed_bid in best_bids[obs_opp].items():
                     proposed_bundle[idx][1][task] = proposed_bid.n_obs
-            
-            ## collect all observation opportunities in proposed path
-            obs_opps_in_path = [obs_action.obs_opp for obs_action in proposed_path]
-            
-            ## find indices of bundle elements not in proposed path
-            bundle_elements_to_remove = [
-                bundle_idx for bundle_idx,(obs_opp,_) in enumerate(proposed_bundle)
-                if obs_opp not in obs_opps_in_path
-            ]
-
-            ## remove any existing bids for observations that were removed from the path
-            for bundle_idx in sorted(bundle_elements_to_remove, reverse=True):
-                proposed_bundle.pop(bundle_idx)
-
-            ## ensure path and bundle lengths match
-            assert len(proposed_path) == len(proposed_bundle), \
-                "Proposed path and bundle lengths do not match after bundle building phase."
 
             # compile list of updated proposed bids
             updated_proposed_bids : Dict[GenericObservationTask, Dict[int, Bid]] = defaultdict(dict)
@@ -547,11 +557,11 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
     BUNDLE-BUILDING PHASE - Path Insertion Methods
     """
     def __incremental_path_builder(self,
-                                            state : SimulationAgentState,
-                                            specs : object,
-                                            current_path : List[ObservationAction],
-                                            new_obs : ObservationOpportunity
-                                        ) -> List[Tuple[List[ObservationAction], List[ObservationAction], List[ObservationAction]]]:
+                                    state : SimulationAgentState,
+                                    specs : object,
+                                    current_path : List[ObservationAction],
+                                    new_obs : ObservationOpportunity
+                                ) -> List[Tuple[List[ObservationAction], List[ObservationAction], List[ObservationAction]]]:
         """ 
         Generates a list of proposed paths by applying the following operators to the path:
             1. Direct Insertion into existing path
@@ -559,8 +569,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             3. Replace conflicting task with new urgent task
 
         #### Returns:
-
-            - `proposed_paths` : List[Tuple[List[ObservationAction], float]]
+            - `proposed_paths` : List[Tuple[List[ObservationAction], List[ObservationAction], List[ObservationAction]]]
         """
         
         # compile agility specifications
@@ -589,6 +598,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         assert not self._debug or all([(path is None or any([action.obs_opp == new_obs for action in path_changes])) for path,path_changes,_ in proposed_paths]), \
               "New observation opportunity not included in proposed path changes."
 
+        # ensure generated paths are valid
+        assert not self._debug or all([(path is None or self.is_observation_path_valid(state, path, max_slew_rate, max_torque, specs)) for path,*_ in proposed_paths]), \
+              "One or more proposed paths are invalid."
+        
         # return proposed paths and the respective observation times for the new observation opportunity in said paths
         return [(path,obs_added,obs_removed) for path,obs_added,obs_removed in proposed_paths if path is not None]
         

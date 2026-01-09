@@ -193,7 +193,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         
         # check if tasks in the bundle were performed by parent agent
         self.bundle, self.path, performed_bundle_updates \
-            = self._update_performed_bundle(state, performed_observations)
+            = self._update_performed_bundle_observations(state, performed_observations)
 
         # compare results with incoming bids and update bundle
         comparison_updates = self._compare_incoming_bids(state, incoming_bids)
@@ -418,8 +418,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return list of removed bids
         return removed_bids
     
-    def _update_performed_bundle(self, state : SimulationAgentState, performed_observations : List[ObservationAction]) -> Tuple[list, List[Bid]]:
-        """ Checks if planned tasks were performed by parent agent and updates results accordingly. """
+    def _update_performed_bundle_observations(self, state : SimulationAgentState, performed_observations : List[ObservationAction]) -> Tuple[list, List[Bid]]:
+        """ Checks if planned observations were performed by parent agent and updates results accordingly. """
         
         # initialize list of bundle updates
         bundle_updates = []
@@ -470,6 +470,35 @@ class ConsensusPlanner(AbstractReactivePlanner):
         performed_bundle_obs = [obs_opp for obs_opp,_ in performed_bundle_tasks]
         revised_path = [obs_action for obs_action in self.path
                         if obs_action.obs_opp not in performed_bundle_obs]
+        
+        # -------------------------------
+        # # DEBUG
+        # if self._debug: 
+            
+        #     for action in revised_path:
+        #         matching_bundle_element = None
+        #         for obs_opp,_ in revised_bundle:
+        #             if action.obs_opp == obs_opp:
+        #                 matching_bundle_element = obs_opp
+        #                 break
+                
+        #         if matching_bundle_element is None:
+        #             x = 1 # debug breakpoint
+        #         else:
+        #             action_obs_dict = action.obs_opp.to_dict()
+        #             bundle_obs_dict = matching_bundle_element.to_dict()
+
+        #             for key in action_obs_dict:
+        #                 if action_obs_dict[key] != bundle_obs_dict[key]:
+        #                     x = 1 # debug breakpoint
+
+        #         if action.t_start < state.t:
+        #             x = 1 # debug breakpoint
+        # -------------------------------
+
+        # ensure elements in path are yet to be performed
+        assert all(obs_action.t_start >= state.t for obs_action in revised_path), \
+            "Revised path contains observation actions that have already been performed."
                 
         # return revised bundle and list of performed bids
         return revised_bundle, revised_path, bundle_updates
@@ -971,7 +1000,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 self._bundle_building_phase(state, specs, current_plan, tasks, clock_config, orbitdata, mission, observation_history)
         
         # check if new path is valid
-        assert len(self.bundle) == len(self.path), "New bundle and path lengths do not match."
+        assert len(self.bundle) == len(self.path), \
+            "New bundle and path lengths do not match."
+        if self._debug:
+            for obs_action in self.path:
+                if not any([obs_action.obs_opp == obs_opp for obs_opp,_ in self.bundle]):
+                    x = 1 # debug breakpoint
+        assert all([obs_action.t_start >= state.t for obs_action in self.path]), \
+            "New observation path contains actions scheduled in the past."        
         assert self.is_observation_path_valid(state, self.path, None, None, specs), \
             "New observation path is not valid."   
         # Dict[GenericObservationTask, Dict[int, Bid]]
@@ -1184,8 +1220,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 assert bid.winner == state.agent_name, \
                     "Bundle entry does not correspond to a winning bid."
 
-        # ensure all bundle bids meet requirements 
-        # assumes bids outside the bundle will be dealt with durin consensus-phase result updates
+        # ensure all bundle bids meet requirements; 
+        #   assumes bids outside the bundle will be dealt with durin consensus-phase result updates
         for _, obs_tasks in self.bundle:    
             for task, n_obs in obs_tasks.items():
                 bid : Bid = self.results[task][n_obs]
@@ -1226,38 +1262,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 # check if any constraint is violated
                 assert all(constraints), \
                     "Generated bids violate constraints; cannot update results."  
-
-        # # ensure all bids meet requirements
-        # for task, bids in self.results.items():
-
-        #     # check every bid in results for this task
-        #     for n_obs_idx, bid in enumerate(bids[1:], start=1):
-        #         # get previous bid to compare constraints with
-        #         prev_bid : Bid = bids[n_obs_idx - 1]
-
-        #         # define constraints
-                # constraints : List[bool] = [
-                #     # Constraint 0: Previous bid must be assigned to a winner
-                #     prev_bid.has_winner(),
-                #     # Constraint 0.5: Current bid must be assigned to a winner
-                #     bid.has_winner(),
-                #     # Constraint 1: Observation number must be consecutive
-                #     prev_bid.n_obs + 1 == bid.n_obs,
-                #     # Constraint 2: Imaging time must be after previous imaging time
-                #     (prev_bid.t_img <= bid.t_img and bid.winner != state.agent_name) \
-                #         or (prev_bid.t_img < bid.t_img and bid.winner == state.agent_name)
-                # ]
-                    
-        #         # DEBUG PRINTOUTS --------
-        #         if self._debug and not all(constraints):
-        #             print(f'ERROR: generated invalid bids during bundle-building phase:')
-        #             self._log_results('INVALID GENERATED BIDS', state, self.results)
-        #             x = 1 # breakpoint
-        #         #-------------------------
-
-        #         # check if any constraint is violated
-                # assert all(constraints), \
-                #     "Generated bids violate constraints; cannot update results."         
 
     def _calculate_path_utility(self,
                                 state : SimulationAgentState,
@@ -1619,6 +1623,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
          
         for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
+
+        out += f'Total tasks in results: {len(results)}\n'
 
         print(out)
 

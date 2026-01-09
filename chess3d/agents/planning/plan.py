@@ -129,7 +129,6 @@ class Plan(ABC):
             if feasible:
                 # is feasible, no need to repair 
                 self.actions = [action for action in prelim_plan]
-                
             else:
                 # possible conflicts exist, may need to repair 
                 for action in actions: self.add(action, t)
@@ -144,8 +143,9 @@ class Plan(ABC):
             # check if action is scheduled to occur during while another action is being performed
             interrupted_actions = [interrupted_action 
                                    for interrupted_action in self.actions
-                                   if isinstance(interrupted_action, AgentAction)
-                                   and interrupted_action.t_start < action.t_start < interrupted_action.t_end]
+                                   if interrupted_action.t_start < action.t_start < interrupted_action.t_end
+                                   or interrupted_action.t_start < action.t_end < interrupted_action.t_end
+                                   ]
             
             # check if another action is schduled during this action
             concurrent_actions = [concurrent_action 
