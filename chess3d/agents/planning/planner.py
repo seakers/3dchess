@@ -162,6 +162,9 @@ class AbstractPlanner(ABC):
         observation_opps : list[ObservationOpportunity] \
             = self.single_task_observation_opportunity_from_accesses(available_tasks, access_times, cross_track_fovs, orbitdata)
         
+        # remove duplicates if needed
+        observation_opps = list(set(observation_opps))
+
         # filter out opportunities that have just been performed
         filtered_observation_opps : list[ObservationOpportunity] \
             = [obs for obs in observation_opps 
@@ -382,7 +385,9 @@ class AbstractPlanner(ABC):
 
         # create adjacency list for tasks
         adj : Dict[str, set[ObservationOpportunity]] = {task.id : set() for task in observation_opportunities}
-                
+        assert len(adj) == len(observation_opportunities), \
+            "Duplicate observation opportunity IDs found when creating adjacency list."
+
         if observation_opportunities:
             # sort tasks by accessibility
             observation_opportunities.sort(key=lambda a : a.accessibility) 
@@ -418,7 +423,8 @@ class AbstractPlanner(ABC):
             assert p not in adj[p.id], \
                 f'Task {p.id} is in its own adjacency list.'
             for q in adj[p.id]:
-                assert p in adj[q.id], f'Task {p.id} is in the adjacency list of task {q.id} but not vice versa.'
+                assert p in adj[q.id], \
+                    f'Task {p.id} is in the adjacency list of task {q.id} but not vice versa.'
 
         return adj
 
