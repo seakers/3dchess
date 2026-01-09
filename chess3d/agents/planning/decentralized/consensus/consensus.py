@@ -630,6 +630,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
                             # winner changed due to performed bid; add updated bid to results updates
                             results_updates.append(updated_bid)
                         else:
+                            # winner did not change; no need to add to results updates
+                            pass 
                             x = 1 # debug breakpoint                        
                     
                     # check if both bids corresponded to a performed observation

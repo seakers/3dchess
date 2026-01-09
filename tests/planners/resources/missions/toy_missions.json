@@ -549,7 +549,7 @@
                             "req_type": "capability",
                             "attribute": "instrument",
                             "strategy" : "explicit",
-                            "valid_values": ["VNIR hyper"]
+                            "valid_values": ["TIR"]
                         },
                         {
                             "req_type": "performance",
