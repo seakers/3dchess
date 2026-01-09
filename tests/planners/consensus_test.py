@@ -37,9 +37,9 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_15 = False
         self.toy_16 = False
         self.toy_17 = False
-        self.toy_18 = True
-        # self.toy_19 = False
-        # self.toy_20 = False
+        self.toy_18 = False
+        self.toy_19 = True
+        self.toy_20 = False
 
     def toy_planner_config(self):
         return {
@@ -1725,13 +1725,70 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         print(f"{scenario_name}: DONE")
 
-    # def test_toy_case_19(self):
-    #     """
-    #     ## TOY CASE 19
-    #     Test case for a single satellite reacting to event announcements from an announcer with an existing pre-planned schedule with a short planning horizon.
+    def test_toy_case_19(self):
+        """
+        ## TOY CASE 19
+        Test case for a single satellite reacting to event announcements from an announcer with an existing pre-planned schedule with a short planning horizon.
 
-    #     """
-    #     if not self.toy_19: return
+        """
+        if not self.toy_19: return
+
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'toy_19'
+        scenario_name = f'toy_19-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_19'
+        mission_name = 'toy_missions'
+
+        # SAT0 : announcer satellite 
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_announcer'
+        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['mission'] = "toy_mission_19"
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_hollistic_planner_config()
+        ractive_spacecraft_1['planner']['preplanner']['period'] = 50 # fixed replanning period
+        ractive_spacecraft_1['planner']['preplanner']['horizon'] = 500 # longer planning horizon
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = -2.0
+        ractive_spacecraft_1['mission'] = "toy_mission_19"
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                       ractive_spacecraft_1
+                                                    ]
+                                                   )
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs, overwrite=True)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
 
     # def test_toy_case_20(self):
     #     """

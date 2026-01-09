@@ -182,7 +182,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         new_default_tasks = self._process_default_tasks(state, tasks)
 
         # check for new urgent tasks
-        new_urgent_task_added = self._process_incoming_urgent_tasks(state, incoming_reqs, incoming_bids)
+        new_urgent_task_added \
+            = self._process_incoming_urgent_tasks(state, incoming_reqs, incoming_bids)
 
         # check if planned tasks expired
         expired_tasks = self._remove_expired_tasks(state)
@@ -968,9 +969,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # schedule broadcasts
         broadcasts : list = self._schedule_broadcasts(state, orbitdata)
-                
+
+        # determine next planning time        
+        t_next = state.t + current_plan.horizon if isinstance(current_plan, PeriodicPlan) else current_plan.t_next
+        
         # compile and generate plan
-        self.plan = ReactivePlan(maneuvers, self.path, broadcasts, t=state.t, t_next=current_plan.t_next)
+        self.plan = ReactivePlan(maneuvers, self.path, broadcasts, t=state.t, t_next=t_next)
 
         # clear new urgent tasks
         self.incoming_event_tasks = list()
