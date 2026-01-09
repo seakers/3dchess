@@ -681,7 +681,7 @@
                             "req_type": "performance",
                             "attribute": "n_obs",
                             "strategy" : "discrete_intervals",
-                            "thresholds": [1, 10],
+                            "thresholds": [1, 100],
                             "scores": [0.1, 1.0]
                         },
                         {
@@ -703,21 +703,21 @@
                             "req_type": "capability",
                             "attribute": "instrument",
                             "strategy" : "explicit",
-                            "valid_values": ["TIR"]
+                            "valid_values": ["VNIR hyper"]
                         },
                         {
                             "req_type": "performance",
                             "attribute": "n_obs",
                             "strategy" : "discrete_intervals",
-                            "thresholds": [1, 100],
-                            "scores": [0.1, 1.0]
+                            "thresholds": [1, 10],
+                            "scores": [0.5, 1.0]
                         },
                         {
                             "req_type": "performance",
                             "attribute": "revisit_time [s]",
                             "strategy" : "discrete_intervals",
-                            "thresholds": [0, 7200],
-                            "scores": [0.1, 0.2]
+                            "thresholds": [0, 10],
+                            "scores": [0.5, 1.0]
                         }
                     ]
                 }

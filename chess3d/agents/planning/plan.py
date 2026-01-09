@@ -363,7 +363,18 @@ class Plan(ABC):
 
     def __str__(self) -> str:
         out = f't_plan = {self.t}[s]\n'
-        out += f'id\t  action type\tt_start\tt_end\tdetails\n'
+        line = f'id\t  action type\tt_start\tt_end\tdetails\n'
+
+        # count characters in line for formatting
+        L_LINE = len(line)
+        L_LINE_PADding = 35
+
+        # header
+        out += line
+
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
 
         if self.is_empty():
             out += 'EMPTY\n\n'
@@ -400,11 +411,26 @@ class Plan(ABC):
                         out += f"\t{action.msg['msg_type'].split('_')[-1].lower()} broadcast"
 
                     out += '\n'    
+        
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '_'
+
+        # stats
         out += f'\nn actions in plan: {len(self)}'
         out += f'\nn measurements in plan: {len([action for action in self if isinstance(action, ObservationAction)])}'
         out += f'\nn broadcasts in plan: {len([action for action in self if isinstance(action, BroadcastMessageAction)])}'
         out += f'\nn maneuvers in plan: {len([action for action in self if isinstance(action, ManeuverAction)])}'
         out += f'\nn travel actions in plan: {len([action for action in self if isinstance(action, TravelAction)])}\n'
+        
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '-'
+        out += '\n'
+
+        # horizon and period
+        out += f'Next plan update time: {round(self.t_next,1)}[s]\n'
+        if isinstance(self, PeriodicPlan):
+            out += f'Planning horizon: {round(self.horizon,1)}[s]\n'
+
         return out
 
     def get_horizon(self) -> float:

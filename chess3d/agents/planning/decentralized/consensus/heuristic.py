@@ -1,14 +1,14 @@
 from abc import abstractmethod
 from collections import defaultdict, deque
-from typing import Dict, List, Tuple
+from typing import Dict, List, Set, Tuple
 from tqdm import tqdm
 
 from dmas.utils import runtime_tracker
 from dmas.clocks import ClockConfig
 
 from chess3d.agents.planning.decentralized.consensus.consensus import ConsensusPlanner
-from chess3d.agents.actions import ObservationAction
-from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
+from chess3d.agents.actions import ObservationAction, WaitForMessages
+from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
 from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.planning.plan import Plan
@@ -126,7 +126,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             path_action.obs_opp = matching_obs_action.obs_opp.copy()
 
             # match id for scheduled actions
-            path_action.id = matching_obs_action.id
+            path_action.id = matching_obs_action.id       
         
         # return proposed bundle and path
         return proposed_bundle, proposed_path, proposed_bids
@@ -147,7 +147,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         cross_track_fovs : dict = self._collect_fov_specs(specs)
 
         # Outline planning horizon interval
-        t_next = current_plan.t_next
+        t_next = max(self.preplan.t + self.preplan.horizon, state.t)
         planning_horizon = Interval(state.t, t_next)
 
         # get only available tasks from existing plan and urgent tasks
@@ -158,10 +158,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
         # create and merge task observation opportunities from scheduled tasks and urgent tasks
         observation_opportunities : List[ObservationOpportunity] = self.create_observation_opportunities_from_accesses(available_tasks, access_opportunities, cross_track_fovs, orbitdata)
-
+        
         # extract already planned task observation opportunities from current plan
         planned_observation_opportunities = [obs.obs_opp for obs in self.path if isinstance(obs,ObservationAction)]
-        
+
         # filter tasks that are already in the current plan
         observation_opportunities = [obs_opp for obs_opp in observation_opportunities
                                      if obs_opp not in planned_observation_opportunities]
@@ -320,7 +320,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                        orbitdata : OrbitData,
                                        mission : Mission,
                                        observation_history : ObservationHistory
-                                    ) -> Tuple[list, list, dict]:
+                                    ) -> Tuple[list, List[ObservationAction], dict]:
         """ 
         Build bundle using a given heuristic. Attempts to insert tasks into existing path, right-shift existing tasks to accommodate for new 
          tasks or replaces tasks in the current plan if it leads to a feasible plan that can increase overall plan utility.  Tasks are added 
@@ -394,11 +394,11 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             best_bids : Dict[ObservationOpportunity, Dict[GenericObservationTask,Bid]] = None
             # best_abandoned : Dict[GenericObservationTask, Dict[int, Bid]] = None
 
-            # Generate proposed paths using heuristic insertion path builder
-            candidate_paths = self.__heuristic_insertion_path_builder(state, specs, proposed_path, proposed_observation)
+            # Generate list of candidate paths for this observation opportunity
+            candidate_paths = self.__incremental_path_builder(state, specs, proposed_path, proposed_observation)
 
             # Find best placement in path   
-            for candidate_path, path_changes in candidate_paths:
+            for candidate_path, obs_added, obs_removed in candidate_paths:
                 # -------------------------------
                 # DEBUG PRINTOUTS
                 # if self._debug:
@@ -409,7 +409,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
                 # find best observation sequence for each parent task of the proposed task in this candidate path
                 n_obs_candidate, t_prev_candidate, bids_candidate \
-                    = self._assign_best_observations_and_revisit_times_to_proposed_path(state, candidate_path, path_changes, proposed_bids, specs, cross_track_fovs, orbitdata, mission, observation_history)
+                    = self._assign_best_observations_and_revisit_times_to_proposed_path(state, candidate_path, obs_added, obs_removed, proposed_bids, specs, cross_track_fovs, orbitdata, mission, observation_history)
 
                 # check if valid bids were found for proposed task
                 if bids_candidate is None: continue # no valid bids found; skip
@@ -502,12 +502,12 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
     """
     BUNDLE-BUILDING PHASE - Path Insertion Methods
     """
-    def __heuristic_insertion_path_builder(self,
+    def __incremental_path_builder(self,
                                             state : SimulationAgentState,
                                             specs : object,
                                             current_path : List[ObservationAction],
                                             new_obs : ObservationOpportunity
-                                        ) -> List[Tuple[List[ObservationAction], List[ObservationAction]]]:
+                                        ) -> List[Tuple[List[ObservationAction], List[ObservationAction], List[ObservationAction]]]:
         """ 
         Generates a list of proposed paths by applying the following operators to the path:
             1. Direct Insertion into existing path
@@ -523,7 +523,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         max_slew_rate, max_torque = self._collect_agility_specs(specs)
 
         # generate proposed paths
-        proposed_paths : List[Tuple[List[ObservationAction], List[ObservationAction]]] = [
+        proposed_paths : List[Tuple[List[ObservationAction], List[ObservationAction], List[ObservationAction]]] = [
             # Option 1: Direct Insertion into existing path
             self._direct_insertion_into_path(state, specs, current_path, new_obs, max_slew_rate, max_torque),
 
@@ -538,15 +538,15 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         ]
 
         # ensure new task was included in new paths
-        assert not self._debug or all([(path is None or any([action.obs_opp == new_obs for action in path])) for path,_ in proposed_paths]), \
+        assert not self._debug or all([(path is None or any([action.obs_opp == new_obs for action in path])) for path,*_ in proposed_paths]), \
               "New observation opportunity not included in proposed paths."
         
         # ensure new observation opportunity was included in path changes
-        assert not self._debug or all([(path is None or any([action.obs_opp == new_obs for action in path_changes])) for path,path_changes in proposed_paths]), \
+        assert not self._debug or all([(path is None or any([action.obs_opp == new_obs for action in path_changes])) for path,path_changes,_ in proposed_paths]), \
               "New observation opportunity not included in proposed path changes."
 
         # return proposed paths and the respective observation times for the new observation opportunity in said paths
-        return [(path,path_changes) for path,path_changes in proposed_paths if path is not None]
+        return [(path,obs_added,obs_removed) for path,obs_added,obs_removed in proposed_paths if path is not None]
         
     def _direct_insertion_into_path(self,
                                     state : SimulationAgentState,
@@ -555,7 +555,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                                     new_obs : ObservationOpportunity,
                                     max_slew_rate : float,
                                     max_torque : float
-                                ) -> Tuple[List[ObservationAction], List[ObservationAction]]:
+                                ) -> Tuple[List[ObservationAction], List[ObservationAction], List[ObservationAction]]:
         """ Try to directly insert new task into existing path. """
         # initialize feasible observation time and select observation loook angle for new task
         t_img, th_img = None, np.average([new_obs.slew_angles.left, new_obs.slew_angles.right])
@@ -635,7 +635,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                 t_img = None # no feasible observation time found
 
         # check if observation time was found
-        if t_img is None: return None,None # no time found; cannot insert new observation into path
+        if t_img is None: return (None, None, None) # no time found; cannot insert new observation into path
 
         # insert new observation into path
         ## create observation action for new task
@@ -647,7 +647,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         new_path = sorted(new_path, key=lambda action: action.t_start)
         
         # return new path if valid
-        return (new_path, [new_observation]) if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs) else (None, None)
+        return (new_path, [new_observation], []) if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs) else (None, None, None)
 
     def _right_shift_path_for_new_obs(self,
                                         state : SimulationAgentState,
@@ -661,7 +661,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # check if path is empty
         if len(current_path) == 0: 
             # Current path is empty; cannot right-shift path for new task.
-            return (None, None)
+            return (None, None, None)
 
         # check if path is sorted by start time
         assert all(current_path[i].t_start <= current_path[i+1].t_start for i in range(len(current_path)-1)), "Current path is not sorted by start time."
@@ -704,7 +704,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             t_img = t_earliest
         
         # check if insertion index was found
-        if i_insert is None: return None, None # no insertion point found; cannot right-shift path for new task
+        if i_insert is None: return (None, None, None) # no insertion point found; cannot right-shift path for new task
 
         # initiate new path
         new_path = [action for action in current_path[:i_insert]]
@@ -714,7 +714,8 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         
         # add new observation to new path
         new_path.append(new_observation)
-        path_changes = [new_observation]
+        obs_added = [new_observation]
+        obs_removed = []
 
         # right-shift remaining observations
         path_to_shift = [action for action in current_path[i_insert:]]
@@ -749,14 +750,15 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
                 # add shifted observation to new path
                 new_path.append(shifted_observation)
-                path_changes.append(shifted_observation)
+                obs_added.append(shifted_observation)
+                obs_removed.append(obs_curr)
                 
-            # else, task needs a later start time but is not feasible
+            # else, could not find a feasible time; abort right-shifting process
             else: 
-                return (None, None) # cannot right-shift path for new task
+                return (None, None, None) # cannot right-shift path for new task
             
         # return new path if valid
-        return (new_path, path_changes) if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs) else (None, None)
+        return (new_path, obs_added, obs_removed) if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs) else (None, None, None)
     
     def _replace_conflicting_tasks_with_new_obs(self,
                                                  state : SimulationAgentState,
@@ -770,7 +772,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # check if path is empty
         if len(current_path) == 0: 
             # Current path is empty; cannot replace conflicting tasks in path for new task.
-            return (None, None)
+            return (None, None, None)
 
         # find possible conflicts in current path
         ## find observations that are being performed during new task accessibility
@@ -785,7 +787,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # check if any conflicting observations were found
         if not conflicting_observations: 
             # no conflicting observations found; cannot replace conflicting tasks in path for new task.
-            return (None, None)
+            return (None, None, None)
         
         # select observation loook angle for new task
         th_img = np.average([new_task.slew_angles.left, new_task.slew_angles.right])
@@ -849,10 +851,10 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
             # return new path if valid
             if self.is_observation_path_valid(state, new_path, max_slew_rate, max_torque, specs):
-                return (new_path, [new_observation, conflicting_observation]) # return new path and changes
+                return (new_path, [new_observation], [conflicting_observation]) # return new path and changes
 
         # unable to accommodate new task by replacing conflicting observations
-        return (None, None)
+        return (None, None, None)
 
     """
     BUNDLE-BUILDING PHASE - Bid Generation Methods
@@ -860,7 +862,8 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
     def _assign_best_observations_and_revisit_times_to_proposed_path(self,
                                                                      state : SimulationAgentState,  
                                                                      candidate_path : List[ObservationAction],
-                                                                     path_changes : List[ObservationAction],
+                                                                     obs_added : List[ObservationAction],
+                                                                     obs_removed : List[ObservationAction],
                                                                      proposed_bids : Dict[GenericObservationTask, Dict[int, Bid]],
                                                                      specs : object,
                                                                      cross_track_fovs : dict,
@@ -876,11 +879,17 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
             - t_prev_best : Dict[int, Dict[GenericObservationTask, float]] - Best previous observation times for each observation in the proposed path.
         """
         # extract modified task observation opportunities from path changes
-        modified_observation_opportunities : List[ObservationOpportunity] = [obs_action.obs_opp for obs_action in path_changes]   
-        modified_tasks : List[GenericObservationTask] =\
-              sorted({task 
-                      for obs_opp in modified_observation_opportunities 
-                      for task in obs_opp.tasks}, key=lambda x: x.id)
+        added_tasks : Set[GenericObservationTask] =\
+            {task for obs_act in obs_added for task in obs_act.obs_opp.tasks}
+        removed_tasks : Set[GenericObservationTask] = \
+            {task for obs_act in obs_removed for task in obs_act.obs_opp.tasks}
+        modified_tasks : Set[GenericObservationTask] = added_tasks.union(removed_tasks)
+        
+        modified_tasks_in_path : List[GenericObservationTask] = \
+              sorted({task
+                      for obs_act in candidate_path
+                        for task in obs_act.obs_opp.tasks
+                        if task in modified_tasks}, key=lambda x: x.id)
 
         # find observation time for proposed task in candidate path
         modified_task_obs_times : Dict[GenericObservationTask, List[Tuple[float,str,float,ObservationOpportunity]]] \
@@ -888,20 +897,20 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                         (action.t_start, state.agent_name, action.look_angle, action.obs_opp) 
                         for action in candidate_path 
                         if task in action.obs_opp.tasks
-                    ] for task in modified_tasks}
+                    ] for task in modified_tasks_in_path}
         
         # initialize best observation numbers and previous observation times
-        n_obs_best : Dict[GenericObservationTask, list[str]] = {task : [] for task in modified_tasks}
-        t_img_best : Dict[GenericObservationTask, list[float]] = {task : [] for task in modified_tasks}
-        t_prev_best : Dict[GenericObservationTask, list[float]] = {task : [] for task in modified_tasks}
-        obs_names_best : Dict[GenericObservationTask, list[str]] = {task : [] for task in modified_tasks}
-        vals_best : Dict[GenericObservationTask, list[float]] = {task : [] for task in modified_tasks}
+        n_obs_best : Dict[GenericObservationTask, list[str]] = {task : [] for task in modified_tasks_in_path}
+        t_img_best : Dict[GenericObservationTask, list[float]] = {task : [] for task in modified_tasks_in_path}
+        t_prev_best : Dict[GenericObservationTask, list[float]] = {task : [] for task in modified_tasks_in_path}
+        obs_names_best : Dict[GenericObservationTask, list[str]] = {task : [] for task in modified_tasks_in_path}
+        vals_best : Dict[GenericObservationTask, list[float]] = {task : [] for task in modified_tasks_in_path}
         
         # initialize search for best sequence for each task
-        best_values : dict = {task : np.NINF for task in modified_tasks}
+        best_values : dict = {task : np.NINF for task in modified_tasks_in_path}
 
         # find best observation sequences for each parent task
-        for task in modified_tasks:
+        for task in modified_tasks_in_path:
             # assume parent task has been considered in results
             assert task in self.results, f"Parent task {task} not being bid on by any agent; cannot generate bids."
             
@@ -1075,7 +1084,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # filter out observations from other agents in best sequences
         indeces_to_remove = {task : [idx for idx,agent_name in enumerate(obs_names_best[task])
                                             if agent_name != state.agent_name] 
-                             for task in modified_tasks}
+                             for task in modified_tasks_in_path}
         
         for task,indices in indeces_to_remove.items():
             for idx in sorted(indices, reverse=True):
@@ -1087,7 +1096,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
 
         # ensure filter was successful
         assert all([all([agent_name == state.agent_name for agent_name in obs_names_best[task]])
-                   for task in modified_tasks]), \
+                   for task in modified_tasks_in_path]), \
                "Not all observations from other agents were removed from best sequences."
         
         # # initiate list of abandoned bids

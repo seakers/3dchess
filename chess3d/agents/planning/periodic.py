@@ -90,11 +90,11 @@ class AbstractPeriodicPlanner(AbstractPlanner):
                         ) -> bool:
         """ Determines whether a new plan needs to be initalized """    
 
-        if (current_plan.t < 0                  # simulation just started
-            or state.t >= current_plan.t_next):    # or periodic planning period has been reached
+        if (self.plan.t < 0                  # simulation just started
+            or state.t >= self.plan.t_next):    # or periodic planning period has been reached
             
             pending_actions = [action for action in current_plan
-                               if action.t_start <= current_plan.t_next]
+                               if action.t_start <= self.plan.t_next]
             
             return not bool(pending_actions)     # no actions left to do before the end of the replanning period 
         return False

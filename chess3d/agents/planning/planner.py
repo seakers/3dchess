@@ -130,8 +130,8 @@ class AbstractPlanner(ABC):
                     break      
 
             if not found:
-                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [off_nadir_angle]])
-                
+                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [off_nadir_angle]])     
+
         # return access times and grid information
         return access_opportunities
 
@@ -203,7 +203,7 @@ class AbstractPlanner(ABC):
 
         # create one instance of an observation opportunity per each access opportunity
         for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
-            
+
             # extract minimum duration requirement for this task
             min_duration_req : float = self.__extract_minimum_duration_req(task, orbitdata)
 
@@ -364,7 +364,7 @@ class AbstractPlanner(ABC):
 
             # Evaluate capability requirement
             if capability_req is not None:
-                return capability_req.calc_preference(CapabilityRequirementAttributes.INSTRUMENT.value, instrument_name) >= 0.5
+                return capability_req.calc_preference(CapabilityRequirementAttributes.INSTRUMENT.value, instrument_name.lower()) >= 0.5
 
         # No capability objectives specified; check if instrument has general capability
         return True

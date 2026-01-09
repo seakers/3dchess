@@ -1760,7 +1760,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
         ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
-        ractive_spacecraft_1['orbitState']['state']['ta'] = -2.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = 0.0
         ractive_spacecraft_1['mission'] = "toy_mission_19"
 
         # terminal welcome message
