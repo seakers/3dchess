@@ -182,7 +182,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         new_default_tasks = self._process_default_tasks(state, tasks)
 
         # check for new urgent tasks
-        new_urgent_task_added = self._process_incoming_urgent_tasks(state, incoming_reqs)
+        new_urgent_task_added = self._process_incoming_urgent_tasks(state, incoming_reqs, incoming_bids)
 
         # check if planned tasks expired
         expired_tasks = self._remove_expired_tasks(state)
@@ -291,15 +291,23 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return list of new task bids added to results
         return new_task_added
     
-    def _process_incoming_urgent_tasks(self, state: SimulationAgentState,  incoming_reqs : List[TaskRequest]) -> List[Bid]:
+    def _process_incoming_urgent_tasks(self, 
+                                       state: SimulationAgentState, 
+                                       incoming_reqs : List[TaskRequest],
+                                       incoming_bids : List[Bid]
+                                       ) -> List[Bid]:
         """ Processes new urgent tasks and updates results accordingly. """
         # initialize list of newly added bids from new tasks
         new_task_added = []
 
         # get active incoming tasks
-        active_tasks = set([req.task for req in incoming_reqs 
+        active_req_tasks = set([req.task for req in incoming_reqs 
                             if req.task.is_available(state.t)])
-        
+        active_bid_tasks = set([bid.task for bid in incoming_bids
+                                if bid.task not in self.results
+                                and bid.task.is_available(state.t)])
+        active_tasks = active_req_tasks.union(active_bid_tasks)
+
         # update urgent tasks
         self.known_event_tasks.update(active_tasks)
         self.incoming_event_tasks.extend(active_tasks)
