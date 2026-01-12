@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict
 import os
 import copy
+from typing import List
+
+import pandas as pd
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
@@ -287,7 +291,46 @@ class PlannerTester(ABC):
                 "outDir" : f"./tests/planners/orbit_data/{scenario_name}",
             }
         return settings
+    
+    def compile_ground_stations(self, gs_network_names : List[str] = []) -> List[dict]:
+        """Compile ground stations for the scenario. """
+        # collect all ground stations from specified networks
+        ground_stations = {gs_network_name : self.load_ground_stations(gs_network_name) for gs_network_name in gs_network_names}
 
+        # add network name to each ground station specifications
+        for gs_network_name,network in ground_stations.items():
+            for gs in network:
+                gs['networkName'] = gs_network_name
+
+        # flatten list of lists
+        return [ground_station for network in ground_stations.values() for ground_station in network]
+
+    def load_ground_stations(self, gs_network_name : str = None) -> List[dict]:
+        if gs_network_name is None: return []
+
+        grid_path = f"./tests/planners/resources/gstations/{gs_network_name}.csv"
+        assert os.path.isfile(grid_path), f"Ground station file not found: {gs_network_name}.csv"
+
+        # load ground station network from file
+        df = pd.read_csv(grid_path)
+        gs_network_df : list[dict] = df.to_dict(orient='records')
+
+        # if no id in file, add index as id
+        gs_network = []
+        for gs_idx, gs_df in enumerate(gs_network_df):
+            gs = {
+                "name": gs_df['name'],
+                "latitude": gs_df['lat[deg]'],
+                "longitude": gs_df['lon[deg]'],
+                "altitude": gs_df['alt[km]'],
+                "minimumElevation": gs_df['minElevation[deg]'],
+                "@id": gs_df['@id'] if '@id' in gs_df else f'{gs_network_name}-{gs_idx}'
+            }
+            gs_network.append(gs)
+
+        # return ground station network as list of dicts
+        return gs_network
+    
     @abstractmethod
     def toy_planner_config(self) -> dict:
         """ Returns the planner configuration for the toy test cases. """

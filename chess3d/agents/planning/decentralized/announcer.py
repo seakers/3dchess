@@ -75,18 +75,15 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
                         orbitdata : OrbitData,
                         *_
                     ) -> Plan:
-        """ Generates a new plan for the agent """        
-        # do NOT schedule observations from parent planner
-        observations : list = []
-        
+        """ Generates a new plan for the agent """            
         # schedule broadcasts to be perfomed
         broadcasts : list = self._schedule_broadcasts(state, [], orbitdata)
-
-        # generate maneuver and travel actions from measurements
-        maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
         
+        # TODO add maneuvers for pointing-dependent transmissions
+        # currently assumes omnidirectional antennas
+
         # generate plan from actions
-        self.plan : PeriodicPlan = PeriodicPlan(observations, maneuvers, broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
+        self.plan : PeriodicPlan = PeriodicPlan(broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
         
         # wait for next planning period to start
         replan : list = self._schedule_periodic_replan(state, self.plan, state.t + self.period)

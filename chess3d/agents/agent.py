@@ -910,8 +910,7 @@ class SimulatedAgent(AbstractAgent):
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
-                if "1" in state.agent_name:
-                    x = 1 # breakpoint
+                x = 1 # breakpoint
                 # -------------------------------------
 
         # --- Modify plan ---

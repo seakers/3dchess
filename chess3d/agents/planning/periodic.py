@@ -14,7 +14,7 @@ from chess3d.agents.planning.tasks import GenericObservationTask
 from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.science.requests import TaskRequest
-from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
+from chess3d.agents.states import GroundOperatorAgentState, SatelliteAgentState, SimulationAgentState
 from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
@@ -173,7 +173,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
     def _schedule_broadcasts(self, state: SimulationAgentState, observations : List[ObservationAction], orbitdata: OrbitData, t : float = None) -> List[BroadcastMessageAction]:
         """ Schedules broadcasts to be done by this agent """
         try:
-            if not isinstance(state, SatelliteAgentState):
+            if not isinstance(state, (SatelliteAgentState, GroundOperatorAgentState)):
                 raise NotImplementedError(f'Broadcast scheduling for agents of type `{type(state)}` not yet implemented.')
             elif orbitdata is None:
                 raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
