@@ -25,11 +25,11 @@ class TestMission(unittest.TestCase):
         # Define requirements
         self.req_1_1 = SinglePointSpatialRequirement(target=self.target, distance_threshold=10.0)
         self.req_1_2 = IntervalInterpolationRequirement(TemporalRequirementAttributes.REVISIT_TIME.value, [0, 10.0], [1.0, 0.0])
-        self.req_1_3 = IntervalInterpolationRequirement(TemporalRequirementAttributes.RELATIVE_OBS_TIME.value, [0, 100.0], [1.0, 0.0])
+        self.req_1_3 = IntervalInterpolationRequirement(TemporalRequirementAttributes.RESPONSE_TIME.value, [0, 100.0], [1.0, 0.0])
         
         self.req_2_1 = SinglePointSpatialRequirement(target=self.target, distance_threshold=10.0)
         self.req_2_2 = IntervalInterpolationRequirement(TemporalRequirementAttributes.REVISIT_TIME.value, [0, 5.0], [1.0, 0.0])
-        self.req_2_3 = IntervalInterpolationRequirement(TemporalRequirementAttributes.RELATIVE_OBS_TIME.value, [0, 50.0], [1.0, 0.0])
+        self.req_2_3 = IntervalInterpolationRequirement(TemporalRequirementAttributes.RESPONSE_TIME.value, [0, 50.0], [1.0, 0.0])
 
         # Define objectives
         ## event-driven mission objective
@@ -145,7 +145,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0                 # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0                 # best observation time from start of task availability
         }
 
         ## compute performance for each objective
@@ -163,7 +163,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (40.7128, -74.0060, 0, 1), # different target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0                 # observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0                 # observation time from start of task availability
         }
 
         ## compute performance for each objective
@@ -181,7 +181,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 5.0,            # worse revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0                 # observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0                 # observation time from start of task availability
         }
 
         ## compute performance for each objective
@@ -198,7 +198,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 10.0,           # worst revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0                 # observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0                 # observation time from start of task availability
         }
 
         ## compute performance for each objective
@@ -216,7 +216,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 50.0                # worse relative observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 50.0                # worse relative observation time from start of task availability
         }
 
         ## compute performance for each objective
@@ -233,7 +233,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 100.0               # worst relative observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 100.0               # worst relative observation time from start of task availability
         }
 
         ## compute performance for each objective
@@ -251,7 +251,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 1e6,                # unrealistically long duration; high cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0                # best relative observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0                # best relative observation time from start of task availability
         }
 
         ## compute performance for each objective
@@ -273,7 +273,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
         self.assertRaises(AssertionError, self.mission.calc_task_value, "invalid_task_type", perf)
@@ -286,7 +286,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             # TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # missing observation time
         }
         self.assertRaises(AssertionError, self.mission.calc_task_value, task_1, perf)
@@ -296,7 +296,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -310,7 +310,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (85.0522, -40.50, 0, 2),    # different target than requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -324,7 +324,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 5.0,            # poor revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -338,7 +338,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 100.0,          # worst revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -352,7 +352,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 1e6,                # very long duration; high cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -366,7 +366,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 101.0               # unavailable observation time
         }
 
@@ -386,7 +386,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
         self.assertRaises(AssertionError, self.mission.calc_observation_opportunity_value, "invalid_observation_type", perf)
@@ -399,7 +399,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -413,7 +413,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (85.0522, -40.50, 0, 2),    # different target than requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -427,7 +427,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 5.0,            # poor revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -441,7 +441,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 100.0,          # worst revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -455,7 +455,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 1e6,                # very long duration; high cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -469,7 +469,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 101.0               # unavailable observation time
         }
 
@@ -490,7 +490,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
         self.assertRaises(AssertionError, self.mission.calc_observation_opportunity_utility, "invalid_observation_type", perf, norm_param)
@@ -507,7 +507,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -521,7 +521,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 1.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -535,7 +535,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (85.0522, -40.50, 0, 2),    # different target than requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -549,7 +549,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (85.0522, -40.50, 0, 2),    # different target than requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 1.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -563,7 +563,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 5.0,            # poor revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -577,7 +577,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 5.0,            # poor revisit time
             TemporalRequirementAttributes.DURATION.value: 1.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -591,7 +591,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 100.0,          # worst revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -605,7 +605,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 100.0,          # worst revisit time
             TemporalRequirementAttributes.DURATION.value: 1.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -619,7 +619,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 1e6,                # very long duration; high cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 0.0                 # best observation time from mission start
         }
 
@@ -633,7 +633,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 0.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 101.0               # unavailable observation time
         }
 
@@ -647,7 +647,7 @@ class TestMission(unittest.TestCase):
             SpatialCoverageRequirement.ATTRIBUTE: (34.0522, -118.2437, 0, 0), # same target as requirement
             TemporalRequirementAttributes.REVISIT_TIME.value: 0,              # best revisit time
             TemporalRequirementAttributes.DURATION.value: 1.0,                # zero duration; zero cost
-            TemporalRequirementAttributes.RELATIVE_OBS_TIME.value: 0.0,       # best observation time from start of task availability
+            TemporalRequirementAttributes.RESPONSE_TIME.value: 0.0,       # best observation time from start of task availability
             TemporalRequirementAttributes.OBS_TIME.value: 101.0               # unavailable observation time
         }
 

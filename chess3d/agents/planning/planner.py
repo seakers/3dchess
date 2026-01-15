@@ -762,7 +762,7 @@ class AbstractPlanner(ABC):
             obs_perf.update({ 
                 SpatialCoverageRequirementAttributes.LOCATION.value : [loc],
                 TemporalRequirementAttributes.OBS_TIME.value : t_img,
-                TemporalRequirementAttributes.RELATIVE_OBS_TIME.value : t_img - task.availability.left,
+                TemporalRequirementAttributes.RESPONSE_TIME.value : t_img - task.availability.left,
                 TemporalRequirementAttributes.DURATION.value : d_img,
                 TemporalRequirementAttributes.REVISIT_TIME.value : t_img - t_prev,
                 "t_end" : t_img + d_img,

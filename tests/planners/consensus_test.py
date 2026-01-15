@@ -43,8 +43,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_19 = False # single sat    default mission     multiple targets    two events           preplan w/short horizon + replan
         self.toy_20 = False # two sats       default mission     multiple targets    two events           preplan w/short horizon + replan
 
-        self.toy_21 = True # single sat    default mission     multiple targets    two events announced by GS  preplan w/short horizon + replan
-        self.toy_22 = False # two sats      default mission     multiple targets    two events announced by GS  preplan w/short horizon + replan
+        self.toy_21 = False # single sat    no default mission     multiple targets    two events announced by GS  replan
+        self.toy_22 = True # two sats      no default mission     multiple targets    two events announced by GS   replan
 
     def toy_planner_config(self):
         return {
@@ -133,20 +133,15 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
     def planner_name(self):
         return "consensus"
     
-    def setup_announcer_ground_operators(self, event_name : str, mission_name : str, gs_network_names : List[str], spacecraft : List[dict]) -> List[dict]:
+    def setup_announcer_ground_operators(self, event_name : str, mission_name : str, gs_network_names : List[str]) -> List[dict]:
         """ create ground operator specifications for the scenario. """
-        # gs_clients = defaultdict(list)
-        # for sat in spacecraft:
-        #     sat : dict
-        #     dealer_name = sat.get('planner', {}).get('replanner', {}).get('dealerName', None)
-        #     if dealer_name is not None and dealer_name in gs_network_names:
-        #         gs_clients[dealer_name].append(sat['name'])
 
         # validate event file exists
         assert isinstance(event_name, str), "`event_name` must be a string"
         assert os.path.isfile(f"./tests/planners/resources/events/{event_name}.csv"), \
             f"Event file not found: {event_name}.csv"
         
+        # generate ground operator specifications
         ground_ops = [
             {
                 "name" : gs_network_name,
@@ -159,13 +154,13 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                     }
                 },
                 "mission" : mission_name,
-                # "clients" : gs_clients[gs_network_name]
             }
 
             for gs_network_name in gs_network_names
         ]
-        return ground_ops
 
+        # return ground operator specifications
+        return ground_ops
     
     def test_toy_case_1(self):
         """ 
@@ -1931,9 +1926,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         ractive_spacecraft_1['@id'] = 'sat1_vnir'
         ractive_spacecraft_1['name'] = 'sat1'
-        ractive_spacecraft_1['planner'] = self.toy_planner_config()
-        # ractive_spacecraft_1['planner']['preplanner']['period'] = 50 # fixed replanning period
-        # ractive_spacecraft_1['planner']['preplanner']['horizon'] = 500 # longer planning horizon
+        ractive_spacecraft_1['planner'] = self.toy_planner_config() # no preplan capability
         ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
         ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
         ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
@@ -1958,7 +1951,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         # compile ground stations and operators
         scenario_specs['groundStation'] = self.compile_ground_stations([gs_network])
-        scenario_specs['groundOperator'] = self.setup_announcer_ground_operators(event_name, mission_name, [gs_network], [ractive_spacecraft_1])
+        scenario_specs['groundOperator'] = self.setup_announcer_ground_operators(event_name, mission_name, [gs_network])
 
         # initialize mission
         self.simulation : Simulation = Simulation.from_dict(scenario_specs, overwrite=True)
@@ -1971,13 +1964,77 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         print(f"{scenario_name}: DONE")
 
-    # def test_toy_case_22(self):
-    #     """
-    #     ## TOY CASE 22
-    #     Test case for multiple satellite responding to event announcements from a ground station.
-    #     """
+    def test_toy_case_22(self):
+        """
+        ## TOY CASE 22
+        Test case for multiple satellite responding to event announcements from a ground station.
+        """
 
-    #     if not self.toy_22: return
+        if not self.toy_22: return
+
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'toy_22'
+        scenario_name = f'toy_22-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_22'
+        mission_filename = 'toy_missions'
+        mission_name = 'toy_mission_22'
+        gs_network = 'gs_toy_22'
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config() # no preplan capability
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = 0.0
+        ractive_spacecraft_1['groundStationNetwork'] = gs_network
+        ractive_spacecraft_1['mission'] = mission_name
+
+        # SAT2 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_2['@id'] = 'sat2_vnir'
+        ractive_spacecraft_2['name'] = 'sat2'
+        ractive_spacecraft_2['planner'] = self.toy_planner_config() # no preplan capability
+        ractive_spacecraft_2['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_2['orbitState']['state']['ta'] = -10.0 # phase offset by 10.0[deg]
+        ractive_spacecraft_2['mission'] = mission_name
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_filename,
+                                                   spacecraft=[
+                                                       ractive_spacecraft_1,
+                                                       ractive_spacecraft_2
+                                                    ]
+                                                   )
+
+        # compile ground stations and operators
+        scenario_specs['groundStation'] = self.compile_ground_stations([gs_network])
+        scenario_specs['groundOperator'] = self.setup_announcer_ground_operators(event_name, mission_name, [gs_network])
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs, overwrite=True)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
 
     # def test_toy_case_2X(self):
     #     """
