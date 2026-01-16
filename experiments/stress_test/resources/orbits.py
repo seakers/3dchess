@@ -1,17 +1,19 @@
-from collections import defaultdict
-from copy import copy,deepcopy
-import json
+from typing import List, Tuple
+from copy import deepcopy
 import os
+
+import json
 import shutil
-from typing import Dict, List, Tuple
-
-import networkx as nx
-import networkx_temporal as tx
-
 import numpy as np
-from orbitpy.mission import Mission
 import pandas as pd
 from tqdm import tqdm
+
+import networkx as nx
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from orbitpy.mission import Mission
 from chess3d.utils import print_welcome
 
 # ========================================
@@ -292,9 +294,12 @@ def propagate_walker_delta_constellation(alt : float, i : float, t : int, p : in
 #       Orbit Evaluation Functions
 # ========================================
 
-def load_access_event_intervals(data_dir : str) -> Tuple[list,float]:
+def load_access_event_intervals(data_dir : str) -> Tuple[list,list,float]:
     # initiale list of events for temporal graph
     events : List[tuple] = []
+
+    # initiate set of nodes
+    nodes = set()
 
     # define path to comms data directory
     comms_data_dir = os.path.join(data_dir, 'comm')
@@ -307,6 +312,10 @@ def load_access_event_intervals(data_dir : str) -> Tuple[list,float]:
         # parse filename
         isl_names = filename.split('.')[0]
         sat1, _, sat2 = isl_names.split('_')
+
+        # add nodes to list
+        nodes.add(sat1)
+        nodes.add(sat2)
         
         # define full path to comms data file
         comms_data_path = os.path.join(comms_data_dir, filename)
@@ -335,17 +344,11 @@ def load_access_event_intervals(data_dir : str) -> Tuple[list,float]:
     events.sort(key=lambda e: e[2])
     
     # return events and approximate time-step
-    return events, time_step
+    return events, list(nodes), time_step
 
 def load_graph_snapshot_series(data_dir : str, T : float) -> Tuple[List[nx.Graph],list,float]:
-    # load access events
-    events, time_step = load_access_event_intervals(data_dir)
-
-    # extract nodes
-    u_events = {e[0] for e in events}
-    v_events = {e[1] for e in events}
-    nodes = list(u_events.union(v_events))
-    assert nodes or not events, "No nodes found in access events!"
+    # load access events and nodes
+    events, nodes, time_step = load_access_event_intervals(data_dir)
 
     # extract event times
     event_times : list = sorted(set([e[2] for e in events]))
@@ -382,78 +385,75 @@ def load_graph_snapshot_series(data_dir : str, T : float) -> Tuple[List[nx.Graph
     # return list of graph snapshots and corresponding times with time step
     return snapshots, times, time_step
 
-# def load_access_events(data_dir : str) -> Tuple[list,float]:
-#     # initiale list of events for temporal graph
-#     events : List[tuple] = []
+def generate_time_series_metrics(i : float, t : int, p : int, f : int, 
+                                 TG : List[nx.Graph], 
+                                 times : List[int], 
+                                 time_step : float,
+                                 data_dir : str, 
+                                 overwrite : bool = False
+                                ) -> pd.DataFrame:
+    """ Generate time-series connectivity metrics from temporal graph snapshots. """
+    # define path to save metrics
+    metrics_path = os.path.join(data_dir, 'connectivity_series.csv')
 
-#     # define path to comms data directory
-#     comms_data_dir = os.path.join(data_dir, 'comm')
-    
-#     # initiate time step variable
-#     time_step = np.NAN
-
-#     # load comms data for every inter-satellite link
-#     for filename in tqdm(os.listdir(comms_data_dir), desc=f'Loading inter-satellite link data'):
-#         # parse filename
-#         isl_names = filename.split('.')[0]
-#         sat1, _, sat2 = isl_names.split('_')
+    # check if file already exists
+    if os.path.exists(metrics_path) and not overwrite:
+        # file exists and no overwrite is required, skip computation
+        print(f"Connectivity metrics file already exists at: {metrics_path}. Loading existing metrics...\n")
         
-#         # define full path to comms data file
-#         comms_data_path = os.path.join(comms_data_dir, filename)
+        # load existing metrics
+        metrics_series_df = pd.read_csv(metrics_path)
+        
+        # print metrics summary
+        assert not metrics_series_df.empty, "Loaded connectivity metrics dataframe is empty!"
+        print('Connectivity Metrics:')
+        print(metrics_series_df.describe().iloc[1:].round(2))
+        print(f"\nConnectivity metrics loaded from:\n   `{metrics_path}`\n")
 
-#         # read propagation time-step
-#         time_data =  pd.read_csv(comms_data_path, nrows=2)
-#         _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
-#         time_step = float(time_step)
+    else:# file does not exist or require overwrite, compute metrics
+        # initialize metrics
+        n_components_series = []
+        n_components_fraction_series = []
+        largest_cc_size_series = []
+        largest_cc_norm_series = []
 
-#         # load communications data
-#         df : pd.DataFrame = pd.read_csv(comms_data_path, skiprows=range(3))
+        # Evaluate constellation connectivity metrics
+        for G in tqdm(TG, desc=f'Evaluating connectivity metrics', unit='time steps'):
+            # compute connectivity metrics
+            components = list(nx.connected_components(G))
+            n_components = nx.number_connected_components(G)
+            n_components_fraction = n_components / G.number_of_nodes()
+            largest_cc_size = len(max(components, key=len)) if n_components > 0 else 0
+            largest_cc_norm = largest_cc_size / G.number_of_nodes() 
 
-#         # skip if dataframe is empty
-#         if df.empty: continue
+            # store metrics
+            n_components_series.append(n_components)
+            n_components_fraction_series.append(n_components_fraction)
+            largest_cc_size_series.append(largest_cc_size)
+            largest_cc_norm_series.append(largest_cc_norm)
 
-#         # add edges to temporal graph
-#         for t_start,t_end in df.values:
-#             # convert to integer time-steps
-#             t_start = int(t_start)
-#             t_end = int(t_end)
+        # compile to dataframe
+        metrics_series_df = pd.DataFrame({
+            'time index' : times,
+            'time [s]' : [t * time_step for t in times],
+            "inc [deg]" : [i] * len(times),
+            "num sats" : [t] * len(times),
+            "num planes" : [p] * len(times),
+            "phasing param" : [f] * len(times),
+            'num components' : n_components_series,
+            'lcc' : largest_cc_size_series,
+            'lcc [norm]' : largest_cc_norm_series
+        })
 
-#             # add contact as an event to list 
-#             events.append( (sat1, sat2, t_start, 1) )
-#             events.append( (sat1, sat2, t_end, -1) )
-    
-#     # sort events by start time
-#     events.sort(key=lambda e: e[2])
-    
-#     # return events and approximate time-step
-#     return events, time_step
+        # save to csv
+        metrics_series_df.to_csv(metrics_path, index=False)
+        
+        # print metrics summary
+        print('Connectivity Metrics:')
+        print(metrics_series_df.describe().iloc[1:].round(2))
+        print(f"\nConnectivity metrics saved to: \n   `{metrics_path}`\n")
 
-# def load_temporal_graph(data_dir : str) -> Tuple[tx.TemporalGraph, list, float]:
-#     """ Generates a temporal graph from orbit data stored in `data_dir` """
-#     # load access events
-#     events, time_step = load_access_events(data_dir)
-
-#     # extract event times
-#     event_times : list = sorted(set([e[2] for e in events]))
-
-#     # graph events by time
-#     # graph_events = [
-#     #     (u,v,event_times.index(t),weight)
-#     #     for u,v,t,weight in events
-#     # ]
-#     graph_events = [event for event in events]
-
-#     # create temporal graph from events            
-#     if events: print('Loading temporal graph from events...')
-#     tg = tx.from_events(graph_events, directed=False) if events else tx.TemporalGraph()
-#     if events: 
-#         print('Temporal graph loaded!')
-#     else:
-#         print('No inter-satellite links found! Temporal graph is empty.')
-
-
-#     # return temporal graph and event times with the approximate time-step
-#     return tg, event_times, time_step
+    return metrics_series_df
 
 # ========================================
 #              Main Execution
@@ -466,17 +466,38 @@ if __name__ == "__main__":
     # define common orbital parameters
     alt = 550.0     # altitude [km]
     i = 98.0        # inclination [degrees]
-    n_sats_candidates = [2, 12, 24, 36, 48, 60, 72]  # total number of satellites
+    # n_sats_candidates = [8, 12, 24, 36, 48, 60, 96, 144]  # total number of satellites
+    # n_sats_candidates = [12, 36, 60, 144]  # total number of satellites
+    # n_sats_candidates = [8, 24, 48, 96]  # total number of satellites
+    n_sats_candidates = [144]  # total number of satellites
+    # n_sats_candidates = [8, 12, 24]  # total number of satellites
 
     # calculate orbital period
     T = 2 * np.pi * np.sqrt( (R + alt)**3 / GM )
+    T /= 2 # propagate for half an orbital period
 
+    # initiate results compilation lists
+    time_series_df : pd.DataFrame = None
+    compiled_df : pd.DataFrame = None    
+
+    # evaluate each candidate number of satellites
     for n_sats in n_sats_candidates:
         # generate walker delta specifications
         walker_specs = generate_walker_delta_specifications(i, n_sats)
 
+        # initialize results compilation lists
+        metrics_columns : List[str] = ['alt [km]', 'inc [deg]', 'num sats', 'num planes', 'phasing param',
+                                        # 'fully connected time frac', 
+                                        'max lcc [norm]', 
+                                        'max lcc frac', 
+                                        'avg lcc [norm]', 
+                                        'avg num components'
+                                        ]
+        metrics_data : list = []    
+
         # evaluate each specification
         for i,t,p,f in walker_specs:
+            # ensure total number of satellites matches specifications
             assert t == n_sats, "Total number of satellites does not match specified value."
     
             # propagate constellation and save to disk
@@ -485,44 +506,79 @@ if __name__ == "__main__":
             # Load temporal graph and event times
             TG, times, time_step = load_graph_snapshot_series(data_dir,T)
 
-            # initialize metrics
-            n_components_series = []
-            largest_cc_size_series = []
-
-            # Evaluate constellation connectivity metrics
-            for t_idx,G in tqdm(zip(times,TG), desc=f'Evaluating connectivity metrics', unit='time steps'):
-                # compute connectivity metrics
-                components = list(nx.connected_components(G))
-                n_components = nx.number_connected_components(G)
-                largest_cc_size = len(max(nx.connected_components(G), key=len)) if n_components > 0 else 0
-
-                # store metrics
-                n_components_series.append(n_components)
-                largest_cc_size_series.append(largest_cc_size)
-
-                # breakpoint 
-                if len(components) > 1:
-                    x= 1
-
-            # compile to dataframe
-            metrics_df = pd.DataFrame({
-                'time_step' : times,
-                'n_components' : n_components_series,
-                'largest_cc_size' : largest_cc_size_series
-            })
-
-            # save to csv
-            metrics_path = os.path.join(data_dir, 'connectivity_metrics.csv')
-            metrics_df.to_csv(metrics_path, index=False)
+            # Generate time-series connectivity metrics
+            metrics_series_df = generate_time_series_metrics(i, t, p, f, TG, times, time_step, data_dir, overwrite=True)
             
-            if not metrics_df.empty:
-                print('Connectivity Metrics:')
-                print(metrics_df.describe())
-            else:
-                print("No connectivity metrics to display.")
-            print(f"Connectivity metrics saved to: {metrics_path}")
-            print('\n')
-        
-        print("\n\n")
+            # Add to results dataframe
+            time_series_df = pd.concat([time_series_df, metrics_series_df], ignore_index=False) \
+                             if time_series_df is not None else metrics_series_df
+ 
+            # TODO Evaluate scalar metrics
 
-        x = 1 # breakpoint
+            # Largest Connected Component 
+            avg_largest_cc_norm = metrics_series_df['lcc [norm]'].mean()
+                        
+            max_largest_cc_norm = metrics_series_df['lcc [norm]'].max()
+            largest_cc_norm_series = metrics_series_df[metrics_series_df["lcc [norm]"] == max_largest_cc_norm]
+            max_largest_cc_norm_fraction = len(largest_cc_norm_series) / len(metrics_series_df)
+
+            # Connected Component Count
+            avg_n_components = metrics_series_df['num components'].mean()
+
+            # Percentage Time Fully Connected
+            n_fully_connected = len(metrics_series_df[metrics_series_df['num components'] == 1])
+            fully_connected_fraction = n_fully_connected / len(metrics_series_df)
+
+            # compile results
+            scalar_metrics = [
+                        # fully_connected_fraction, 
+                        max_largest_cc_norm, 
+                        max_largest_cc_norm_fraction, 
+                        avg_largest_cc_norm, 
+                        avg_n_components
+                    ]
+
+            metrics = [alt,i,t,p,f]
+            metrics.extend(scalar_metrics)
+            
+            # Add to results list
+            metrics_data.append(metrics)
+
+        # sort metrics data 
+        # metrics_data.sort(key=lambda x: (-x[5],-x[6],-x[7],-x[8],x[9])) # sort by metrics
+
+        # generate metrics dataframe for this number of satellites
+        metrics_df = pd.DataFrame(data=metrics_data, columns=metrics_columns) 
+
+        # compile results dataframe
+        compiled_df = pd.concat([compiled_df, metrics_df], ignore_index=True) \
+                        if compiled_df is not None else metrics_df
+    
+    # compile final results metrics
+    print("Compiled Scalar Metrics:")
+    print(compiled_df)
+
+    # Save results metrics to csv
+    compiled_metrics_path = os.path.join('./orbits/compiled_walker_delta_connectivity_metrics.csv')
+    compiled_df.to_csv(compiled_metrics_path, index=False)
+    print(f"Compiled connectivity scalar metrics saved to: \n   `{compiled_metrics_path}`\n")
+
+    # plot 
+    print("Plotting compiled time-series metrics...")
+    sns.set_theme(style="whitegrid")
+
+    # Largest Connected Component over time
+    ax1 = sns.relplot(data=time_series_df, x='time [s]', y='lcc [norm]', row="num sats", hue="num planes", kind="line", palette="Set2")
+    ax1.set_titles("Largest Connected Component Over Time (n_sats={row_name})")
+
+    # Number of Components over time
+    ax2 = sns.relplot(data=time_series_df, x='time [s]', y='num components', row="num sats", hue="num planes", kind="line", palette="Set2")
+    ax2.set_titles("Number of Components Over Time (n_sats={row_name})")
+
+    # Scatter Plots
+    ax3 = sns.relplot(data=compiled_df, x='max lcc [norm]', y='max lcc frac', row='num sats', hue='num planes', size='avg lcc [norm]', kind='scatter', palette="Set2")
+    ax3.set_titles("Max LCC vs. Avg LCC (n_sats={row_name})")
+
+    plt.show()
+
+    x = 1
