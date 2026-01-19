@@ -437,7 +437,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         performed_bundle_tasks = [ (obs_opp, obs_tasks) 
                                     for obs_opp, obs_tasks in self.bundle
-                                    if obs_opp in observed_opportunities]
+                                    if obs_opp in observed_opportunities
+                                    # if any([obs_opp == performed_obs for performed_obs in observed_opportunities])
+                                    ]
 
         # iterate through performed bundle to mark bids as performed
         for obs_opp, obs_tasks in performed_bundle_tasks:     
@@ -477,7 +479,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         if obs_action.obs_opp not in performed_bundle_obs]
         
         # -------------------------------
-        # # DEBUG
+        # DEBUG
         # if self._debug: 
             
         #     for action in revised_path:
@@ -498,6 +500,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
         #                     x = 1 # debug breakpoint
 
         #         if action.t_start < state.t:
+        #             x = 1 # debug breakpoint
+        #             x = self.path[0].obs_opp == observed_opportunities[0]
         #             x = 1 # debug breakpoint
         # -------------------------------
 
@@ -1076,6 +1080,15 @@ class ConsensusPlanner(AbstractReactivePlanner):
             "New observation path is not valid."   
         if self._debug: assert all(bid.t_bid <= state.t for bids in new_bids.values() for bid in bids.values()), \
             "New bids must be assigned the correct bid time."
+
+        # ensure every task in the path has a matching bundle entry
+        if self._debug:
+            for obs_action in self.path:
+                matching_bundle_entries = [obs_tasks 
+                                            for obs_opp,obs_tasks in self.bundle
+                                            if obs_opp == obs_action.obs_opp]
+                assert len(matching_bundle_entries) == 1, \
+                    "Every observation action in the path must have a matching bundle entry."
  
 
     @abstractmethod
@@ -1179,6 +1192,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         for task, bids in self.results.items():
             while bids and not bids[-1].has_winner():
                 bids.pop(-1)
+                self.optimistic_bidding_counters[task].pop(-1)
                 
         # ==========================================================
         #  ENSURE RESULTS CONSISTENCY
@@ -1218,10 +1232,23 @@ class ConsensusPlanner(AbstractReactivePlanner):
         assert total_won_bids == total_bundle_entries, \
             "Number of winning bids does not match number of bundle entries."
         
-        ## check that every bundle entry corresponds to a winning bid
+        # ensure all bundle bids match results
         for _, obs_tasks in self.bundle:
             for task, n_obs in obs_tasks.items():
+                assert task in self.results, \
+                    "Bundle task not found in results."
+                assert n_obs < len(self.results[task]), \
+                    "Bundle observation number exceeds number of bids in results for task."
+
+                assert task in self.optimistic_bidding_counters, \
+                    "Bundle task not found in optimistic bidding counters."
+                assert n_obs < len(self.optimistic_bidding_counters[task]), \
+                    "Bundle observation number exceeds number of optimistic bidding counters for task."
+                
+                # get matching bid from results
                 bid : Bid = self.results[task][n_obs]
+                
+                # check that every bundle entry corresponds to a winning bid
                 assert bid.winner == state.agent_name, \
                     "Bundle entry does not correspond to a winning bid."
 
@@ -1638,10 +1665,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 bid : Bid
                 # if bid.winner == bid.NONE: continue
 
-                if bid.winner != bid.NONE:
-                    line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t{bid.winner[0].lower()}{bid.winner[-1]}\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
-                else:
-                    line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t\tn/a\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
+                try:
+                    if bid.winner != bid.NONE:
+                        line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t{bid.winner[0].lower()}{bid.winner[-1]}\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
+                    else:
+                        line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t\tn/a\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
+                except IndexError:
+                    x=  1 # breakpoint
                 out += line
 
             if not bids:

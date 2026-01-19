@@ -17,7 +17,7 @@ from zmq import SocketType
 from chess3d.agents.planning.plan import ReactivePlan, Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
+from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
@@ -469,7 +469,7 @@ class AbstractAgent(Agent):
         try:
             t = self.get_current_time()
             dt = action.t_end - action.t_start
-
+            
             if dt > 0:
                 # perfrom time wait if needed
                 await self.perform_wait_for_messages(WaitForMessages(t, t+dt), False)
@@ -496,9 +496,6 @@ class AbstractAgent(Agent):
             # request measurement data from the environment
             dst,src,observation_results = await self.send_peer_message(observation_req)
             msg_sci = ObservationResultsMessage(**observation_results)
-
-            if any([data['GP index'] in [2641, 3752, 4946] for data in msg_sci.observation_data]):
-                x=1
             
             # send measurement data to results logger
             # await self._send_manager_msg(msg_sci, zmq.PUB)
@@ -853,6 +850,8 @@ class SimulatedAgent(AbstractAgent):
 
         # process performed observations
         generated_reqs : list[TaskRequest] = self.__process_observations(incoming_reqs, observations)
+        if generated_reqs:
+            x = 1
         incoming_reqs.extend(generated_reqs)
         
         # compile measurements performed by myself or other agents NOTE do we still need this feature?
@@ -965,8 +964,7 @@ class SimulatedAgent(AbstractAgent):
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 self.__log_plan(self.plan, "REPLAN", logging.WARNING)
-                if "3" in state.agent_name:
-                    x = 1 # breakpoint
+                x = 1 # breakpoint
                 # -------------------------------------
 
         plan_out = self.get_next_actions(state)

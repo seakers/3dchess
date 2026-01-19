@@ -272,6 +272,12 @@ class EventObservationTask(GenericObservationTask):
             # ## Validate task priority 
             # assert priority is not None, "If no event is specified, priority must be provided."
 
+        if availability is not None and event is not None:
+            # Ensure task availability is within event duration
+            assert availability.left >= event.t_start and availability.right <= event.t_start + event.d_exp, \
+                "If event is specified, task availability must be within event duration."
+        
+
         # Set attributes
         self.event : GeophysicalEvent = event
 

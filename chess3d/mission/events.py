@@ -1,6 +1,8 @@
 from typing import Dict, Union
 import uuid
 
+from chess3d.utils import Interval
+
 class GeophysicalEvent:
     def __init__(self,
                  event_type : str,
@@ -43,7 +45,7 @@ class GeophysicalEvent:
         assert isinstance(severity, (int, float)), "Severity must be a number"
         assert severity >= 0, "Severity must be non-negative"
         assert t_start is None or isinstance(t_start, (int, float)), "Start time must be a number or None"
-        
+        if t_start is not None: assert t_start <= t_detect, "An event must start before or at its detection time."
 
         # Set attributes
         self.event_type : str = event_type.lower()
@@ -52,6 +54,7 @@ class GeophysicalEvent:
         self.t_detect : float = t_detect
         self.d_exp : float = d_exp
         self.t_start : float = t_detect if t_start is None else t_start
+        self.availability : Interval = Interval(self.t_start, self.t_start + self.d_exp)
         
         # Generate a unique ID if not provided
         assert id is None or isinstance(id, str) or uuid.UUID(id), "ID must be a string, a valid UUID, or None"
@@ -72,19 +75,31 @@ class GeophysicalEvent:
     def is_available(self, t: float) -> bool:
         """Check if the event is available for observation at time t."""
         return self.is_active(t) or self.is_future(t)
-
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the event to a dictionary."""
-        return self.__dict__
+    
+    def set_detection_time(self, t_detect: float):
+        """Set the detection time of the event."""
+        assert isinstance(t_detect, (int, float)), "Detection time must be a number"
+        assert t_detect >= 0, "Detection time must be non-negative"
+        assert t_detect in self.availability, "Detection time must be after start time"
+        
+        self.t_detect = t_detect
     
     @classmethod
     def from_dict(cls, event_dict: Dict[str, Union[str, float]]) -> 'GeophysicalEvent':
         """Create an event from a dictionary."""
-        return cls(**event_dict)
+        return cls(event_dict['event_type'],
+                   event_dict['location'],
+                   event_dict['t_detect'],
+                   event_dict['d_exp'],
+                   event_dict['severity'],
+                   t_start=event_dict.get('t_start', None),
+                   id=event_dict.get('id', None))
     
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the event to a dictionary."""
-        return self.__dict__
+        d = dict(self.__dict__)
+        d['availability'] = self.availability.to_dict()
+        return d
     
     def __repr__(self) -> str:
         """String representation of the event."""
@@ -96,11 +111,29 @@ class GeophysicalEvent:
     
     def __eq__(self, other) -> bool:
         """Check if two events are equal."""
-        if not isinstance(other, GeophysicalEvent):
-            return False
-        return self.to_dict() == other.to_dict()
+        # validate input
+        assert isinstance(other, GeophysicalEvent), "Can only compare GeophysicalEvent with another GeophysicalEvent"
+                
+        # define criteria for equality
+        criteria = [
+            # same event type 
+            self.event_type == other.event_type,
+            # same severity
+            abs(self.severity - other.severity) < 1e-6,
+            # same location 
+            all([abs(a - b) < 1e-6 for a, b in zip(self.location, other.location)]) if isinstance(self.location, (list, tuple)) and isinstance(other.location, (list, tuple)) and len(self.location) == len(other.location) else self.location == other.location,
+            # overlapping availability intervals
+            self.availability.overlaps(other.availability)
+        ]
+
+        # compare all comparison criteria
+        return all(criteria)
     
     def __hash__(self) -> int:
         """Hash the event for use in sets and dictionaries."""
         # return hash((self.event_type, self.severity, self.t_detect, self.d_exp, self.t_start, self.id))
         return hash(self.id)
+
+    def copy(self) -> 'GeophysicalEvent':
+        """Create a deep copy of the event."""
+        return GeophysicalEvent.from_dict(self.to_dict())

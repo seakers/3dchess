@@ -147,14 +147,23 @@ class LookupProcessor(DataProcessor):
         events = []
         for _,row in events_df.iterrows():
             # convert event to GeophysicalEvent
+            # event = GeophysicalEvent(
+            #     row['event type'],
+            #     (row['lat [deg]'], row['lon [deg]'], row.get('grid index', 0), row['gp_index']),
+            #     row['start time [s]'],
+            #     row['duration [s]'],
+            #     row['severity'],
+            #     row['start time [s]'],
+            #     row['id']
+            # )
             event = GeophysicalEvent(
-                row['event type'],
-                (row['lat [deg]'], row['lon [deg]'], row.get('grid index', 0), row['gp_index']),
-                row['start time [s]'],
-                row['duration [s]'],
-                row['severity'],
-                row['start time [s]'],
-                row['id']
+                event_type=row['event type'],
+                location=(row['lat [deg]'], row['lon [deg]'], row.get('grid index', 0), row['gp_index']),
+                t_detect=row['start time [s]'],
+                d_exp=row['duration [s]'],
+                t_start=row['start time [s]'],
+                severity=row['severity'],
+                id=row['id']
             )
             events.append(event)
 
@@ -175,30 +184,32 @@ class LookupProcessor(DataProcessor):
             self.events_lookup = [event for event in self.events_lookup if event.is_active(t_img_start) or event.is_future(t_img_start)]
             self.t_update = t_img_start
 
-        observed_events = [ event
-                            for event in self.events_lookup
-                            # same location as the observation
-                            if abs(lat - event.location[0]) <= 1e-3
-                            and abs(lon - event.location[1]) <= 1e-3
-                            # availability during the time of observation
-                            and (event.t_start <= t_img_start <= event.t_start + event.d_exp
-                                 or event.t_start <= t_img_end <= event.t_start + event.d_exp)
-                            # event has not been detected before
-                            and (event.location[0],event.location[1],event.t_start,event.d_exp,event.severity,event.event_type) not in self.detected_events 
-                            # event type is detectable by mission
-                            and event.event_type in self.event_driven_objectives
-                            # and instrument.lower() in self.detectable_event_types[event.event_type]
-                            ]
+        observed_events : List[GeophysicalEvent] = [ event.copy()
+                                                    for event in self.events_lookup
+                                                    # same location as the observation
+                                                    if abs(lat - event.location[0]) <= 1e-3
+                                                    and abs(lon - event.location[1]) <= 1e-3
+                                                    # availability during the time of observation
+                                                    and (event.t_start <= t_img_start <= event.t_start + event.d_exp
+                                                        or event.t_start <= t_img_end <= event.t_start + event.d_exp)
+                                                    # event has not been detected before
+                                                    and (event.location[0],event.location[1],event.t_start,event.d_exp,event.severity,event.event_type) not in self.detected_events 
+                                                    # event type is detectable by mission
+                                                    and event.event_type in self.event_driven_objectives
+                                                    # and instrument.lower() in self.detectable_event_types[event.event_type]
+                                                    ]
         
-        # modify event to start and estimated duration to match observation times
+        # modify event detection time to the end of the image
         for event in observed_events:
-            # calculate new start time
-            t_start = max(event.t_start, t_img_end)
+            event.t_detect = t_img_end
 
-            # adjust start time and duration
-            assert t_start >= event.t_start, "Adjusted start time must be after original start time"
-            event.d_exp -= t_start-event.t_start
-            event.t_start = t_start
+            # # calculate new start time
+            # t_start = max(event.t_start, t_img_end)
+
+            # # adjust start time and duration
+            # assert t_start >= event.t_start, "Adjusted start time must be after original start time"
+            # event.d_exp -= t_start-event.t_start
+            # event.t_start = t_start
         
         # return highest severity event            
         return max(observed_events, key=lambda a: a.severity) if observed_events else None

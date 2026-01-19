@@ -18,12 +18,12 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## common cases
         self.single_sat_toy = False     # NOT IMPLEMENTED YET
         self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
-        self.single_sat_lakes = False   
+        self.single_sat_lakes = True   
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
         self.toy_1 = False  # single sat    default mission     single target, no events
-        self.toy_2 = True  # single sat    no default mission  one event
+        self.toy_2 = False  # single sat    no default mission  one event
         self.toy_3 = False  # two sats      no default mission  one event
         self.toy_4 = False  # two sats      no default mission  one event           optimistic bidding
         self.toy_5 = False  # two sats      no default mission  one event           comm delays
@@ -99,7 +99,6 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             "preplanner": {
                 "@type": "heuristic",
                 "debug": "False",
-                # "period" : 250,
             },
             "replanner": {
                 "@type": "consensus",
@@ -2076,8 +2075,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         if not self.single_sat_lakes: return
 
         # setup scenario parameters
-        duration = 2.0 / 24.0
-        # duration = 110.0 / 3600.0 / 20.0
+        # duration = 2.0 / 24.0
+        duration = 250.0 / 3600.0 / 20.0
         grid_name = 'lake_event_points'
         scenario_name = f'single_sat_lake_scenario-{self.planner_name()}'
         connectivity = 'FULL'
@@ -2086,7 +2085,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         spacecraft['planner'] = self.lakes_planner_config()
-        spacecraft['planner']['preplanner']['period'] = 100 # fixed replanning period
+        spacecraft['planner']['preplanner']['period'] = 250 # fixed replanning period
         # spacecraft['planner']['preplanner']['horizon'] = 500 # longer planning horizon
         spacecraft['mission'] = "Algal bloom comprehensive"
         spacecraft['science'] = self.setup_science_config(event_name)

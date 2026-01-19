@@ -313,6 +313,24 @@ class ObservationOpportunity:
     
     def __eq__(self, other : 'ObservationOpportunity') -> bool:
         assert isinstance(other, ObservationOpportunity), f"Can only compare with another `ObservationOpportunity`. is of type {type(other)}."
+        
+        my_dict = self.to_dict()
+        other_dict = other.to_dict()
+
+        for key in my_dict:
+            if key not in other_dict:
+                return False
+            if my_dict[key] != other_dict[key]:
+                if isinstance(my_dict[key], list) and isinstance(other_dict[key], list):
+                    if len(my_dict[key]) != len(other_dict[key]):
+                        return False
+                    for item1, item2 in zip(my_dict[key], other_dict[key]):
+                        if item1 != item2:
+                            for item_key in item1:
+                                if item_key not in item2 or item1[item_key] != item2[item_key]:
+                                    return False
+            
+        
         return self.to_dict() == other.to_dict()
     
     def __hash__(self):
