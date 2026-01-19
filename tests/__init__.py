@@ -1,1 +1,1 @@
-""" unittests for 3DCHESS """
+""" base dir for 3DCHESS  implementations """

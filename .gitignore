@@ -169,11 +169,14 @@ cython_debug/
 *geodata*
 swifa/
 
+# Experiments
+**experiments/orbit_connectivity/resources/orbits/**.csv
+
 *.tar
 *.tar*
 *.tar.xz
 *.png
-.zip
+*.zip
 
 # Gurobi
 *.lic

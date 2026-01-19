@@ -1,11 +1,11 @@
 
-from typing import Dict, Union
+from abc import ABC, abstractmethod
+from typing import Dict, Iterator, List, Union
 import uuid
 import numpy as np
 
 from chess3d.mission.events import GeophysicalEvent
-from chess3d.mission.requirements import *
-
+from chess3d.mission.requirements import MissionRequirement, PerformanceRequirement, SpatialCoverageRequirement
 
 class MissionObjective(ABC):
     DEFAULT = "default_mission"
@@ -14,8 +14,7 @@ class MissionObjective(ABC):
     def __init__(self, 
                  objective_type: str,
                  parameter: str, 
-                 weight: float, 
-                 requirements: list, 
+                 requirements: List[MissionRequirement], 
                  id : str = None):
         """ 
         ### Objective
@@ -23,7 +22,7 @@ class MissionObjective(ABC):
         Initialize an objective with a parameter, weight, and requirements.
         - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
         - :`weight`: The relative objective weight.
-        - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
+        - :`requirements`: A list of `MissionRequirement` instances that define the requirements for the objective.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
 
@@ -31,18 +30,16 @@ class MissionObjective(ABC):
         assert isinstance(objective_type, str), "Objective type must be a string"
         assert objective_type in [self.DEFAULT, self.EVENT], f"Objective type must be one of {self.DEFAULT} or {self.EVENT}"
         assert isinstance(parameter, str), "Parameter must be a string"
-        assert isinstance(weight, (int, float)), "Weight must be a number"
         assert len(requirements) > 0, "At least one requirement is needed"
         assert all(isinstance(req, MissionRequirement) for req in requirements), "All requirements must be instances of `MeasurementRequirement`"
-        assert any(isinstance(req, TemporalRequirement) for req in requirements), "At least one requirement must be a `TemporalRequirement`"
-        assert any(isinstance(req, SpatialRequirement) for req in requirements), "At least one requirement must be a `SpatialRequirement`"
+        if not any(isinstance(req, PerformanceRequirement) for req in requirements):
+            raise ValueError("No performance requirement found, please add a performance requirement to objective definition.")
         assert isinstance(id, str) or id is None, f"ID must be a string or None. is of type {type(id)}"
 
         # Set attributes
         self.objective_type : str = objective_type.lower()
-        self.weight : float = weight
-        self.parameter : str = parameter
-        self.requirements : list[MissionRequirement] = [requirement for requirement in requirements]
+        self.parameter : str = parameter.lower()
+        self.requirements : Dict[str, MissionRequirement] = {requirement.attribute: requirement for requirement in requirements}
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
     def eval_measurement_performance(self, measurement: dict) -> float:
@@ -50,24 +47,23 @@ class MissionObjective(ABC):
 
         # Validate measurement input
         assert isinstance(measurement, dict), "Measurement must be a dictionary"
+        assert all(isinstance(k, str) for k in measurement.keys()), "Measurement keys must be strings"
+        assert all(attribute in measurement for attribute in self.requirements.keys()), "Measurement must contain all requirement attributes"
 
         # Evaluate measurement performance for each requirement attribute
-        pref_values = [req.calc_preference_value(measurement[req.attribute]) \
-                       if req.attribute in measurement else 0.0
-                       for req in self.requirements]
+        pref_values = [
+            req.calc_preference(attribute, measurement[attribute]) 
+            for attribute,req in self.requirements.items()
+        ]
 
         # Return product of all preference values
         return np.prod(pref_values)
 
     def to_dict(self) -> Dict[str, Union[str, float]]:
         """Convert the objective to a dictionary."""
-        return {
-            "objective_type": self.objective_type,
-            "parameter": self.parameter,
-            "weight": self.weight,
-            "requirements": [req.to_dict() for req in self.requirements],
-            "id": self.id
-        }
+        d = dict(self.__dict__)
+        d['requirements'] = [req.to_dict() for req in self.requirements.values()]
+        return d
 
     @classmethod
     def from_dict(cls, obj_dict: Dict[str, Union[str, float]]) -> 'MissionObjective':
@@ -84,25 +80,32 @@ class MissionObjective(ABC):
         
         raise ValueError(f"Unknown objective type: {obj_dict['objective_type']}")
 
-    @abstractmethod
     def copy(self) -> 'MissionObjective':
         """Create a copy of the objective."""
+        return self.from_dict(self.to_dict())
     
     @abstractmethod
     def __repr__(self) -> str:
         """String representation of the objective."""
 
-    def __iter__(self):
+    def __iter__(self) -> 'Iterator[MissionRequirement]':
         """Iterate over the objectives."""
-        return iter(self.requirements)
+        return iter(self.requirements.values())
+    
+    def __eq__(self, other):
+        """Check equality of two objectives."""
+        if not isinstance(other, MissionObjective):
+            return False
+        return self.to_dict() == other.to_dict()
+    
+    def __hash__(self):
+        return hash(self.id)
 
 class DefaultMissionObjective(MissionObjective):
     def __init__(self, 
                  parameter: str, 
-                 weight: float = 1.0, 
                  requirements: list = [], 
-                 id : str = None,
-                 outputFlag : bool = False
+                 id : str = None
                  ):
         """ 
         ### Monitoring Objective
@@ -113,33 +116,20 @@ class DefaultMissionObjective(MissionObjective):
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
-        # Validate inputs
-        if not any(isinstance(req, SpatialRequirement) for req in requirements):
-            if outputFlag: print("WARNING:No spatial requirement found, adding default grid target spatial requirement.")
-            requirements.append(GridTargetSpatialRequirement('grid', 0))
-        if not any(isinstance(req, TemporalRequirement) for req in requirements):
-            if outputFlag: print("WARNING: No temporal requirement found, adding default temporal requirement.")
-            requirements.append(RevisitTemporalRequirement([3600, 3600*4, 24*3600], [1, 0.5, 0.0]))
-
-        super().__init__(MissionObjective.DEFAULT, parameter, weight, requirements, id)
-
-    def copy(self) -> 'DefaultMissionObjective':
-        """Create a copy of the objective."""
-        return DefaultMissionObjective(self.parameter, 
-                                       self.weight, 
-                                       [req.copy() for req in self.requirements], 
-                                       self.id)
+        # Validate inputs      
+        super().__init__(MissionObjective.DEFAULT, parameter, requirements, id)
 
     def __repr__(self) -> str:
         """String representation of the objective."""
-        return f"DefaultMissionObjective({self.parameter}, weight={self.weight}, requirements={self.requirements})"
+        return f"DefaultMissionObjective(parameter={self.parameter}, n_reqs={len(self.requirements)}, id={self.id.split('-')[0]})"
 
     @classmethod
     def from_dict(cls, obj_dict: Dict[str, Union[str, float]]) -> 'DefaultMissionObjective':
         """Create a default mission objective from a dictionary."""
+
+        # validate input dictionary
         assert 'objective_type' in obj_dict and obj_dict['objective_type'] == MissionObjective.DEFAULT, "Objective type must be 'default' for DefaultMissionObjective"
         assert 'parameter' in obj_dict, "Parameter must be specified in the dictionary"
-        assert 'weight' in obj_dict, "Weight must be specified in the dictionary"
         assert 'requirements' in obj_dict, "Requirements must be specified in the dictionary"
 
         # Convert requirements to MissionRequirement instances
@@ -150,109 +140,85 @@ class DefaultMissionObjective(MissionObjective):
         else:
             raise ValueError("Requirements must be a list of dictionaries or `MissionRequirement` instances")
 
+        # Unpack other attributes
+        parameter = obj_dict.get('parameter')
         id = obj_dict.get('id', None)
 
-        return cls(obj_dict['parameter'], obj_dict['weight'], requirements, id)
+        # Return DefaultMissionObjective
+        return cls(parameter, requirements, id)
 
 class EventDrivenObjective(MissionObjective):
     def __init__(self, 
                  event_type: str,
                  parameter: str,
-                 weight: float, 
-                 requirements: list, 
-                 synergistic_parameters: list = [],
-                 id : str = None,
-                 outputFlag : bool = False
+                 requirements: List[MissionRequirement], 
+                #  synergistic_parameters: List[str] = [],
+                 id : str = None
                  ):
         """ 
         ### Event Driven Objective
          
-        Initialize an event-driven objective with a weight, parameter, and requirements.
+        Initialize an event-driven objective with a parameter and requirements.
         - :`event_type`: The type of geophysical event associated with the objective.
         - :`parameter`: The primary geophysical parameter to be measured (e.g., "Chl-A concentration").
-        - :`weight`: The weight of the objective.
         - :`requirements`: A list of `MeasurementRequirement` instances that define the requirements for the objective.
-        - :`synergistic_parameters`: A list of additional parameters that are synergistic with the main parameter.
+        # - :`synergistic_parameters`: A list of additional parameters that are synergistic with the main parameter.
         - :`id`: An optional ID for the objective. If None, a new UUID is generated.
         """
-        # Validate inputs
-        if not any(isinstance(req, SpatialRequirement) for req in requirements):
-            if outputFlag: print("WARNING:No spatial requirement found, adding default grid target spatial requirement.")
-            requirements.append(GridTargetSpatialRequirement('grid', 0))
-        if not any(isinstance(req, TemporalRequirement) for req in requirements):
-            if outputFlag: print("WARNING: No temporal requirement found, adding default temporal requirement.")
-            requirements.append(RevisitTemporalRequirement([3600, 3600*4, 24*3600], [1, 0.5, 0.0]))
-
         # Initialize the parent class
-        super().__init__(MissionObjective.EVENT, parameter, weight, requirements, id)
+        super().__init__(MissionObjective.EVENT, parameter, requirements, id)
         
         # Validate inputs
         assert isinstance(event_type, str), "Event type must be a string"
-        assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
-        assert all(isinstance(param, str) for param in synergistic_parameters), "Synergistic parameters must be strings"
-        assert parameter not in synergistic_parameters, "Main parameter cannot be in list of synergistic parameters."
+        # assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
+        # assert all(isinstance(param, str) for param in synergistic_parameters), "Synergistic parameters must be strings"
+        # assert parameter not in synergistic_parameters, "Main parameter cannot be in list of synergistic parameters."
         
         # Set attributes
         self.event_type = event_type.lower() 
-        self.synergistic_parameters = [param.lower() for param in synergistic_parameters]
-
-    def copy(self):
-        return EventDrivenObjective(self.event_type, 
-                                    self.parameter, 
-                                    self.weight, 
-                                    [req.copy() for req in self.requirements], 
-                                    self.synergistic_parameters, 
-                                    self.id)
+        # self.synergistic_parameters = [param.lower() for param in synergistic_parameters]
     
     def __repr__(self):
-        return f"EventDrivenObjective({self.parameter}, weight={self.weight}, event_type={self.event_type}, synergistic_parameters={self.synergistic_parameters}, requirements={self.requirements})"
-
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the objective to a dictionary."""
-        d = super().to_dict()
-        d.update({
-            "event_type": self.event_type,
-            "synergistic_parameters": self.synergistic_parameters
-        })
-        return d
+        return f"EventDrivenObjective(parameter={self.parameter}, event_type={self.event_type}, id={self.id.split('-')[0]})"
 
     @classmethod
-    def from_dict(cls, obj_dict: Dict[str, Union[str, float]]) -> 'EventDrivenObjective':
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'EventDrivenObjective':
         """Create an event-driven objective from a dictionary."""
-        assert 'objective_type' in obj_dict and obj_dict['objective_type'] == MissionObjective.EVENT, "Objective type must be 'event' for EventDrivenObjective"
-        assert 'parameter' in obj_dict, "Parameter must be specified in the dictionary"
-        assert 'weight' in obj_dict, "weight must be specified in the dictionary"
-        assert 'requirements' in obj_dict, "Requirements must be specified in the dictionary"
-        assert 'event_type' in obj_dict, "Event type must be specified in the dictionary"
+        assert 'objective_type' in d and d['objective_type'] == MissionObjective.EVENT, "Objective type must be 'event' for EventDrivenObjective"
+        assert 'event_type' in d, "Event type must be specified in the dictionary"
+        assert 'parameter' in d, "Parameter must be specified in the dictionary"
+        assert 'requirements' in d, "Requirements must be specified in the dictionary"
         
         # Convert requirements to MissionRequirement instances
-        if all(isinstance(req, dict) for req in obj_dict['requirements']):
-            requirements = [MissionRequirement.from_dict(req) for req in obj_dict['requirements']]
-        elif all(isinstance(req, MissionRequirement) for req in obj_dict['requirements']):
-            requirements = obj_dict['requirements']
+        if all(isinstance(req, dict) for req in d['requirements']):
+            requirements = [MissionRequirement.from_dict(req) for req in d['requirements']]
+        elif all(isinstance(req, MissionRequirement) for req in d['requirements']):
+            requirements = d['requirements']
         else:
             raise ValueError("Requirements must be a list of dictionaries or `MissionRequirement` instances")
         
-        return EventDrivenObjective(event_type=obj_dict['event_type'],
-                                    parameter=obj_dict['parameter'],
-                                    weight=obj_dict['weight'],
+        return EventDrivenObjective(event_type=d['event_type'],
+                                    parameter=d['parameter'],
                                     requirements=requirements,
-                                    synergistic_parameters=obj_dict.get('synergistic_parameters', []),
-                                    id=obj_dict.get('id', None))
+                                    # synergistic_parameters=d.get('synergistic_parameters', []),
+                                    id=d.get('id', None))
 
     @classmethod
-    def from_default_objective(cls, event : GeophysicalEvent, default_objective: DefaultMissionObjective, synergistic_parameters : list = [], weight : float = None) -> 'EventDrivenObjective':
+    def from_default_objective(cls, 
+                               event : GeophysicalEvent, 
+                               default_objective: DefaultMissionObjective, 
+                            #    synergistic_parameters : list = []
+                            ) -> 'EventDrivenObjective':
         """Create an `EventDrivenObjective` from a default objective and an event."""
 
         # Validate Inputs
         assert isinstance(event, GeophysicalEvent), "Event must be an instance of GeophysicalEvent"
         assert isinstance(default_objective, DefaultMissionObjective), "Default objective must be an instance of DefaultMissionObjective"
-        assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
-        assert weight is None or isinstance(weight, (int, float)), "weight must be a number or None"
+        # assert isinstance(synergistic_parameters, list), "Synergistic parameters must be a list"
 
         # Return Event Objective
         return cls(event_type=event.event_type,
                    parameter=default_objective.parameter,
-                   weight=weight if weight is not None else default_objective.weight,
-                   requirements=default_objective.requirements,
-                   synergistic_parameters=synergistic_parameters)
+                   requirements=[req for req in default_objective],
+                #    synergistic_parameters=synergistic_parameters
+                   )

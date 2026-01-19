@@ -1,48 +1,58 @@
+from collections.abc import Iterable
+from enum import Enum
 from numbers import Number
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 import uuid
 import numpy as np
-from pyparsing import ABC, abstractmethod
+from pyparsing import ABC, Tuple, abstractmethod
 
-from chess3d.utils import Interval
-
+"""
+---------------------------------
+ABSTRACT REQUIREMENT DEFINITION
+---------------------------------
+"""
+        
+class RequirementTypes(Enum):
+    CAPABILITY = 'capability'
+    SPATIAL = 'spatial'
+    PERFORMANCE = 'performance'
 
 class MissionRequirement(ABC):
-    CATEGORICAL = 'categorical'
-    DISCRETE = 'discrete'
-    CONTINUOUS = 'continuous'
-    TEMPORAL = 'temporal'
-    SPATIAL = 'spatial'
-    CAPABILITY = 'capability'
-
-    def __init__(self, requirement_type : str, attribute: str, preference_function : callable, id : str = None):
+    def __init__(self, req_type : str, attribute: str, id : str = None):
         """
         ### Mission Requirement 
         
-        Initialize a mission requirement with an attribute, thresholds, and scores.
-        - :`requirement_type`: The type of requirement (e.g., "categorical", "discrete", "continuous", "temporal", "spatial").
+        Initialize a mission requirement with a requirement type, attribute, strategy, and unique ID.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
         - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
-        - :`preference_function`: maps values of perforamnce to requirement satisfaction score in [0,1].        
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.    
         """
-
-        # Validate inputs
-        assert any([requirement_type == t for t in [self.CATEGORICAL, self.DISCRETE, self.CONTINUOUS, self.TEMPORAL, self.SPATIAL, self.CAPABILITY]]), \
-            f"Unknown requirement type: {requirement_type}"
+        # validate argument types
+        assert isinstance(req_type, str), "Requirement type must be a string"
         assert isinstance(attribute, str), "Attribute must be a string"
-        assert callable(preference_function), "Preference function must be callable"
+        assert isinstance(id, str) or id is None, "ID must be a string or `None`"
         
-        # Set attributes
-        self.requirement_type = requirement_type
+        # validate argument values
+        assert req_type.lower() in RequirementTypes._value2member_map_, f"Requirement type must be one of {list(RequirementTypes._value2member_map_.keys())}"
+        
+        # set attributes
+        self.req_type : str = req_type.lower()
         self.attribute : str = attribute.lower()
-        self.preference_function : callable = preference_function
+        # TODO do we really need to enforce UUID format? Could the ID be attribute-dependent?
         self.id = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
 
-    def calc_preference_value(self, value : Any) -> float:
-        """Calculate the preference value for a given value."""
+    def calc_preference(self, attribute : str, value : Any) -> float:
+        """Evaluates the preference function for a given parameter-value pair."""
+        
+        # check if attribute matches requirement attribute
+        assert isinstance(attribute, str), "Attribute must be a string"
+        assert attribute.lower() == self.attribute, \
+            f"Attribute '{attribute}' does not match requirement attribute '{self.attribute}'"
+        
         # calculate preference value
-        result = self.preference_function(value)
+        result = self._eval_preference_function(value)
 
-        # Validate the result
+        # validate the result
         if not isinstance(result, Number):
             raise TypeError(f"Expected a numeric return value, got {type(result).__name__}")
 
@@ -53,800 +63,915 @@ class MissionRequirement(ABC):
         return result
     
     @abstractmethod
-    def copy(self) -> 'MissionRequirement':
-        """Create a copy of the measurement requirement."""
+    def _eval_preference_function(self, value : Any) -> float:
+        """Evaluate the preference function for a given value."""
 
-    @abstractmethod
-    def to_dict(self) -> Dict[str, Union[str, float]]:
-        """Convert the measurement requirement to a dictionary."""
-        return {
-            "requirement_type": self.requirement_type,
-            "attribute": self.attribute,
-            # "preference_function": self.preference_function.__name__,
-            "id": self.id
-        }
-    
     @abstractmethod
     def __repr__(self):
         """String representation of the measurement requirement."""
-
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'MissionRequirement':
-        """Create a measurement requirement from a dictionary."""
-        requirement_type = dict.get("requirement_type")
-
-        if requirement_type == MissionRequirement.CATEGORICAL:
-            return CategoricalRequirement.from_dict(dict)
-
-        elif requirement_type == MissionRequirement.DISCRETE:
-            return DiscreteRequirement.from_dict(dict)
-
-        elif requirement_type == MissionRequirement.CONTINUOUS:
-            return ContinuousRequirement.from_dict(dict)
-
-        elif requirement_type == MissionRequirement.TEMPORAL:
-            return TemporalRequirement.from_dict(dict)
-        
-        elif requirement_type == MissionRequirement.SPATIAL:
-            return SpatialRequirement.from_dict(dict)
-        
-        elif requirement_type == MissionRequirement.CAPABILITY:
-            return CapabilityRequirement.from_dict(dict)
-
-        raise ValueError(f"Unknown requirement type: {requirement_type}. Must be one of {MissionRequirement.CATEGORICAL}, {MissionRequirement.DISCRETE}, {MissionRequirement.CONTINUOUS}, {MissionRequirement.TEMPORAL}, {MissionRequirement.SPATIAL}, {MissionRequirement.CAPABILITY}.")
-
-class CategoricalRequirement(MissionRequirement):
-    def __init__(self, attribute: str, thresholds: list, scores: list, id: str = None, **_):
-        """
-        ### Categorical Mission Requirement
-        Initialize a categorical requirement with an attribute, thresholds, and scores.
-        - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
-        - :`thresholds`: A list of qualitative threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., ["low", "medium", "high"].
-        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1.0, 0.7, 0.2].
-        """
-        # Validate inputs
-        assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
-        assert all(isinstance(threshold, str) for threshold in thresholds), "All thresholds must be strings"
-        assert all(0 <= score <= 1 for score in scores), "Scores must be between 0 and 1"
-
-        # Convert thresholds to lowercase
-        thresholds = [threshold.lower() for threshold in thresholds]
-        
-        # Set scores attributes
-        self.thresholds = thresholds
-        self.scores = scores
-
-        # Build preference function
-        preference_function = self._build_categorical_preference_function(thresholds, scores)
-
-        # Initialize the parent class
-        super().__init__(self.CATEGORICAL, attribute, preference_function, id)
-
-    def _build_categorical_preference_function(self, thresholds: list, scores: list) -> callable:
-        """Creates a categorical preference function."""
-        def preference(value: str) -> float:
-            value = value.lower()
-            if value not in thresholds:
-                return 0.0
-            
-            index = thresholds.index(value)
-            return scores[index]
-        
-        return preference
-
+        # return f"MissionRequirement(type={RequirementTypes._value2member_map_[self.req_type].name}, attribute={self.attribute})"
+    
     def copy(self) -> 'MissionRequirement':
         """Create a copy of the measurement requirement."""
-        return CategoricalRequirement(
-            attribute=self.attribute,
-            thresholds=self.thresholds,
-            scores=self.scores,
-            id=self.id
-        )
+        return self.from_dict(self.to_dict())
     
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "thresholds": self.thresholds,
-            "scores": self.scores
-        })
-        return d
+    def to_dict(self) -> Dict[str, Union[str, float]]:
+        """Convert the measurement requirement to a dictionary."""
+        return dict(self.__dict__)
+    
+    @classmethod
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'MissionRequirement':
+        """Create a measurement requirement from a dictionary."""
 
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute']
+        assert all(key in d for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        
+        # unpack dictionary
+        req_type = d.get("req_type")
+
+        # initiate approriate requirement 
+        if req_type.lower() == RequirementTypes.PERFORMANCE.value:
+            return PerformanceRequirement.from_dict(d)
+        elif req_type.lower() == RequirementTypes.CAPABILITY.value:
+            return CapabilityRequirement.from_dict(d)
+        elif req_type.lower() == RequirementTypes.SPATIAL.value:
+            return SpatialCoverageRequirement.from_dict(d)
+        
+        raise NotImplementedError(f"Requirement type '{req_type}' not yet supported.")
+    
+"""
+------------------------------------
+PERFORMANCE REQUIREMENT DEFINITIONS
+------------------------------------
+"""
+
+class PerformancePreferenceStrategies(Enum):
+    # Categorical
+    CATEGORICAL = 'categorical'
+
+    # Discrete
+    DISCRETE = 'discrete'
+
+    # No change
+    CONSTANT = 'constant'
+    
+    # Higher val = better   
+    EXP_SATURATION = 'exp_saturation'
+    LOG_THRESHOLD = 'log_threshold'
+    DEMINISHING_RETURNS = 'diminishing_returns'
+    
+    # Lower val = better
+    EXP_DECAY = 'exp_decay'
+    
+    # Bounded
+    GAUSSIAN = 'gaussian'
+    TRIANGLE = 'triangle'
+    
+    # Interval Threshold-Based
+    STEPS = 'discrete_steps'
+    INTERVAL_INTERP = 'discrete_intervals'
+
+class PerformanceRequirement(MissionRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 strategy : str,
+                 id = None):
+        """
+        ### Performance Requirement
+
+        Initializes a generic measurement performance requirement
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`strategy`: Name of the preference function strategy to be used (e.g., "categorical", "exp_saturation").
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+
+        # initiate parent class
+        super().__init__(RequirementTypes.PERFORMANCE.value, attribute, id)
+
+        # validate inputs
+        assert isinstance(strategy, str), "Preference strategy must be a string"
+        assert strategy.lower() in PerformancePreferenceStrategies._value2member_map_, f"Preference strategy must be one of {list(PerformancePreferenceStrategies._value2member_map_.keys())}"
+        
+        # set attributes
+        self.strategy : str = strategy.lower()
+
+    def __repr__(self):
+        """String representation of the measurement requirement."""
+        return f"PerformanceRequirement(strategy={PerformancePreferenceStrategies._value2member_map_[self.strategy].name}, attribute={self.attribute})"
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'MissionRequirement':
+        """Create a performance requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'strategy']
+        assert all(key in d for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        
+        # unpack dictionary
+        strategy = d.get("strategy").lower()
+
+        # initiate approriate requirement 
+        if strategy == PerformancePreferenceStrategies.CATEGORICAL.value:
+            return CategoricalRequirement.from_dict(d)
+        
+        elif strategy == PerformancePreferenceStrategies.CONSTANT.value:
+            return ConstantValueRequirement.from_dict(d)
+        
+        elif strategy == PerformancePreferenceStrategies.EXP_SATURATION.value:
+            return ExpSaturationRequirement.from_dict(d)
+
+        elif strategy == PerformancePreferenceStrategies.LOG_THRESHOLD.value:
+            return LogThresholdRequirement.from_dict(d)
+
+        elif strategy == PerformancePreferenceStrategies.EXP_DECAY.value:
+            return ExpDecayRequirement.from_dict(d)
+
+        elif strategy == PerformancePreferenceStrategies.GAUSSIAN.value:
+            return GaussianRequirement.from_dict(d)
+        
+        elif strategy == PerformancePreferenceStrategies.TRIANGLE.value:
+            return TriangleRequirement.from_dict(d)
+
+        elif strategy == PerformancePreferenceStrategies.STEPS.value:
+            return StepsRequirement.from_dict(d)
+        
+        elif strategy == PerformancePreferenceStrategies.INTERVAL_INTERP.value:
+            return IntervalInterpolationRequirement.from_dict(d)
+        
+        # Additional strategies can be implemented here
+        raise NotImplementedError(f"Preference function for strategy '{strategy}' not yet supported.")
+
+class CategoricalRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 preferences : Dict[str, float],
+                 id = None):
+        """
+        ### Categorical Requirement
+
+        Initializes a requirement that assigns preference scores to categorical values.
+        - :`attribute`: The attribute being measured (e.g., instrument type, agent type, etc.).
+        - :`preferences`: A dictionary mapping categorical values (strings) to preference scores (floats) in the range [0, 1].
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.CATEGORICAL.value, id)
+        
+        # validate inputs
+        assert isinstance(preferences, dict), "Preferences must be a dictionary"
+        for key, val in preferences.items():
+            assert isinstance(key, str), "Preference keys must be strings"
+            assert isinstance(val, (int, float)), "Preference values must be numeric"
+            assert 0.0 <= val <= 1.0, "Preference values must be in [0, 1]"
+        
+        # set attributes
+        self.preferences : Dict[str, float] = {key.lower(): val for key,val in preferences.items()}
+    
+    def _eval_preference_function(self, value : str) -> float:
+        # validate inputs
+        assert isinstance(value, str), "Input value must be a string"
+
+        # normalize value to lowercase string
+        value = str(value).lower()
+
+        # return preference value
+        return self.preferences.get(value, 0.0) # default preference is 0.0 if category not found
+        
     @classmethod
     def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'CategoricalRequirement':
         """Create a categorical requirement from a dictionary."""
-        # Validate Inputs
-        assert "attribute" in dict, "Attribute must be provided for categorical requirement"
-        assert "thresholds" in dict, "Thresholds must be provided for categorical requirement"
-        assert "scores" in dict, "Scores must be provided for categorical requirement"
+
+        # validate input dictionary
+        required_keys = ['attribute', 'strategy', 'preferences']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.CATEGORICAL.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.CATEGORICAL.value}'"
         
-        # Create and return the CategoricalRequirement
-        return cls(
-            attribute=dict["attribute"],
-            thresholds=dict["thresholds"],
-            scores=dict["scores"],
-            id=dict.get("id")
-        )
-
-    
-    def __repr__(self):
-        return f"CategoricalRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
-
-class DiscreteRequirement(MissionRequirement):
-    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
-        """
-        ### Discrete Value Mission Requirement
-        Initialize a discrete requirement with an attribute, thresholds, and scores.
-        - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
-        - :`thresholds`: A list of discrete threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10, 30, 100].
-        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1.0, 0.7, 0.2].
-        """
-        # Validate inputs
-        assert all(isinstance(threshold, (int, float)) for threshold in thresholds), "All thresholds must be numbers"
-        assert all(isinstance(score, (int, float)) for score in scores), "All scores must be numbers"
-        assert len(thresholds) > 0, "At least one threshold is needed"
-        assert len(scores) > 0, "At least one preference score value is needed"
-        assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
-        assert all(0 <= score <= 1 for score in scores), "Scores must be values between 0 and 1"
-        assert all(scores[i] >= scores[i + 1] for i in range(len(scores) - 1)), "Scores must be sorted in descending order"
-        assert all(thresholds[i] >= thresholds[i + 1] for i in range(len(thresholds) - 1)) or all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "Thresholds must be sorted."
-
-        # Set thresholds and scores attributes
-        self.thresholds = thresholds
-        self.scores = scores
-
-        # Build preference function
-        preference_function = self._build_discrete_preference_function(thresholds, scores)
-
-        # Initialize the parent class
-        super().__init__(self.DISCRETE, attribute, preference_function, id)
-
-    def _build_discrete_preference_function(self, thresholds: list, scores: list) -> callable:
-        """Creates a discrete preference function."""
-        # Check if thresholds are increasing or decreasing
-        increasing : bool = all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)) if thresholds else True
-
-        # Create preference function based on increasing or decreasing thresholds
-        if increasing:
-            def preference(value: float) -> float:
-                for threshold in thresholds:
-                    if value <= threshold:
-                        index = thresholds.index(threshold)
-                        return scores[index]
-                
-                return scores[-1]  # Beyond worst threshold: return worst score
-        else:
-            def preference(value: float) -> float:
-                for threshold in thresholds:
-                    if value >= threshold:
-                        index = thresholds.index(threshold)
-                        return scores[index]
-
-                return scores[-1]  # Beyond worst threshold: return worst score
-        
-        # Return the preference function    
-        return preference
-
-    def copy(self) -> 'MissionRequirement':
-        """Create a copy of the measurement requirement."""
-        return DiscreteRequirement(
-            attribute=self.attribute,
-            thresholds=self.thresholds,
-            scores=self.scores,
-            id=self.id
-        )
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "thresholds": self.thresholds,
-            "scores": self.scores
-        })
-        return d
-    
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'DiscreteRequirement':
-        """Create a discrete requirement from a dictionary."""
-        # Validate Inputs
-        assert "attribute" in dict, "Attribute must be provided for discrete requirement"
-        assert "thresholds" in dict, "Thresholds must be provided for discrete requirement"
-        assert "scores" in dict, "Scores must be provided for discrete requirement"
-        # Create and return the DiscreteRequirement
-        return cls(
-            attribute=dict["attribute"],
-            thresholds=dict["thresholds"],
-            scores=dict["scores"],
-            id=dict.get("id")
-        )
-
-    def __repr__(self):
-        return f"DiscreteRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
-
-class ContinuousRequirement(MissionRequirement):
-    def __init__(self, attribute: str, thresholds: list, scores: list, id : str = None, **kwargs):
-        """
-        ### Continuous Value Mission Requirement
-        Initialize a continuous requirement with an attribute, thresholds, and scores.
-        - :`attribute`: The attribute being measured (e.g., "temperature", "humidity").
-        - :`thresholds`: A list of continuous threshold values that define the performance levels threshold ordered [x_1=x_best, x_2,...,x_worst], e.g., [10.0, 30.0, 100.0].
-        - :`scores`: A list of scores corresponding to the thresholds, indicating performance ordered from highest to lowest, [u_1=u_best, u_2,...,u_worst], e.g., [1.0, 0.7, 0.2].
-        """
-        # Validate inputs
-        assert all(isinstance(threshold, (int, float)) for threshold in thresholds), "All thresholds must be numbers"
-        assert all(isinstance(score, (int, float)) for score in scores), "All scores must be numbers"
-        assert len(thresholds) > 0, "At least one threshold is needed"
-        assert len(scores) > 0, "At least one preference score value is needed"
-        assert len(thresholds) == len(scores), "Thresholds and scores must match in length"
-        assert all(0 <= score <= 1 for score in scores), "Scores must be values between 0 and 1"
-        if all(thresholds[i] >= thresholds[i + 1] for i in range(len(thresholds) - 1)):
-            # thresholds are in descending order; reverse them
-            thresholds = list(reversed(thresholds))
-            scores = list(reversed(scores))
-        assert all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), \
-                "Thresholds must be sorted."
-
-        # Set thresholds and scores attributes
-        self.thresholds = thresholds
-        self.scores = scores
-
-        # Build preference function
-        preference_function = self._build_continuous_preference_function(thresholds, scores)
-
-        # Initialize the parent class
-        super().__init__(self.CONTINUOUS, attribute, preference_function, id)
-
-    def _build_continuous_preference_function(self, thresholds: list, scores: list) -> callable:
-        """Creates a continuous interpolated preference function."""
-
-        def preference(value: float) -> float:
-            return np.interp(value, thresholds, scores, left=scores[0], right=scores[-1])
-        
-        # Return the preference function
-        return preference
-
-    def copy(self):
-        """Create a copy of the measurement requirement."""
-        return ContinuousRequirement(
-            attribute=self.attribute,
-            thresholds=self.thresholds,
-            scores=self.scores,
-            id=self.id
-        )
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "thresholds": self.thresholds,
-            "scores": self.scores
-        })
-        return d
-
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ContinuousRequirement':
-        """Create a continuous requirement from a dictionary."""
-        # Validate Inputs
-        assert "attribute" in dict, "Attribute must be provided for continuous requirement"
-        assert "thresholds" in dict, "Thresholds must be provided for continuous requirement"
-        assert "scores" in dict, "Scores must be provided for continuous requirement"
-        
-        # Create and return the ContinuousRequirement
-        return cls(
-            attribute=dict["attribute"],
-            thresholds=dict["thresholds"],
-            scores=dict["scores"],
-            id=dict.get("id")
-        )
-
-    def __repr__(self):
-        return f"ContinuousRequirement({self.attribute}, thresholds={self.thresholds}, scores={self.scores})"
-
-class TemporalRequirement(MissionRequirement):
-    AVAILABILITY = 't_img'
-    DURATION = 'measurement_duration'
-    REVISIT = 'revisit_time'
-    N_OBS = 'n_observations'
-
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'TemporalRequirement':
-        """Create a temporal requirement from a dictionary."""
-        requirement_type = dict.get("requirement_type")
+        # unpack dictionary
         attribute = dict.get("attribute")
-
-        # validate requirement type
-        assert requirement_type == MissionRequirement.TEMPORAL, "Requirement type must be 'temporal' for temporal requirements"
-
-        # create temporal requirement from attribute type
-        if attribute == cls.AVAILABILITY:
-            return AvailabilityRequirement.from_dict(dict)
+        preferences = dict.get("preferences")
+        id = dict.get("id", None)
         
-        elif attribute == cls.DURATION:
-            return MeasurementDurationRequirement.from_dict(dict)
+        # initiate requirement
+        return cls(attribute, preferences, id)
 
-        elif attribute == cls.REVISIT:
-            return RevisitTemporalRequirement.from_dict(dict)
-
-        elif attribute == cls.N_OBS:
-            return ReobservationStrategyRequirement.from_dict(dict)
-    
-        raise ValueError(f"Unknown temporal requirement for attribute: {attribute}")
-
-class AvailabilityRequirement(TemporalRequirement):
-    def __init__(self, t_start : float, t_end : float, id: str = None):
+class ConstantValueRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str,
+                 value : float = 1.0,
+                 id = None
+                ):
         """
-        ### Availability Requirement
-        Initialize an availability requirement with thresholds and scores.
-        - :`thresholds`: A list of time thresholds that define the performance levels.
-        - :`scores`: A list of scores corresponding to the thresholds.
+        ### Constant Value Requirement
+
+        Initializes a requirement that always returns the same preference score.
+        - :`attribute`: The attribute being measured.
+        - :`value`: The constant preference score to return (default is 1.0).
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
         """
-        super().__init__(MissionRequirement.TEMPORAL, 
-                         TemporalRequirement.AVAILABILITY, 
-                         self.build_step_preference_function(), 
-                         id)
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.CONSTANT.value, id)
+
+        # validate inputs
+        assert isinstance(value, (int, float)), "Value must be numeric"
+        assert 0.0 <= value <= 1.0, "Value must be in [0, 1]"
 
         # set attributes
-        self.availability = Interval(t_start, t_end)
+        self.value : float = value
 
-    def build_step_preference_function(self) -> callable:
-        def step_preference_function(t: float) -> float:
-            assert t >= 0, "Time must be non-negative"
-            return int(t in self.availability)
-        return step_preference_function
+    def _eval_preference_function(self, value : float) -> float:
+        # validate inputs
+        assert isinstance(value, (int, float)), "Input value must be numeric"
 
-    def __repr__(self):
-        return f"AvailabilityRequirement(t_start={self.availability.left}, t_end={self.availability.right}, id={self.id})"
-    
-    def copy(self):
-        return AvailabilityRequirement(self.availability.left, self.availability.right, self.id)
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["t_start"] = self.availability.left
-        d["t_end"] = self.availability.right
-        return d
-
+        # return preference value
+        return self.value # always returns the constant preference value
+       
     @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'AvailabilityRequirement':
-        """Create an `AvailabilityRequirement` from a dictionary."""
-        # Validate Inputs
-        assert "t_start" in dict and "t_end" in dict, "Start and end times must be provided for `availability` requirement"
-        
-        # Upack dictionary
-        t_start = dict.get("t_start")
-        t_end = dict.get("t_end")
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ConstantValueRequirement':
+        """Create a constant value requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'strategy']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.CONSTANT.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.CONSTANT.value}'"
+
+        # unpack dictionary
+        req_type = dict.get("req_type")
+        attribute = dict.get("attribute")
+        value = dict.get("value", 1.0)  # default to 1.0 if not provided
         id = dict.get("id", None)
 
-        # Return Requirement
-        return AvailabilityRequirement(t_start, t_end, id)
-
-class MeasurementDurationRequirement(TemporalRequirement, ContinuousRequirement):
-    def __init__(self, thresholds: list, scores: list, id: str = None, **kwargs):
-        """
-        ### Measurement Duration Requirement
-        Initialize a measurement duration requirement with thresholds and scores.
-        - :`thresholds`: A list of time thresholds that define the performance levels.
-        - :`scores`: A list of scores corresponding to the thresholds.
-        """
-        super().__init__(TemporalRequirement.DURATION, thresholds, scores, id)
-        
-        # Validate inputs
-        assert all(threshold >= 0 for threshold in thresholds), "All threshold values must be non-negative."
-
-        # Set Requirement Type
-        self.requirement_type = MissionRequirement.TEMPORAL
+        # initiate requirement
+        return cls(attribute, value, id)
     
-    def copy(self):
-        return MeasurementDurationRequirement(self.thresholds, self.scores, self.id)
+class ExpSaturationRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 sat_rate : float,
+                 id = None
+                ):
+        """
+        ### Exponential Saturation Requirement
+
+        Initializes a requirement that uses an exponential saturation preference function.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`sat_rate`: The rate at which preference saturates (higher values lead to quicker saturation). Must be non-negative.
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.EXP_SATURATION.value, id)
+        
+        # validate inputs
+        assert isinstance(sat_rate, (int, float)), "Saturation rate must be a number"
+        assert sat_rate >= 0, "Saturation rate must be non-negative"
+
+        # set attributes
+        self.sat_rate : float = sat_rate
+
+    def _eval_preference_function(self, value : float) -> float:
+        # validate inputs
+        assert isinstance(value, (int, float)), "Evaluated value must be a number"
+        assert value >= 0, "Evaluated value must be non-negative"
+
+        # return preference value
+        return 1.0 - np.exp(-self.sat_rate * value)
     
     def __repr__(self):
-        return f"MeasurementDurationRequirement(thresholds={self.thresholds}, scores={self.scores}, id={self.id})"
-
+        return super().__repr__()[:-1] + f", sat_rate={self.sat_rate})"
+    
     @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'MeasurementDurationRequirement':
-        # Validate Inputs
-        assert "thresholds" in dict and "scores" in dict, "Thresholds and scores must be provided for `measurement_duration` requirement"
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ExpSaturationRequirement':
+        """Create an exponential saturation requirement from a dictionary."""
 
-        # Unpack dictionary
-        thresholds = dict.get("thresholds", [])
-        scores = dict.get("scores", [])
-        id = dict.get("id", None)
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'strategy', 'sat_rate']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.EXP_SATURATION.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.EXP_SATURATION.value}'"
+        
+        # unpack dictionary
+        attribute = dict.get("attribute")
+        sat_rate = dict.get("sat_rate")
+        id = dict.get("id", None) 
 
-        # Return Requirement
-        return MeasurementDurationRequirement(thresholds, scores, id)
-
-class RevisitTemporalRequirement(TemporalRequirement, ContinuousRequirement):
-    def __init__(self, thresholds: list, scores: list, id: str = None, **kwargs):
-        """"
-        ### Revisit Temporal Requirement
-        Initialize a revisit temporal requirement with thresholds and scores.
-        - :`thresholds`: A list of time thresholds that define the performance levels.
-        - :`scores`: A list of scores corresponding to the thresholds.
+        # initiate requirement
+        return cls(attribute, sat_rate, id)
+    
+class LogThresholdRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 slope : float, 
+                 threshold : float, 
+                 id = None
+                ):
         """
-        super().__init__(TemporalRequirement.REVISIT, thresholds, scores, id)
-        self.requirement_type = MissionRequirement.TEMPORAL
-    
-    def copy(self):
-        return RevisitTemporalRequirement(self.thresholds, self.scores, self.id)
+        ### Logarithmic Threshold Requirement
         
-    def __repr__(self):
-        return f"RevisitTemporalRequirement(thresholds={self.thresholds}, scores={self.scores}, id={self.id})"
-
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'RevisitTemporalRequirement':
-        # Validate Inputs
-        assert "thresholds" in dict and "scores" in dict, "Thresholds and scores must be provided for `revisit_time` requirement"
-
-        # Unpack dictionary
-        thresholds = dict.get("thresholds", [])
-        scores = dict.get("scores", [])
-        id = dict.get("id", None)
-
-        # Return Requirement
-        return RevisitTemporalRequirement(thresholds, scores, id)
-
-class ReobservationStrategyRequirement(TemporalRequirement):
-    # Reobservation Strategies
-    ## No change
-    NO_CHANGE = 'no_change'
-    ## More obs = better    
-    EXP_SATURATION = 'exp_saturation'
-    LOG_THRESHOLD = 'log_threshold'
-    ## Less obs = better    
-    EXP_DECAY = 'exp_decay'
-    ## Thresholds
-    STEP_THRESHOLD = 'step_threshold'
-    LINEAR_THRESHOLD = 'linear_threshold'
-    ## Bounded 
-    GAUSSIAN_THRESHOLD = 'gaussian_threshold'
-    TRIANGLE_THRESHOLD = 'triangle_threshold'
-
-    # RO = {
-    #     # Reobservation Strategies
-    #     "linear_increase" : lambda n_obs : n_obs,
-    #     "linear_decrease" : lambda n_obs : max((4 - n_obs)/4, 0),
-    #     "decaying_increase" : lambda n_obs : np.log(n_obs) + 1,
-    #     "decaying_decrease" : lambda n_obs : np.exp(1 - n_obs),
-    #     "immediate_decrease" : lambda n_obs : 0.0 if n_obs > 0 else 1.0,
-    #     "no_change" : lambda _ : 1.0,
-    #     # "monitoring" : monitoring,
-    # }
-
-    def __init__(self, strategy : str, id : str = None, **_):
+        Initializes a requirement that uses a logarithmic threshold preference function.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`slope`: The slope of the logarithmic function (higher values lead to steeper transitions). Must be positive.
+        - :`threshold`: The threshold value at which preference value is 0.5. Must be non-negative.
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
         """
-        ### Reobservation Strategy Requirement
-        Initialize a reobservation strategy requirement with a strategy and an ID.
-        - :`id`: An optional unique identifier for the requirement.
-        """
-
-        # Validate inputs
-        assert isinstance(strategy, str), "Strategy must be a string"
-        assert strategy.lower() in [self.NO_CHANGE, self.EXP_SATURATION, self.LOG_THRESHOLD, self.EXP_DECAY, self.STEP_THRESHOLD, self.LINEAR_THRESHOLD, self.GAUSSIAN_THRESHOLD, self.TRIANGLE_THRESHOLD], \
-            f"Unknown strategy: {strategy}. Must be one of {self.NO_CHANGE}, {self.EXP_SATURATION}, {self.LOG_THRESHOLD}, {self.EXP_DECAY}, {self.STEP_THRESHOLD}, {self.LINEAR_THRESHOLD}, {self.GAUSSIAN_THRESHOLD}, {self.TRIANGLE_THRESHOLD}."
-
-        super().__init__(MissionRequirement.TEMPORAL, TemporalRequirement.N_OBS, self._build_reobservation_strategy(), id)
-        self.strategy = strategy.lower()
-
-    @abstractmethod
-    def _build_reobservation_strategy(self) -> Callable[[Any], float]:
-        """Creates a reobservation strategy preference function."""
-
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "strategy": self.strategy
-        })
-        return d
-
-    def __repr__(self):
-        return f"ReobservationStrategy(strategy={self.strategy}, id={self.id})"
-    
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ReobservationStrategyRequirement':
-        """Create a reobservation strategy requirement from a dictionary."""
-        assert "strategy" in dict, "Strategy must be provided for reobservation strategy requirement"
-        strategy = dict.get("strategy")
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.LOG_THRESHOLD.value, id)
         
-        if strategy == cls.NO_CHANGE:
-            return NoChangeReobservationStrategy.from_dict(dict)
-        elif strategy == cls.EXP_SATURATION:
-            return ExpSaturationReobservationsStrategy.from_dict(dict)
-        elif strategy == cls.LOG_THRESHOLD:
-            return LogThresholdReobservationsStrategy.from_dict(dict)
-        elif strategy == cls.EXP_DECAY:
-            return ExpDecayReobservationStrategy.from_dict(dict)
-        # elif strategy == cls.STEP_THRESHOLD:
-        #     TODO
-        #     return StepThresholdReobservationsStrategy.from_dict(dict)
-        # elif strategy == cls.LINEAR_THRESHOLD:
-        #     TODO
-        #     return LinearThresholdReobservationsStrategy.from_dict(dict)
-        elif strategy == cls.GAUSSIAN_THRESHOLD:
-            return GaussianThresholdReobservationsStrategy.from_dict(dict)
-        elif strategy == cls.TRIANGLE_THRESHOLD:
-            return TriangleThresholdReobservationsStrategy.from_dict(dict)
-
-        raise ValueError(f"Unknown reobservation strategy: {strategy}")
-    
-
-class NoChangeReobservationStrategy(ReobservationStrategyRequirement):
-    def __init__(self, id = None, **_):
-        super().__init__(self.NO_CHANGE, id, **_)
-    
-    def _build_reobservation_strategy(self):
-        def preference(n_obs: int) -> float:
-            assert n_obs >= 0, "Number of observations must be non-negative"
-            return 1.0
-        return preference
-    
-    def copy(self):
-        return NoChangeReobservationStrategy(self.id)
-    
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'NoChangeReobservationStrategy':
-        """Create a no change reobservation strategy from a dictionary."""
-        # Validate Inputs
-        assert "strategy" in dict and dict["strategy"] == cls.NO_CHANGE, "Strategy must be 'no_change' for NoChangeReobservationStrategy"
-        
-        # Get the ID if provided
-        id = dict.get("id",None)
-
-        # Create and return the NoChangeReobservationStrategy
-        return cls(id=id)
-
-class ExpSaturationReobservationsStrategy(ReobservationStrategyRequirement):
-    def __init__(self, saturation_rate : float, id = None, **_):
-        super().__init__(self.EXP_SATURATION, id)
-        
-        # Validate inputs
-        assert isinstance(saturation_rate, (int, float)), "Saturation rate must be a number"
-        assert saturation_rate >= 0, "Saturation rate must be non-negative"
-
-        # Set attributes
-        self.saturation_rate : float = saturation_rate
-    
-    def _build_reobservation_strategy(self):
-        def preference(n_obs: int) -> float:
-            assert n_obs >= 0, "Number of observations must be non-negative"
-            return 1.0 - np.exp(-self.saturation_rate * n_obs)
-        return preference
-    
-    def copy(self):
-        return ExpSaturationReobservationsStrategy(self.saturation_rate, self.id)
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "saturation_rate": self.saturation_rate
-        })
-        return d
-    
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ExpSaturationReobservationsStrategy':
-        """Create an exponential saturation reobservation strategy from a dictionary."""
-        # Validate Inputs
-        assert "strategy" in dict and dict["strategy"] == cls.EXP_SATURATION, "Strategy must be 'exp_saturation' for ExpSaturationReobservationsStrategy"
-        assert "saturation_rate" in dict, "Saturation rate must be provided for ExpSaturationReobservationsStrategy"
-        
-        # Get the saturation rate and ID if provided
-        saturation_rate = dict.get("saturation_rate")
-        id = dict.get("id", None)
-        
-        # Create and return the ExpSaturationReobservationsStrategy
-        return cls(saturation_rate=saturation_rate, id=id)
-    
-    def __repr__(self):
-        return f"ReobservationStrategy(strategy={self.strategy}, saturation_rate={self.saturation_rate}, id={self.id})"
-    
-class LogThresholdReobservationsStrategy(ReobservationStrategyRequirement):
-    def __init__(self, threshold: float, slope: float, id = None, **_):
-        super().__init__(self.LOG_THRESHOLD, id)
-        
-        # Validate inputs
-        assert isinstance(threshold, (int, float)), "Threshold must be a number"
+        # validate inputs
         assert isinstance(slope, (int, float)), "Slope must be a number"
-        assert threshold >= 0, "Threshold must be non-negative"
         assert slope > 0, "Slope must be positive"
+        assert isinstance(threshold, (int, float)), "Threshold must be a number"
+        assert threshold >= 0, "Threshold must be non-negative"
 
-        # Set attributes
-        self.threshold : float = threshold
+        # set attributes
         self.slope : float = slope
-
-    def _build_reobservation_strategy(self):
-        def preference(n_obs: int) -> float:
-            assert n_obs >= 0, "Number of observations must be non-negative"
-            return 1 / (1 + np.exp(-self.slope * (n_obs - self.threshold)))
-        return preference
+        self.threshold : float = threshold
     
-    def copy(self):
-        return LogThresholdReobservationsStrategy(self.threshold, self.slope, self.id)
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "threshold": self.threshold,
-            "slope": self.slope
-        })
-        return d
-    
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'LogThresholdReobservationsStrategy':
-        """Create a log threshold reobservation strategy from a dictionary."""
-        # Validate Inputs
-        assert "strategy" in dict and dict["strategy"] == cls.LOG_THRESHOLD, "Strategy must be 'log_threshold' for LogThresholdReobservationsStrategy"
-        assert "threshold" in dict, "Threshold must be provided for LogThresholdReobservationsStrategy"
-        assert "slope" in dict, "Slope must be provided for LogThresholdReobservationsStrategy"
+    def _eval_preference_function(self, value : float) -> float:
+        # validate inputs
+        assert isinstance(value, (int, float)), "Value must be a number"
+        assert value >= 0, "Value must be non-negative"
         
-        # Get the threshold, slope and ID if provided
-        threshold = dict.get("threshold")
-        slope = dict.get("slope")
-        id = dict.get("id", None)
-        
-        # Create and return the LogThresholdReobservationsStrategy
-        return cls(threshold=threshold, slope=slope, id=id)
+        # return preference value
+        return 1 / (1 + np.exp(-self.slope * (value - self.threshold)))
     
     def __repr__(self):
-        return f"ReobservationStrategy(strategy={self.strategy}, threshold={self.threshold}, slope={self.slope}, id={self.id})"
+        return super().__repr__()[:-1] + f", slope={self.slope}, threshold={self.threshold})"
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'LogThresholdRequirement':
+        """Create a log threshold requirement from a dictionary."""
 
-class ExpDecayReobservationStrategy(ReobservationStrategyRequirement):
-    def __init__(self, decay_rate: float, id = None, **_):
-        super().__init__(self.EXP_DECAY, id)
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'slope', 'threshold']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.LOG_THRESHOLD.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.LOG_THRESHOLD.value}'"
         
-        # Validate inputs
+        # unpack dictionary
+        attribute = dict.get("attribute")
+        slope = dict.get("slope")
+        threshold = dict.get("threshold")
+        id = dict.get("id", None) 
+
+        # initiate requirement
+        return cls(attribute, slope, threshold, id)
+
+class DeminishingReturnsRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 slope : float, 
+                 threshold : float, 
+                 id = None
+                ):
+        """
+        ### Diminishing Returns Requirement
+        
+        Initializes a requirement that uses the derivative of a logarithmic threshold preference function.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`slope`: The slope of the logarithmic function (higher values lead to steeper transitions). Must be positive.
+        - :`threshold`: The threshold value at which preference value is 0.5. Must be non-negative.
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.LOG_THRESHOLD.value, id)
+        
+        # validate inputs
+        assert isinstance(slope, (int, float)), "Slope must be a number"
+        assert slope > 0, "Slope must be positive"
+        assert isinstance(threshold, (int, float)), "Threshold must be a number"
+        assert threshold >= 0, "Threshold must be non-negative"
+
+        # set attributes
+        self.slope : float = slope
+        self.threshold : float = threshold
+    
+    def _eval_preference_function(self, value : int) -> float:
+        # validate inputs
+        assert isinstance(value, int) and value > 0, \
+            "Value must be a positive integer"
+        
+        # calculate preference values of value and value-1
+        p_i_mins_1  = 1 / (1 + np.exp(-self.slope * (value - 1 - self.threshold)))
+        p_i = 1 / (1 + np.exp(-self.slope * (value - self.threshold)))
+    
+        # return preference value
+        return max(0.0, p_i - p_i_mins_1)
+
+    def __repr__(self):
+        return super().__repr__()[:-1] + f", slope={self.slope}, threshold={self.threshold})"
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'DeminishingReturnsRequirement':
+        """Create a diminishing returns requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'slope', 'threshold']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.DEMINISHING_RETURNS.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.DEMINISHING_RETURNS.value}'"
+        
+        # unpack dictionary
+        attribute = dict.get("attribute")
+        slope = dict.get("slope")
+        threshold = dict.get("threshold")
+        id = dict.get("id", None) 
+
+        # initiate requirement
+        return cls(attribute, slope, threshold, id)
+
+class ExpDecayRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 decay_rate : float, 
+                 id = None
+                ):
+        """
+        ### Exponential Decay Requirement
+
+        Initializes a requirement that uses an exponential decay preference function.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`decay_rate`: The rate at which preference decays (higher values lead to quicker decay). Must be non-negative. 
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.EXP_DECAY.value, id)
+        
+        # validate inputs
         assert isinstance(decay_rate, (int, float)), "Decay rate must be a number"
         assert decay_rate >= 0, "Decay rate must be non-negative"
-
-        # Set attributes
+        
+        # set attributes
         self.decay_rate : float = decay_rate
 
-    def _build_reobservation_strategy(self):
-        def preference(n_obs: int) -> float:
-            assert n_obs >= 0, "Number of observations must be non-negative"
-            return np.exp(-self.decay_rate * n_obs)
-        return preference
+    def _eval_preference_function(self, value : float) -> float:
+        # validate inputs
+        assert isinstance(value, (int, float)), "Value must be a number"
+        assert value >= 0, "Value must be non-negative"
+        
+        # return preference value
+        return np.exp(-self.decay_rate * value)
     
-    def copy(self):
-        return ExpDecayReobservationStrategy(self.decay_rate, self.id)
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "decay_rate": self.decay_rate
-        })
-        return d
+    def __repr__(self):
+        return super().__repr__()[:-1] + f", decay_rate={self.decay_rate})"
     
     @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ExpDecayReobservationStrategy':
-        """Create an exponential decay reobservation strategy from a dictionary."""
-        # Validate Inputs
-        assert "strategy" in dict and dict["strategy"] == cls.EXP_DECAY, "Strategy must be 'exp_decay' for ExpDecayReobservationStrategy"
-        assert "decay_rate" in dict, "Decay rate must be provided for ExpDecayReobservationStrategy"
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'ExpDecayRequirement':
+        """Create an exponential decay requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'decay_rate']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.EXP_DECAY.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.EXP_DECAY.value}'"
         
-        # Get the decay rate and ID if provided
+        # unpack dictionary
+        req_type = dict.get("req_type")
+        attribute = dict.get("attribute")
         decay_rate = dict.get("decay_rate")
-        id = dict.get("id", None)
-        
-        # Create and return the ExpDecayReobservationStrategy
-        return cls(decay_rate=decay_rate, id=id)
+        id = dict.get("id", None) 
 
-    def __repr__(self):
-        return f"ReobservationStrategy(strategy={self.strategy}, decay_rate={self.decay_rate}, id={self.id})"
+        # initiate requirement
+        return cls(attribute, decay_rate, id)
 
-class GaussianThresholdReobservationsStrategy(ReobservationStrategyRequirement):
-    def __init__(self, n_target: int, stddev: float, id = None, **_):
-        super().__init__(self.GAUSSIAN_THRESHOLD, id)
+class GaussianRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str,  
+                 mean : float,
+                 stddev : float,
+                 id = None):
+        """
+        ### Gaussian Requirement
 
-        # Validate inputs
-        assert isinstance(n_target, (int, float)), "Target number of observations must be a number"
+        Initializes a requirement that uses a Gaussian distribution as a threshold preference function.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`mean`: The mean value of the Gaussian function.
+        - :`stddev`: The standard deviation of the Gaussian function. Must be positive.
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.GAUSSIAN.value, id)
+
+        # validate inputs
+        assert isinstance(mean, (int, float)), "Average must be a number"
         assert isinstance(stddev, (int, float)), "Standard deviation must be a number"
-        assert n_target >= 0, "Target number of observations must be non-negative"
         assert stddev > 0, "Standard deviation must be positive"
 
-        self.n_target : int = n_target
+        # set attributes
+        self.mean : float = mean
         self.stddev : float = stddev
 
-    def _build_reobservation_strategy(self):
-        def preference(n_obs: int) -> float:
-            assert n_obs >= 0, "Number of observations must be non-negative"
-            return np.exp(-0.5 * ((n_obs - self.n_target) / self.stddev) ** 2)
-        return preference
+    def _eval_preference_function(self, value : float) -> float:
+        # validate inputs
+        assert isinstance(value, (int, float)), "Number of observations must be a number"
+        assert value >= 0, "Number of observations must be non-negative"
+
+        # return preference value
+        return np.exp(-0.5 * ((value - self.mean) / self.stddev) ** 2)
     
-    def copy(self):
-        return GaussianThresholdReobservationsStrategy(self.n_target, self.stddev, self.id)
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "n_target": self.n_target,
-            "stddev": self.stddev
-        })
-        return d
-    
+    def __repr__(self):
+        return super().__repr__()[:-1] + f", mean={self.mean}, stddev={self.stddev})"
+
     @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'GaussianThresholdReobservationsStrategy':
-        """Create a Gaussian threshold reobservation strategy from a dictionary."""
-        # Validate Inputs
-        assert "strategy" in dict and dict["strategy"] == cls.GAUSSIAN_THRESHOLD, "Strategy must be 'gaussian_threshold' for GaussianThresholdReobservationsStrategy"
-        assert "n_target" in dict, "Target number of observations must be provided for GaussianThresholdReobservationsStrategy"
-        assert "stddev" in dict, "Standard deviation must be provided for GaussianThresholdReobservationsStrategy"
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'GaussianRequirement':
+        """Create a Gaussian requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'mean', 'stddev']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.GAUSSIAN.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.GAUSSIAN.value}'"
         
-        # Get the target number of observations, standard deviation and ID if provided
-        n_target = dict.get("n_target")
+        # unpack dictionary
+        req_type = dict.get("req_type")
+        attribute = dict.get("attribute")
+        mean = dict.get("mean")
         stddev = dict.get("stddev")
         id = dict.get("id", None)
+
+        # initiate requirement
+        return cls(attribute, mean, stddev, id)
+
+class TriangleRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 reference : float,
+                 width : float, 
+                 id = None):
+        """
+        ### Triangle Requirement
+
+        Initializes a requirement that uses a triangular threshold preference function.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`reference`: The reference value at which preference is maximized.
+        - :`width`: The width of the triangle base (preference drops to 0.0 at reference ± width / 2). Must be positive.
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.TRIANGLE.value, id)
+
+        # validate inputs
+        assert isinstance(reference, (int, float)), "Reference must be a number"
+        assert isinstance(width, (int, float)), "Width must be a number"
+        assert width > 0, "Width must be positive"
         
-        # Create and return the GaussianThresholdReobservationsStrategy
-        return cls(n_target=n_target, stddev=stddev, id=id)
-    
-    def __repr__(self):
-        return f"ReobservationStrategy(strategy={self.strategy}, mean={self.n_target}, stddev={self.stddev}, id={self.id})"
-
-class TriangleThresholdReobservationsStrategy(ReobservationStrategyRequirement):
-    def __init__(self, n_target : int, width : float, id = None, **_):
-        super().__init__(self.TRIANGLE_THRESHOLD, id)
-
-        # Validate inputs
-        assert isinstance(n_target, int) and n_target >= 0, "Target number of observations must be a non-negative integer"
-        assert isinstance(width, (int, float)) and width > 0, "Width must be a positive number"
-
-        # Set attributes
-        self.n_target : float = n_target
+        # set attributes
+        self.reference : float = reference
         self.width : float = width
-
-    def _build_reobservation_strategy(self):
-        def preference(n_obs: int) -> float:
-            assert n_obs >= 0, "Number of observations must be non-negative"
-            return max(0.0, 1.0 - abs(n_obs - self.n_target) / self.width)
-        return preference
     
-    def copy(self):
-        return TriangleThresholdReobservationsStrategy(self.n_target, self.width, self.id)
+    def _eval_preference_function(self, value : float) -> float:
+        # validate inputs
+        assert isinstance(value, (int, float)), "Number of observations must be a number"
+        assert value >= 0, "Number of observations must be non-negative"
+
+        # return preference value
+        return max(0.0, 1.0 - abs(value - self.reference) / (self.width / 2))
+
+    def __repr__(self):
+        return super().__repr__()[:-1] + f", reference={self.reference}, width={self.width})"
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'TriangleRequirement':
+        """Create a triangle requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'reference', 'width']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.TRIANGLE.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.TRIANGLE.value}'"
+        
+        # unpack dictionary
+        req_type = dict.get("req_type")
+        attribute = dict.get("attribute")
+        reference = dict.get("reference")
+        width = dict.get("width")
+        id = dict.get("id", None)
+
+        # initiate requirement
+        return cls(attribute, reference, width, id)
+
+class StepsRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 thresholds : List[float],
+                 scores : List[float],
+                 id = None):
+        """
+        ### Discrete Steps Requirement
+        
+        Initializes a requirement that uses discrete step functions for preference evaluation.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`thresholds`: A list of numeric thresholds defining the steps (must be in ascending order).
+        - :`scores`: A list of preference scores corresponding to each threshold interval (must be in [0, 1]).
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.STEPS.value, id)
+        
+        # validate inputs
+        assert isinstance(thresholds, list), "Thresholds must be a list"
+        assert isinstance(scores, list), "Scores must be a list"
+        assert len(thresholds) + 1 == len(scores), \
+            "Scores must have the same length as thresholds plus one"
+        for threshold in thresholds:
+            assert isinstance(threshold, (int, float)), "Thresholds must be numeric"
+        assert all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "All values in `thresholds` must be ascending."
+        for score in scores:
+            assert isinstance(score, (int, float)), "Scores must be numeric"
+            assert 0.0 <= score <= 1.0, "Scores must be in [0, 1]"
+
+        # set attributes
+        self.thresholds = [threshold for threshold in thresholds]
+        self.scores = [score for score in scores] # assumes scores match thresholds in length and order
+
+    def _eval_preference_function(self, value):
+        # validate inputs
+        assert isinstance(value, (int, float)), "Value must be numeric"
+
+        # return preference value based on discrete levels
+        for threshold,score in zip(self.thresholds,self.scores[:-1]):
+            if value < threshold:
+                return score
+                    
+        if self.thresholds[-1] <= value:
+            return self.scores[-1] 
+
+        # fallback; should not reach here
+        raise ValueError("Value does not fall within any defined thresholds.")    
+
+    def __repr__(self):
+        return super().__repr__()[:-1] + f", thresholds={self.thresholds}, scores={self.scores})"
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'StepsRequirement':
+        """Create a discrete levels requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'thresholds', 'scores']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        
+        # unpack dictionary
+        attribute = dict.get("attribute")
+        thresholds = dict.get("thresholds")
+        scores = dict.get("scores")
+        id = dict.get("id", None)
+
+        # initiate requirement
+        return cls(attribute, thresholds, scores, id)
+
+class IntervalInterpolationRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 thresholds : List[float],
+                 scores : List[float],
+                 id = None):
+        """
+        ### Interval Interpolation Requirement
+
+        Initializes a requirement that uses interval-based linear interpolation for preference evaluation.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`thresholds`: A list of numeric thresholds defining the breakpoints (must be in ascending order).
+        - :`scores`: A list of preference scores corresponding to each threshold (must be in [0, 1] and same length as thresholds).
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated
+        """
+
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.INTERVAL_INTERP.value, id)
+        
+        # validate inputs
+        assert isinstance(thresholds, list), "Intervals must be a list"
+        assert isinstance(scores, list), "Scores must be a list"
+        assert len(thresholds) == len(scores), "Intervals and scores must have the same length"
+        for interval in thresholds:
+            assert isinstance(interval, (int, float)), "Intervals must be numeric"
+        assert all(thresholds[i] <= thresholds[i + 1] for i in range(len(thresholds) - 1)), "All values in `intervals` must be ascending."
+        for score in scores:
+            assert isinstance(score, (int, float)), "Scores must be numeric"
+            assert 0.0 <= score <= 1.0, "Scores must be in [0, 1]"
+
+        # set attributes
+        self.thresholds = [threshold for threshold in thresholds]
+        self.scores = [score for score in scores] # assumes scores match intervals in length and order
+
+    def _eval_preference_function(self, value):
+        # validate inputs
+        assert isinstance(value, (int, float)), "Value must be numeric"
+
+        # find if value is between two intervals and interpolate score
+        if self.thresholds[-1] < value:
+            return self.scores[-1]
+
+        # initialize previous values
+        prev_threshold,prev_score = np.NINF, self.scores[0]
+
+        # iterate through intervals
+        for threshold,score in zip(self.thresholds,self.scores):
+            # check if value is within current interval
+            if prev_threshold < value <= threshold:
+                # do not interpolate if previous threshold is -inf
+                if prev_threshold == np.NINF: return score
+                
+                # linear interpolation
+                m = (score - prev_score) / (threshold - prev_threshold) # slope
+                return prev_score + m * (value - prev_threshold)        # interpolated score
+            
+            # update previous values for next interval
+            prev_threshold,prev_score = threshold, score
+        
+        # fallback; should not reach here
+        raise ValueError("Value does not fall within any defined intervals.")
+        
+    def __repr__(self):
+        return super().__repr__()[:-1] + f", thresholds={self.thresholds}, scores={self.scores})"
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'IntervalInterpolationRequirement':
+        """Create a discrete intervals requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'thresholds', 'scores']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        
+        # unpack dictionary
+        attribute = dict.get("attribute")
+        thresholds = dict.get("thresholds")
+        scores = dict.get("scores")
+        id = dict.get("id", None)
+
+        # initiate requirement
+        return cls(attribute, thresholds, scores, id)
+
+"""
+-----------------------------
+CAPABILITY REQUIREMENT DEFINITIONS
+-----------------------------
+"""
+class CapabilityPreferenceStrategies(Enum):
+    # Explicit categorical matching
+    EXPLICIT = 'explicit'
+
+class CapabilityRequirement(MissionRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 strategy : str,
+                 id = None):
+        """
+        ### Capability Requirement
+
+        Initializes a generic measurement capability requirement
+        - :`attribute`: The attribute being evaluated (e.g., "instrument capability").
+        - :`strategy`: Name of the preference function strategy to be used (e.g., "categorical", "exp_saturation").
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+
+        # initiate parent class
+        super().__init__(RequirementTypes.CAPABILITY.value, attribute, id)
+
+        # validate inputs
+        assert isinstance(strategy, str), "Preference strategy must be a string"
+        assert strategy.lower() in CapabilityPreferenceStrategies._value2member_map_, f"Preference strategy must be one of {list(CapabilityPreferenceStrategies._value2member_map_.keys())}"
+        
+        # set attributes
+        self.strategy : str = strategy.lower()
+
+    def __repr__(self):
+        """String representation of the capability requirement."""
+        return f"CapabilityRequirement(strategy={CapabilityPreferenceStrategies._value2member_map_[self.strategy].name}, attribute={self.attribute})"
+    
+    @classmethod
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'MissionRequirement':
+        """Create a capability requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'strategy']
+        assert all(key in d for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"    
+        # unpack dictionary
+        strategy = d.get("strategy").lower()
+
+        # initiate approriate requirement 
+        if strategy == CapabilityPreferenceStrategies.EXPLICIT.value:
+            return ExplicitCapabilityRequirement.from_dict(d)
+        
+        # Additional strategies can be implemented here
+        raise NotImplementedError(f"Preference function for strategy '{strategy}' not yet supported.")
+
+class ExplicitCapabilityRequirement(CapabilityRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 valid_values : Union[List[str], Set[str]],
+                 id = None):
+        """
+        ### Explicit Capability Requirement
+
+        Initializes a requirement that accepts any value from a predefined set of valid categorical values.
+        - :`attribute`: The attribute being measured (e.g., instrument type, agent type, etc.).
+        - :`valid_values`: A set of valid categorical values (strings) that are acceptable.
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+
+        # initiate parent class
+        super().__init__(attribute, CapabilityPreferenceStrategies.EXPLICIT.value, id)
+
+        # validate inputs
+        assert isinstance(valid_values, (list, set)), "Valid values must be a list or set"
+        assert all(isinstance(val, str) for val in valid_values), "All valid values must be strings"
+
+        # set attributes
+        self.valid_values : Set[str] = {val.lower() for val in valid_values}
+
+    def _eval_preference_function(self, value : str) -> float:
+        """Evaluate the preference function for a given capability value."""
+        
+        # validate inputs
+        assert isinstance(value, str), "Input value must be a string"
+
+        # normalize value to lowercase string
+        value = str(value).lower()  
+
+        # return preference value
+        return 1.0 if value in self.valid_values else 0.0
     
     def to_dict(self):
         d = super().to_dict()
-        d.update({
-            "n_target": self.n_target,
-            "width": self.width
-        })
+        d.update({"valid_values": sorted(self.valid_values)})
         return d
-    
+
     @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'TriangleThresholdReobservationsStrategy':
-        """Create a triangle threshold reobservation strategy from a dictionary."""
-        # Validate Inputs
-        assert "strategy" in dict and dict["strategy"] == cls.TRIANGLE_THRESHOLD, "Strategy must be 'triangle_threshold' for TriangleThresholdReobservationsStrategy"
-        assert "n_target" in dict, "Target number of observations must be provided for TriangleThresholdReobservationsStrategy"
-        assert "width" in dict, "Width must be provided for TriangleThresholdReobservationsStrategy"
-        
-        # Get the target number of observations, width and ID if provided
-        n_target = dict.get("n_target")
-        width = dict.get("width")
-        id = dict.get("id", None)
-        
-        # Create and return the TriangleThresholdReobservationsStrategy
-        return cls(n_target=n_target, width=width, id=id)
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'ExplicitCapabilityRequirement':
+        """Create an explicit capability requirement from a dictionary."""
 
-    def __repr__(self):
-        return f"ReobservationStrategy(strategy={self.strategy}, n_target={self.n_target}, width={self.width}, id={self.id})"
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'valid_values']
+        assert all(key in d for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert d.get("strategy") == CapabilityPreferenceStrategies.EXPLICIT.value, \
+            f"Strategy does not match requirement definition. Must be '{CapabilityPreferenceStrategies.EXPLICIT.value}'"
+        
+        # unpack dictionary
+        attribute = d.get("attribute")
+        valid_values : list = d.get("valid_values")
+        id = d.get("id", None)
 
-class SpatialRequirement(MissionRequirement):
-    POINT = 'point'
-    LIST = 'list'
+        # initiate requirement
+        return cls(attribute, valid_values, id)
+
+"""
+---------------------------------
+SPATIAL REQUIREMENT DEFINITIONS
+---------------------------------
+"""
+class SpatialPreferenceStrategies(Enum):
+    SINGLE_POINT = 'single_point'
+    MULTI_POINT = 'multi_point'
     GRID = 'grid'
 
-    def __init__(self, location_type : str, distance_threshold: float = 1, id = None):
-        """
-        ### Spatial Mission Requirement
-        Initialize a spatial requirement with a location type and a distance threshold.
-        - :`location_type`: The type of target location (e.g., "point", "list", "grid").
-        - :`distance_threshold`: The distance threshold for the requirement in [km].
-        """
-        super().__init__(self.SPATIAL, 'location', self._build_spatial_preference_function(distance_threshold), id)
-        assert location_type in [self.POINT, self.LIST, self.GRID], f"Invalid location type: {location_type}. Must be one of {self.POINT}, {self.LIST}, or {self.GRID}."
-        self.location_type = location_type
-        self.distance_threshold = distance_threshold
+class SpatialCoverageRequirement(MissionRequirement):
+    ATTRIBUTE = 'location'
 
-    @abstractmethod
-    def _build_spatial_preference_function(self, distance_threshold: float) -> callable:
-        """Creates a spatial preference function based on a distance threshold."""
-        raise NotImplementedError("Subclasses must implement this method")
+    def __init__(self, 
+                 strategy : str,
+                 id = None):
+        """
+        ### Spatial Coverage Requirement
+
+        Initializes a generic coverage requirement.
+        - :`strategy`: Name of the preference function strategy to be used (e.g., "categorical", "exp_saturation").
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+
+        # initiate parent class
+        super().__init__(RequirementTypes.SPATIAL.value, self.ATTRIBUTE, id)
+
+        # validate inputs
+        assert isinstance(strategy, str), "Preference strategy must be a string"
+        assert strategy.lower() in SpatialPreferenceStrategies._value2member_map_, f"Preference strategy must be one of {list(SpatialPreferenceStrategies._value2member_map_.keys())}"
+
+        # set attributes
+        self.strategy : str = strategy.lower()
 
     def haversine_np(self, lat1 : float, lon1 : float, lat2 : float, lon2 : float) -> float:
         """
@@ -860,330 +985,299 @@ class SpatialRequirement(MissionRequirement):
         dlat = lat2 - lat1
         
         # Haversine formula
-        a = np.sin(dlat/2.0)**2 + np.cos(lon1) * np.cos(lat2) * np.sin(dlon/2.0)**2
-        
+        a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+
         # Calculate the arc distance
         c = 2 * np.arcsin(np.sqrt(a))
 
         # Return great circle distance in kilometers
         return 6378.137 * c
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "location_type": self.location_type,
-            "distance_threshold": self.distance_threshold
-        })
-        return d
-    
+
+    def __repr__(self):
+        """String representation of the coverage requirement."""
+        return f"SpatialRequirement(strategy={SpatialPreferenceStrategies._value2member_map_[self.strategy].name})"
+      
     @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'SpatialRequirement':
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'MissionRequirement':
         """Create a spatial requirement from a dictionary."""
-        assert "location_type" in dict, "Location type must be provided for spatial requirement"
-        location_type = dict.get("location_type")
-
-        if location_type == cls.POINT:
-            return PointTargetSpatialRequirement.from_dict(dict)
-
-        elif location_type == cls.LIST:
-            return TargetListSpatialRequirement.from_dict(dict)
         
-        elif location_type == cls.GRID:
-            return GridTargetSpatialRequirement.from_dict(dict)
+        # validate input dictionary
+        required_keys = ['req_type', 'strategy']
+        assert all(key in d for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"    
+        # unpack dictionary
+        strategy = d.get("strategy").lower()
 
-        raise ValueError(f"Unknown spatial requirement type: {location_type}")
+        # initiate approriate requirement 
+        if strategy == SpatialPreferenceStrategies.SINGLE_POINT.value:
+            return SinglePointSpatialRequirement.from_dict(d)
+        elif strategy == SpatialPreferenceStrategies.MULTI_POINT.value:
+            return MultiPointSpatialRequirement.from_dict(d)
+        elif strategy == SpatialPreferenceStrategies.GRID.value:
+            return GridSpatialRequirement.from_dict(d)
+        
+        # Additional strategies can be implemented here
+        raise NotImplementedError(f"Preference function for strategy '{strategy}' not yet supported.")
     
-class PointTargetSpatialRequirement(SpatialRequirement):
-    def __init__(self, target: Tuple[float, float, int, int], distance_threshold: float = 1.0, id: str = None, **kwargs):
-        super().__init__(self.POINT, distance_threshold, id)
-        
-        # Validate inputs
-        assert isinstance(target, (tuple, list)) and len(target) == 4, \
-            "Target must be a tuple or list of length 4 (lat, lon, grid index, gp index)"
-        
-        # Set attributes
-        self.target = target
-
-    def _is_location_in_target(self, location: Tuple[float, float, int, int], distance_threshold: float) -> bool:
-        if not (isinstance(location, (tuple, list)) and len(location) == 4):
-            raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index)")
-        
-        # Check for exact match
-        if self.target == location: return True
-        
-        # Proximity match (lat/lon only)
-        return self.haversine_np(self.target[0], self.target[1], location[0], location[1]) <= distance_threshold
-
-    def _build_spatial_preference_function(self, distance_threshold: float) -> Callable[[Any], float]:
-        """Creates a spatial preference function that returns 1.0 if a location is the target or within a distance threshold, else 0.0."""
-        def preference(location: Any) -> float:
-            # Validate location input
-            if not (isinstance(location, (tuple, list)) and len(location) == 4):
-                raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index)")
-            
-            return float(self._is_location_in_target(location, distance_threshold))
-        
-        return preference
-    
-    def copy(self):
-        """Create a copy of the measurement requirement."""
-        return PointTargetSpatialRequirement(self.target, self.distance_threshold, self.id)
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "target": self.target
-        })
-        return d
-    
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'PointTargetSpatialRequirement':
-        """Create a point target spatial requirement from a dictionary."""
-        
-        # Validate Inputs
-        assert "target" in dict, "Target must be provided for point target spatial requirement"
-        target = dict.get("target")
-        
-        # Validate target
-        assert isinstance(target, (tuple, list)) and len(target) == 4, \
-            "Target must be a tuple or list of length 4 (lat, lon, grid index, gp index)"
-        target = tuple(target)
-        distance_threshold = dict.get("distance_threshold", 1.0)
-
-        # Return the PointTargetSpatialRequirement instance
-        return cls(target=target, distance_threshold=distance_threshold, id=dict.get("id", None))
-
-    def __repr__(self):
-        return f"PointTargetSpatialRequirement(target={self.target}, distance_threshold={self.distance_threshold}, id={self.id})"
-
-class TargetListSpatialRequirement(SpatialRequirement):
-    def __init__(self, targets: List[Tuple[float, float, int, int]], distance_threshold: float, id=None, **kwargs):
-        super().__init__(self.LIST, distance_threshold, id)
-
-        # Validate inputs
-        assert isinstance(targets, list) and len(targets) > 0, \
-            "Targets must be a non-empty list"
-        assert all(isinstance(t, (tuple, list)) and len(t) == 4 for t in targets), \
-            "Each target must be a tuple/list of (lat, lon, grid index, gp index)"
-
-        # Set attributes
-        self.targets: List[Tuple[float, float, int, int]] = [tuple(t) for t in targets]
-
-    def _is_location_in_targets(self, location: Tuple[float, float, int, int], distance_threshold: float) -> bool:
-        """Check if a location is in the targets list or within a distance threshold."""
-        # Validate location input
-        if not (isinstance(location, (tuple, list)) and len(location) == 4):
-            raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index)")
-
-        # Check for exact match
-        if tuple(location) in self.targets:
-            return True
-
-        # Proximity match (lat/lon only)
-        for loc in self.targets:
-            if self.haversine_np(loc[0], loc[1], location[0], location[1]) <= distance_threshold:
-                return True
-
-        return False
-
-    def _build_spatial_preference_function(self, distance_threshold: float) -> Callable[[Any], float]:
-        """Creates a spatial preference function that returns 1.0 if a location is in targets (exact or within threshold), else 0.0."""
-        def preference(location: Any) -> float:
-            if isinstance(location, (list, tuple)) and len(location) == 4:
-                return float(self._is_location_in_targets(location, distance_threshold))
-            elif isinstance(location, list):
-                return float(any(
-                    self._is_location_in_targets(loc, distance_threshold)
-                    for loc in location
-                ))
-            else:
-                raise ValueError("Location must be a tuple/list of (lat, lon, grid index, gp index) or a list of such elements.")
-
-        return preference
-
-    def copy(self) -> 'MissionRequirement':
-        """Create a copy of the measurement requirement."""
-        return TargetListSpatialRequirement(
-            targets=self.targets,
-            distance_threshold=self.distance_threshold,
-            id=self.id
-        )
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "targets": self.targets
-        })
-        return d
-    
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'TargetListSpatialRequirement':
-        """Create a target list spatial requirement from a dictionary."""
-        # Validate Inputs
-        assert "targets" in dict, "Targets must be provided for target list spatial requirement"
-        targets = dict.get("targets")
-        
-        # Validate targets
-        assert isinstance(targets, list) and len(targets) > 0, "Targets must be a non-empty list"
-        assert all(isinstance(t, (tuple, list)) and len(t) == 4 for t in targets), \
-            "Each target must be a tuple/list of (lat, lon, grid index, gp index)"
-        
-        distance_threshold = dict.get("distance_threshold", 1.0)
-
-        # Return the TargetListSpatialRequirement instance
-        return cls(targets=[tuple(t) for t in targets], distance_threshold=distance_threshold, id=dict.get("id", None))
-    
-    def __repr__(self):
-        return f"SpatialRequirement(type={self.location_type},targets={self.targets}, distance_threshold={self.distance_threshold}, id={self.id})"
-
-class GridTargetSpatialRequirement(SpatialRequirement):
-    def __init__(self, grid_name: str, grid_index: int, grid_size : int = None, id: str = None, **kwargs):
+class SinglePointSpatialRequirement(SpatialCoverageRequirement):
+    def __init__(self, 
+                 target : Union[Tuple, list],
+                 distance_threshold : float,
+                 id = None):
         """
-        ### Grid Target Spatial Requirement
-        Initialize a grid target spatial requirement with a grid name, grid index, and grid size.
+        ### Single Point Spatial Requirement
+
+        Initializes a requirement that evaluates preference based on proximity to a single target point.
+        - :`target_point`: A tuple representing the target location as (latitude [deg], longitude [deg], grid idx, gp idx).
+        - :`distance_threshold`: The distance threshold for full preference in [km].
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+
+        # initiate parent class
+        super().__init__(SpatialPreferenceStrategies.SINGLE_POINT.value, id)
+
+        # validate inputs
+        if isinstance(target, list):
+            if len(target) == 1:
+                target = target[0]
+            else:
+                raise ValueError("Target must be a single tuple of (latitude, longitude, grid idx, gp idx)")
+            
+        assert isinstance(target, tuple) and len(target) == 4, "Target point must be a tuple of (latitude, longitude)"
+        lat, lon, grid_idx, gp_idx = target
+        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), "Latitude and longitude must be numeric"
+        assert isinstance(grid_idx, int) and isinstance(gp_idx, int), "Grid index and GP index must be integers"
+        assert -90.0 <= lat <= 90.0, "Latitude must be in [-90, 90]"
+        assert -180.0 <= lon <= 180.0, "Longitude must be in [-180, 180]"
+        assert grid_idx >= 0, "Grid index must be non-negative"
+        assert gp_idx >= 0, "GP index must be non-negative"
+        assert isinstance(distance_threshold, (int, float)), "Distance threshold must be numeric"
+        assert distance_threshold >= 0, "Distance threshold must be non-negative"
+
+        # set attributes
+        self.target : Tuple[float, float, int, int] = target
+        self.distance_threshold : float = distance_threshold
+
+    def _eval_preference_function(self, location : Union[Tuple, list]) -> float:
+        """Evaluate the preference function for a given location."""
+        
+        # validate inputs
+        if isinstance(location, list):
+            if len(location) == 1:
+                location = location[0]
+            else:
+                raise ValueError("Location must be a single tuple of (latitude, longitude, grid idx, gp idx)")
+
+        assert isinstance(location, tuple) and len(location) == 4, "Location must be a tuple of (latitude, longitude, grid idx, gp idx)"
+        lat, lon, grid_idx, gp_idx = location
+        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), "Latitude and longitude must be numeric"
+        assert -90.0 <= lat <= 90.0, "Latitude must be in [-90, 90]"
+        assert -180.0 <= lon <= 180.0, "Longitude must be in [-180, 180]"
+        assert isinstance(grid_idx, int) and isinstance(gp_idx, int), "Grid index and GP index must be integers"
+        assert grid_idx >= 0, "Grid index must be non-negative"
+        assert gp_idx >= 0, "GP index must be non-negative"
+
+        # check for exact match
+        if location == self.target: return 1.0
+
+        # calculate distance to target point
+        target_lat, target_lon, _, _ = self.target
+        distance = self.haversine_np(lat, lon, target_lat, target_lon)
+
+        # return preference value based on distance threshold
+        return float(distance <= self.distance_threshold)
+    
+    @classmethod
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'SinglePointSpatialRequirement':
+        """Create a single point spatial requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'strategy', 'target', 'distance_threshold']
+        assert all(key in d for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert d.get("strategy").lower() == SpatialPreferenceStrategies.SINGLE_POINT.value, \
+            f"Strategy does not match requirement definition. Must be '{SpatialPreferenceStrategies.SINGLE_POINT.value}'"
+        
+        # unpack dictionary
+        target = d.get("target")
+        distance_threshold = d.get("distance_threshold")
+        id = d.get("id", None)
+
+        # initiate requirement
+        return cls(target, distance_threshold, id)
+    
+    def __repr__(self):
+        """String representation of the single point spatial requirement."""
+        return super().__repr__()[:-1] + f", target={self.target[2],self.target[3]})"
+    
+class MultiPointSpatialRequirement(SpatialCoverageRequirement):
+    def __init__(self, 
+                 targets : List[Tuple[float, float, int, int]],
+                 distance_threshold : float,
+                 id = None):
+        """
+        ### Multi Point Target Spatial Requirement
+
+        Initializes a requirement that evaluates preference based on proximity to a list of target points.
+        - :`targets`: A list of tuples representing target locations as (latitude [deg], longitude [deg], grid idx, gp idx).
+        - :`distance_threshold`: The distance threshold for full preference in [km].
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+
+        # initiate parent class
+        super().__init__(SpatialPreferenceStrategies.MULTI_POINT.value, id)
+
+        # validate inputs
+        assert isinstance(targets, list) and len(targets) > 0, "Target list must be a non-empty list of target points"
+        for target in targets:
+            assert isinstance(target, tuple) and len(target) == 4, "Each target point must be a tuple of (latitude, longitude, grid idx, gp idx)"
+            lat, lon, grid_idx, gp_idx = target
+            assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), "Latitude and longitude must be numeric"
+            assert isinstance(grid_idx, int) and isinstance(gp_idx, int), "Grid index and GP index must be integers"
+            assert -90.0 <= lat <= 90.0, "Latitude must be in [-90, 90]"
+            assert -180.0 <= lon <= 180.0, "Longitude must be in [-180, 180]"
+            assert grid_idx >= 0, "Grid index must be non-negative"
+            assert gp_idx >= 0, "GP index must be non-negative"
+        assert isinstance(distance_threshold, (int, float)), "Distance threshold must be numeric"
+        assert distance_threshold >= 0, "Distance threshold must be non-negative"
+
+        # set attributes
+        self.targets : List[Tuple[float, float, int, int]] = targets
+        self.distance_threshold : float = distance_threshold
+
+    def _eval_preference_function(self, location : Union[Tuple, list]) -> float:
+        """Evaluate the preference function for a given location."""
+        
+        # validate inputs
+        if isinstance(location, tuple):
+            if len(location) == 4:
+                location = [location]
+            else:
+                raise ValueError("Location must be a list of tuples of (latitude, longitude, grid idx, gp idx)")
+
+        for loc in location:
+            assert isinstance(loc, tuple) and len(loc) == 4, "Location must be a tuple of (latitude, longitude, grid idx, gp idx)"
+            lat, lon, grid_idx, gp_idx = loc
+            assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), "Latitude and longitude must be numeric"
+            assert -90.0 <= lat <= 90.0, "Latitude must be in [-90, 90]"
+            assert -180.0 <= lon <= 180.0, "Longitude must be in [-180, 180]"
+            assert isinstance(grid_idx, int) and isinstance(gp_idx, int), "Grid index and GP index must be integers"
+            assert grid_idx >= 0, "Grid index must be non-negative"
+            assert gp_idx >= 0, "GP index must be non-negative"
+
+        # check for exact match with any target
+        for target in self.targets:
+            if location == target:
+                return 1.0
+
+        # calculate distances to all target points
+        for target in self.targets:
+            target_lat, target_lon, _, _ = target
+            distance = self.haversine_np(lat, lon, target_lat, target_lon)
+            if distance <= self.distance_threshold:
+                return 1.0
+
+        # return preference value based on distance threshold
+        return 0.0
+    
+    def __repr__(self):
+        return super().__repr__()[:-1] + f", num_targets={len(self.targets)})"
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'MultiPointSpatialRequirement':
+        """Create a target list spatial requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'strategy', 'targets', 'distance_threshold']
+        assert all(key in d for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert d.get("strategy").lower() == SpatialPreferenceStrategies.MULTI_POINT.value, \
+            f"Strategy does not match requirement definition. Must be '{SpatialPreferenceStrategies.MULTI_POINT.value}'"
+
+        # unpack dictionary
+        targets = d.get("targets")
+        distance_threshold = d.get("distance_threshold")
+        id = d.get("id", None)
+        
+        # initiate requirement
+        return cls(targets, distance_threshold, id)
+
+class GridSpatialRequirement(SpatialCoverageRequirement):
+    # TODO load grid definitions from file or external source and evaluate accordingly
+
+    def __init__(self, 
+                 grid_name : str,
+                 grid_index : int,
+                 grid_size : int,
+                 id = None):
+        """
+        ### Grid Coverage Spatial Requirement
+
+        Initializes a requirement that evaluates preference based on coverage of specified grid cells.
         - :`grid_name`: The name of the grid (e.g., "global", "regional").
         - :`grid_index`: The index of the grid cell.
         - :`grid_size`: The size of the grid cell in degrees.
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
         """
-        super().__init__(self.GRID, id=id)
-        
-        # Validate inputs
+
+        # initiate parent class
+        super().__init__(SpatialPreferenceStrategies.GRID.value, id)
+
+        # validate inputs
         assert isinstance(grid_name, str), "Grid name must be a string"
         assert isinstance(grid_index, int) and grid_index >= 0, "Grid index must be a non-negative integer"
-        assert grid_size is None or (isinstance(grid_size, (int, float)) and grid_size > 0), "Grid size must be a positive number"
-
-        # Set attributes
-        self.grid_name = grid_name
-        self.grid_index = grid_index
-        self.grid_size = grid_size if grid_size is not None else np.Inf
-
-    def _build_spatial_preference_function(self, _: float) -> Callable[[Any], float]:
-        """Creates a spatial preference function that checks if a location is within the grid cell."""
-        def preference(location: Any) -> float:
-            # Normalize location input
-            location = [location] if not isinstance(location, list) else location
-
-            # Validate input
-            assert all(isinstance(loc, (list, tuple)) for loc in location), \
-                "Location must be a tuple/list of (lat, lon, grid index, gp index)"
-            assert all([len(loc) == 4 for loc in location]), \
-                "Each location in the list must be a tuple of (lat, lon, grid index, gp index)"               
-
-            # return 1.0 if any location is within the grid cell
-            return float(
-                any(
-                    grid_idx == self.grid_index and
-                    0 <= gp_idx < self.grid_size
-                    for *_,grid_idx,gp_idx in location
-                )
-            )
-
-        
-        return preference
-    
-    def copy(self) -> 'MissionRequirement':
-        """Create a copy of the measurement requirement."""
-        return GridTargetSpatialRequirement(
-            grid_name=self.grid_name,
-            grid_index=self.grid_index,
-            grid_size=self.grid_size,
-            id=self.id
-        )
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "grid_name": self.grid_name,
-            "grid_index": self.grid_index,
-            "grid_size": self.grid_size
-        })
-        return d
-    
-    @classmethod    
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'GridTargetSpatialRequirement':
-        """Create a grid target spatial requirement from a dictionary."""
-        # Validate Inputs
-        assert "grid_name" in dict, "Grid name must be provided for grid target spatial requirement"
-        assert "grid_index" in dict, "Grid index must be provided for grid target spatial requirement"
-        assert "grid_size" in dict, "Grid size must be provided for grid target spatial requirement"
-        
-        grid_name = dict.get("grid_name")
-        grid_index = dict.get("grid_index")
-        grid_size = dict.get("grid_size", None)
-        id = dict.get("id", None)
-
-        # Return the GridTargetSpatialRequirement instance
-        return cls(
-            grid_name=grid_name,
-            grid_index=grid_index,
-            grid_size=grid_size,
-            id=id
-        )
-    
-    def __repr__(self):
-        return f"GridTargetSpatialRequirement(grid_name={self.grid_name}, grid_index={self.grid_index}, grid_size={self.grid_size}, id={self.id})"
-
-class CapabilityRequirement(MissionRequirement):
-    def __init__(self, attribute: str, valid_values: List[str], id: str = None, **kwargs):
-        """
-        ### Predefined Capability Requirement
-        Initialize a capability requirement with an attribute and a list of categories.
-        - :`attribute`: The attribute being evaluated (e.g., "sensor_type", "platform").
-        - :`valid_values`: A list of known values of the attribute that are considered to have a desired capability.
-
-        TODO replace these requirements with a more generic capability requirement that can be used for any attribute, a Knowledge Graph, or other forms of knowledge representation.
-        """
-
-        # Validate inputs
-        assert isinstance(valid_values, list), "Valid values must be a list"
-        assert valid_values, "Valid values must be a non-empty list"
-        if all(isinstance(cat, str) for cat in valid_values): valid_values = [cat.lower() for cat in valid_values]
-
-        # Initialize parent class
-        super().__init__(self.CAPABILITY, attribute, self._build_capability_preference_function(valid_values), id)
+        assert isinstance(grid_size, int) and grid_size > 0, "Grid size must be a positive integer"
         
         # set attributes
-        self.valid_values = valid_values
+        self.grid_name : str = grid_name
+        self.grid_index : int = grid_index
+        self.grid_size : int = grid_size
 
-    def _build_capability_preference_function(self, valid_values: list) -> callable:
-        """Creates a capability preference function."""
-        def preference(value: str) -> float:
-            # if the value is a string, convert it to lowercase
-            value = value.lower() if isinstance(value, str) else value
-            
-            # only return 1.0 if the value is in the categories, else 0.0
-            return 1.0 if value in valid_values else 0.0
+    def _eval_preference_function(self, location : Union[Tuple, list]) -> float:
+        """Evaluate the preference function for a given location."""
         
-        return preference
-    
-    def copy(self) -> 'MissionRequirement':
-        """Create a copy of the measurement requirement."""
-        return CapabilityRequirement(
-            attribute=self.attribute,
-            valid_values=self.valid_values,
-            id=self.id
-        )
-    
-    def to_dict(self):
-        d = super().to_dict()
-        d.update({
-            "valid_values": self.valid_values
-        })
-        return d
-    
-    @classmethod
-    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'CapabilityRequirement':
-        """Create a capability requirement from a dictionary."""
-        # Validate inputs
-        assert "attribute" in dict, "Attribute must be provided for capability requirement"
-        assert "valid_values" in dict, "Valid values must be provided for capability requirement"
+        # validate inputs
+        if isinstance(location, tuple):
+            if len(location) == 4:
+                location = [location]
+            else:
+                raise ValueError("Location must be a list of tuples of (latitude, longitude, grid idx, gp idx)")
 
-        # Create and return the CapabilityRequirement
-        return cls(
-            attribute=dict["attribute"],
-            valid_values=dict["valid_values"],
-            id=dict.get("id", None)
-        )
+        for loc in location:
+            assert isinstance(loc, tuple) and len(loc) == 4, "Locations must be a tuple of (latitude, longitude, grid idx, gp idx)"
+            lat, lon, grid_idx, gp_idx = loc
+            assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), "Latitude and longitude must be numeric"
+            assert -90.0 <= lat <= 90.0, "Latitude must be in [-90, 90]"
+            assert -180.0 <= lon <= 180.0, "Longitude must be in [-180, 180]"
+            assert isinstance(grid_idx, int) and isinstance(gp_idx, int), \
+                "Grid index and GP index must be integers"
+            assert grid_idx >= 0, "Grid index must be non-negative"
+            assert gp_idx >= 0, "GP index must be non-negative"
+
+            # return preference value based on grid index match
+            return 1.0 if grid_idx == self.grid_index and gp_idx < self.grid_size else 0.0        
+        
+        return 0.0
     
     def __repr__(self):
-        return f"CapabilityRequirement({self.attribute}, valid_values={self.valid_values}, id={self.id})"
+        return super().__repr__()[:-1] + f", grid_name={self.grid_name}, grid_index={self.grid_index}, grid_size={self.grid_size})"
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Union[str, float]]) -> 'GridSpatialRequirement':
+        """Create a grid coverage spatial requirement from a dictionary."""
+        
+        # validate input dictionary
+        required_keys = ['req_type', 'strategy', 'grid_name', 'grid_index', 'grid_size']
+        assert all(key in d for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert d.get("strategy").lower() == SpatialPreferenceStrategies.GRID.value, \
+            f"Strategy does not match requirement definition. Must be '{SpatialPreferenceStrategies.GRID.value}'"  
+        
+        # unpack dictionary
+        grid_name = d.get("grid_name")
+        grid_index = d.get("grid_index")
+        grid_size = d.get("grid_size")
+        id = d.get("id", None)  
+
+        # initiate requirement
+        return cls(grid_name, grid_index, grid_size, id)

@@ -1,11 +1,10 @@
 from abc import ABC, abstractmethod
-import math
-from typing import Union
 import uuid
 
 from chess3d.mission.events import GeophysicalEvent
-from chess3d.mission.objectives import *
-from chess3d.utils import EmptyInterval, Interval
+from chess3d.mission.objectives import MissionObjective, EventDrivenObjective, DefaultMissionObjective
+from chess3d.mission.requirements import SpatialCoverageRequirement, SinglePointSpatialRequirement
+from chess3d.utils import Interval
 
 
 class GenericObservationTask(ABC):
@@ -23,6 +22,7 @@ class GenericObservationTask(ABC):
                 ):
         """
         Generic observation task to be scheduled by an agent.
+        - :`task_type`: The type of the task, either 'default_mission_task' or 'event_driven_task'.
         - :`parameter`: The parameter to be observed (e.g., "temperature", "humidity").
         - :`location`: Location or list of locations to be observed, each represented as a tuple of (lat[deg], lon[deg], grid index, gp index).
         - :`availability`: The time interval during which the task is available.
@@ -33,16 +33,20 @@ class GenericObservationTask(ABC):
         - :`id`: A unique identifier for the task. If not provided, a new ID will be generated.
         """
 
-        if isinstance(location, tuple) and len(location) == 4 and all([isinstance(coordinate, (float,int)) for coordinate in location]):
+        if isinstance(location, (tuple, list)) and len(location) == 4 and all([isinstance(coordinate, (float,int)) for coordinate in location]):
             # single location provided; convert to list
-            location = [location]
+            if isinstance(location, tuple):
+                location = [location]
+            else:
+                location = [tuple(location)]
 
         # validate inputs
         assert isinstance(task_type, str), "Task type must be a string."
         assert task_type in [self.DEFAULT, self.EVENT], "Task type must be either 'default_mission_task' or 'event_driven_task'."
         assert isinstance(parameter, str), "Parameter must be a string."
         assert isinstance(location, list), "Locations must be a list."
-        assert all([isinstance(location, tuple) for location in location]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
+        assert all([isinstance(location, tuple) for location in location]), \
+            "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
         assert all([len(location) == 4 for location in location]), "All locations must tuples of type (lat[deg], lon[deg], grid index, gp index)."
         assert isinstance(availability, Interval), "Availability must be an Interval."
         assert availability.left >= 0.0, "Start of availability must be non-negative."
@@ -53,11 +57,11 @@ class GenericObservationTask(ABC):
 
         if objective is not None:
             # Objective specified; check objective attributes 
-            assert parameter == objective.parameter, "Target parameter must match the objective's parameter."
+            assert parameter.lower() == objective.parameter, "Target parameter must match the objective's parameter."
 
         # Set attributes
         self.task_type : str = task_type
-        self.parameter : str = parameter
+        self.parameter : str = parameter.lower()
         self.location : list[tuple] = location
         self.availability : Interval = availability
         self.priority : float = priority
@@ -100,6 +104,9 @@ class GenericObservationTask(ABC):
     def __repr__(self):
         """ String representation of the task. """
 
+    def __str__(self):
+        return self.__repr__()
+
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'GenericObservationTask':
         """ Create a task from a dictionary. """
@@ -114,6 +121,14 @@ class GenericObservationTask(ABC):
 
         return ValueError(f"Unknown task type: {task_type}")
         
+    def __eq__(self, other: object) -> bool:
+        """ Check if two tasks are equal. """
+        assert isinstance(other, GenericObservationTask), "Can only compare GenericObservationTask objects."
+        return self.to_dict() == other.to_dict()
+
+    def __hash__(self):
+        return hash(self.id)
+
 class DefaultMissionTask(GenericObservationTask):
     def __init__(self,
                  parameter : str,
@@ -144,8 +159,9 @@ class DefaultMissionTask(GenericObservationTask):
         super().__init__(GenericObservationTask.DEFAULT, parameter, [location], Interval(0.0, mission_duration), priority, objective, id)
 
     def generate_id(self) -> str:
-        """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"GenericObservation_{self.parameter}_{self.priority}_{self.location[0][2]}_{self.location[0][3]}"
+        """ Generate a unique identifier for the task. """
+        # return f"GenericObservation_{self.parameter}_{self.priority}_{int(self.location[0][2])}_{int(self.location[0][3])}"
+        return str(uuid.uuid1())
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
@@ -159,7 +175,7 @@ class DefaultMissionTask(GenericObservationTask):
         )
     
     def __repr__(self):
-        return f"DefaultMissionTask(parameter={self.parameter}, priority={self.priority}, location={self.location}, availability={self.availability}, id={self.id})"
+        return f"DefaultMissionTask-'{self.parameter}'@({int(self.location[0][-2])},{int(self.location[0][-1])})"
 
     @classmethod
     def from_dict(cls, task_dict: dict) -> 'DefaultMissionTask':
@@ -227,31 +243,40 @@ class EventObservationTask(GenericObservationTask):
             priority = event.severity if priority is None else priority
 
         elif objective is not None:
-            # Objective specified; use objective attributes
-            assert objective.parameter == parameter, "If objective is specified, target parameter must match the objective's parameter."
+            # TODO: implement objective-based task creation
+            raise NotImplementedError("`EventObservationTask` creation from only an objective is not implemented yet.")
 
-            ## Extract spatial measurement requirements
-            spatial_req = [req for req in objective.requirements
-                           if isinstance(req, SpatialRequirement)]
-            spatial_req : SpatialRequirement = spatial_req[0] if spatial_req else None
-            assert spatial_req is not None or location is not None, \
-                "If no event is specified, either a specified location or a spatial requirement must be provided."
-            
-            if isinstance(spatial_req, PointTargetSpatialRequirement):
-                location = [spatial_req.target] if location is None else location
-            else:
-                raise NotImplementedError(f"Default task creation for spatial requirement type {type(spatial_req)} is not implemented yet")
-            
-            ## Extract temporal measurement requirements
-            availability_req = [req for req in objective.requirements
-                                if isinstance(req, AvailabilityRequirement)]
-            availability_req : AvailabilityRequirement = availability_req[0] if availability_req else None
-            assert availability_req is not None or availability is not None, \
-                "If no event is specified, either a specified availability or an availability requirement must be provided."
-            availability = availability_req.availability if availability is None else availability
+            # # Objective specified; use objective attributes
+            # assert objective.parameter == parameter, "If objective is specified, target parameter must match the objective's parameter."
 
-            ## Validate task priority 
-            assert priority is not None, "If no event is specified, priority must be provided."
+            # ## Extract spatial measurement requirements
+            # spatial_req = [req for req in objective.requirements
+            #                if isinstance(req, SpatialCoverageRequirement)]
+            # spatial_req : SpatialCoverageRequirement = spatial_req[0] if spatial_req else None
+            # assert spatial_req is not None or location is not None, \
+            #     "If no event is specified, either a specified location or a spatial requirement must be provided."
+            
+            # if isinstance(spatial_req, SinglePointSpatialRequirement):
+            #     location = [spatial_req.target] if location is None else location
+            # else:
+            #     raise NotImplementedError(f"Default task creation for spatial requirement type {type(spatial_req)} is not implemented yet")
+            
+            # ## Extract temporal measurement requirements
+            # availability_req = [req for req in objective.requirements
+            #                     if isinstance(req, AvailabilityRequirement)]
+            # availability_req : AvailabilityRequirement = availability_req[0] if availability_req else None
+            # assert availability_req is not None or availability is not None, \
+            #     "If no event is specified, either a specified availability or an availability requirement must be provided."
+            # availability = availability_req.availability if availability is None else availability
+
+            # ## Validate task priority 
+            # assert priority is not None, "If no event is specified, priority must be provided."
+
+        if availability is not None and event is not None:
+            # Ensure task availability is within event duration
+            assert availability.left >= event.t_start and availability.right <= event.t_start + event.d_exp, \
+                "If event is specified, task availability must be within event duration."
+        
 
         # Set attributes
         self.event : GeophysicalEvent = event
@@ -261,7 +286,7 @@ class EventObservationTask(GenericObservationTask):
 
     def generate_id(self) -> str:
         """ Generate a unique identifier for the task. `Mission-Parameter-Grid Index-Ground Point Index` """
-        return f"EventObservationTask_{self.parameter}_{self.priority}_{self.location[0][2]}_{self.location[0][3]}_EVENT-{self.event.id.split('-')[0] if self.event else 'None'}"
+        return f"EventObservationTask-'{self.parameter}'@({self.location[0][2]},{self.location[0][3]})-EVENT-{self.event.id.split('-')[0] if self.event else 'None'}"
 
     def copy(self) -> object:
         """ Create a deep copy of the task. """
@@ -276,8 +301,8 @@ class EventObservationTask(GenericObservationTask):
         )
 
     def __repr__(self):
-        return f"EventObservationTask(parameter={self.parameter}, priority={self.priority}, event={self.event}, location={self.location}, availability={self.availability}, id={self.id})"
-
+        return self.id
+    
     def to_dict(self) -> dict:
         """ Convert the task to a dictionary. """
         d = super().to_dict()
@@ -307,222 +332,3 @@ class EventObservationTask(GenericObservationTask):
             id=task_dict.get('id',None),
         )        
 
-class SpecificObservationTask:
-    def __init__(self,
-                 parent_task : Union[GenericObservationTask, set],
-                 instrument_name : str, 
-                 accessibility : Interval,
-                 min_duration : float,
-                 slew_angles : Interval,
-                 id : str = None,
-                 ):
-        """ Represents an observation task to be scheduled by a particular agent """
-
-        # validate inputs
-        assert isinstance(parent_task, (GenericObservationTask, set)), "Parent task(s) must be a `GenericObservationTask` or a set of `GenericObservationTask`."
-        assert isinstance(instrument_name, str), "Instrument name must be a string."
-        assert isinstance(accessibility, Interval), "Accessibility must be an Interval."
-        assert not accessibility.is_empty(), "Accessibility must not be empty."
-        assert accessibility.left >= 0.0, "Start of accessibility must be non-negative."
-        assert isinstance(min_duration, (float, int)), "Minimum duration must be a number."
-        assert min_duration >= 0.0, "Minimum duration must be non-negative."
-        assert min_duration <= accessibility.span(), "Minimum duration must not exceed accessibility interval span."
-        assert isinstance(slew_angles, Interval), "Slew angles must be an Interval."
-        
-        if isinstance(parent_task, set):
-            assert all([isinstance(task, GenericObservationTask) 
-                        for task in parent_task]), \
-                "All parent tasks must be instances of GenericObservationTask."
-            assert all([accessibility.overlaps(task.availability) 
-                        for task in parent_task 
-                        if isinstance(task, GenericObservationTask)]),\
-                "Accesibility interval must be within the parent tasks' availability interval."
-        else:
-            assert accessibility.overlaps(parent_task.availability), \
-                "Accessibility interval must be within the parent task's availability interval."
-
-        # set parametersparent_task}
-        self.parent_tasks : set[GenericObservationTask] = \
-              {parent_task} if isinstance(parent_task, GenericObservationTask) else parent_task
-        self.instrument_name : str = instrument_name
-        self.accessibility : Interval = accessibility
-        self.min_duration : Interval = min_duration
-        self.slew_angles : Interval = slew_angles
-        self.id : str = str(uuid.UUID(id)) if id is not None else str(uuid.uuid1())
-    
-    def copy(self) -> 'SpecificObservationTask':
-        """ Create a deep copy of the task. """
-        return SpecificObservationTask(
-            parent_task=self.parent_tasks,
-            instrument_name=self.instrument_name,
-            accessibility=self.accessibility,
-            min_duration=self.min_duration,
-            slew_angles=self.slew_angles,
-            id=self.id
-        )
-    
-    def get_location(self) -> List[tuple]:
-        """ Collects the location information of all parent tasks. """
-        return list({loc for task in self.parent_tasks for loc in task.location})
-    
-    def get_objectives(self) -> List[MissionObjective]:
-        """ Collects the objectives of all parent tasks. """
-        return list({task.objective for task in self.parent_tasks})
-    
-    def get_priority(self) -> float:
-        """ Collects the priority of all parent tasks. """
-        return sum(task.priority for task in self.parent_tasks) if self.parent_tasks else 0.0
-
-    def is_mutually_exclusive(self, other_task : 'SpecificObservationTask') -> bool:
-        """ Check if two tasks are mutually exclusive. """
-        if other_task == self: return False
-        common_parents : set = self.parent_tasks.intersection(other_task.parent_tasks)
-        return len(common_parents) > 0
-
-    def _calc_time_requirements(self, other_task : 'SpecificObservationTask', must_overlap : bool = False) -> Tuple[Interval,float]:
-        """
-        Calculates the joint availability and duration requirements for two tasks if merged. 
-
-        **Arguments:**
-        - `other_task`: The other task to merge with.
-        - `must_overlap`: If True, the tasks must overlap in accessibility to be merged.
-        """
-        # Calculate accessibility overlap
-        accessibility_overlap : Interval = self.accessibility.intersection(other_task.accessibility)
-
-        # If accessibility time windows are not allowed to be extended, we cannot merge the tasks
-        if accessibility_overlap.is_empty() and must_overlap: return accessibility_overlap, np.NaN
-
-        # Determine which task starts first
-        preceeding_task, proceeding_task = sorted([self, other_task], key=lambda t: t.accessibility.left)
-
-        # Check if accesibility has any overlap
-        if not accessibility_overlap.is_empty():  # There is an overlap between the tasks' availability
-            # Use tasks' accessibility and duration requirements to find new accessibility bounds
-            accessibility_start = max(preceeding_task.accessibility.left, 
-                                        min(proceeding_task.accessibility.left + proceeding_task.min_duration - preceeding_task.min_duration,
-                                            proceeding_task.accessibility.left)
-                                    )
-            accessibility_end   = min(preceeding_task.accessibility.right,
-                                        max(proceeding_task.accessibility.right - proceeding_task.min_duration + preceeding_task.min_duration,
-                                            proceeding_task.accessibility.right)
-                                    )
-            
-            # Merge accessibility
-            merged_accessibility = Interval(accessibility_start, accessibility_end) if accessibility_start <= accessibility_end else EmptyInterval()
-
-            # Calculate new observation duration requirement
-            min_duration_req = max(preceeding_task.min_duration, proceeding_task.min_duration)
-        
-        else: # There is no overlap between the tasks' availability; we can only merge by extending the accessibility window
-            # Find new accessibility bounds
-            accessibility_start = preceeding_task.accessibility.right - preceeding_task.min_duration
-            accessibility_end = proceeding_task.accessibility.left + proceeding_task.min_duration
-
-            # Extend accessibility
-            merged_accessibility : Interval = Interval(accessibility_start, accessibility_end) if accessibility_end > accessibility_start else EmptyInterval()
-
-            # Calculate new observation duration requirement
-            min_duration_req = merged_accessibility.span()
-
-        # Return Time Requirements
-        return merged_accessibility, min_duration_req
-
-    def can_merge(self, other_task : 'SpecificObservationTask', must_overlap : bool = False, max_duration : float = 5*60) -> bool:
-        """ 
-        Check if two tasks can be merged based on their time and slew angle. 
-        
-        **Arguments:**
-        - `other_task`: The other task to merge with.
-        - `must_overlap`: If True, the tasks must overlap in accessibility to be merged.
-        - `max_duration`: The maximum allowed duration for the merged task in seconds [s].
-        """
-               
-        # Validate inputs
-        assert isinstance(other_task, SpecificObservationTask), "The other task must be an instance of SpecificObservationTask."
-        assert isinstance(must_overlap, bool), "must_overlap must be a boolean."
-        assert isinstance(max_duration, (float, int)), "max_duration must be a number."
-        assert max_duration > 0.0, "max_duration must be positive."
-        
-        # Calculate slew angles overlap
-        merged_slew_angles : Interval = self.slew_angles.intersection(other_task.slew_angles) 
-
-        # Calculate accessibility overlap and duration requirements
-        merged_accessibility, min_duration_req = self._calc_time_requirements(other_task, must_overlap)
-
-        # Check if merge can occur
-        return (self.instrument_name == other_task.instrument_name  # same instrument
-                and min_duration_req <= max_duration                # duration requirements do not exceed maximum allowed duration
-                and not math.isnan(min_duration_req)                # joint minimum duration requirements is valid
-                and min_duration_req <= merged_accessibility.span() # accessibility window encompasses the duration requirements
-                and not merged_slew_angles.is_empty()               # slew angles overlap
-                and not merged_accessibility.is_empty()             # there exist a valid joint accessibility window 
-                # and not self.is_mutually_exclusive(other_task)      # TODO tasks with common parent tasks cannot be merged
-                )           
-        
-    def merge(self, other_task : 'SpecificObservationTask', must_overlap : bool = False, max_duration : float = 2*60) -> 'SpecificObservationTask':
-        """ 
-        Merge two tasks into one. 
-                
-        **Arguments:**
-        - `other_task`: The other task to merge with.
-        - `must_overlap`: If True, the tasks must overlap in accessibility to be merged.
-        - `max_duration`: The maximum allowed duration for the merged task in seconds [s] (default: 120 seconds = 2 minutes).
-        """
-        try:
-            # Check other task's type
-            assert isinstance(other_task, SpecificObservationTask), "can only merge with tasks of type `SpecificObservationTask`."
-
-            # Merge parent tasks
-            merged_parent_tasks = {task for task in self.parent_tasks}
-            merged_parent_tasks.update({task for task in other_task.parent_tasks})
-
-            # Check instrument compatibility
-            assert self.instrument_name == other_task.instrument_name, "tasks pertain to observations with different instruments."
-
-            # Calculate accessibility overlap and duration requirements
-            merged_accessibility, min_duration_req = self._calc_time_requirements(other_task, must_overlap)
-            assert isinstance(merged_accessibility, Interval), "merged accessibility is not an Interval."
-            assert isinstance(min_duration_req, (float,int)), "minimum duration requirement is not a number."
-            assert not merged_accessibility.is_empty(), "joint task availability is empty."
-            assert not math.isnan(min_duration_req) , "minimum duration requirement is invalid."
-            assert min_duration_req <= max_duration, "minimum duration requirements exceed maximum allowed duration."
-            assert min_duration_req <= merged_accessibility.span(), "minimum duration requirements exceed accessibility span."
-
-            # Calculate slew angles overlap
-            merged_slew_angles : Interval = self.slew_angles.intersection(other_task.slew_angles) 
-            assert not merged_slew_angles.is_empty(), "slew angles do not overlap."
-        
-            # Return merged task
-            # TODO which id should we be using for new tasks? Ref task clustering in planners
-            return SpecificObservationTask(merged_parent_tasks, self.instrument_name, merged_accessibility, min_duration_req, merged_slew_angles, self.id) 
-        
-        except AssertionError as e:
-            raise AssertionError(f"Cannot merge tasks; {e}")
-
-    def __repr__(self):
-        return f"SpecificObservationTask(parent_tasks={self.parent_tasks}, accessibility={self.accessibility}, slew_angles={self.slew_angles})"
-    
-    def __hash__(self):
-        return hash(self.id)
-    
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "parent_tasks": [task.to_dict() for task in self.parent_tasks],
-            "instrument_name": self.instrument_name,
-            "accessibility": self.accessibility.to_dict(),
-            "min_duration": self.min_duration,
-            "slew_angles": self.slew_angles.to_dict()
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "SpecificObservationTask":
-        return cls(
-            parent_task={GenericObservationTask.from_dict(task) for task in data["parent_tasks"]},
-            instrument_name=data["instrument_name"],
-            accessibility=Interval.from_dict(data["accessibility"]),
-            min_duration=data["min_duration"],
-            slew_angles=Interval.from_dict(data["slew_angles"]),
-            id=data["id"]
-        )

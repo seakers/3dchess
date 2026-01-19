@@ -14,21 +14,20 @@ from dmas.modules import InternalModule
 from dmas.utils import runtime_tracker
 from zmq import SocketType
 
-from chess3d.agents.planning.plan import Replan, Plan, Preplan
+from chess3d.agents.planning.plan import ReactivePlan, Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
+from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.actions import *
 from chess3d.messages import *
-from chess3d.agents.planning.module import PlanningModule
 from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
 from chess3d.mission.mission import Mission
 from chess3d.mission.objectives import DefaultMissionObjective
-from chess3d.mission.requirements import GridTargetSpatialRequirement, PointTargetSpatialRequirement, SpatialRequirement, TargetListSpatialRequirement
+from chess3d.mission.requirements import GridSpatialRequirement, SinglePointSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
 from chess3d.orbitdata import OrbitData
 
 class AbstractAgent(Agent):
@@ -61,7 +60,7 @@ class AbstractAgent(Agent):
         self.state_history : list = []
         
         # setup results folder:
-        self.results_path = os.path.join(results_path, self.get_element_name())
+        self.results_path = os.path.join(results_path, self.get_element_name().lower())
     
     """
     --------------------
@@ -194,14 +193,26 @@ class AbstractAgent(Agent):
 
         # perform each action and record action status
         statuses = []
-        for action_dict in actions:
+        while actions:
+            # unpack action
+            action_dict : dict = actions.pop(0)
             action : AgentAction = action_from_dict(**action_dict) if isinstance(action_dict, dict) else action_dict
 
             # check action start time
             if (action.t_start - self.get_current_time()) > 1e-6:
-                self.log(f"action of type {action.action_type} has NOT started yet (start time {action.t_start}[s]). waiting for start time...", level=logging.ERROR)
-                action.status = AgentAction.PENDING
-                statuses.append((action, action.status))
+                self.log(f"action of type {action.action_type} has NOT started yet (start time {action.t_start}[s]). waiting for start time...", level=logging.WARNING)
+                # action.status = AgentAction.PENDING
+                # statuses.append((action, action.status))
+
+                # create temporary wait action
+                wait_action = WaitForMessages(self.get_current_time(), action.t_start)
+                
+                # add to front of action queue
+                actions.insert(0, action) 
+                actions.insert(0, wait_action)
+
+                # perform wait action
+                continue
 
                 raise RuntimeError(f"agent {self.get_element_name()} attempted to perform action of type {action.action_type} before it started (start time {action.t_start}[s]) at time {self.get_current_time()}[s]")
             
@@ -301,6 +312,57 @@ class AbstractAgent(Agent):
             return AgentAction.COMPLETED
         
         else: # no messages in inbox; wait for incoming messages
+            
+            # # check type of simulation clock
+            # if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
+            #     or isinstance(self._clock_config, EventDrivenClockConfig)) 
+            #     and self.external_inbox.empty()
+            #     ):
+            #     # clock is not real-time based; wait until incoming message transmissions are completed
+            #     receive_broadcast = asyncio.create_task(self.__wait_for_messages(t_curr))
+            # else:
+            #     # clock is real-time based; wait until actions are received or timeout expires
+            #     receive_broadcast = asyncio.create_task(self.external_inbox.get())
+
+            # # initiate broadcast timeout tasks
+            # timeout = asyncio.create_task(self.sim_wait(action.t_end - t_curr))
+
+            # # wait for first task to be completed
+            # done, _ = await asyncio.wait([timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
+
+            # # check which task was finished first 
+            # if receive_broadcast in done:
+            #     # messages were received before timeout
+            #     try:
+            #         # cancel timeout timer and end wait
+            #         timeout.cancel()
+            #         await timeout
+
+            #     except asyncio.CancelledError:
+            #         # get broadcast reception routine results
+            #         result = receive_broadcast.result()
+
+            #         # restore message to inbox so it can be processed during `sense()`
+            #         if result is not None:
+            #             await self.external_inbox.put(result)    
+
+            #         # update action completion status
+            #         return AgentAction.COMPLETED                
+
+            # else:
+            #     # timeout ended
+            #     try:
+            #         # cancel message wait
+            #         receive_broadcast.cancel()
+            #         await receive_broadcast
+
+            #     except asyncio.CancelledError:
+            #         # update action completion status
+            #         if self.external_inbox.empty():
+            #             return AgentAction.ABORTED
+            #         else:
+            #             return AgentAction.COMPLETED
+
 
             # check type of simulation clock
             if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
@@ -308,7 +370,7 @@ class AbstractAgent(Agent):
                 and self.external_inbox.empty()
                 ):
                 # give the agent time to finish processing messages before submitting a tic-request
-                t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
+                t_wait = 5e-3 if t_curr <= 1e-3 else 1e-5
                 await asyncio.sleep(t_wait)
 
             # initiate broadcast wait and timeout tasks
@@ -327,6 +389,10 @@ class AbstractAgent(Agent):
                     await timeout
 
                 except asyncio.CancelledError:
+                    # give the agent time to finish processing messages before continuing
+                    t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
+                    await asyncio.sleep(t_wait)
+
                     # restore message to inbox so it can be processed during `sense()`
                     await self.external_inbox.put(receive_broadcast.result())    
 
@@ -334,7 +400,7 @@ class AbstractAgent(Agent):
                     return AgentAction.COMPLETED                
 
             else:
-                # timouet ended
+                # timeout ended
                 try:
                     # cancel message wait
                     receive_broadcast.cancel()
@@ -346,6 +412,49 @@ class AbstractAgent(Agent):
                         return AgentAction.ABORTED
                     else:
                         return AgentAction.COMPLETED
+
+    async def __wait_for_messages(self, t_curr : float) -> None:
+        """ Waits for all incoming messages to be received at fixed time intervals. """
+        # initate received message list
+        msgs = []
+
+        # wait for messages until timeout
+        while True:
+            # set timeout time 
+            t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
+            await asyncio.sleep(t_wait)
+
+            # initiate broadcast wait and timeout tasks
+            receive_broadcast = asyncio.create_task(self.external_inbox.get())
+            real_clock_timeout = asyncio.create_task(asyncio.sleep(t_wait))
+
+            # wait for first task to be completed
+            done, _ = await asyncio.wait([real_clock_timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
+
+            # check which task was finished first
+            if receive_broadcast in done:
+                # messages were received before timeout; some might still be transmitted
+                try:
+                    # cancel timeout timer and end wait task
+                    real_clock_timeout.cancel()
+                    await real_clock_timeout
+
+                except asyncio.CancelledError:
+                    # restore message to inbox so it can be processed during `sense()`
+                    msgs.append(receive_broadcast.result())    
+            else:
+                # timeout ended before messages were received; no more messages expected
+                try:
+                    # cancel message wait task
+                    receive_broadcast.cancel()
+                    await receive_broadcast
+
+                except asyncio.CancelledError:
+                    # forward all received messages to inbox
+                    for msg in msgs: await self.external_inbox.put(msg)
+                    
+                    # return
+                    return 
                     
     @runtime_tracker
     async def perform_observation(self, action : ObservationAction) -> str:
@@ -360,7 +469,7 @@ class AbstractAgent(Agent):
         try:
             t = self.get_current_time()
             dt = action.t_end - action.t_start
-
+            
             if dt > 0:
                 # perfrom time wait if needed
                 await self.perform_wait_for_messages(WaitForMessages(t, t+dt), False)
@@ -387,9 +496,6 @@ class AbstractAgent(Agent):
             # request measurement data from the environment
             dst,src,observation_results = await self.send_peer_message(observation_req)
             msg_sci = ObservationResultsMessage(**observation_results)
-
-            if any([data['GP index'] in [2641, 3752, 4946] for data in msg_sci.observation_data]):
-                x=1
             
             # send measurement data to results logger
             # await self._send_manager_msg(msg_sci, zmq.PUB)
@@ -602,78 +708,6 @@ class AbstractAgent(Agent):
     async def send_peer_broadcast(self, msg: SimulationMessage) -> None:
         return await super().send_peer_broadcast(msg)
     
-
-class RealtimeAgent(AbstractAgent):
-    """
-    Implements 
-    """
-
-    def __init__(self, 
-                 agent_name, 
-                 results_path, 
-                 agent_network_config, 
-                 manager_network_config, 
-                 initial_state, 
-                 specs, 
-                 mission : Mission,
-                 planning_module : InternalModule = None,
-                 science_module : InternalModule = None,
-                 level=logging.INFO, 
-                 logger=None):
-        
-        # load agent modules
-        modules = []
-        if planning_module is not None:
-            if not isinstance(planning_module, PlanningModule):
-                raise AttributeError(f'`planning_module` must be of type `PlanningModule`; is of type {type(planning_module)}')
-            modules.append(planning_module)
-        if science_module is not None:
-            if not isinstance(science_module, ScienceModule):
-                raise AttributeError(f'`science_module` must be of type `ScienceModule`; is of type {type(science_module)}')
-            modules.append(science_module)
-
-        super().__init__(agent_name, results_path, agent_network_config, manager_network_config, initial_state, specs, modules, mission, level, logger)
-
-    @runtime_tracker
-    async def think(self, senses: list) -> list:
-        # send all sensed messages to planner
-        self.log(f'sending {len(senses)} senses to planning module...', level=logging.DEBUG)
-        senses_dict = []
-        state_dict = None
-        for sense in senses:
-            sense : SimulationMessage
-            if isinstance(sense, AgentStateMessage):
-                state_dict = sense.to_dict()
-            else:
-                senses_dict.append(sense.to_dict())
-
-        senses_msg = SenseMessage( self.get_element_name(), 
-                                    self.get_element_name(),
-                                    state_dict, 
-                                    senses_dict)
-        await self.send_internal_message(senses_msg)
-
-        # wait for planner to send list of tasks to perform
-        self.log(f'senses sent! waiting on response from planner module...')
-        actions = []
-        
-        while True:
-            _, _, content = await self.internal_inbox.get()
-            
-            if content['msg_type'] == SimulationMessageTypes.PLAN.value:
-                msg = PlanMessage(**content)
-
-                # assert self.get_current_time() - msg.t_plan <= 1e-3
-
-                for action_dict in msg.plan:
-                    self.log(f"received an action of type {action_dict['action_type']}", level=logging.DEBUG)
-                    actions.append(action_dict)  
-                break
-        
-        self.log(f"plan of {len(actions)} actions received from planner module!")
-        return actions
-
-
 class SimulatedAgent(AbstractAgent):
     def __init__(self, 
                  agent_name, 
@@ -707,54 +741,88 @@ class SimulatedAgent(AbstractAgent):
         self.replanner : AbstractReactivePlanner = replanner
 
         # initialize parameters
-        self.plan : Plan = Preplan(t=-1.0)
+        self.plan : Plan = PeriodicPlan(t=-1.0)
         self.orbitdata = orbitdata
         self.plan_history = []
-        self.tasks : list[GenericObservationTask] = []
+        self.tasks : list[GenericObservationTask] = SimulatedAgent.__initialize_default_mission_tasks(mission, orbitdata)
         self.known_reqs : set[TaskRequest] = set() # TODO do we need this or is the task list enough?
         self.observation_history : ObservationHistory = None
 
         # initialize observation history
         self.observation_history = ObservationHistory(orbitdata)
 
-        # gather targets for default mission tasks
-        objective_targets = { objective : [] for objective in self.mission 
+    @staticmethod
+    def __initialize_default_mission_tasks(mission : Mission, orbitdata : OrbitData) -> None:
+        """ 
+        Creates default observation tasks for each default mission objective
+         based on the spatial requirements of each objective.
+        """
+        # initialize task list
+        tasks = []
+
+        # gather targets for each default mission objective
+        objective_targets = { objective : [] for objective in mission 
                              # ignore non-default objectives
-                             if not isinstance(objective, DefaultMissionObjective)
+                             if isinstance(objective, DefaultMissionObjective)
                              }
-        for objective in objective_targets:         
-            for req in objective:
-                # ignore non-spatial requirements
-                if not isinstance(req, SpatialRequirement): continue
+        
+        # iterate through each mission objective
+        for objective,targets in objective_targets.items():  
+            # collect spatial coverage requirements
+            spatial_requirements = [req for req in objective.requirements
+                                    if isinstance(req, SpatialCoverageRequirement)]
+
+            # iterate through each spatial requirement
+            for req in spatial_requirements:
+                if isinstance(req, SinglePointSpatialRequirement):
+                    # collect specified target
+                    req_targets = [req.target]
                 
-                elif isinstance(req, PointTargetSpatialRequirement):
-                    raise NotImplementedError("Default task creation for `PointTargetSpatialRequirement` is not implemented yet")
+                elif isinstance(req, MultiPointSpatialRequirement):
+                    # collect all specified targets
+                    req_targets = [target for target in req.targets]
                 
-                elif isinstance(req, TargetListSpatialRequirement):
-                    raise NotImplementedError("Default task creation for `TargetListSpatialRequirement` is not implemented yet")
-                
-                elif isinstance(req, GridTargetSpatialRequirement):
+                elif isinstance(req, GridSpatialRequirement):
+                    # collect all targets matching this grid requirement
                     req_targets = [
                         (lat, lon, grid_index, gp_index)
-                        for grid in self.orbitdata.grid_data
+                        for grid in orbitdata.grid_data
                         for lat,lon,grid_index,gp_index in grid.values
                         if grid_index == req.grid_index and gp_index < req.grid_size
                     ]
-                    
                 else: 
                     raise TypeError(f"Unknown spatial requirement type: {type(req)}")
                     
+                # add to list of targets for this objective
+                targets.extend(req_targets)
+
+            # check if any spatial coverage requirements were found
+            if not spatial_requirements:
+                # no spatial coverage requirements found; 
+                #   collect all targets from all grids known to this agent
+                req_targets = list({
+                    (lat, lon, grid_index, gp_index)
+                    for grid in orbitdata.grid_data
+                    for lat,lon,grid_index,gp_index in grid.values
+                })
+                targets.extend(req_targets)
+        
+        # iterate through each mission objective
+        for objective,targets in objective_targets.items():                           
             # create monitoring tasks from each location in this mission objective
-            tasks = [DefaultMissionTask(objective.parameter,
+            objective_tasks = [DefaultMissionTask(objective.parameter,
                                         location=(lat, lon, grid_index, gp_index),
-                                        mission_duration=self.orbitdata.duration*24*3600,
+                                        mission_duration=orbitdata.duration*24*3600,
                                         objective=objective,
                                         )
-                        for lat,lon,grid_index,gp_index in req_targets
+                        for lat,lon,grid_index,gp_index in targets
                     ]
             
             # add to list of known tasks
-            self.tasks.extend(tasks)
+            tasks.extend(objective_tasks)
+
+        # return list of created tasks
+        return tasks
 
     @runtime_tracker
     async def think(self, senses : list):
@@ -765,42 +833,41 @@ class SimulatedAgent(AbstractAgent):
         incoming_reqs : list[TaskRequest]
         states : list[AgentStateMessage]
 
-        # check action completion
+        # process action completion
         completed_actions, aborted_actions, pending_actions \
-            = self._check_action_completion(action_statuses)
+            = self.__process_action_completion(action_statuses)
 
         # extract latest state from senses
         states = [a for a in states if a.state['agent_name'] == self.get_element_name()]
         states.sort(key = lambda a : a.state['t'])
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
-        if state.t < self.get_current_time():
-            x = 1 # breakpoint
-
         # update plan completion
-        self.update_plan_completion(completed_actions, 
+        self.__update_plan_completion(completed_actions, 
                                     aborted_actions, 
                                     pending_actions, 
                                     state.t)
 
         # process performed observations
-        generated_reqs : list[TaskRequest] = self.process_observations(incoming_reqs, observations)
+        generated_reqs : list[TaskRequest] = self.__process_observations(incoming_reqs, observations)
+        if generated_reqs:
+            x = 1
         incoming_reqs.extend(generated_reqs)
         
-        # compile measurements performed by myself or other agents TODO do we still need this feature?
+        # compile measurements performed by myself or other agents NOTE do we still need this feature?
         # completed_observations = self.compile_completed_observations(completed_actions, misc_messages)
                 
         # TODO update mission objectives from requests
             # for objective in self.mission.objectives:
 
         # update observation history
-        self.update_observation_history(observations)
+        self.__update_observation_history(observations)
 
         # update tasks from incoming requests
-        self.update_tasks(incoming_reqs=incoming_reqs)
+        self.__update_tasks(incoming_reqs=incoming_reqs)
 
         # update known requests
-        self.update_reqs(incoming_reqs=incoming_reqs)
+        self.__update_reqs(incoming_reqs=incoming_reqs)
 
         # --- Create plan ---
         if self.preplanner is not None:
@@ -809,6 +876,7 @@ class SimulatedAgent(AbstractAgent):
             # update preplanner precepts
             self.preplanner.update_percepts(state,
                                             self.plan, 
+                                            self.tasks,
                                             incoming_reqs,
                                             relay_messages,
                                             misc_messages,
@@ -823,7 +891,7 @@ class SimulatedAgent(AbstractAgent):
                                               self.plan):  
                 
                 # update tasks for only tasks that are available
-                self.update_tasks(available_only=True)
+                self.__update_tasks(available_only=True)
                 
                 # initialize plan      
                 self.plan : Plan = self.preplanner.generate_plan(state, 
@@ -845,13 +913,14 @@ class SimulatedAgent(AbstractAgent):
                 # -------------------------------------
 
         # --- Modify plan ---
-        # Check if reeplanning is needed
+        # Check if replanning is needed
         if self.replanner is not None:
             # there is a replanner assigned to this planner
 
             # update replanner precepts
             self.replanner.update_percepts( state,
                                             self.plan, 
+                                            self.tasks,
                                             incoming_reqs,
                                             relay_messages,
                                             misc_messages,
@@ -869,8 +938,11 @@ class SimulatedAgent(AbstractAgent):
                 # x = 1 # breakpoint
                 # -------------------------------------
 
+                # update tasks for only tasks that are available
+                self.__update_tasks(available_only=True)
+
                 # Modify current Plan      
-                self.plan : Replan = self.replanner.generate_plan(state, 
+                self.plan : ReactivePlan = self.replanner.generate_plan(state, 
                                                                 self.specs,
                                                                 self.plan,
                                                                 self._clock_config,
@@ -921,7 +993,8 @@ class SimulatedAgent(AbstractAgent):
         incoming_reqs : list[TaskRequest] = [TaskRequest.from_dict(msg.req) 
                                                     for msg in senses 
                                                     if isinstance(msg, MeasurementRequestMessage)
-                                                    and msg.req['severity'] > 0.0]
+                                                    # and msg.req['severity'] > 0.0
+                                                    ]
         
         observation_msgs : list [ObservationResultsMessage] = [sense for sense in senses 
                                                                 if isinstance(sense, ObservationResultsMessage)]
@@ -954,7 +1027,7 @@ class SimulatedAgent(AbstractAgent):
         return relay_messages, incoming_reqs, observations, states, action_statuses, misc_messages
 
     @runtime_tracker
-    def _check_action_completion(self, action_statuses : list) -> tuple:
+    def __process_action_completion(self, action_statuses : list) -> tuple:
         
         # collect all action statuses from messages
         actions = [action_from_dict(**action_msg.action) for action_msg in action_statuses]
@@ -976,7 +1049,7 @@ class SimulatedAgent(AbstractAgent):
         return completed_actions, aborted_actions, pending_actions
 
     @runtime_tracker
-    def update_plan_completion(self, 
+    def __update_plan_completion(self, 
                                 completed_actions : list, 
                                 aborted_actions : list, 
                                 pending_actions : list, 
@@ -991,7 +1064,7 @@ class SimulatedAgent(AbstractAgent):
                                            t)    
 
     @runtime_tracker
-    def process_observations(self, incoming_reqs, observations) -> list:
+    def __process_observations(self, incoming_reqs, observations) -> list:
         """
         Processes observations and generates new requests based on the observations.
         """
@@ -1002,7 +1075,7 @@ class SimulatedAgent(AbstractAgent):
             # no processor assigned; return empty list
             return []
     
-    def update_tasks(self, incoming_reqs : list = [], available_only : bool = False) -> None:
+    def __update_tasks(self, incoming_reqs : list = [], available_only : bool = False) -> None:
         """
         Updates the list of tasks based on incoming requests and task availability.
         """
@@ -1011,7 +1084,7 @@ class SimulatedAgent(AbstractAgent):
                        for req in incoming_reqs
                        if isinstance(req, TaskRequest)]
         
-        # # filter tasks that can be performed by agent
+        # TODO filter tasks that can be performed by agent?
         # valid_event_tasks = []
         # payload_instrument_names = {instrument_name.lower() for instrument_name in self.payload.keys()}
         # for event_task in event_tasks_flat:
@@ -1024,26 +1097,23 @@ class SimulatedAgent(AbstractAgent):
         
         # filter tasks to only include active tasks
         if available_only: # only consider tasks that are active and available
-            # self.tasks = [task for task in self.tasks 
-            #               if task.is_available(self.get_current_time())]
-        # else: # consider all tasks that have not expired yet
             self.tasks = [task for task in self.tasks 
                           if not task.is_expired(self.get_current_time())]
 
-    def update_reqs(self, incoming_reqs : List[TaskRequest] = [], available_only : bool = True) -> None:
+    def __update_reqs(self, incoming_reqs : List[TaskRequest] = [], available_only : bool = True) -> None:
         """ Updates the known requests based on incoming requests and request availability. """
         
         # update known requests
         self.known_reqs.update(incoming_reqs)
 
-        # check for request availability
+        if incoming_reqs:
+            x = 1 # breakpoint
+
+        # filter for request availability
         if available_only:
             self.known_reqs = {req for req in self.known_reqs 
                                if req.task.is_available(self.get_current_time())
                                }
-            
-        if self.known_reqs:
-            x = 1 # breakpoint
 
     @runtime_tracker
     def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
@@ -1059,96 +1129,101 @@ class SimulatedAgent(AbstractAgent):
         return completed_observations
 
     @runtime_tracker
-    def update_observation_history(self, observations : list) -> None:
+    def __update_observation_history(self, observations : list) -> None:
         """
         Updates the observation history with the completed observations.
-        """        
+        """
         # update observation history
         self.observation_history.update(observations)
 
     @runtime_tracker
     def get_next_actions(self, state : SimulationAgentState) -> List[AgentAction]:
-        # get list of next actions from plan
-        plan_out : List[AgentAction] = self.plan.get_next_actions(state.t)
+        try:
+            # get list of next actions from plan
+            plan_out : List[AgentAction] = self.plan.get_next_actions(state.t)
 
-        # check for future broadcast message actions in plan
-        future_broadcasts = [action for action in plan_out
-                             if isinstance(action, FutureBroadcastMessageAction)]
-        
-        # no future broadcasts; return plan as is
-        if not future_broadcasts: return plan_out
-
-        # compile broadcast messages
-        msgs : list[SimulationMessage] = []
-        for future_broadcast in future_broadcasts:
+            # check for future broadcast message actions in plan
+            future_broadcasts = [action for action in plan_out
+                                if isinstance(action, FutureBroadcastMessageAction)]
             
-            # create appropriate broadcast message
-            if future_broadcast.broadcast_type == FutureBroadcastMessageAction.STATE:
-                msgs.append(AgentStateMessage(state.agent_name, state.agent_name, state.to_dict()))
+            # no future broadcasts; return plan as is
+            if not future_broadcasts: return plan_out
+
+            # compile broadcast messages
+            msgs : list[SimulationMessage] = []
+            for future_broadcast in future_broadcasts:
                 
-            elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.OBSERVATIONS:
-                # compile latest observations from the observation history
-                latest_observations : List[ObservationAction] = self.get_latest_observations(state)
+                # create appropriate broadcast message
+                if future_broadcast.broadcast_type == FutureBroadcastMessageAction.STATE:
+                    msgs.append(AgentStateMessage(state.agent_name, state.agent_name, state.to_dict()))
+                    
+                elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.OBSERVATIONS:
+                    # compile latest observations from the observation history
+                    latest_observations : List[ObservationAction] = self.get_latest_observations(state)
 
-                # index by instrument name
-                instruments_used : set = {latest_observation['instrument'].lower() 
-                                        for latest_observation in latest_observations}
-                indexed_observations = {instrument_used: [latest_observation for latest_observation in latest_observations
-                                                        if latest_observation['instrument'].lower() == instrument_used]
-                                        for instrument_used in instruments_used}
+                    # index by instrument name
+                    instruments_used : set = {latest_observation['instrument'].lower() 
+                                            for latest_observation in latest_observations}
+                    indexed_observations = {instrument_used: [latest_observation for latest_observation in latest_observations
+                                                            if latest_observation['instrument'].lower() == instrument_used]
+                                            for instrument_used in instruments_used}
 
-                # create ObservationResultsMessage for each instrument
-                msgs.extend([ObservationResultsMessage(state.agent_name, 
-                                                state.agent_name, 
-                                                state.to_dict(), 
-                                                {}, 
-                                                instrument,
-                                                state.t,
-                                                state.t,
-                                                observations
-                                                )
-                        for instrument, observations in indexed_observations.items()])
-                
-                # msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+                    # create ObservationResultsMessage for each instrument
+                    msgs.extend([ObservationResultsMessage(state.agent_name, 
+                                                    state.agent_name, 
+                                                    state.to_dict(), 
+                                                    {}, 
+                                                    {"name" : instrument},
+                                                    state.t,
+                                                    state.t,
+                                                    observations
+                                                    )
+                            for instrument, observations in indexed_observations.items()])
+                    
+                    # msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
 
-            elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.REQUESTS:
-                msgs.extend([MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
-                        for req in self.known_reqs
-                        if req.event.is_available(state.t)     # only active or future events
-                        and req.requester == state.agent_name   # only requests created by myself
-                        ])
+                elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.REQUESTS:
+                    msgs.extend([MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+                            for req in self.known_reqs
+                            if req.task.is_available(state.t)       # only active or future events
+                            and req.requester == state.agent_name   # only requests created by myself
+                            ])
 
-            else: # unsupported broadcast type
-                raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
+                else: # unsupported broadcast type
+                    raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
+            
+            # create bus message if there are messages to broadcast
+            msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+
+            # create state broadcast message action
+            broadcast = BroadcastMessageAction(msg.to_dict(), future_broadcast.t_start)
+
+            # remove future message action from current plan
+            for future_broadcast in future_broadcasts: 
+                self.plan.remove(future_broadcast, state.t)
+
+            # add broadcast message action from current plan
+            self.plan.add(broadcast, state.t)
+
+            # get indices of future broadcast message actions in output plan
+            future_broadcast_indices = [i for i, action in enumerate(plan_out) if action in future_broadcasts]
+
+            # remove future message actions from output plan
+            for i in sorted(future_broadcast_indices, reverse=True): plan_out.pop(i)
+            
+            # replace future message action with broadcast action in out plan
+            plan_out.insert(min(future_broadcast_indices), broadcast)    
+
+            # --- FOR DEBUGGING PURPOSES ONLY: ---
+            # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
+            x = 1 # breakpoint
+            # -------------------------------------
+
+            return plan_out
         
-        # create bus message if there are messages to broadcast
-        msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
-
-        # create state broadcast message action
-        broadcast = BroadcastMessageAction(msg.to_dict(), future_broadcast.t_start)
-
-        # remove future message action from current plan
-        for future_broadcast in future_broadcasts: 
-            self.plan.remove(future_broadcast, state.t)
-
-        # add broadcast message action from current plan
-        self.plan.add(broadcast, state.t)
-
-        # get indices of future broadcast message actions in output plan
-        future_broadcast_indices = [i for i, action in enumerate(plan_out) if action in future_broadcasts]
-
-        # remove future message actions from output plan
-        for i in sorted(future_broadcast_indices, reverse=True): plan_out.pop(i)
-        
-        # replace future message action with broadcast action in out plan
-        plan_out.insert(min(future_broadcast_indices), broadcast)    
-
-        # --- FOR DEBUGGING PURPOSES ONLY: ---
-        # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
-        x = 1 # breakpoint
-        # -------------------------------------
-
-        return plan_out
+        finally:
+            assert all([action.t_start <= state.t + 1e-3 for action in plan_out]), \
+                "All returned actions must start at or before the current time."
     
     def get_latest_observations(self, 
                                 state : SimulationAgentState,
@@ -1176,9 +1251,9 @@ class SimulatedAgent(AbstractAgent):
                 for action in plan:
                     if isinstance(action, AgentAction):
                         out += f"{action.id.split('-')[0]}, {action.action_type}, {action.t_start}, {action.t_end}\n"
+
                     elif isinstance(action, dict):
-                        out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"
-            
+                        out += f"{action['id'].split('-')[0]}, {action['action_type']}, {action['t_start']}, {action['t_end']}\n"           
 
             self.log(out, level)
         except Exception as e:

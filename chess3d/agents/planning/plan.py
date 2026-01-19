@@ -136,15 +136,11 @@ class Plan(ABC):
         
     def add(self, action : AgentAction, t : float) -> None:
         """ adds action to plan """
-
-        if action.t_end < t:
-            x =1
-
-        # check argument types
-        if not isinstance(action, AgentAction):
-            raise ValueError(f"Cannot place action of type `{type(action)}` in plan. Must be of type `{AgentAction}`.")
-
         try:
+            # check argument types
+            if not isinstance(action, AgentAction):
+                raise ValueError(f"Cannot place action of type `{type(action)}` in plan. Must be of type `{AgentAction}`.")
+
             # check if action is scheduled to occur during while another action is being performed
             interrupted_actions = [interrupted_action 
                                    for interrupted_action in self.actions
@@ -180,14 +176,30 @@ class Plan(ABC):
                     continued_action.t_end = earliest_interrupted_action.t_end
                     continued_action.id = str(uuid.uuid1())
 
-                    # modify interrupted action
-                    if isinstance(earliest_interrupted_action, TravelAction):
-                        ## change start and end positions TODO
-                        pass
-
                     ## change start and end times for the interrupted and continued actions
                     earliest_interrupted_action.t_end = action.t_start
                     continued_action.t_start = action.t_end
+
+                    # modify interrupted action
+                    if isinstance(earliest_interrupted_action, TravelAction):
+                        # change start and end positions TODO
+                        raise NotImplementedError("Splitting of travel actions is not yet supported.")
+                    
+                    elif isinstance(earliest_interrupted_action, ManeuverAction):
+                        # ensure only one angular rate component is non-zero TODO improve kinematic model
+                        assert sum([abs(param) > 0 for param in earliest_interrupted_action.attitude_rates]) <= 1, \
+                            "Maneuvers with only one angular rate component are supported for splitting."
+                        
+                        # calculate duration of interrupted action
+                        duration_interrupted = earliest_interrupted_action.t_end - earliest_interrupted_action.t_start
+
+                        # change start and end orientations
+                        for i in range(3):
+                            if abs(earliest_interrupted_action.attitude_rates[i]) > 1e-6:
+                                # interrupted action changes this attitude component
+                                delta_angle = earliest_interrupted_action.attitude_rates[i] * duration_interrupted
+                                earliest_interrupted_action.final_attitude[i] = earliest_interrupted_action.initial_attitude[i] + delta_angle
+                                continued_action.initial_attitude[i] += delta_angle
 
                     # place action in between the two split parts
                     self.actions[i_plan] = earliest_interrupted_action
@@ -351,19 +363,74 @@ class Plan(ABC):
 
     def __str__(self) -> str:
         out = f't_plan = {self.t}[s]\n'
-        out += f'id\t  action type\tt_start\tt_end\n'
+        line = f'id\t  action type\tt_start\tt_end\tdetails\n'
+
+        # count characters in line for formatting
+        L_LINE = len(line)
+        L_LINE_PADding = 35
+
+        # header
+        out += line
+
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
 
         if self.is_empty():
             out += 'EMPTY\n\n'
         else:
             for action in self.actions:
                 if isinstance(action, AgentAction):
-                    out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}\n"
+
+                    if isinstance(action, WaitForMessages):
+                        if abs(action.t_end - self.t_next) < 1e-3:
+                            out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\ttrigger periodic replanning"
+                        else:
+                            out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\t-"
+                    else:
+                        out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}"
+
+                    if isinstance(action, ObservationAction):
+                        locations = {int(gp_idx) for *_,gp_idx in action.obs_opp.get_location()}
+                        locations = sorted(list(locations))
+                        n_locations = len(locations)
+
+                        if n_locations > 3:
+                            locations = locations[:3]
+                            locations.append('...')
+
+                        out += f"\t{action.instrument_name}, targets: {n_locations} {locations}"
+                    
+                    elif isinstance(action, ManeuverAction):
+                        # TODO increase dimensionality of maneuver description
+                        out += f"\t{round(action.initial_attitude[0],1)}° -> {round(action.final_attitude[0],1)}°"
+
+                    elif isinstance(action, FutureBroadcastMessageAction):
+                        out += f"\t{action.broadcast_type.lower()} broadcast"
+                    elif isinstance(action, BroadcastMessageAction):
+                        out += f"\t{action.msg['msg_type'].split('_')[-1].lower()} broadcast"
+
+                    out += '\n'    
+        
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '_'
+
+        # stats
         out += f'\nn actions in plan: {len(self)}'
         out += f'\nn measurements in plan: {len([action for action in self if isinstance(action, ObservationAction)])}'
         out += f'\nn broadcasts in plan: {len([action for action in self if isinstance(action, BroadcastMessageAction)])}'
         out += f'\nn maneuvers in plan: {len([action for action in self if isinstance(action, ManeuverAction)])}'
         out += f'\nn travel actions in plan: {len([action for action in self if isinstance(action, TravelAction)])}\n'
+        
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '-'
+        out += '\n'
+
+        # horizon and period
+        out += f'Next plan update time: {round(self.t_next,1)}[s]\n'
+        if isinstance(self, PeriodicPlan):
+            out += f'Planning horizon: {round(self.horizon,1)}[s]\n'
+
         return out
 
     def get_horizon(self) -> float:
@@ -381,20 +448,20 @@ class Plan(ABC):
     def __len__(self) -> int:
         return len(self.actions)    
 
-class Preplan(Plan):
+class PeriodicPlan(Plan):
     def __init__(self, 
                  *actions, 
                  t: float = 0,
                  horizon : float = np.Inf,
                  t_next : float = np.Inf
                  ) -> None:
-        
+        """ Describes a plan to be performed by an agent that is generated periodically over a fixed period and horizon. """
         self.horizon = horizon
 
         super().__init__(*actions, t=t, t_next=t_next)
 
     def copy(self) -> object:
-        return Preplan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
+        return PeriodicPlan(self.actions, t=self.t, horizon=self.horizon, t_next=self.t_next)
     
     def add(self, action: AgentAction, t: float) -> None:
         if self.t + self.horizon < action.t_end:
@@ -402,11 +469,15 @@ class Preplan(Plan):
 
         super().add(action, t)
 
-class Replan(Plan):
+class ReactivePlan(Plan):
+    def __init__(self, *actions, t = 0, t_next = np.Inf):
+        """ Describes a plan to be performed by an agent that is generated reactively based on external and internal knowledge. """
+        super().__init__(*actions, t=t, t_next=t_next)
+
     def copy(self) -> object:
-        return Replan(self.actions, t=self.t, t_next=self.t_next)
+        return ReactivePlan(self.actions, t=self.t, t_next=self.t_next)
     
-    def from_preplan(preplan : Preplan, *actions, t : float) -> object:
-        """ creates a modified plan from an existing preplan and a set of new actions to be added to said plan """
-        return Replan(preplan.actions, *actions, t=t, t_next=preplan.t_next)
+    def from_periodic_plan(periodic_plan : PeriodicPlan, *actions, t : float) -> object:
+        """ creates a modified plan from an existing periodic plan and a set of new actions to be added to said plan """
+        return ReactivePlan(periodic_plan.actions, *actions, t=t, t_next=periodic_plan.t_next)
     

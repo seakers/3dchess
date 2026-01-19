@@ -24,25 +24,25 @@ from dmas.network import NetworkConfig
 from dmas.clocks import *
 
 from chess3d.agents.agents import *
-from chess3d.agents.planning.centralized.dealer import TestingDealer
-from chess3d.agents.planning.centralized.milp import DealerMILPPlanner
-from chess3d.agents.planning.decentralized.milp import SingleSatMILP
-from chess3d.agents.planning.decentralized.nadir import NadirPointingPlanner
-from chess3d.agents.planning.decentralized.broadcaster import OpportunisticBroadcasterReplanner, PeriodicBroadcasterReplanner
-from chess3d.agents.planning.centralized.worker import WorkerReplanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.mission.mission import *
+from chess3d.mission.requirements import CapabilityRequirement, ExplicitCapabilityRequirement
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
 from chess3d.orbitdata import OrbitData
 from chess3d.agents.states import *
 from chess3d.agents.agent import SimulatedAgent
-from chess3d.agents.planning.module import PlanningModule
-from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
+from chess3d.agents.planning.centralized.dealer import TestingDealer
+from chess3d.agents.planning.centralized.milp import DealerMILPPlanner
+from chess3d.agents.planning.centralized.worker import WorkerPlanner
+from chess3d.agents.planning.decentralized.nadir import NadirPointingPlanner
 from chess3d.agents.planning.decentralized.earliest import EarliestAccessPlanner
+from chess3d.agents.planning.decentralized.heuristic import HeuristicInsertionPlanner
+# from chess3d.agents.planning.decentralized.milp import SingleSatMILP
 from chess3d.agents.planning.decentralized.dynamic import DynamicProgrammingPlanner
-from chess3d.agents.planning.decentralized.consensus.acbba import ACBBAPlanner
+from chess3d.agents.planning.decentralized.announcer import EventAnnouncerPlanner
+from chess3d.agents.planning.decentralized.consensus.heuristic import HeuristicInsertionConsensusPlanner
 from chess3d.agents.science.module import *
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes
 from chess3d.agents.agent import SimulatedAgent
@@ -289,7 +289,7 @@ class Simulation:
         except pd.errors.EmptyDataError:
             columns = ['observer','t_img','lat','lon','range','look','incidence','zenith','instrument_name']
             observations_performed = pd.DataFrame(data=[],columns=columns)
-            print('OOPS!')
+            print('No observations were performed.')
 
         # load all senario events
         print('Loading event data...')
@@ -303,7 +303,7 @@ class Simulation:
         event_detections = None
         for agent in self.agents:
             _,agent_name = agent.name.split('/')
-            events_detected_path = os.path.join(self.results_path, agent_name, 'events_detected.csv')
+            events_detected_path = os.path.join(self.results_path, agent_name.lower(), 'events_detected.csv')
             if not os.path.isfile(events_detected_path): continue
             
             events_detected_temp = pd.read_csv(events_detected_path)
@@ -312,6 +312,9 @@ class Simulation:
                 event_detections = events_detected_temp
             else:
                 event_detections = pd.concat([event_detections, events_detected_temp], axis=0)
+
+        assert event_detections is not None, \
+            "Coundn't load Event Detection file for any agent."
 
         # compile mesurement requests
         print('Collecting measurement request data...')
@@ -415,21 +418,6 @@ class Simulation:
                     # ['Simulation Start Date', self.environment._clock_config.start_date], 
                     # ['Simulation End Date', self.environment._clock_config.end_date], 
 
-                    # Coverage Metrics #TODO add more
-                    ['Ground Points', n_gps],
-                    ['Ground Points Accessible', n_gps_accessible],
-                    ['Ground Points Observed', n_gps_observed],
-                    ['Ground Points Reobserved', n_gps_reobserved],
-                    ['Ground Point Observations', n_observations],
-                    ['Ground Points with Events', n_gps_with_events],
-
-                    ['Average GP Reobservation Time [s]', t_gp_reobservation['mean']],
-                    ['Standard Deviation of GP Reobservation Time [s]', t_gp_reobservation['std']],
-                    ['Median GP Reobservation Time [s]', t_gp_reobservation['median']],
-                    ['Average Event Reobservation Time [s]', t_event_reobservation['mean']],
-                    ['Standard Deviation of Event Reobservation Time [s]', t_event_reobservation['std']],
-                    ['Median Event Reobservation Time [s]', t_event_reobservation['median']],
-
                     # Counters
                     ['Events', n_events],
                     ['Events Observable', n_events_observable],
@@ -449,6 +437,21 @@ class Simulation:
                     ['Events Only Partially Co-observable', n_events_co_observable_partially],
                     ['Events Partially Co-observed', n_events_partially_co_obs],
                     ['Event Partial Co-observations', n_total_event_partially_co_obs],
+
+                    # Coverage Metrics #TODO add more
+                    ['Ground Points', n_gps],
+                    ['Ground Points Accessible', n_gps_accessible],
+                    ['Ground Points Observed', n_gps_observed],
+                    ['Ground Points Reobserved', n_gps_reobserved],
+                    ['Ground Point Observations', n_observations],
+                    ['Ground Points with Events', n_gps_with_events],
+
+                    ['Average GP Reobservation Time [s]', t_gp_reobservation['mean']],
+                    ['Standard Deviation of GP Reobservation Time [s]', t_gp_reobservation['std']],
+                    ['Median GP Reobservation Time [s]', t_gp_reobservation['median']],
+                    ['Average Event Reobservation Time [s]', t_event_reobservation['mean']],
+                    ['Standard Deviation of Event Reobservation Time [s]', t_event_reobservation['std']],
+                    ['Median Event Reobservation Time [s]', t_event_reobservation['median']],
 
                     # Ground-Point Coverage Probabilities
                     ['P(Ground Point Accessible)', np.round(p_gp_accessible,n_decimals)],
@@ -706,16 +709,17 @@ class Simulation:
         event = tuple(event) 
 
         # event format: gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
-        gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,id = event
+        gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,event_id = event
 
         # get matching objectives
+        # TODO group reqs and agents by mission to avoid double counting
         observations_reqs = set()
         for _,mission in self.missions.items():
             for objective in mission:
                 if (isinstance(objective, EventDrivenObjective) 
                     and objective.event_type.lower() == event_type.lower()):
                     for req in objective:
-                        if isinstance(req, CapabilityRequirement) and req.attribute == 'instrument':
+                        if isinstance(req, ExplicitCapabilityRequirement) and req.attribute == 'instrument':
                             observations_reqs.update(set(req.valid_values))
 
         # find accesses that overlook a given event's location
@@ -764,32 +768,30 @@ class Simulation:
                                 and abs(lat - lat_req) < 1e-3 
                                 and abs(lon - lon_req) < 1e-3
                                 and event_type == detected_event_type
-                            ]       
+                            ] # if event_detections is not None else []
         matching_detections.sort(key= lambda a : a[5])
 
-        # TODO find measurement requests that match this event
-        matching_requests = []
-        # matching_requests = [   (id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types)
-        #                         for id_req, requester, lat_req, lon_req, severity_req, t_start_req, t_end_req, t_corr_req, observation_types in measurement_reqs.values
-        #                         if  t_start-1e-3 <= t_start_req <= t_end_req <= t_start+duration+1e-3
-        #                         and abs(lat - lat_req) < 1e-3 
-        #                         and abs(lon - lon_req) < 1e-3
-        #                         and all([instrument in observations_req for instrument in str_to_list(observation_types)])
-        #                     ]       
-        # matching_requests.sort(key= lambda a : a[5])
+        # find measurement requests that match this event
+        matching_requests = [(req_id, requester, event_req_id, mission_name, t_req)
+                             for req_id, requester, event_req_id, mission_name, t_req in measurement_reqs.values
+                             if event_req_id == event_id
+                             ]
+        matching_requests.sort(key= lambda a : a[4])
 
         # find observations that overlooked a given event's location
         matching_observations = [   (lat, lon, t_start, duration, severity, observer, t_img, instrument)
                                  
-                                    # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],observation range [km],
-                                    # look angle [deg],incidence angle [deg],ground pixel along-track resolution [m],
-                                    # ground pixel cross-track resolution [m],grid index,instrument,agent name,time [s]  
-                                    for observer,gp_index,t_img,pnt_opt,lat_img,lon_img,*_,instrument,agent_name,_ in observations_performed.values
+                                    # observer,GP index,t_img,pnt-opt index,lat [deg],lon [deg],
+                                    # observation range [km],look angle [deg],incidence angle [deg],
+                                    # off-nadir axis angle [deg],ground pixel along-track resolution [m],
+                                    # ground pixel cross-track resolution [m],grid index,instrument,agent name,time [s]
+                                    for observer,gp_index_img,t_img,pnt_opt,lat_img,lon_img,*_,instrument,agent_name,_ in observations_performed.values
                                     
                                     if self.str2interval(t_img).overlaps(Interval(t_start, t_start+duration))
-                                    and abs(lat - lat_img) < 1e-3 
-                                    and abs(lon - lon_img) < 1e-3
+                                    and gp_index_img == gp_index
                                     and instrument.lower() in observations_reqs
+                                    and abs(lat - lat_img) <= 1e-3 
+                                    and abs(lon - lon_img) <= 1e-3
                                 ]
         matching_observations.sort(key= lambda a : a[6])
 
@@ -1243,53 +1245,90 @@ class SimulationElementFactory:
                                      if instruments_dict else []
 
         # load specific mission assigned to this satellite
-        mission : Mission = missions[agent_dict['mission'].lower()]
-        mission = copy.deepcopy(mission)
+        mission : Mission = missions[agent_dict['mission'].lower()].copy()
+        
+        # ensure deep copy 
+        if mission != missions[agent_dict['mission'].lower()]:
+            mission_a_dict = mission.to_dict()
+            mission_b_dict = missions[agent_dict['mission'].lower()].to_dict()
 
-        if isinstance(clock_config, RealTimeClockConfig):            
-            # load science module
-            science = SimulationElementFactory.load_science_module(science_dict,
-                                                            results_path,
-                                                            agent_name,
-                                                            mission,
-                                                            agent_network_config,
-                                                            logger)
+            keys_a = set(mission_a_dict.keys())
+            keys_b = set(mission_b_dict.keys())
 
-            # load planner module
-            planner = SimulationElementFactory.load_planner_module(planner_dict,
-                                                            results_path,
-                                                            agent_specs,
-                                                            agent_network_config,
-                                                            agent_orbitdata, 
-                                                            level, 
-                                                            logger)
+            if len(keys_a) != len(keys_b) or keys_a != keys_b:
+                raise AssertionError("mission deep copy failed due to key mismatch.")
+            
+            for key in keys_a:
+                val_a = mission_a_dict[key]
+                val_b = mission_b_dict[key]
 
-            # create agent
-            if agent_type == SimulationAgentTypes.SATELLITE:
+                if isinstance(val_a, list) and isinstance(val_b, list):
+                    if len(val_a) != len(val_b):
+                        raise AssertionError(f"mission deep copy failed due to list length mismatch for key `{key}`: {len(val_a)} != {len(val_b)}")
+                    for item_a, item_b in zip(val_a, val_b):
+                        if item_a != item_b:
+                            for subkey in item_a.keys():
+                                if item_a[subkey] != item_b[subkey]:
+                                    if isinstance(item_a[subkey],list):
+                                        for subitem_a, subitem_b in zip(item_a[subkey], item_b[subkey]):
+                                            if subitem_a != subitem_b:
+                                                raise AssertionError(f"mission deep copy failed due to list item mismatch for key `{key}` subkey `{subkey}`: {subitem_a} != {subitem_b}")
+                                    raise AssertionError(f"mission deep copy failed due to list item mismatch for key `{key}`: {item_a} != {item_b}")
+                else:
+                    if val_a != val_b:
+                        raise AssertionError(f"mission deep copy failed due to value mismatch for key `{key}`: {val_a} != {val_b}")
 
-                # define initial state
-                position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
-                time_data =  pd.read_csv(position_file, nrows=3)
-                l : str = time_data.at[1,time_data.axes[1][0]]
-                _, _, _, _, dt = l.split(' '); dt = float(dt)
+        assert mission == missions[agent_dict['mission'].lower()], \
+            f"mission copy failed. {mission} != {missions[agent_dict['mission'].lower()]}"
+        assert mission is not missions[agent_dict['mission'].lower()], \
+            "mission deep copy failed."
 
-                initial_state = SatelliteAgentState(agent_name,
-                                                    orbit_state_dict,
-                                                    time_step=dt) 
+        if isinstance(clock_config, RealTimeClockConfig):    
+            raise NotImplementedError("Real-time clock not yet supported in agent factory.")
+
+            # # load science module
+            # science = SimulationElementFactory.load_science_module(science_dict,
+            #                                                 results_path,
+            #                                                 agent_name,
+            #                                                 mission,
+            #                                                 agent_network_config,
+            #                                                 logger)
+
+            # # load planner module
+            # planner = SimulationElementFactory.load_planner_module(planner_dict,
+            #                                                 results_path,
+            #                                                 agent_specs,
+            #                                                 agent_network_config,
+            #                                                 agent_orbitdata, 
+            #                                                 level, 
+            #                                                 logger)
+
+            # # create agent
+            # if agent_type == SimulationAgentTypes.SATELLITE:
+
+            #     # define initial state
+            #     position_file = os.path.join(orbitdata_dir, f'sat{agent_index}', 'state_cartesian.csv')
+            #     time_data =  pd.read_csv(position_file, nrows=3)
+            #     l : str = time_data.at[1,time_data.axes[1][0]]
+            #     _, _, _, _, dt = l.split(' '); dt = float(dt)
+
+            #     initial_state = SatelliteAgentState(agent_name,
+            #                                         orbit_state_dict,
+            #                                         time_step=dt) 
                 
-                # return satellite agent
-                return RealtimeSatelliteAgent(
-                                        agent_name,
-                                        results_path,
-                                        manager_network_config,
-                                        agent_network_config,
-                                        initial_state, 
-                                        agent_specs,
-                                        mission,
-                                        planner,
-                                        science,
-                                        logger=logger
-                                    )
+            #     # return satellite agent
+            #     return RealtimeSatelliteAgent(
+            #                             agent_name,
+            #                             results_path,
+            #                             manager_network_config,
+            #                             agent_network_config,
+            #                             initial_state, 
+            #                             agent_specs,
+            #                             mission,
+            #                             planner,
+            #                             science,
+            #                             logger=logger
+            #                         )
             
         else:
             # initialize observation data processor 
@@ -1298,7 +1337,7 @@ class SimulationElementFactory:
             
             # load planners
             preplanner, replanner = \
-                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, missions, logger)               
+                    SimulationElementFactory.load_planners(agent_name, planner_dict, orbitdata_dir, mission, missions, logger)               
 
             # create agent
             if agent_type == SimulationAgentTypes.SATELLITE:
@@ -1593,7 +1632,7 @@ class SimulationElementFactory:
         # return nothing
         return None  
 
-    def load_planners(agent_name : str, planner_dict : dict, orbitdata_dir : str, missions : Dict[str,Mission], logger : logging.Logger) -> tuple:
+    def load_planners(agent_name : str, planner_dict : dict, orbitdata_dir : str, agent_mission : Mission, missions : Dict[str,Mission], logger : logging.Logger) -> tuple:
         # check if planner dictionary is empty
         if planner_dict is None: return None, None
 
@@ -1609,31 +1648,30 @@ class SimulationElementFactory:
             horizon = preplanner_dict.get('horizon', period)
             horizon = np.Inf if isinstance(horizon, str) and 'inf' in horizon.lower() else horizon
             debug = bool(preplanner_dict.get('debug', 'false').lower() in ['true', 't'])
-            # sharing = bool(preplanner_dict.get('sharing', 'false').lower() in ['true', 't'])
+            sharing = preplanner_dict.get('sharing', 'none').lower()
+
+            if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
 
             # initialize preplanner
             if preplanner_type.lower() in ["heuristic"]:
-                period = preplanner_dict.get('period', 500)
-                horizon = preplanner_dict.get('horizon', period)
-
-                if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
-
-                preplanner = HeuristicInsertionPlanner(horizon, period, debug, logger)
+                preplanner = HeuristicInsertionPlanner(horizon, period, sharing, debug, logger)
 
             elif preplanner_type.lower() in ["naive", "fifo", "earliest"]:
-                preplanner = EarliestAccessPlanner(horizon, period, debug, logger)
+                preplanner = EarliestAccessPlanner(horizon, period, sharing, debug, logger)
 
             elif preplanner_type.lower() == 'nadir':
-                preplanner = NadirPointingPlanner(horizon, period, debug, logger)
+                preplanner = NadirPointingPlanner(horizon, period, sharing, debug, logger)
 
             elif preplanner_type.lower() in ["dynamic", "dp"]:
-                period = preplanner_dict.get('period', 500)
-                horizon = preplanner_dict.get('horizon', period)
-                
-                if period > horizon: raise ValueError('replanning period must be greater than planning horizon.')
-
-                preplanner = DynamicProgrammingPlanner(horizon, period, debug, logger)
+                model = preplanner_dict.get('model', 'earliest').lower()
+                preplanner = DynamicProgrammingPlanner(horizon, period, model, sharing, debug, logger)
             
+            elif preplanner_type.lower() in ["eventannouncer", "announcer"]:
+                events_path = preplanner_dict.get('eventsPath', None)
+                if events_path is None: raise ValueError(f'predefined events path not specified in input file.')
+                
+                preplanner = EventAnnouncerPlanner(events_path, agent_mission, debug, logger)
+
             elif preplanner_type.lower() == 'dealer':
                 # unpack preplanner parameters
                 mode = preplanner_dict.get('@mode', 'test').lower()
@@ -1671,25 +1709,40 @@ class SimulationElementFactory:
                 
                 if mode == 'test':                   
                     preplanner = TestingDealer(client_orbitdata, client_specs, horizon, period)
+
                 elif mode in ['milp', 'mixed-integer-linear-programming']:
                     model = preplanner_dict.get('model', DealerMILPPlanner.STATIC).lower()
                     license_path = preplanner_dict.get('licensePath', None)
                     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
                     max_observations = preplanner_dict.get('maxObservations', 10)
 
-                    preplanner = DealerMILPPlanner(client_orbitdata, client_specs, client_missions, model, license_path, horizon, period, max_tasks, max_observations, debug, logger)
+                    preplanner = DealerMILPPlanner(client_orbitdata, 
+                                                   client_specs, 
+                                                   client_missions, 
+                                                   model, 
+                                                   license_path, 
+                                                   horizon, 
+                                                   period, 
+                                                   max_tasks=max_tasks, 
+                                                   max_observations=max_observations, 
+                                                   debug=debug,
+                                                   logger=logger)
 
-            elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
-                # unpack preplanner parameters
-                obj = preplanner_dict.get('objective', 'reward').lower()
-                model = preplanner_dict.get('model', 'earliest').lower()
-                license_path = preplanner_dict.get('licensePath', None)
-                max_tasks = preplanner_dict.get('maxTasks', np.Inf)
+            elif preplanner_type.lower() == 'worker':
+                dealer_name = preplanner_dict.get('dealerName', None)
+                preplanner = WorkerPlanner(dealer_name, debug, logger)
 
-                if license_path is None and not debug: 
-                    raise ValueError('license path for Gurobi MILP preplanner not specified. Set `debug` to true to run with limited functionality or specify a valid license path to `licensePath`.')        
+            # elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
+            #     # unpack preplanner parameters
+            #     obj = preplanner_dict.get('objective', 'reward').lower()
+            #     model = preplanner_dict.get('model', 'earliest').lower()
+            #     license_path = preplanner_dict.get('licensePath', None)
+            #     max_tasks = preplanner_dict.get('maxTasks', np.Inf)
 
-                preplanner = SingleSatMILP(obj, model, license_path, horizon, period, max_tasks, debug, logger)
+            #     if license_path is None and not debug: 
+            #         raise ValueError('license path for Gurobi MILP preplanner not specified. Set `debug` to true to run with limited functionality or specify a valid license path to `licensePath`.')        
+
+            #     preplanner = SingleSatMILP(obj, model, license_path, horizon, period, max_tasks, debug, logger)
 
             # elif... # add more preplanners here
             
@@ -1706,41 +1759,18 @@ class SimulationElementFactory:
             replanner_type : str = replanner_dict.get('@type', None)
             if replanner_type is None: raise ValueError(f'replanner type within planner module not specified in input file.')
             debug = bool(replanner_dict.get('debug', 'false').lower() in ['true', 't'])
+            
+            if replanner_type.lower() in ['consensus', 'cbba']:
+                model = replanner_dict.get('model', 'heuristicInsertion')
+                replan_threshold = replanner_dict.get('replanThreshold', 1)
+                optimistic_bidding_threshold = replanner_dict.get('optimisticBiddingThreshold', 1)
+                periodic_overwrite = bool(replanner_dict.get('periodicOverwrite', 'false').lower() in ['true', 't'])
 
-            if replanner_type.lower() == 'broadcaster':
-                mode = replanner_dict.get('mode', 'periodic').lower()
-                period = replanner_dict.get('period', np.Inf)
-
-                if mode == 'opportunistic':
-                    replanner = OpportunisticBroadcasterReplanner(period, debug, logger)
-                elif mode == 'periodic':
-                    replanner = PeriodicBroadcasterReplanner(period, debug, logger)
+                if 'heuristic' in model:
+                    heuristic = replanner_dict.get('heuristic', 'earliestAccess')
+                    replanner = HeuristicInsertionConsensusPlanner(heuristic, replan_threshold, optimistic_bidding_threshold, periodic_overwrite, debug, logger)
                 else:
-                    raise ValueError(f'`mode` of type `{mode}` not supported for broadcaster replanner.')
-
-            elif replanner_type.lower() == 'worker':
-                dealer_name = replanner_dict.get('dealerName', None)
-                replanner = WorkerReplanner(dealer_name, debug, logger)
-
-            elif replanner_type.lower() == 'acbba': 
-                threshold = replanner_dict.get('threshold', 1)
-
-                replanner = ACBBAPlanner(
-                                            threshold, 
-                                            debug,
-                                            logger
-                                            )
-                
-            # elif replanner_type.lower() == 'acbba-dp': 
-            #     max_bundle_size = replanner_dict.get('bundle size', 3)
-            #     threshold = replanner_dict.get('threshold', 1)
-            #     horizon = replanner_dict.get('horizon', np.Inf)
-
-            #     replanner = DynamicProgrammingACBBAReplanner(max_bundle_size, 
-            #                                                 threshold, 
-            #                                                 horizon,
-            #                                                 debug,
-            #                                                 logger)
+                    raise NotImplementedError(f'replanner model `{model}` not yet supported.')
             
             else:
                 raise NotImplementedError(f'replanner of type `{replanner_dict}` not yet supported.')
@@ -1757,20 +1787,9 @@ class SimulationElementFactory:
                             agent_orbitdata : OrbitData,
                             level : int,
                             logger : logging.Logger
-                            ) -> PlanningModule:
+                            ):
 
         raise NotImplementedError('`load_planner_module` requires missions argument.')
 
-        preplanner, replanner = SimulationElementFactory.load_planners(planner_dict, orbitdata_dir, missions, logger)
-
-        # create planning module
-        return PlanningModule(results_path, 
-                              agent_specs,
-                              agent_network_config, 
-                              preplanner,
-                              replanner,
-                              agent_orbitdata,
-                              level,
-                              logger
-                            )    
+        
     

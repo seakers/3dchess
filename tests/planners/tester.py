@@ -1,13 +1,24 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict
 import os
 import copy
+from typing import List
+
+import pandas as pd
 
 from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 
-
 class PlannerTester(ABC):
+    R = 6357.0 # Radius of the Earth [km]
+
     def setUp(self) -> None:        
+        # test case toggles
+        self.single_sat_toy : bool = False
+        self.multiple_sat_toy : bool = False
+        self.single_sat_lakes : bool = False
+        self.multiple_sat_lakes : bool = False
+
         # load scenario json file
         self.spacecraft_template = {
                     "@id": "thermal_sat_0_0",
@@ -61,30 +72,22 @@ class PlannerTester(ABC):
                         },
                         "state": {
                             "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                            "sma": 7078,
+                            "sma": 7078, # ~700 km altitude
                             "ecc": 0.01,
                             "inc": 60.0,
                             "raan": 0.0,
-                            "aop": 0.0,
-                            "ta": 95.0
+                            "aop": 98.0,
+                            "ta": 0.0
                         }
                     },
                     "planner" : {
-                        # "preplanner" : {
-                        #     "@type" : "earliest",
-                        #     "period": 500,
-                        #     # "horizon": 500,
-                        # },
-                        # "replanner" : {
-                        #     "@type" : "broadcaster",
-                        #     "period" : 400
-                        # },
+                        
                     },
                     # "science" : {
                     #     "@type": "lookup", 
                     #     "eventsPath" : "./tests/planners/resources/events/toy_events.csv"
                     # },
-                    "mission" : "Algal blooms monitoring"
+                    "mission" : "Algal bloom comprehensive"
             }
         
         # set outdir
@@ -105,8 +108,8 @@ class PlannerTester(ABC):
                                 },
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
-                                    "angleHeight": 2.5, 
-                                    "angleWidth": 45.0
+                                    "angleHeight": 0.5, 
+                                    "angleWidth": 0.5
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
@@ -127,8 +130,8 @@ class PlannerTester(ABC):
                                 },
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
-                                    "angleHeight": 2.5, 
-                                    "angleWidth": 45.0
+                                    "angleHeight": 0.5, 
+                                    "angleWidth": 0.5
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
@@ -149,8 +152,8 @@ class PlannerTester(ABC):
                                 },
                                 "fieldOfViewGeometry": { 
                                     "shape": "RECTANGULAR", 
-                                    "angleHeight": 2.5, 
-                                    "angleWidth": 45.0
+                                    "angleHeight": 0.5, 
+                                    "angleWidth": 20.0
                                 },
                                 "maneuver" : {
                                     "maneuverType":"SINGLE_ROLL_ONLY",
@@ -181,6 +184,19 @@ class PlannerTester(ABC):
                                 }
                             }
                         }
+        
+    def setup_science_config(self, event_name : str) -> dict:
+        """ Setup science configuration for the scenario. """
+
+        assert isinstance(event_name, str), "event_name must be a string"
+
+        assert os.path.isfile(f"./tests/planners/resources/events/{event_name}.csv"), \
+            f"Event file not found: {event_name}.csv"
+        
+        return {
+                    "@type": "lookup", 
+                    f"eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
+                }
         
     def setup_scenario_specs(self, 
                              duration : float, 
@@ -275,28 +291,80 @@ class PlannerTester(ABC):
                 "outDir" : f"./tests/planners/orbit_data/{scenario_name}",
             }
         return settings
+    
+    def compile_ground_stations(self, gs_network_names : List[str] = []) -> List[dict]:
+        """Compile ground stations for the scenario. """
+        # collect all ground stations from specified networks
+        ground_stations = {gs_network_name : self.load_ground_stations(gs_network_name) for gs_network_name in gs_network_names}
 
+        # add network name to each ground station specifications
+        for gs_network_name,network in ground_stations.items():
+            for gs in network:
+                gs['networkName'] = gs_network_name
+
+        # flatten list of lists
+        return [ground_station for network in ground_stations.values() for ground_station in network]
+
+    def load_ground_stations(self, gs_network_name : str = None) -> List[dict]:
+        if gs_network_name is None: return []
+
+        grid_path = f"./tests/planners/resources/gstations/{gs_network_name}.csv"
+        assert os.path.isfile(grid_path), f"Ground station file not found: {gs_network_name}.csv"
+
+        # load ground station network from file
+        df = pd.read_csv(grid_path)
+        gs_network_df : list[dict] = df.to_dict(orient='records')
+
+        # if no id in file, add index as id
+        gs_network = []
+        for gs_idx, gs_df in enumerate(gs_network_df):
+            gs = {
+                "name": gs_df['name'],
+                "latitude": gs_df['lat[deg]'],
+                "longitude": gs_df['lon[deg]'],
+                "altitude": gs_df['alt[km]'],
+                "minimumElevation": gs_df['minElevation[deg]'],
+                "@id": gs_df['@id'] if '@id' in gs_df else f'{gs_network_name}-{gs_idx}'
+            }
+            gs_network.append(gs)
+
+        # return ground station network as list of dicts
+        return gs_network
+    
     @abstractmethod
     def toy_planner_config(self) -> dict:
-        """ Returns the planner configuration for the test case. """
-    
+        """ Returns the planner configuration for the toy test cases. """
+
+    @abstractmethod
+    def lakes_planner_config(self) -> dict:
+        """ Returns the planner configuration for the lakes test cases. """
+
     @abstractmethod
     def planner_name(self) -> str:
         """ Returns the planner name for the test case. """
 
     def test_single_sat_toy(self):
         """ Test case for a single satellite with toy events. """
+        # check for case toggle 
+        if not self.single_sat_toy: return
+
         # setup scenario parameters
-        duration = 1.0 / 24.0
+        duration = 2.0 / 24.0
         grid_name = 'toy_points'
         scenario_name = f'single_sat_toy_scenario-{self.planner_name()}'
-        connectivity = 'FULL'
+        connectivity = 'LOS'
         event_name = 'toy_events'
         mission_name = 'toy_missions'
 
-        spacecraft : dict = copy.deepcopy(self.spacecraft_template)
-        spacecraft['planner'] = self.toy_planner_config()
-        spacecraft['orbitState']['state']['inc'] = 0.0
+        # SAT0 : announcer satellite with wide swath instrument
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_tir'
+        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['planner'] = self.toy_planner_config()
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['science'] = self.setup_science_config(event_name)
+        # if 'replanner' in announcer_spacecraft['planner']: announcer_spacecraft["planner"].pop('replanner') # make announcer purely preplanner
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` PLANNER TEST')
@@ -308,7 +376,9 @@ class PlannerTester(ABC):
                                                    connectivity,
                                                    event_name,
                                                    mission_name,
-                                                   spacecraft=[spacecraft]
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                    ]
                                                    )
 
 
@@ -325,10 +395,79 @@ class PlannerTester(ABC):
 
     def test_multiple_sats_toy(self):
         """ Test case for multiple satellites with toy events. """
-        pass
+        # check for case toggle 
+        if not self.multiple_sat_toy: return
+
+        # setup scenario parameters
+        duration = 1.0 / 24.0
+        grid_name = 'toy_points'
+        scenario_name = f'multiple_sat_toy_scenario-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_events'
+        mission_name = 'toy_missions'
+
+        # SAT0 : announcer satellite with wide swath instrument
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_tir'
+        announcer_spacecraft['name'] = 'sat0'
+        announcer_spacecraft['planner'] = self.toy_planner_config()
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['science'] = self.setup_science_config(event_name)
+        # if 'replanner' in announcer_spacecraft['planner']: announcer_spacecraft["planner"].pop('replanner') # make announcer purely preplanner
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config()
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = announcer_spacecraft['orbitState']['state']['ta'] - 2.0 # phase offset by 2.0[deg]
+
+        # SAT2 : reactive satellite with narrow swath instrument and lagging behind announcer
+        ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_2['@id'] = 'sat2_vnir'
+        ractive_spacecraft_2['name'] = 'sat2'
+        ractive_spacecraft_2['planner'] = self.toy_planner_config()
+        ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_2['orbitState']['state']['ta'] = announcer_spacecraft['orbitState']['state']['ta'] - 2.5 # phase offset by 2.5[deg]
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                       ractive_spacecraft_1,
+                                                    #    ractive_spacecraft_2
+                                                    ]
+                                                   )
+
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print('DONE')
 
     def test_single_sat_lakes(self):
         """ Test case for a single satellite in a lake-monitoring scenario. """
+        # check for case toggle 
+        if not self.single_sat_lakes: return
+
         # setup scenario parameters
         duration = 2.0 / 24.0
         grid_name = 'lake_event_points'
@@ -338,7 +477,7 @@ class PlannerTester(ABC):
         mission_name = 'lake_missions'
 
         spacecraft : dict = copy.deepcopy(self.spacecraft_template)
-        spacecraft['planner'] = self.toy_planner_config()
+        spacecraft['planner'] = self.lakes_planner_config()
 
         # terminal welcome message
         print_welcome(f'`{scenario_name}` PLANNER TEST')
@@ -367,4 +506,53 @@ class PlannerTester(ABC):
 
     def test_multiple_sats_lakes(self):
         """ Test case for multiple satellites in a lake-monitoring scenario. """
-        pass
+        # check for case toggle 
+        if not self.multiple_sat_lakes: return
+        
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'lake_event_points'
+        scenario_name = f'multiple_sat_lake_scenario-{self.planner_name()}'
+        connectivity = 'FULL'
+        event_name = 'lake_events_seed-1000'
+        mission_name = 'lake_missions'
+
+        spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        spacecraft_1['planner'] = self.lakes_planner_config()
+        spacecraft_1['@id'] = 'sat_1'
+        spacecraft_1['name'] = 'sat_1'
+
+        spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        spacecraft_2['planner'] = self.lakes_planner_config()
+        spacecraft_2['orbitState']['state']['ta'] = 90.0
+        spacecraft_2['@id'] = 'sat_2'
+        spacecraft_2['name'] = 'sat_2'
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_name,
+                                                   spacecraft=[
+                                                       spacecraft_1, 
+                                                       spacecraft_2
+                                                    ]
+                                                   )
+
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print('DONE')
+

@@ -2,7 +2,7 @@
 from collections import defaultdict
 from functools import reduce
 import queue
-from typing import Dict, Tuple
+from typing import Dict, Set, Tuple
 
 from instrupy.base import BasicSensorModel
 from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
@@ -15,13 +15,15 @@ from pyparsing import List
 from tqdm import tqdm
 
 from chess3d.agents.planning.plan import Plan
-from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask, SpecificObservationTask
+from chess3d.agents.planning.tasks import GenericObservationTask
+from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.states import *
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
+from chess3d.mission.attributes import CapabilityRequirementAttributes, ObservationRequirementAttributes, SpatialCoverageRequirementAttributes, TemporalRequirementAttributes
 from chess3d.mission.mission import Mission
-from chess3d.mission.requirements import CapabilityRequirement, MeasurementDurationRequirement
+from chess3d.mission.requirements import CapabilityRequirement, CategoricalRequirement, ConstantValueRequirement, ExpDecayRequirement, ExpSaturationRequirement, GaussianRequirement, IntervalInterpolationRequirement, LogThresholdRequirement, PerformancePreferenceStrategies, PerformanceRequirement, StepsRequirement, TriangleRequirement
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
@@ -40,8 +42,9 @@ class AbstractPlanner(ABC):
             raise ValueError(f'`logger` must be of type `Logger`. Is of type `{type(logger)}`.')
 
         # initialize attributes
-        self.known_reqs : set[TaskRequest] = set()                   # set of known measurement requests
-        self.stats : dict = dict()                                          # collector for runtime performance statistics
+        self.known_reqs : set[TaskRequest] = set()                                # set of known measurement requests
+        self.stats : dict = dict()                                                # collector for runtime performance statistics
+        self.last_performed_observations : List[ObservationOpportunity] = list()  # list of last performed observations
         
         # set attribute parameters
         self._debug = debug                 # toggles debugging features
@@ -52,8 +55,7 @@ class AbstractPlanner(ABC):
                          state : SimulationAgentState,
                          incoming_reqs : list,
                          relay_messages : list,
-                         completed_actions : list,
-                         **kwargs
+                         completed_actions : list
                         ) -> None:
         """ Updates internal knowledge based on incoming percepts """
         
@@ -62,7 +64,11 @@ class AbstractPlanner(ABC):
 
         # update list of known requests
         self.known_reqs.update(incoming_reqs)
-        
+
+        # update latest observation opportunities measured by this agent
+        self.last_performed_observations = list({action.obs_opp for action in completed_actions
+                                            if isinstance(action, ObservationAction)})
+
     @abstractmethod
     def needs_planning(self, **kwargs) -> bool:
         """ Determines whether planning is triggered """ 
@@ -72,16 +78,74 @@ class AbstractPlanner(ABC):
         """ Creates a plan for the agent to perform """
 
     @runtime_tracker
-    def create_tasks_from_accesses(self, 
-                                    available_tasks : list,
-                                    access_times : list, 
+    def calculate_access_opportunities(self, 
+                                       state : SimulationAgentState, 
+                                       planning_horizon : Interval,
+                                       orbitdata : OrbitData
+                                    ) -> dict:
+        """ Calculate access opportunities for targets visible in the planning horizon """
+
+        # check planning horizon span
+        if planning_horizon.is_empty(): 
+            return {}
+
+        # compile coverage data
+        raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(planning_horizon.left, planning_horizon.right)
+
+        # initiate access times
+        access_opportunities : Dict[int, Dict[int, Dict[str, List]]] = {}
+        
+        for i in tqdm(range(len(raw_coverage_data['time [s]'])), 
+                        desc=f'{state.agent_name}/PREPLANNER: Compiling access opportunities', 
+                        leave=False):
+            t_img = raw_coverage_data['time [s]'][i]
+            grid_index = raw_coverage_data['grid index'][i]
+            gp_index = raw_coverage_data['GP index'][i]
+            instrument = raw_coverage_data['instrument'][i]
+            # look_angle = raw_coverage_data['look angle [deg]'][i]
+            off_nadir_angle = raw_coverage_data['off-nadir axis angle [deg]'][i]
+            
+            # initialize dictionaries if needed
+            if grid_index not in access_opportunities:
+                access_opportunities[grid_index] = {}
+                
+            if gp_index not in access_opportunities[grid_index]:
+                access_opportunities[grid_index][gp_index] = defaultdict(list)
+
+            # compile time interval information 
+            found = False
+            for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
+                interval : Interval
+                t : list
+                th : list
+
+                overlap_interval = Interval(t_img - orbitdata.time_step, 
+                                            t_img + orbitdata.time_step)
+                
+                if overlap_interval.overlaps(interval):
+                    interval.extend(t_img)
+                    t.append(t_img)
+                    th.append(off_nadir_angle)
+                    found = True
+                    break      
+
+            if not found:
+                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [off_nadir_angle]])     
+
+        # return access times and grid information
+        return access_opportunities
+
+    @runtime_tracker
+    def create_observation_opportunities_from_accesses(self, 
+                                    available_tasks : List[GenericObservationTask],
+                                    access_times : List[tuple], 
                                     cross_track_fovs : dict,
                                     orbitdata : OrbitData,
                                     must_overlap : bool = True,
                                     threshold : float = 5*60
                                     ) -> list:
         """ 
-        Creates specific observation tasks from precalculated access times of known generic task targets. 
+        Creates observation opportunities from precalculated access times of known generic task targets. 
 
         #### Arguments
         - `available_tasks` : List of known and available generic observation tasks.
@@ -94,55 +158,62 @@ class AbstractPlanner(ABC):
 
         if not must_overlap: raise NotImplementedError('Clustering without overlap is not yet fully implemented.')
 
-        # generate schedulable tasks from access times
-        schedulable_tasks : list[SpecificObservationTask] \
-            = self.single_tasks_from_accesses(available_tasks, access_times, cross_track_fovs, orbitdata)
+        # generate task observation opportunities from access times
+        observation_opps : list[ObservationOpportunity] \
+            = self.single_task_observation_opportunity_from_accesses(available_tasks, access_times, cross_track_fovs, orbitdata)
+        
+        # remove duplicates if needed
+        observation_opps = list(set(observation_opps))
+
+        # filter out opportunities that have just been performed
+        filtered_observation_opps : list[ObservationOpportunity] \
+            = [obs for obs in observation_opps 
+               if all(not obs.is_mutually_exclusive(performed_obs) 
+                      for performed_obs in self.last_performed_observations)] \
+                if self.last_performed_observations else observation_opps
         
         # check if tasks are clusterable
-        task_adjacency : Dict[str, set[SpecificObservationTask]] \
-            = self.check_task_clusterability(schedulable_tasks, must_overlap, threshold)
+        task_adjacency : Dict[str, set[ObservationOpportunity]] \
+            = self.check_task_observation_opportunity_clusterability(filtered_observation_opps, must_overlap, threshold)
    
         # cluster tasks based on adjacency
-        combined_tasks : list[SpecificObservationTask] = self.cluster_tasks(schedulable_tasks, task_adjacency, must_overlap, threshold)
+        combined_obs : list[ObservationOpportunity] \
+            = self.cluster_task_observation_opportunities(filtered_observation_opps, task_adjacency, must_overlap, threshold)
 
         # add clustered tasks to the final list of tasks available for scheduling
-        schedulable_tasks.extend(combined_tasks) 
+        filtered_observation_opps.extend(combined_obs) 
 
-        assert all([task.slew_angles.span()-1e-6 <= cross_track_fovs[task.instrument_name] 
-                    for task in schedulable_tasks]), \
+        assert all([obs.slew_angles.span()-1e-6 <= cross_track_fovs[obs.instrument_name] 
+                    for obs in filtered_observation_opps]), \
             f"Tasks have slew angles larger than the maximum allowed field of view."
 
         # return tasks
-        return schedulable_tasks
-    
+        return sorted(filtered_observation_opps, key=lambda x: x.accessibility)
+        
     @runtime_tracker
-    def single_tasks_from_accesses(self,
-                                   available_tasks : list,
-                                   access_times : list, 
+    def single_task_observation_opportunity_from_accesses(self,
+                                   available_tasks : List[GenericObservationTask],
+                                   access_times : List[tuple], 
                                    cross_track_fovs : dict,
                                    orbitdata : OrbitData,
                                    threshold : float = 1e-9
-                                   ) -> list:
-        """ Creates one specific task per each access opportunity for every available task """
+                                   ) -> List[ObservationOpportunity]:
+        """ Creates one instance of a task observation opportunity per each access opportunity 
+        for every available task """
 
-        # initialize list of schedulable tasks
-        schedulable_tasks : list[SpecificObservationTask] = []
+        # initialize list of task observation opportunities
+        observation_opps : List[ObservationOpportunity] = []
 
-        # create one task per each access opportunity
+        # create one instance of an observation opportunity per each access opportunity
         for task in tqdm(available_tasks, desc="Calculating access times to known tasks", leave=False):
-            task : GenericObservationTask
 
-            # TODO improve minimum and maximum measurement duration requirement calculation
-            if task.objective is not None:
-                duration_reqs = [req for req in task.objective
-                                if isinstance(req, MeasurementDurationRequirement)]
-                duration_req : MeasurementDurationRequirement = duration_reqs[0] if duration_reqs else None
-            else:
-                duration_req = None
-            min_duration_req : float = min(duration_req.thresholds) if duration_req is not None else orbitdata.time_step
+            # extract minimum duration requirement for this task
+            min_duration_req : float = self.__extract_minimum_duration_req(task, orbitdata)
+
+            # ensure minimum duration requirement is a positive number
             assert isinstance(min_duration_req, (int,float)) and min_duration_req >= 0.0, "minimum duration requirement must be a positive number."
 
-            # find access time for each target location for this task
+            # collect access interval information for each target location for this task
             for *__,grid_index,gp_index in task.location:
                 # ensure grid_index and gp_index are integers
                 grid_index,gp_index = int(grid_index), int(gp_index)
@@ -159,7 +230,7 @@ class AbstractPlanner(ABC):
                                         if task.availability.overlaps(access_interval)
                                         ]
                 
-                # create a schedulable task for each access time
+                # create a task observation opportunity for each access time
                 for access_time in matching_access_times:
                     # unpack access time
                     instrument_name,accessibility,_,th = access_time
@@ -196,16 +267,16 @@ class AbstractPlanner(ABC):
                         if accessibility.span() - min_duration_req >= threshold: 
                             continue # is over the threshold; skip
 
-                        # create and add schedulable task to list of schedulable tasks with a different minimum observation requirement
-                        schedulable_tasks.append(SpecificObservationTask(task,
+                        # create and add task observation opportunity to list of task observation opportunities with a different minimum observation requirement
+                        observation_opps.append(ObservationOpportunity(task,
                                                                         instrument_name,
                                                                         accessibility,
                                                                         accessibility.span(), # slightly shorter than `min_duration_req`
                                                                         slew_angles
                                                                         ))
                     else:
-                        # create and add schedulable task to list of schedulable tasks
-                        schedulable_tasks.append(SpecificObservationTask(task,
+                        # create and add task observation opportunity to list of task observation opportunities
+                        observation_opps.append(ObservationOpportunity(task,
                                                                         instrument_name,
                                                                         accessibility,
                                                                         min_duration_req,
@@ -213,64 +284,131 @@ class AbstractPlanner(ABC):
                                                                         ))
 
         
-        # return list of schedulable tasks
-        return schedulable_tasks
+        # return list of task observation opportunities
+        return observation_opps
+    
+    def __extract_minimum_duration_req(self, task : GenericObservationTask, orbitdata : OrbitData) -> float:
+        """ Extracts the minimum duration requirement for a given task. """
+        
+        # check if task has any objectives
+        if task.objective is None:
+            return orbitdata.time_step # no objectives assigned to this task; assume default minimum duration requirement
+
+        # extract any duration requirements from the task objective
+        duration_reqs = [req for req in task.objective
+                        if req.attribute == TemporalRequirementAttributes.DURATION.value]
+        
+        # check if any duration requirements were found
+        if not duration_reqs: return orbitdata.time_step # no duration requirement found; return default minimum duration requirement
+
+        # get duration requirement
+        duration_req : PerformanceRequirement = duration_reqs[0]
+
+        # extract minimum duration requirement based on requirement type
+        if isinstance(duration_req, CategoricalRequirement):
+            raise ValueError('Categorical duration requirements are not supported.')
+        
+        elif isinstance(duration_req, ConstantValueRequirement):
+            return duration_req.value # return constant duration requirement value
+        
+        elif isinstance(duration_req, ExpSaturationRequirement):
+            return - (1 / duration_req.sat_rate) * np.log(1 - 0.01) # return duration requirement at 1% saturation
+
+        elif isinstance(duration_req, LogThresholdRequirement):
+            return duration_req.threshold # return log threshold duration requirement value
+
+        elif isinstance(duration_req, ExpDecayRequirement):
+            return - (1 / duration_req.decay_rate) * np.log(0.01) # return duration requirement at 1% decay
+
+        elif isinstance(duration_req, GaussianRequirement):
+            # TODO implement gaussian requirement extraction
+            raise NotImplementedError('Gaussian duration requirements are not supported yet.')
+        
+        elif isinstance(duration_req, TriangleRequirement):
+            min_duration = duration_req.reference - (duration_req.width / 2) * (1 - 0.01) # 1% of the triangle height
+            return max(min_duration, 0.0) # ensure non-negative duration requirement
+
+        elif isinstance(duration_req, StepsRequirement):
+            # filter non-zero scores
+            positive_scores = [(idx, score) for idx,score in enumerate(duration_req.scores) if score > 0]
+
+            # check if there are any positive scores        
+            if not positive_scores:
+                raise ValueError('No positive scores found in `StepsRequirement` for duration requirement.')
+
+            # get interval with minimum positive score
+            min_idx, _ = min(positive_scores, key=lambda x: x[1])
+
+            if min_idx == 0:
+                return max(duration_req.thresholds[0], 0.0)
+            elif min_idx == len(duration_req.thresholds):
+                return max(duration_req.thresholds[-1], 0.0)
+            else:
+                return max(min(duration_req.thresholds[min_idx + 1], duration_req.thresholds[min_idx]), 0.0)
+        
+        elif isinstance(duration_req, IntervalInterpolationRequirement):
+            # TODO implement interval interpolation requirement extraction
+            raise NotImplementedError('Interval interpolation duration requirements are not supported yet.')     
+       
+        # unsupported requirement type; should not reach here
+        raise ValueError('Unsupported duration requirement type.')
             
     def can_perform_task(self, task : GenericObservationTask, instrument_name : str) -> bool:
         """ Checks if the agent can perform the task at hand with the given instrument """
-        # TODO Replace this with KG for better reasoning capabilities
+        # TODO Replace this with KG for better reasoning capabilities; currently assumes instrument has general capability
 
         # Check if task has specified objectives
         if task.objective is not None:
             # Extract capability requirements from the objective
             capability_reqs = [req for req in task.objective
-                               if isinstance(req, CapabilityRequirement)]
+                               if isinstance(req, CapabilityRequirement)
+                               and req.attribute == CapabilityRequirementAttributes.INSTRUMENT.value]
             capability_req: CapabilityRequirement = capability_reqs[0] if capability_reqs else None
 
             # Evaluate capability requirement
             if capability_req is not None:
-                return capability_req.calc_preference_value(instrument_name) >= 0.5
+                return capability_req.calc_preference(CapabilityRequirementAttributes.INSTRUMENT.value, instrument_name.lower()) >= 0.5
 
         # No capability objectives specified; check if instrument has general capability
-        # TODO replace with better reasoning; currently assumes instrument has general capability
         return True
         
     @runtime_tracker
-    def check_task_clusterability(self, schedulable_tasks : list, must_overlap : bool, threshold : float) -> dict:
+    def check_task_observation_opportunity_clusterability(self, observation_opportunities : List[ObservationOpportunity], must_overlap : bool, threshold : float) -> dict:
         """ 
-        Creates adjacency list for a given list of specific observation tasks.
+        Creates adjacency list for a given list of task observation opportunities.
 
         #### Arguments
-        - `schedulable_tasks` : A list of specific observation tasks to create the adjacency list for.
+        - `observation_opportunities` : A list of task observation opportunities to create the adjacency list for.
         - `must_overlap` : Whether tasks' availability must overlap in availability time to be considered for clustering.
         - `threshold` : The time threshold for clustering tasks in seconds [s].
         """
-        schedulable_tasks : list[SpecificObservationTask] = schedulable_tasks
 
         # create adjacency list for tasks
-        adj : Dict[str, set[SpecificObservationTask]] = {task.id : set() for task in schedulable_tasks}
-                
-        if schedulable_tasks:
+        adj : Dict[str, set[ObservationOpportunity]] = {task.id : set() for task in observation_opportunities}
+        assert len(adj) == len(observation_opportunities), \
+            "Duplicate observation opportunity IDs found when creating adjacency list."
+
+        if observation_opportunities:
             # sort tasks by accessibility
-            schedulable_tasks.sort(key=lambda a : a.accessibility) 
+            observation_opportunities.sort(key=lambda a : a.accessibility) 
             
             # get min and max accessibility times
-            t_min = schedulable_tasks[0].accessibility.left
+            t_min = observation_opportunities[0].accessibility.left
 
             # initialize bins
             bins = defaultdict(list)
             
             # group task in bins by accessibility
-            for task in tqdm(schedulable_tasks, leave=False, desc="Grouping tasks into bins"):
-                task : SpecificObservationTask
+            for task in tqdm(observation_opportunities, leave=False, desc="Grouping tasks into bins"):
+                task : ObservationOpportunity
                 center_time = (task.accessibility.left + task.accessibility.right) / 2 - t_min
                 bin_key = int(center_time // threshold)
                 bins[bin_key].append(task)
 
             # populate adjacency list
-            with tqdm(total=len(schedulable_tasks), desc="Checking task clusterability", leave=False) as pbar:
+            with tqdm(total=len(observation_opportunities), desc="Checking task clusterability", leave=False) as pbar:
                 for b in bins:
-                    candidates : list[SpecificObservationTask]\
+                    candidates : list[ObservationOpportunity]\
                           = bins[b] + bins.get(b + 1, [])  # optionally add b-1 for symmetry
                     for i in range(len(candidates)):
                         for j in range(i + 1, len(candidates)):
@@ -281,17 +419,23 @@ class AbstractPlanner(ABC):
                         pbar.update(1)
 
         # check if adjacency list is symmetric
-        for p in schedulable_tasks:
-            assert p not in adj[p.id], f'Task {p.id} is in its own adjacency list.'
+        for p in observation_opportunities:
+            assert p not in adj[p.id], \
+                f'Task {p.id} is in its own adjacency list.'
             for q in adj[p.id]:
-                assert p in adj[q.id], f'Task {p.id} is in the adjacency list of task {q.id} but not vice versa.'
+                assert p in adj[q.id], \
+                    f'Task {p.id} is in the adjacency list of task {q.id} but not vice versa.'
 
         return adj
 
     @runtime_tracker
-    def cluster_tasks(self, schedulable_tasks : list, adj : dict, must_overlap : bool, threshold : float) -> list:
+    def cluster_task_observation_opportunities(self, 
+                                               observation_opportunities : List[ObservationOpportunity], 
+                                               adj : Dict[str, Set[ObservationOpportunity]], 
+                                               must_overlap : bool, 
+                                               threshold : float) -> list:
         """ 
-        Clusters tasks based on adjacency. 
+        Clusters observation opportunities based on adjacency. 
         
         ```
         while V!=Ø do
@@ -313,25 +457,22 @@ class AbstractPlanner(ABC):
         ```
         
         """         
-        schedulable_tasks : list[SpecificObservationTask]
-        adj : Dict[str, set[SpecificObservationTask]] = adj
-
-        # only keep tasks that have at least one clusterable task
-        v = [task for task in schedulable_tasks if len(adj[task.id]) > 0]
+        # only keep observation opportunities that have at least one clusterable observation opportunity
+        v = [obs for obs in observation_opportunities if len(adj[obs.id]) > 0]
         
-        # sort tasks by degree of adjacency 
-        v : list[SpecificObservationTask] = self.sort_tasks_by_degree(schedulable_tasks, adj)
+        # sort observation opportunities by degree of adjacency 
+        v : list[ObservationOpportunity] = self.__sort_by_degree(observation_opportunities, adj)
         
-        # combine tasks into clusters
-        combined_tasks : list[SpecificObservationTask] = []
+        # combine observation opportunities into clusters
+        combined_obs : list[ObservationOpportunity] = []
 
-        with tqdm(total=len(v), desc="Merging overlapping tasks", leave=False) as pbar:
+        with tqdm(total=len(v), desc="Merging overlapping observation opportunities", leave=False) as pbar:
             while len(v) > 0:
-                # pop first task from the list of tasks to be scheduled
-                p : SpecificObservationTask = v.pop()
+                # pop first observation opportunity from the list of observation opportunities to be scheduled
+                p : ObservationOpportunity = v.pop()
 
                 # get list of neighbors of p sorted by number of common neighbors
-                n_p : list[SpecificObservationTask] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)
+                n_p : list[ObservationOpportunity] = self.__sort_observation_opportunities_by_common_neighbors(p, list(adj[p.id]), adj)
 
                 # initialize clique with p
                 clique = set()
@@ -342,13 +483,13 @@ class AbstractPlanner(ABC):
                 # while there are neighbors of p
                 while len(n_p) > 0:
                     # pop first neighbor q from the list of neighbors
-                    q : SpecificObservationTask = n_p.pop()
+                    q : ObservationOpportunity = n_p.pop()
 
                     # Combine q and p into a new p                 
                     clique.add(q)
 
                     # find common neighbors of p and q
-                    common_neighbors : set[SpecificObservationTask] = adj[p.id].intersection(adj[q.id])
+                    common_neighbors : set[ObservationOpportunity] = adj[p.id].intersection(adj[q.id])
                    
                     # remove edges to p and q that do not include common neighbors
                     for neighbor in adj[p.id].difference(common_neighbors): adj[neighbor.id].discard(p)
@@ -364,7 +505,7 @@ class AbstractPlanner(ABC):
                     v.remove(q)
 
                     # Reset neighbor collection N_p for the new p;
-                    n_p : list[SpecificObservationTask] = self.sort_tasks_by_common_neighbors(p, list(adj[p.id]), adj)               
+                    n_p : list[ObservationOpportunity] = self.__sort_observation_opportunities_by_common_neighbors(p, list(adj[p.id]), adj)               
 
                 for q in clique: 
                     # TODO: look into ID being used. Ideally we would want a new ID for the combined task.
@@ -377,31 +518,31 @@ class AbstractPlanner(ABC):
 
                 # DEBUGGING--------- 
                 # clique.add(p)
-                # cliques.append(sorted([schedulable_tasks.index(t)+1 for t in clique]))
+                # cliques.append(sorted([observation_opportunities.index(t)+1 for t in clique]))
                 # ------------------
 
                 # add merged task to the list of combined tasks
-                combined_tasks.append(p) 
+                combined_obs.append(p) 
 
-                # sort remaining schedulable tasks by degree of adjacency 
-                v : list[SpecificObservationTask] = self.sort_tasks_by_degree(v, adj)
+                # sort remaining task observation opportunities by degree of adjacency 
+                v : list[ObservationOpportunity] = self.__sort_by_degree(v, adj)
         
-        # return only tasks that have multiple parents (avoid generating duplicate tasks)
-        return [task for task in combined_tasks if len(task.parent_tasks) > 1] 
+        # return only observation opportunities that have multiple parents (avoid generating duplicate observation opportunities)
+        return [obs for obs in combined_obs if len(obs.tasks) > 1] 
 
     @runtime_tracker
-    def sort_tasks_by_degree(self, tasks : list, adjacency : dict) -> list:
-        """ Sorts tasks by degree of adjacency. """
-        # calculate degree of each task
-        degrees : dict = {task : len(adjacency[task.id]) for task in tasks}
+    def __sort_by_degree(self, obs_opportunities : List[ObservationOpportunity], adjacency : dict) -> list:
+        """ Sorts observation opportunities by degree of adjacency. """
+        # calculate degree of each observation opportunity
+        degrees : dict = {obs : len(adjacency[obs.id]) for obs in obs_opportunities}
 
-        # sort tasks by degree and return
-        return sorted(tasks, key=lambda p: (degrees[p], sum([parent_task.priority for parent_task in p.parent_tasks]), -p.accessibility.left))
+        # sort observation opportunities by degree and return
+        return sorted(obs_opportunities, key=lambda p: (degrees[p], sum([parent_task.priority for parent_task in p.tasks]), -p.accessibility.left))
 
-    def sort_tasks_by_common_neighbors(self, p : SpecificObservationTask, n_p : list, adjacency : dict) -> list:
+    def __sort_observation_opportunities_by_common_neighbors(self, p : ObservationOpportunity, n_p : list, adjacency : dict) -> list:
         # specify types
-        n_p : list[SpecificObservationTask] = n_p
-        adjacency : Dict[str, set[SpecificObservationTask]] = adjacency
+        n_p : list[ObservationOpportunity] = n_p
+        adjacency : Dict[str, set[ObservationOpportunity]] = adjacency
 
         # calculate common neighbors
         common_neighbors : dict = {q : adjacency[p.id].intersection(adjacency[q.id]) 
@@ -415,100 +556,252 @@ class AbstractPlanner(ABC):
         return sorted(n_p, 
                       key=lambda p: (len(common_neighbors[p]), 
                                      -len(neighbors_to_delete[p]),
-                                     sum([parent_task.priority for parent_task in p.parent_tasks]), 
+                                     sum([parent_task.priority for parent_task in p.tasks]), 
                                      -p.accessibility.left))
 
     @runtime_tracker
-    def estimate_task_value(self, 
-                            task : SpecificObservationTask, 
+    def estimate_observation_opportunity_value(self, 
+                                     obs : ObservationOpportunity, 
+                                     t_img : float,
+                                     d_img : float,
+                                     specs : object, 
+                                     cross_track_fovs : Dict[str, float],
+                                     orbitdata : OrbitData,
+                                     mission : Mission,
+                                     observation_history : ObservationHistory,
+                                     task_n_obs : Dict[GenericObservationTask,int] = None,
+                                     task_t_prevs : Dict[GenericObservationTask,int] = None
+                                ) -> float:
+        """ 
+        
+        Estimates task value based on predicted observation performance. 
+        
+        #### Arguments
+        - `obs` : The observation opportunity to estimate the value for.
+        - `t_img` : The time of the observation [s].
+        - `d_img` : The duration of the observation [s].
+        - `specs` : The agent or spacecraft specifications.
+        - `cross_track_fovs` : The cross-track fields of view for each instrument.
+        - `orbitdata` : The pre-computed orbit and coverage data for the mission.
+        - `mission` : The mission assigned to the agent performing the observation.
+        - `observation_history` : The observation history tracker for the agent.
+        - `task_n_obs` : A dictionary mapping tasks being observed by this agent to the number of observations planned for them.
+        - `task_t_prevs` : A dictionary mapping tasks being observed by this agent to the time of the previous observation planned for them.
+        """
+        
+        # check if previous observation counts and times are provided
+        if task_n_obs is None or task_t_prevs is None:
+            # no previous observation counts and times provided;
+            #  count previous observations for each task in the observation opportunity
+            task_n_obs, task_t_prevs = self._count_previous_observations_from_history(obs, t_img, observation_history)
+        
+        # estimate measurment look angle 
+        th_img = np.average([obs.slew_angles.left, obs.slew_angles.right])
+
+        # calculate task reward per parent task
+        rewards = {parent_task : self._estimate_task_value(parent_task,
+                                                            obs.instrument_name,
+                                                            th_img,
+                                                            t_img,
+                                                            d_img,
+                                                            specs,
+                                                            cross_track_fovs,
+                                                            orbitdata,
+                                                            mission,
+                                                            task_n_obs[parent_task],
+                                                            task_t_prevs[parent_task])
+                     for parent_task in obs.tasks}
+
+        # return total reward
+        return sum(rewards.values())    
+    
+    def _count_previous_observations_from_history(self,
+                                                   obs : ObservationOpportunity,
+                                                   t_img : float,
+                                                   observation_history : ObservationHistory,
+                                                ) -> Tuple[Dict[GenericObservationTask,int], Dict[GenericObservationTask,float]]:
+        """ Counts the number of previous observations for each task in the observation opportunity. """
+        # initialize observation counts and previous observation times
+        task_n_obs : Dict[GenericObservationTask,int] = {task : 0 for task in obs.tasks} 
+        task_t_prev : Dict[GenericObservationTask,int] = {task : np.NINF for task in obs.tasks} 
+
+        # Find tergets per task
+        for task in obs.tasks:
+            # iterate through task targets
+            for *_,grid_index,gp_index in task.location:
+                # unpack grid and gp indices
+                grid_index,gp_index = int(grid_index), int(gp_index)
+
+                # get past observations for this target before current image time
+                target_observation : ObservationTracker = observation_history.get_observation_history(grid_index, gp_index)
+
+                # check if there are no previous observations for this target
+                if target_observation is None: continue  
+
+                # count number of previous observations and observation time for this task
+                task_n_obs[task] += target_observation.n_obs
+                task_t_prev[task] = max(task_t_prev[task], target_observation.t_last) if target_observation.t_last <= t_img else task_t_prev[task]
+
+                # validate previous observation time
+                if task_n_obs[task] > 0: assert task_t_prev[task] >= 0.0, "Previous observation time must be non-negative."
+                    
+        # return observation counts and previous observation times
+        return task_n_obs, task_t_prev
+
+    def _estimate_task_value(self,
+                            task : GenericObservationTask,
+                            instrument_name : str,
+                            th_img : float,
                             t_img : float,
                             d_img : float,
                             specs : Spacecraft, 
                             cross_track_fovs : dict,
                             orbitdata : OrbitData,
                             mission : Mission,
-                            observation_history : ObservationHistory,
                             n_obs : int = 0,
-                            t_prev : float = None
-                            ) -> float:
-        """ Estimates task value based on predicted observation performance. """
+                            t_prev : float = np.NINF
+                        ) -> float:
+        
+        assert isinstance(n_obs, int) and n_obs >= 0, \
+            "Number of previous observations must be a non-negative integer."
+        assert isinstance(t_prev, (int,float)) and (t_prev <= t_img), \
+            "Previous observation time must be less than or equal to the current image time."
+        if n_obs > 0: assert t_prev >= 0.0, \
+            "Previous observation time must be non-negative if there are previous observations."
 
-        # estimate measurement performance metrics
-        measurement_performance_metrics : dict = self.estimate_observation_performance_metrics(task, t_img, d_img, specs, cross_track_fovs, orbitdata, observation_history, n_obs, t_prev)
+        measurement_performance : dict = self.__estimate_task_performance_metrics(task, 
+                                                                                 instrument_name, 
+                                                                                 th_img, 
+                                                                                 t_img, 
+                                                                                 d_img, 
+                                                                                 specs, 
+                                                                                 cross_track_fovs, 
+                                                                                 orbitdata, 
+                                                                                 n_obs, 
+                                                                                 t_prev)
 
-        # check if measurement performance is valid
-        if measurement_performance_metrics is None: return 0.0
-
-        # calculate and return total task reward
-        return mission.calc_specific_task_value(task, measurement_performance_metrics)
+        return max([mission.calc_task_value(task, measurement) 
+                    for measurement in measurement_performance.values()]) \
+                        if len(measurement_performance.values()) > 0 else 0.0
 
     @runtime_tracker    
-    def estimate_observation_performance_metrics(self, 
-                                         task : SpecificObservationTask, 
-                                         t_img : float,
-                                         d_img : float,
-                                         specs : Spacecraft, 
-                                         cross_track_fovs : dict,
-                                         orbitdata : OrbitData,
-                                         observation_history : ObservationHistory,
-                                         n_obs : int = 0,
-                                         t_prev : float = None   
+    def __estimate_task_performance_metrics(self, 
+                                            task : GenericObservationTask, 
+                                            instrument_name : str,
+                                            th_img : float,
+                                            t_img : float,
+                                            d_img : float,
+                                            specs : Spacecraft, 
+                                            cross_track_fovs : dict,
+                                            orbitdata : OrbitData,
+                                            n_obs : int,
+                                            t_prev : float,  
                                         ) -> dict:
 
-        # get available access metrics
-        observation_performances = self.get_available_accesses(task, t_img, d_img, orbitdata, cross_track_fovs)
-        observed_locations = list({(observation_performances['lat [deg]'][i], 
-                                    observation_performances['lon [deg]'][i],
-                                    observation_performances['grid index'][i], 
-                                    observation_performances['GP index'][i]) 
-                                    for i in range(len(observation_performances['time [s]']))
-                                })
+        # validate inputs
+        assert isinstance(task, GenericObservationTask), "Task must be of type `GenericObservationTask`."
+        assert isinstance(instrument_name, str), "Instrument name must be a string."
+        assert isinstance(th_img, (int,float)), "Image look angle must be a numeric value."
+        assert isinstance(t_img, (int,float)), "Image time must be a numeric value."
+        assert t_img >= 0, "Image time must be non-negative."
+        assert isinstance(d_img, (int,float)), "Image duration must be a numeric value."
+        assert d_img >= 0, "Image duration must be non-negative."
+        assert all(isinstance(instr, str) for instr in cross_track_fovs.keys()), "Cross-track FOV instrument names must be strings."
+        assert all(isinstance(fov, (int,float)) for fov in cross_track_fovs.values()), "Cross-track FOVs must be numeric values."
+        assert all(fov >= 0 for fov in cross_track_fovs.values()), "Cross-track FOVs must be non-negative."
+        assert isinstance(orbitdata, OrbitData), "Orbit data must be of type `OrbitData`."
+        assert n_obs >= 0, "Number of observations must be non-negative."
+        assert t_prev <= t_img, "Last observation time must be before the current image time."
+
+        # get access metrics for given observation time, instrument, and look angle
+        observation_performances = self.get_available_accesses(task, instrument_name, th_img, t_img, d_img, orbitdata, cross_track_fovs)
 
         # check if there are no valid observations for this task
         if any([len(observation_performances[col]) == 0 for col in observation_performances]): 
             # no valid accesses; no reward added
-            return None
+            return dict()
+        
+        # group observations by location
+        observed_location_groups : dict[tuple[int,int], list[int]] = defaultdict(list)
+        for i in range(len(observation_performances['time [s]'])):
+            # unpack observed target location information
+            lat = observation_performances['lat [deg]'][i]
+            lon = observation_performances['lon [deg]'][i]
+            grid_index = int(observation_performances['grid index'][i])
+            gp_index = int(observation_performances['GP index'][i])
+
+            # define location indices
+            loc = (lat,lon,grid_index,gp_index)
+
+            # add to location group
+            observed_location_groups[loc].append({col.lower() : observation_performances[col][i] 
+                                                    for col in observation_performances})
+        
+        # sort groups by measurement time 
+        for loc in observed_location_groups: observed_location_groups[loc].sort(key=lambda a : a['time [s]'])
+        
+        # get unique task targets
+        task_targets : List[tuple] = list({(grid_idx,gp_idx) 
+                                           for *_,grid_idx,gp_idx in task.location})
+
+        # keep only one of the observations per location group that matches the task target
+        observation_performance_metrics : Dict[tuple[int,int], dict] = {loc : observed_location_groups[loc][0] # keep only first observation
+                                                 for loc in observed_location_groups
+                                                 if (loc[2],loc[3]) in task_targets
+                                                 }       
 
         # get instrument specifications
         instrument_spec : BasicSensorModel = next(instr 
                                                   for instr in specs.instrument
-                                                  if instr.name.lower() == task.instrument_name.lower()).mode[0]
-                
-        # get previous observation information
-        prev_obs : list[ObservationTracker] = [observation_history.get_observation_history(grid_index, gp_index)
-                    for *_,grid_index,gp_index in observed_locations]
-        prev_t_imgs = [obs.t_last for obs in prev_obs]
-        if t_prev is not None: prev_t_imgs.append(t_prev)
+                                                  if instr.name.lower() == instrument_name.lower()).mode[0]
 
-        # get current observation information 
-        observation_performance_metrics = {col.lower() : observation_performances[col][-1] 
-                                    for col in observation_performances}
-        observation_performance_metrics.update({ 
-                "location" : observed_locations,
-                "t_start" : t_img,
+        # include additional observation information 
+        for loc,obs_perf in observation_performance_metrics.items():
+            
+            # update observation performance information
+            obs_perf.update({ 
+                SpatialCoverageRequirementAttributes.LOCATION.value : [loc],
+                TemporalRequirementAttributes.DURATION.value : d_img,
+                TemporalRequirementAttributes.REVISIT_TIME.value : t_img - t_prev,
+                #TODO Co-observation time
+                TemporalRequirementAttributes.RESPONSE_TIME.value : t_img - task.availability.left,
+                TemporalRequirementAttributes.RESPONSE_TIME_NORM.value : (t_img - task.availability.left) / task.availability.span() if task.availability.span() > 0 else 0.0,
+                TemporalRequirementAttributes.OBS_TIME.value : t_img,
                 "t_end" : t_img + d_img,
-                "duration" : d_img,
-                "n_obs" : sum(obs.n_obs for obs in prev_obs) + n_obs,
-                "revisit_time" : min(t_img - t_prev for t_prev in prev_t_imgs),
-                "horizontal_spatial_resolution" : observation_performance_metrics['ground pixel cross-track resolution [m]'],
+                ObservationRequirementAttributes.OBSERVATION_NUMBER.value : n_obs + 1, # including this observation
             })
 
-        # package observation performance information
-        if 'vnir' in task.instrument_name.lower() or 'tir' in task.instrument_name.lower():
-            observation_performance_metrics.update({
-                'spectral_resolution' : instrument_spec.spectral_resolution
-            })
-        elif 'altimeter' in task.instrument_name.lower():
-            observation_performance_metrics.update({
-                "accuracy" : observation_performance_metrics['accuracy [m]'],
-            })
-        else:
-            raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{task.instrument_name}`.')
+            # handle special case of first observation
+            if n_obs == 0:
+                obs_perf[TemporalRequirementAttributes.REVISIT_TIME.value] = 0.0
+
+            # update instrument-specific observation performance information
+            if 'vnir' in instrument_name.lower() or 'tir' in instrument_name.lower():
+                if isinstance(instrument_spec.spectral_resolution, str):
+                    obs_perf.update({
+                        ObservationRequirementAttributes.SPECTRAL_RESOLUTION.value : instrument_spec.spectral_resolution.lower()
+                    })
+                elif isinstance(instrument_spec.spectral_resolution, (int,float)):
+                    obs_perf.update({
+                        ObservationRequirementAttributes.SPECTRAL_RESOLUTION.value : instrument_spec.spectral_resolution
+                    })
+                else:
+                    raise ValueError('Unsupported type for spectral resolution in instrument specification.')
+                
+            elif 'altimeter' in instrument_name.lower():
+                obs_perf.update({
+                    ObservationRequirementAttributes.ACCURACY.value : observation_performance_metrics[loc][ObservationRequirementAttributes.ACCURACY.value],
+                })
+            else:
+                raise NotImplementedError(f'Calculation of task reward not yet supported for instruments of type `{instrument_name.lower()}`.')
 
         return observation_performance_metrics
-
+    
+    @runtime_tracker
     def get_available_accesses(self, 
-                               task : SpecificObservationTask, 
+                               task : GenericObservationTask, 
+                               instrument_name : str,
+                               th_img : float,
                                t_img : float,
                                d_img : float,
                                orbitdata : OrbitData, 
@@ -518,20 +811,17 @@ class AbstractPlanner(ABC):
         
         # get task targets
         task_targets = {(int(grid_index), int(gp_index))
-                        for parent_task in task.parent_tasks
-                        for *_,grid_index,gp_index in parent_task.location}
+                        for *_,grid_index,gp_index in task.location}
         
-        # estimate observation look angle
-        th_img = np.average((task.slew_angles.left, task.slew_angles.right))
-
         # get ground points accessesible during the availability of the task
-        raw_access_data : Dict[str,list] = orbitdata.gp_access_data.lookup_interval(t_img, t_img + d_img)
+        raw_access_data : Dict[str,list] \
+            = orbitdata.gp_access_data.lookup_interval(t_img, t_img + d_img)
 
         # extract ground point accesses that are within the agent's field of view
         accessible_gps_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
-                                        if abs(raw_access_data['look angle [deg]'][i] - th_img) \
-                                            <= cross_track_fovs[task.instrument_name] / 2
-                                        and raw_access_data['instrument'][i] == task.instrument_name]
+                                        if abs(raw_access_data['off-nadir axis angle [deg]'][i] - th_img) \
+                                            <= cross_track_fovs[instrument_name] / 2
+                                        and raw_access_data['instrument'][i] == instrument_name]
         accessible_gps_performances = {col : [raw_access_data[col][i] 
                                               for i in accessible_gps_data_indeces]
                                     for col in raw_access_data}
@@ -543,7 +833,17 @@ class AbstractPlanner(ABC):
         observation_performances = {col : [accessible_gps_performances[col][i] 
                                            for i in valid_access_data_indeces]
                                     for col in accessible_gps_performances}
-        
+
+        # get agent eclipse data
+        agent_eclipse_intervals : list[Interval] \
+            = orbitdata.eclipse_data.lookup_intervals(t_img, t_img + d_img)
+
+        # include eclipse data for each observation in the performance metrics
+        observation_performances[ObservationRequirementAttributes.ECLIPSE.value] = [
+            int(any([t in interval for interval in agent_eclipse_intervals]))
+            for t in observation_performances['time [s]']
+        ]
+
         # return estimated observation performances
         return observation_performances
 
@@ -686,12 +986,14 @@ class AbstractPlanner(ABC):
             - clock_config (:obj:`ClockConfig`): clock being used for this simulation
         """
 
+        # validate inputs
         if not isinstance(state, SatelliteAgentState):
             raise NotImplementedError(f'Maneuver scheduling for agents of type `{type(state)}` not yet implemented.')
         elif not isinstance(specs, Spacecraft):
             raise ValueError(f'`specs` needs to be of type `Spacecraft` for agents of state type `{type(state)}`. Is of type `{type(specs)}`.')
         elif orbitdata is None:
             raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+        assert all([isinstance(observation, ObservationAction) for observation in observations]), "`observations` must be a list of `ObservationAction` objects."
 
         # compile instrument field of view specifications   
         cross_track_fovs = self._collect_fov_specs(specs)
@@ -759,8 +1061,8 @@ class AbstractPlanner(ABC):
     def is_maneuver_path_valid(self, 
                                state : SimulationAgentState, 
                                specs : object, 
-                               observations : list, 
-                               maneuvers : list,
+                               observations : List[ObservationAction], 
+                               maneuvers : List[ManeuverAction],
                                max_slew_rate : float,
                                cross_track_fovs : dict
                                ) -> bool:
@@ -852,7 +1154,7 @@ class AbstractPlanner(ABC):
     @runtime_tracker
     def is_observation_path_valid(self, 
                                   state : SimulationAgentState, 
-                                  observations : list,
+                                  observations : List[ObservationAction],
                                   max_slew_rate : float = None,
                                   max_torque : float = None,
                                   specs : object = None,
@@ -902,12 +1204,16 @@ class AbstractPlanner(ABC):
                     observation_parameters.append((t_i, d_i, th_i, t_j, d_j, th_j, max_slew_rate))
 
                 # check if observations sequence is valid
-                if not all([self.is_observation_pair_valid(*params) for params in observation_parameters]):
+                if any([not self.is_observation_pair_valid(*params) 
+                            for params in observation_parameters]):
+                    for idx, params in enumerate(observation_parameters):
+                        if not self.is_observation_pair_valid(*params):
+                            x = 1   
                     return False
 
                 # ensure no mutually exclusive tasks are present in observation sequence
                 return all(
-                    not obs_i.task.is_mutually_exclusive(obs_j.task)
+                    not obs_i.obs_opp.is_mutually_exclusive(obs_j.obs_opp)
                     for i, obs_i in enumerate(observations)
                     for j, obs_j in enumerate(observations)
                     if i < j
@@ -917,19 +1223,14 @@ class AbstractPlanner(ABC):
         finally:
             # DEBUG SECTION
             pass
-            # for pair_idx,(t_i,d_i,th_i,t_j,d_j,th_j,max_slew_rate) in enumerate(observation_parameters):
-            #     if not self.is_observation_pair_valid(t_i, d_i, th_i, t_j, d_j, th_j, max_slew_rate):
-            #         x = 1
-
-            # for i, obs_i in enumerate(observations):
-            #     for j, obs_j in enumerate(observations):
-            #         if obs_i.task.is_mutually_exclusive(obs_j.task) and obs_i != obs_j:
-            #             x = 1
+            for pair_idx,(t_i,d_i,th_i,t_j,d_j,th_j,max_slew_rate) in enumerate(observation_parameters):
+                if not self.is_observation_pair_valid(t_i, d_i, th_i, t_j, d_j, th_j, max_slew_rate):
+                    x = 1
 
     def is_observation_pair_valid(self, 
                                   t_i, d_i, th_i, 
                                   t_j, d_j, th_j,
-                                  max_slew_rate):
+                                  max_slew_rate) -> bool:
         # check inputs
         assert not np.isnan(th_j) and not np.isnan(th_i) # TODO: add case where the target is not visible by the agent at the desired time according to the precalculated orbitdata
 
@@ -938,11 +1239,6 @@ class AbstractPlanner(ABC):
         
         # calculate time between measuremnets
         dt_measurements = t_j - (t_i + d_i)
-
-        if (dt_measurements < dt_maneuver):
-            x = 1
-        if dt_measurements < -1e-6:
-            x = 1
 
         return ((dt_measurements > dt_maneuver 
                 or abs(dt_measurements - dt_maneuver) < 1e-6)   # there is enough time to maneuver

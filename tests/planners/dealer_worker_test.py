@@ -7,8 +7,15 @@ from chess3d.simulation import Simulation
 from chess3d.utils import print_welcome
 from tests.planners.tester import PlannerTester
 
-
 class TestDealerWorker(PlannerTester, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+
+        self.single_sat_toy : bool = False
+        self.multiple_sat_toy : bool = True
+        self.single_sat_lakes : bool = False
+        self.multiple_sat_lakes : bool = True
+
     def planner_name(self) -> str:
         return "dealer-worker"
 
@@ -26,7 +33,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
             }
         }
     
-    def lake_planner_config(self) -> dict:
+    def lakes_planner_config(self) -> dict:
         return {
             "preplanner": {
                 "@type": "dealer",
@@ -42,18 +49,18 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
     
     def test_single_sat_toy(self):
         # do nothing, cannot test only one sat for these planners
-        return
+        raise unittest.SkipTest("Skipping single sat test for dealer-worker planners")
 
     def test_single_sat_lakes(self):
         # do nothing, cannot test only one sat for these planners
-        return
+        raise unittest.SkipTest("Skipping single sat test for dealer-worker planners")
 
     def test_multiple_sats_toy(self):
         # setup scenario parameters
         duration = 0.1 / 24.0
         grid_name = 'toy_points'
         scenario_name = f'multiple_sat_toy_scenario-{self.planner_name()}'
-        connectivity = 'FULL'
+        connectivity = 'LOST'
         event_name = 'toy_events'
         mission_name = 'toy_missions'
 
@@ -72,7 +79,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         worker_spacecraft_1['name'] = 'worker_sat_1'
         worker_spacecraft_1['@id'] = 'worker-sat_1'
         worker_spacecraft_1['planner'] = {}
-        worker_spacecraft_1['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_1['planner']['preplanner'] = {"@type": "worker", "dealerName": "dealer-sat"}
         worker_spacecraft_1['orbitState']['state']['inc'] = 0.0         # equatorial
         worker_spacecraft_1['instrument'] = self.instruments['TIR']  # thermal infrared instrument
 
@@ -80,7 +87,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         worker_spacecraft_2['name'] = 'worker_sat_2'
         worker_spacecraft_2['@id'] = 'worker-sat_2'
         worker_spacecraft_2['planner'] = {}
-        worker_spacecraft_2['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_2['planner']['preplanner'] = {"@type": "worker", "dealerName": "dealer-sat"}
         worker_spacecraft_2['orbitState']['state']['inc'] = 0.0     # equatorial
         worker_spacecraft_2['orbitState']['state']['ta'] = 90.0     # 5 deg before worker 1
         worker_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # hyperspectral imager instrument
@@ -115,14 +122,14 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         duration = 1.0 / 24.0
         grid_name = 'lake_event_points'
         scenario_name = f'multiple_sat_lake_scenario-{self.planner_name()}'
-        connectivity = 'FULL'
+        connectivity = 'LOS'
         event_name = 'lake_events_seed-1000'
         mission_name = 'lake_missions'
 
         dealer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         dealer_spacecraft['name'] = 'dealer-sat'
         dealer_spacecraft['@id'] = 'dealer-sat_0'
-        dealer_spacecraft['planner'] = self.lake_planner_config()
+        dealer_spacecraft['planner'] = self.lakes_planner_config()
         dealer_spacecraft['instrument'] = []
         dealer_spacecraft['orbitState']['state']['ta'] = np.average([95,93])  # between both workers
         dealer_spacecraft['science'] = {
@@ -134,7 +141,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         worker_spacecraft_1['name'] = 'worker_sat_1'
         worker_spacecraft_1['@id'] = 'worker-sat_1'
         worker_spacecraft_1['planner'] = {}
-        worker_spacecraft_1['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_1['planner']['preplanner'] = {"@type": "worker", "dealerName": "dealer-sat"}
         worker_spacecraft_1['orbitState']['state']['ta'] = 95.0     
         worker_spacecraft_1['instrument'] = self.instruments['TIR']  # thermal infrared instrument
         
@@ -142,7 +149,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         worker_spacecraft_2['name'] = 'worker_sat_2'
         worker_spacecraft_2['@id'] = 'worker-sat_2'
         worker_spacecraft_2['planner'] = {}
-        worker_spacecraft_2['planner']['replanner'] = {"@type": "worker"}
+        worker_spacecraft_2['planner']['preplanner'] = {"@type": "worker", "dealerName": "dealer-sat"}
         worker_spacecraft_2['orbitState']['state']['ta'] = 93.0     # 3 [deg] before worker 1
         worker_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # hyperspectral imager instrument
         

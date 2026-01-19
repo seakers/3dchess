@@ -61,41 +61,44 @@ class TaskRequest:
     def from_dict(cls, d : dict) -> 'TaskRequest':
         return cls(**d)
     
-    def same_event(self, other_req : 'TaskRequest') -> bool:
-        """ compares the events being requested for observation between two measurement requests """
+    # def __eq__(self, other_req : 'TaskRequest') -> bool:
+    #     """ compares the events being requested for observation between two measurement requests """
 
-        # validate inputs
-        if not isinstance(other_req, TaskRequest):
-            raise ValueError(f'cannot compare `TaskRequest` object to an object of type {type(other_req)}.')
-        if not isinstance(self.task, EventObservationTask) or not isinstance(other_req.task, EventObservationTask):
-            raise ValueError(f'`same_event` can only be used to compare `EventObservationTask` objects. One of the tasks is of type {type(self.task)} and the other is of type {type(other_req.task)}.')
+    #     # validate inputs
+    #     if not isinstance(other_req, TaskRequest):
+    #         raise ValueError(f'cannot compare `TaskRequest` object to an object of type {type(other_req)}.')
+    #     if not isinstance(self.task, EventObservationTask) or not isinstance(other_req.task, EventObservationTask):
+    #         raise ValueError(f'`same_event` can only be used to compare `EventObservationTask` objects. One of the tasks is of type {type(self.task)} and the other is of type {type(other_req.task)}.')
 
-        my_task : EventObservationTask = self.task
-        their_task : EventObservationTask = other_req.task
+    #     my_task : EventObservationTask = self.task
+    #     their_task : EventObservationTask = other_req.task
 
-        if my_task.event is None and their_task.event is None:
-            # both requests have no event associated; compare their task parameters instead
-            same_type = my_task.task_type == their_task.task_type
-            same_target = all([abs(my_task.location[i][j]-their_task.location[i][j]) <= 1e-3
-                            for i in range(len(my_task.location))
-                            for j in range(len(my_task.location[i]))
-                            ])
-            same_severity = True   # no event, so severity is not applicable
-            same_time = my_task.availability.overlaps(other_req.task.availability)
+    #     if my_task.event is None and their_task.event is None:
+    #         # both requests have no event associated; compare their task parameters instead
+    #         same_type = my_task.task_type == their_task.task_type
+    #         same_target = all([abs(my_task.location[i][j]-their_task.location[i][j]) <= 1e-3
+    #                         for i in range(len(my_task.location))
+    #                         for j in range(len(my_task.location[i]))
+    #                         ])
+    #         same_severity = True   # no event, so severity is not applicable
+    #         same_time = my_task.availability.overlaps(other_req.task.availability)
 
-        else:
-            same_type = my_task.event.event_type == their_task.event.event_type
-            same_target = all([abs(my_task.event.location[i]-their_task.event.location[i]) <= 1e-3
-                            for i in range(len(my_task.event.location))])
-            same_severity = abs(my_task.event.severity - their_task.event.severity) <= 1e-3
+    #     else:
+    #         same_type = my_task.event.event_type == their_task.event.event_type
+    #         same_target = all([abs(my_task.event.location[i]-their_task.event.location[i]) <= 1e-3
+    #                         for i in range(len(my_task.event.location))])
+    #         same_severity = abs(my_task.event.severity - their_task.event.severity) <= 1e-3
 
-            my_event_availability = Interval(my_task.event.t_start, my_task.event.t_start+my_task.event.d_exp)
-            other_event_availability = Interval(their_task.event.t_start, their_task.event.t_start+their_task.event.d_exp)
-            same_time = my_event_availability.overlaps(other_event_availability)
+    #         my_event_availability = Interval(my_task.event.t_start, my_task.event.t_start+my_task.event.d_exp)
+    #         other_event_availability = Interval(their_task.event.t_start, their_task.event.t_start+their_task.event.d_exp)
+    #         same_time = my_event_availability.overlaps(other_event_availability)
 
-        return (
-                same_type
-                and same_target
-                and same_severity
-                and same_time
-                )
+    #     return (
+    #             same_type
+    #             and same_target
+    #             and same_severity
+    #             and same_time
+    #             )
+    
+    def __hash__(self):
+        return hash(str(self.to_dict()))

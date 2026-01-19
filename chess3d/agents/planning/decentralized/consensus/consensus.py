@@ -1,1271 +1,1798 @@
-import itertools
+from abc import abstractmethod
+from collections import defaultdict
+from itertools import chain
+from typing import Dict, List, Set, Tuple
+
 import logging
-from queue import Queue
-from typing import Dict
-from tqdm import tqdm
 
+from dmas.messages import SimulationMessage
 from dmas.utils import runtime_tracker
-from dmas.clocks import *
+from dmas.agents import AgentAction
+from dmas.clocks import ClockConfig
 
-# from chess3d.agents.planning.rewards import GridPoint, RewardGrid
+from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.states import SimulationAgentState
-from chess3d.agents.planning.plan import Plan, Preplan, Replan
-from chess3d.agents.planning.decentralized.consensus.bids import Bid, BidComparisonResults, RebroadcastComparisonResults
+from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
+from chess3d.agents.planning.observations import ObservationOpportunity
+from chess3d.agents.planning.tracker import ObservationHistory
+from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
+from chess3d.agents.planning.decentralized.consensus.bids import Bid
 from chess3d.agents.science.reward import *
+from chess3d.messages import BusMessage, MeasurementBidMessage
+from chess3d.mission.mission import Mission
+from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.science.requests import *
-from chess3d.agents.states import *
-from chess3d.messages import *
+from chess3d.utils import Interval
 
-class AbstractConsensusReplanner(AbstractReactivePlanner):    
+class ConsensusPlanner(AbstractReactivePlanner):    
+    # Replanning models
+    # NOTE break down into separate replanner classes that use this class as the parent class?
+    HEURISTIC_INSERTION = 'heuristicInsertion'
+    DYNAMIC_PROGRAMMING = 'dynamicProgramming'
+    MILP = 'mixedIntegerLinearProgramming'
+    MODELS = [HEURISTIC_INSERTION, DYNAMIC_PROGRAMMING, MILP]
+    
+    # Constants
+    EPS = 1e-6
+
     def __init__(self, 
-                 replan_threshold : int = 1,
+                 model : str,
+                 replan_threshold : int,
+                 optimistic_bidding_threshold : int,
+                 periodic_overwrite : bool,
                  debug : bool = False,
                  logger: logging.Logger = None
                  ) -> None:
         super().__init__(debug, logger)
+        """
+        ## Consensus Couple-Constrained Planner
+        
+        ### Arguments
+        - `model` (str): The consensus replanning model to use. Must be one of the defined models in `MODELS`.
+        - `replan_threshold` (int): The minimum number of new urgent tasks required to trigger replanning.
+        - `optimistic_bidding_threshold` (int): The number of consensus rounds to wait before abandoning optimistic bids for tasks without new bids.        
+        - `periodic_overwrite` (bool): Whether to overwrite results upon the generation of a new periodic plan.
 
-        # initialize variables
-        self.active_requests : set[TaskRequest] = set()
-        self.bundle = []
-        self.results : Dict[str, Dict[str, Bid]] = dict()
-        self.available_requests = set()
-        self.bids_to_rebroadcast = []
-        self.other_plans = {}
-        self.recently_completed_observations = set()
-        self.my_completed_observations = set()
-        self.pending_reqs_to_broadcast : set[TaskRequest] = set()            # set of observation requests that have not been broadcasted
-        self.planner_changes = []
-        self.ignored_requests = set()
-        self.agent_orbitdata : OrbitData = None
-        self.preplan : Preplan = None
+
+        ## Bundle
+        The Bundle is defined as a list of a tuple indicating the specific observation opportunity that was added to the plan, 
+        and a dictionary that maps the observation number being bid on.
+        
+        """
+
+        # TODO implement periodic overwrite functionality
+        if periodic_overwrite: raise NotImplementedError("Periodic overwrite functionality not yet implemented.")
+
+        # validate inputs
+        assert isinstance(model, str), "Model must be a string."
+        assert model in self.MODELS, f"Invalid model '{model}'. Must be one of {self.MODELS}."
+        assert isinstance(replan_threshold, int) and replan_threshold > 0, "Replan threshold must be positive integer."
+        assert isinstance(optimistic_bidding_threshold, int), "Optimistic bidding threshold must be an integer"
+        assert optimistic_bidding_threshold >= 0, "Optimistic bidding threshold must be non-negative"
+
+        # initialize consensus results
+        self.bundle : List[Tuple[ObservationOpportunity, Dict[GenericObservationTask, int]]] = list()
+        self.path : List[ObservationAction] = list()
+        self.results : Dict[GenericObservationTask, List[Bid]] = defaultdict(list)
+        self.optimistic_bidding_counters : Dict[GenericObservationTask, List[int]] = defaultdict(list)
+
+        # initialize urgent tasks and bid inbox/outbox
+        self.known_event_tasks : set[GenericObservationTask] = set()
+        self.incoming_event_tasks : list[GenericObservationTask] = list()
+        self.relevant_updates : List[Bid] = list()
+
+        # initialize known preplan and current plan
+        self.preplan : PeriodicPlan = PeriodicPlan([])
         self.plan : Plan = None
 
-        # set paremeters
+        # set parameters
+        self.model = model
         self.replan_threshold = replan_threshold
-        self.planning_horizon = np.Inf
-        self.t_share = -1
+        self.optimistic_bidding_threshold = optimistic_bidding_threshold
+        self.periodic_overwrite = periodic_overwrite
+        self.t_share = -1   
 
-    @runtime_tracker
+        # replanning flags 
+        self.task_announcements_received = False
+        self.results_changes_performed = False
+        self.bundle_changes_performed = False
+
+    """
+    ---------------------------
+    CONSENSUS PHASE
+    ---------------------------
+    """
     def update_percepts(self, 
-                        state: SimulationAgentState, 
-                        current_plan: Plan, 
-                        incoming_reqs: list, 
-                        relay_messages: list, 
-                        misc_messages: list, 
-                        completed_actions: list, 
-                        aborted_actions: list, 
-                        pending_actions: list, 
-                        ) -> None:
-       
-        # update other percepts
-        super().update_percepts(state,
-                                current_plan,
-                                incoming_reqs,
-                                relay_messages,
-                                misc_messages,
-                                completed_actions,
-                                aborted_actions,
-                                pending_actions)
-        
-        # update list of known and active events
-        self.active_requests = {req for req in self.known_reqs
-                                if req.t_start <= state.t <= req.t_end}
-
-        # check if new preplan was received
-        if abs(state.t - current_plan.t) <= 1e-3 and isinstance(current_plan, Preplan): 
-            # set latest preplan as current plan 
-            self.plan = current_plan.copy()
-            
-        # collect list of measurement requests newly generated by the parent agent
-        my_reqs = {req 
-                    for req in incoming_reqs
-                    if isinstance(req, TaskRequest)
-                    and req.requester == state.agent_name}
-
-        # update list of pending requests to broadcast
-        self.pending_reqs_to_broadcast.update(my_reqs)
-
-        # collect list of completed broadcasts
-        completed_broadcasts = {message_from_dict(**action.msg) 
-                            for action in completed_actions
-                            if isinstance(action, BroadcastMessageAction)}
-        
-        # collect list of completed request broadcasts
-        broadcasted_reqs = {TaskRequest.from_dict(msg.req) 
-                            for msg in completed_broadcasts
-                            if isinstance(msg, MeasurementRequestMessage)}
-        
-        # remove from list of pending requests to breadcasts if they've been broadcasted already
-        self.pending_reqs_to_broadcast.difference_update(broadcasted_reqs)
-
-        # update preplan
-        self.preplan.update_action_completion(completed_actions, aborted_actions, pending_actions, state.t)
-
-        # compile set of recently completed observation
-        my_completed_observations, completed_observations \
-            = self._compile_completed_observations(completed_actions, misc_messages)
-        self.my_completed_observations : set[ObservationAction] = my_completed_observations
-        self.recently_completed_observations : set[ObservationAction] = completed_observations
-
-        # check if any new measurement requests have been received
-        self.incoming_bids : set[Bid] = self.compile_new_measurement_request_bids(state, incoming_reqs)
-
-        # update incoming bids
-        self.incoming_bids.update({ Bid.from_dict(msg.bid) 
-                                    for msg in misc_messages 
-                                    if isinstance(msg, MeasurementBidMessage)})
-
-        # check if any request refers to an action in the pre-plan
-        for req in incoming_reqs:
-            # find all observations that match a given request
-            matching_planned_observations : list[ObservationAction] \
-                = [action for action in self.preplan
-                   if isinstance(action, ObservationAction)
-                   and abs(action.targets[0] - req.target[0]) <= 1e-3
-                   and abs(action.targets[1] - req.target[1]) <= 1e-3
-                   and abs(action.targets[2] - req.target[2]) <= 1e-3
-                   ]
-            
-            # remove from pre-plan
-            for observation in matching_planned_observations: 
-                self.preplan.actions.remove(observation)
-        
-    def _compile_completed_observations(self, 
-                                        completed_actions : list, 
-                                        misc_messages : list) -> set:
-        """ Reads incoming precepts and compiles all measurement actions performed by the parent agent or other agents """
-        # checks measurements performed by the parent agent
-        my_completed_observations = { action for action in completed_actions
-                                      if isinstance(action, ObservationAction)}
-        
-        # checks measuremetns performed by other agents
-        completed_observations = {  action_from_dict(**msg.observation_action) 
-                                    for msg in misc_messages
-                                    if isinstance(msg, ObservationPerformedMessage) }
-        completed_observations.update(my_completed_observations)
-
-        # return lists of observations
-        return my_completed_observations, completed_observations
-    
-    @runtime_tracker
-    def compile_new_measurement_request_bids(self, 
-                                             state : SimulationAgentState, 
-                                             incoming_reqs : list) -> set:
-        """ Checks for all requests that havent been considered in current bidding process """
-        # check if incoming requests are considered in the bidding results
-        reqs_not_in_results = {req for req in incoming_reqs if req.id not in self.results}
-
-        # generate set of bids for all new requests
-        new_request_bids : set[Bid]= { bid
-                                        for req in reqs_not_in_results
-                                        for bid in self._generate_bids_from_request(req, state)
-                                    }
-
-        if incoming_reqs:
-            x =1
-
-        return new_request_bids
-
-    @abstractmethod
-    def _generate_bids_from_request(self, req : TaskRequest, state : SimulationAgentState) -> list:
-        """ Creages bids from given measurement request """    
-
-    @runtime_tracker
-    def needs_planning(self, 
-                       state : SimulationAgentState, 
-                       specs : object,
-                       current_plan : Plan,
-                       orbitdata : OrbitData
-                       ) -> bool:   
-                
-        # perform consesus phase
-        # ---------------------------------
-        # DEBUGGING OUTPUTS 
-        # self.log_results('PRE-CONSENSUS PHASE', state, self.results)
-        # print(f'length of bundle: {len(self.bundle)}\nbids to rebroadcast: {len(self.bids_to_rebroadcast)}')
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     bid : Bid
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        
-        # if self.incoming_bids:
-        #     x = 1
-        # print('')
-        # ---------------------------------
-
-        self.results, self.bundle, \
-            _, bids_to_rebroadcast = self.consensus_phase(state,
-                                                            self.results,
-                                                            self.bundle, 
-                                                            self.incoming_bids,
-                                                            self.recently_completed_observations)
-        self.bids_to_rebroadcast.extend(bids_to_rebroadcast)
-        
-        path = self.path_from_bundle(self.bundle)
-
-        if self._debug: assert self.is_task_path_valid(state, specs, path, orbitdata)
-        
-        # ---------------------------------
-        # DEBUGGING OUTPUTS 
-        # self.log_results('CONSENSUS PHASE', state, self.results)
-        # print(f'length of bundle: {len(self.bundle)}\nbids to rebroadcast: {len(self.bids_to_rebroadcast)}')
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     bid : Bid
-        #     id_short = req.id.split('-')[0]
-        #     print(f'\t{id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        # print('')
-        # ---------------------------------
-
-        # only replan if...
-        if (
-            self.bids_to_rebroadcast                    # there is bid information to broadcast
-            #TODO or pending_information_broadcast       # there is relevant information to broadcast
-            or (abs(state.t - current_plan.t) <= 1e-3 
-                and isinstance(current_plan, Preplan))  # a new preplan was just generated
-            ):
-            return True
-        
-        return False
-            
-    
-    def path_from_bundle(self, bundle : list) -> list:
-        """ Extracts the sequence of observations being scheduled by a given bundle """
-        path = [(req, instrument_name, bid.t_img, bid.th_img, bid.bid)
-                for req, instrument_name, bid in bundle
-                if isinstance(bid, Bid)]
-        
-        path.sort(key=lambda a : a[2])
-
-        return path
-
-    @runtime_tracker
-    def generate_plan(  self, 
                         state : SimulationAgentState,
-                        specs : object,
-                        reward_grid ,
                         current_plan : Plan,
-                        clock_config : ClockConfig,
-                        orbitdata : dict = None
-                    ) -> list:
-        
+                        tasks : List[GenericObservationTask],
+                        incoming_reqs: List[TaskRequest], 
+                        relay_messages: List[SimulationMessage], 
+                        misc_messages : List[SimulationMessage],
+                        completed_actions: List[AgentAction],
+                        aborted_actions : List[AgentAction],
+                        pending_actions : List[AgentAction]
+                    ) -> None:
+        """ Updates internal knowledge based on incoming percepts """
+
+        # update base percepts
+        super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
+
+        # collect bids from incoming messages to inbox
+        incoming_bids : List[Bid] = self.__collect_incoming_bids(misc_messages)  
+
+        # collect performed observations from completed actions
+        performed_observations : List[ObservationAction] = [action for action in completed_actions 
+                                                            if isinstance(action, ObservationAction)]
+
         # -------------------------------
         # DEBUG PRINTOUTS
-        # self.log_results('PRE-PLANNING PHASE', state, self.results)
+        if isinstance(current_plan, PeriodicPlan) and self._debug:
+            self._log_results('CONSENSUS PHASE - RESULTS (BEFORE)', state, self.results)
+            self._log_bundle('CONSENSUS PHASE - BUNDLE (BEFORE)', state, self.bundle)
+            print(f'`{state.agent_name}` - Received {len(incoming_bids)} incoming bids and {len(self.incoming_event_tasks)} task requests.')
+
+            x = 1 # debug breakpoint
         # -------------------------------
 
-        # perform bidding phase
-        self.results, self.bundle, self.planner_changes = \
-            self.planning_phase(state, specs, self.results, self.bundle, reward_grid, orbitdata)
-        
+        # perform consensus phase for incoming task bids
+        task_updates, results_updates, bundle_updates, self.last_performed_observations \
+              = self._consensus_phase(state, incoming_reqs, incoming_bids, tasks, current_plan, performed_observations)
+
+        # assume bundle and results are now consistent
+        assert len(self.bundle) == len(self.path), \
+            "Bundle and path lengths do not match after consensus phase."
+
         # -------------------------------
         # DEBUG PRINTOUTS
-        # self.log_results('PLANNING PHASE', state, self.results)
-        # print(f'bundle:')
-        # for req, subtask_index, bid in self.bundle:
-        #     req : MeasurementRequest
-        #     bid : Bid
-        #     req_id_short = req.id.split('-')[0]
-        #     print(f'\t{req_id_short}, {subtask_index}, {np.round(bid.t_img,3)}, {np.round(bid.bid)}')
-        # print('')
+        if (task_updates or results_updates or bundle_updates) and self._debug:
+            self._log_results('CONSENSUS PHASE - RESULTS (AFTER)', state, self.results)
+            self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
+            # self._log_path('CONSENSUS PHASE - PATH (AFTER)', state, self.path)
+            x = 1 # debug breakpoint
         # -------------------------------
 
-        # schedule observations from bids
-        observations : list = self._schedule_observations(state, specs, self.bundle, orbitdata)
+        # set replanning flags
+        # 0) there were new tasks that were not previously considered by agent
+        self.task_announcements_received = len(task_updates) > 0
+        # 1) there were relevant updates to bids/results
+        self.results_changes_performed = len(results_updates) > 0
+        # 2) incoming bids modified tasks in my bundle
+        self.bundle_changes_performed = len(bundle_updates) > 0
 
-        # generate maneuver and travel actions from observations
-        maneuvers : list = self._schedule_maneuvers(state, specs, observations, clock_config, orbitdata)
-
-        # schedule broadcasts
-        broadcasts : list = self._schedule_broadcasts(state, current_plan, reward_grid, orbitdata)       
-
-        # generate wait actions 
-        waits : list = self._schedule_waits(state)
+    def __collect_incoming_bids(self, misc_messages : List[SimulationMessage]) -> List[Bid]:
+        """ Collect bids from incoming messages and requests. """
+        # TODO include support for BidResultsMessage when re-enabled?
         
-        # compile and generate plan
-        self.plan = Replan(maneuvers, waits, observations, broadcasts, t=state.t, t_next=self.preplan.t_next)
+        # TEMP use only MeasurementBidMessages. Disable after `BidResultsMessage` is supported?
+        incoming_bids = [Bid.from_dict(msg.bid) 
+                            for msg in misc_messages 
+                            if isinstance(msg, MeasurementBidMessage)]
+        return incoming_bids
 
-        return self.plan.copy()
+    def _consensus_phase(self,
+                        state : SimulationAgentState,
+                        incoming_reqs : List[TaskRequest],
+                        incoming_bids : List[Bid],
+                        tasks : List[GenericObservationTask],
+                        current_plan : Plan,
+                        performed_observations : List[ObservationAction]
+                    ) -> Tuple[List[Bid], List[Bid], List[Bid], List[ObservationAction]]:
+        """ Perform consensus phase to update bids and bundle. """
+
+        # check for new default mission tasks
+        new_default_tasks = self.__process_default_tasks(state, tasks)
+
+        # check for new urgent tasks
+        new_urgent_task_added \
+            = self.__process_incoming_task_requests(state, incoming_reqs, incoming_bids)
+
+        # check if planned tasks expired
+        expired_tasks = self.__remove_expired_tasks(state)
+
+        # check if new base plan is available
+        preplan_obs, preplan_resets \
+            = self.__update_bundle_from_preplan(state, current_plan)
+        
+        # check if tasks in the bundle were performed by parent agent
+        self.bundle, self.path, performed_bundle_updates \
+            = self.__update_performed_bundle_observations(state, performed_observations)
+
+        # compare results with incoming bids and update bundle
+        comparison_updates = self.__compare_incoming_bids(state, incoming_bids)
+
+        # check if bids in results would have been performed by other agents
+        performed_updates = self.__update_performed_bids(state)
+        
+        # compile updates and return list of updates
+        task_updates = list(chain.from_iterable([
+                                                    new_default_tasks,
+                                                    new_urgent_task_added, 
+                                                ]))
+        results_updates = list(chain.from_iterable([
+                                                    # new_default_tasks,
+                                                    # new_urgent_task_added, 
+                                                    expired_tasks, 
+                                                    preplan_obs,
+                                                    performed_bundle_updates,
+                                                    comparison_updates, 
+                                                    performed_updates,
+                                                   ]))   
+        bundle_updates = list(chain.from_iterable([
+                                                    preplan_resets,
+                                                    # performed_bundle_updates
+                                                ]))
+
+        # update bundle and enforce constraints iteratively on results
+        while True:
+            # update bundle from results updates
+            self.bundle, self.path, results_bundle_updates \
+                = self.__update_bundle_from_results(state)
+
+            # enforce constraints in results
+            constraint_violations = self.__check_results_constraints(state)
+
+            # append updates to compiling lists
+            bundle_updates.extend(results_bundle_updates)
+            results_updates.extend(constraint_violations)
+
+            # check for further updates
+            if not results_bundle_updates and not constraint_violations:
+                break # no more updates; exit loop       
+        
+        # collect performed observation opportunities
+        performed_observation_opportunities : List[ObservationOpportunity] \
+            = [obs_opp for obs_opp,_ in performed_bundle_updates]
+                
+        # return lists of updates
+        return task_updates, results_updates, bundle_updates, performed_observation_opportunities   
+
+    def __update_bundle_from_preplan(self, 
+                                     state : SimulationAgentState, 
+                                     current_plan : Plan
+                                    ) -> tuple:
+        """ Update latest preplan if new plan is available. """
+        # check if new periodic plan is available
+        if not isinstance(current_plan, PeriodicPlan) or abs(state.t - current_plan.t) > self.EPS:
+            # no new preplan available; return no updates
+            return [], []
     
-    @runtime_tracker
-    def _schedule_observations(self, 
-                               state : SimulationAgentState, 
-                               specs : object, 
-                               bundle : list, 
-                               orbitdata : OrbitData) -> list:
-        """ compiles and merges lists of measurement actions to be performed by the agent """
+        # save new preplan
+        self.preplan : PeriodicPlan = current_plan.copy()
 
-        # generate plan from path        
-        path : list = self.path_from_bundle(bundle)
+        # extract observations path from new preplan
+        preplan_path : List[ObservationAction] = \
+                [action for action in current_plan if isinstance(action, ObservationAction)]
 
-        # ensure path given was valid
-        if self._debug: assert self.is_task_path_valid(state, specs, path, orbitdata)
+        # ensure all tasks in preplan observations are known in results
+        assert all((task in self.results 
+                    for obs_action in preplan_path 
+                    for task in obs_action.obs_opp.tasks)), \
+            "All tasks in preplan observations must be known in results."
+
+        # initiate list of changes to bundle        
+        bundle_resets = []
         
-        # merge with preplanned observations
-        observations : list[ObservationAction] = self.merge_plans(state, specs, path)
+        # TODO reset any prior bids from previous plan
+        while self.bundle:
+            # get next bundle entry
+            _,tasks = self.bundle.pop(0)
+
+            for task,n_obs in tasks.items():
+                # get existing bid for this task and observation number
+                bid_to_reset : Bid = self.results[task][n_obs]
+
+                # reset bid to empty bid
+                bid_to_reset.reset(state.t)
+
+                # add empty bid to results
+                self.results[task][n_obs] = bid_to_reset
+
+                # add existing bid to list of bundle updates
+                bundle_resets.append(bid_to_reset.copy())
+
+        # reset path
+        self.path = []
+
+        # return updates
+        return preplan_path, bundle_resets
+
+    def __process_default_tasks(self, state: SimulationAgentState, tasks: List[GenericObservationTask]) -> List[Bid]:
+        """ Processes new default mission tasks and updates results accordingly. """
+        # initialize list of newly added bids from new tasks
+        new_task_added = []
+
+        # identify new default tasks
+        unknown_tasks = [task for task in tasks 
+                         if isinstance(task, DefaultMissionTask)
+                         and task not in self.results]
         
-        # ensure resulting plan is valid
-        if self._debug: assert self.is_observation_path_valid(state, specs, observations)
+        # process each default task
+        for task in unknown_tasks:
+            # initialize results for new default tasks
+            self.results[task] = []
+
+            # initialize optimistic bidding counter for new task
+            self.optimistic_bidding_counters[task] = []
+
+            # create empty bid for new task and add to list of changes
+            new_task_added.append(Bid(task, state.agent_name, t_bid=state.t))
+
+        # return list of new task bids added to results
+        return new_task_added
+    
+    def __process_incoming_task_requests(self, 
+                                       state: SimulationAgentState, 
+                                       incoming_reqs : List[TaskRequest],
+                                       incoming_bids : List[Bid]
+                                       ) -> List[Bid]:
+        """ Processes new urgent task requests and updates results accordingly. """
+        # initialize list of newly added bids from new tasks
+        new_task_added = []
+
+        # get active incoming tasks
+        active_req_tasks = set([req.task for req in incoming_reqs 
+                            if req.task.is_available(state.t)])
+        active_bid_tasks = set([bid.task for bid in incoming_bids
+                                if bid.task not in self.results
+                                and bid.task.is_available(state.t)])
+        active_tasks = active_req_tasks.union(active_bid_tasks)
+
+        # update urgent tasks
+        self.known_event_tasks.update(active_tasks)
+        self.incoming_event_tasks.extend(active_tasks)
+                
+        # remove unavailable tasks from known task lists
+        # if any([not task.is_available(state.t) for task in self.known_event_tasks]):
+        #     raise NotImplementedError("Removal of unavailable urgent tasks not yet implemented.")
+        # self.known_event_tasks = {task for task in self.known_event_tasks if task.is_available(state.t)}
         
-        # return observations
-        return observations
+        # identify new urgent tasks
+        new_event_tasks = [task for task in self.incoming_event_tasks 
+                           if task not in self.results]
 
+        # check if new tasks exceed threshold
+        if len(new_event_tasks) < self.replan_threshold: 
+            return new_task_added # threshold not met; skip processing
 
-    @runtime_tracker
-    def merge_plans(self, state : SimulationAgentState, specs : object, path : list) -> list:
-        # generate proposed observation actions
-        proposed_observations = [ObservationAction(main_measurement, req.target, th_img, t_img)
-                                for req, main_measurement, t_img, th_img, _ in path
-                                if isinstance(req,TaskRequest)]
-        proposed_observations_bckp = [observation for observation in proposed_observations]
-        proposed_observations.sort(key=lambda a : a.t_start)
+        # DEBUG PRINTOUTS --------
+        # if self._debug and self.incoming_event_tasks:
+        #     out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\nReceived incoming urgent tasks:\n'
+        #-------------------------
 
-        # check for if the right number of measurements was created
-        assert len(proposed_observations) == len(path)
+        # threshold met; process new tasks
+        for task in self.incoming_event_tasks:
+            # check if task is already in results
+            if task in self.results: continue # already processed; skip
 
-        # gather observations from preplan
-        planned_observations = [action for action in self.preplan
-                                if isinstance(action, ObservationAction)]
-        planned_observations.sort(key=lambda a : a.t_start)
+            # initialize results for new event tasks
+            self.results[task] = []
 
-        # combine observation list
-        observations = []
-        while proposed_observations and planned_observations:
-            # get next actions in the lists
-            proposed_observation : ObservationAction = proposed_observations[0]
-            planned_observation  : ObservationAction = planned_observations[0]
+            # initialize optimistic bidding counter for new task
+            self.optimistic_bidding_counters[task] = []
 
-            # construct temporary observation sequence
-            temp_observations = [action for action in observations]
-            if proposed_observation.t_start <= planned_observation.t_start:
-                temp_observations.append(proposed_observation)
-            else:
-                temp_observations.append(planned_observation)
+            # create empty bid for new task and add to list of changes
+            new_task_added.append(Bid(task, state.agent_name, t_bid=state.t))
 
-            # check if the temporary observation sequence is valid
-            if self.is_observation_path_valid(state, specs, temp_observations):
-                # is valid; remove added action from queue
-                if proposed_observation.t_start <= planned_observation.t_start:
-                    observations.append(proposed_observations.pop(0))
-                else:
-                    if (    observations
-                        and abs(observations[-1].target[0]-planned_observation.targets[0]) <= 1e-3
-                        and abs(observations[-1].target[1]-planned_observation.targets[1]) <= 1e-3
-                        and abs(observations[-1].target[2]-planned_observation.targets[2]) <= 1e-3):
-                        # is already in plan; ignore
-                        planned_observations.pop(0)
-                    else:
-                        # add to new observations plan
-                        observations.append(planned_observations.pop(0))
-            else:
-                if temp_observations[-1] == proposed_observation:
-                    observations.pop()
-                else:
-                    planned_observations.pop(0)
+        # DEBUG PRINTOUTS --------
+        #     if self._debug:
+        #         out += f'\t - {repr(task)}\n'
+
+        # if self._debug and new_event_tasks:
+        #     print(out)
+        # -------------------------
+
+        # return list of new task bids added to results
+        return new_task_added
+    
+    def __remove_expired_tasks(self, state : SimulationAgentState) -> List[Bid]:
+        """ Remove expired tasks from results. """
+
+        # initialize list of removed bids
+        removed_bids = []
+
+        # identify expired tasks
+        expired_tasks = [task for task in self.results 
+                         if not task.is_available(state.t)]
         
-        # check if compiled observations path is valid
-        if self._debug: assert self.is_observation_path_valid(state, specs, observations)
+        # remove expired tasks from results
+        for task in expired_tasks:
+            # remove task from results
+            bids_removed = self.results.pop(task)
 
-        # check if there are still proposed observations to be added to the path
-        while proposed_observations:
-            # get next actions in the lists
-            proposed_observation : ObservationAction = proposed_observations[0]
+            # # reset bids to empty list in results
+            # self.results[task] = []
 
-            # construct temporary observation sequence
-            temp_observations = [action for action in observations]
-            temp_observations.append(proposed_observation)  
+            # remove optimistic bidding counters
+            self.optimistic_bidding_counters.pop(task, None)
 
-            # check if the temporary observation sequence is valid
-            if self.is_observation_path_valid(state, specs, temp_observations):
-                # is valid; remove added action from queue
-                observations.append(proposed_observations.pop(0))
-            else:
-                observations.pop()
+            # add removed bids to list
+            removed_bids.extend(bids_removed)
 
-        # check if compiled observations path is valid
-        if self._debug: assert self.is_observation_path_valid(state, specs, observations)
+            # check if expired task was in the bundle
+            bundle_idx_to_remove = None
+            for bundle_idx,(_,tasks) in enumerate(self.bundle):
+                if task in tasks:
+                    bundle_idx_to_remove = bundle_idx
+                    break
+            
+            if bundle_idx_to_remove is not None:
+                # TODO ensure that this is not needed. Bids should not be placed for tasks that will expire before they are performed.
+                raise NotImplementedError("Removal of expired tasks from bundle not yet implemented.")
 
-        while planned_observations:
-            # get next actions in the lists
-            planned_observation  : ObservationAction = planned_observations[0]
+        # return list of removed bids
+        return removed_bids
+    
+    def __update_performed_bundle_observations(self, state : SimulationAgentState, performed_observations : List[ObservationAction]) -> Tuple[list, List[Bid]]:
+        """ Checks if planned observations were performed by parent agent and updates results accordingly. """
+        
+        # initialize list of bundle updates
+        bundle_updates = []
 
-            # construct temporary observation sequence
-            temp_observations = [action for action in observations]
-            temp_observations.append(planned_observation) 
+        # initialize list of performed tasks to remove from bundle
+        performed_task_bids = []
 
-            # check if the temporary observation sequence is valid
-            if self.is_observation_path_valid(state, specs, temp_observations):
-                # is valid; check if already being observed:
-                if (    observations
-                    and abs(observations[-1].target[0]-planned_observation.targets[0]) <= 1e-3
-                    and abs(observations[-1].target[1]-planned_observation.targets[1]) <= 1e-3
-                    and abs(observations[-1].target[2]-planned_observation.targets[2]) <= 1e-3):
+        # collect actions in bundle past their imaging time
+        observed_opportunities : list[ObservationOpportunity] = [obs_action.obs_opp for obs_action in performed_observations]
+
+        performed_bundle_tasks = [ (obs_opp, obs_tasks) 
+                                    for obs_opp, obs_tasks in self.bundle
+                                    if obs_opp in observed_opportunities
+                                    # if any([obs_opp == performed_obs for performed_obs in observed_opportunities])
+                                    ]
+
+        # iterate through performed bundle to mark bids as performed
+        for obs_opp, obs_tasks in performed_bundle_tasks:     
+                       
+            # imaging time has passed for task bids; assume tasks were performed by parent agent
+            assert any([self.results[task][n_obs].winner == state.agent_name for task,n_obs in obs_tasks.items()]), \
+                "Cannot mark tasks as performed if this agent is not the winning bidder."
+            
+            # mark bids as performed
+            performed_bids = []
+            for task, n_obs in obs_tasks.items():
+                bid_to_perform : Bid = self.results[task][n_obs]
+
+                # mark bid as performed
+                bid_to_perform.set_performed(state.t, performed=True)
+
+                # update results
+                self.results[task][n_obs] = bid_to_perform
+
+                # add to list of performed bids
+                performed_bids.append(bid_to_perform.copy())
+            
+            # add bids to list of bundle updates
+            bundle_updates.append((obs_opp, performed_bids))
+
+            # add tasks to list of performed tasks
+            performed_task_bids.append((obs_opp, obs_tasks))
+               
+        # create revised bundle considering newly performed tasks
+        revised_bundle = [entry for entry in self.bundle 
+                          if entry not in performed_task_bids] \
+                            if performed_task_bids else self.bundle
+        
+        # create revised path considering newly performed tasks
+        performed_bundle_obs = [obs_opp for obs_opp,_ in performed_bundle_tasks]
+        revised_path = [obs_action for obs_action in self.path
+                        if obs_action.obs_opp not in performed_bundle_obs]
+        
+        # -------------------------------
+        # DEBUG
+        # if self._debug: 
+            
+        #     for action in revised_path:
+        #         matching_bundle_element = None
+        #         for obs_opp,_ in revised_bundle:
+        #             if action.obs_opp == obs_opp:
+        #                 matching_bundle_element = obs_opp
+        #                 break
+                
+        #         if matching_bundle_element is None:
+        #             x = 1 # debug breakpoint
+        #         else:
+        #             action_obs_dict = action.obs_opp.to_dict()
+        #             bundle_obs_dict = matching_bundle_element.to_dict()
+
+        #             for key in action_obs_dict:
+        #                 if action_obs_dict[key] != bundle_obs_dict[key]:
+        #                     x = 1 # debug breakpoint
+
+        #         if action.t_start < state.t:
+        #             x = 1 # debug breakpoint
+        #             x = self.path[0].obs_opp == observed_opportunities[0]
+        #             x = 1 # debug breakpoint
+        # -------------------------------
+
+        # ensure elements in path are yet to be performed
+        assert all(obs_action.t_start >= state.t for obs_action in revised_path), \
+            "Revised path contains observation actions that have already been performed."
+                
+        # return revised bundle and list of performed bids
+        return revised_bundle, revised_path, bundle_updates
+
+    def __compare_incoming_bids(self,
+                       state : SimulationAgentState,
+                       incoming_bids : List[Bid]
+                       ) -> Tuple[List[Bid], List[Bid]]:
+        """ Update results from incoming bids. """
+        # initialize list of updates done to results
+        results_updates = []        
+
+        # group bids by bidding agent 
+        grouped_bids : Dict[str, Dict[GenericObservationTask, List[Bid]]] \
+              = defaultdict(lambda: defaultdict(list))
+        for bid in sorted(incoming_bids, key=lambda b: (b.owner, b.task.id, b.n_obs)):
+            try:
+                # get current bid for this task and observation number
+                current_bid = grouped_bids[bid.owner][bid.task][bid.n_obs]
+                
+                # compare incoming bid with existing bids for the same task
+                updated_bid = current_bid.update(bid, state.t)
+
+                # update grouped bids with modified bid
+                grouped_bids[bid.owner][bid.task][bid.n_obs] = updated_bid
+
+            except IndexError:
+                
+                # ensure incoming bids are sorted by observation number within each task
+                n_obs_max : Set[int] = set(range(bid.n_obs+1))
+                n_obs_curr : Set[int] = {grouped_bid.n_obs for grouped_bid in grouped_bids[bid.owner][bid.task]}
+
+                assert len(n_obs_max) > len(n_obs_curr), \
+                    "Incoming bids must be processed in order of observation number within each task."
+
+                # determine missing observation numbers
+                missing_n_obs : Set[int] = n_obs_max - n_obs_curr
+
+                # add empty bids as needed to fill in missing observation numbers
+                for n_obs in missing_n_obs:
+                    # add empty bid for missing observation number
+                    grouped_bids[bid.owner][bid.task].append(Bid(bid.task, bid.owner, n_obs, t_bid=state.t))
+
+                # sort bids by observation number
+                grouped_bids[bid.owner][bid.task] = sorted(grouped_bids[bid.owner][bid.task], key=lambda b: b.n_obs)
+
+                # get current bid for this task and observation number
+                current_bid = grouped_bids[bid.owner][bid.task][bid.n_obs]
+                
+                # compare incoming bid with existing bids for the same task
+                updated_bid = current_bid.update(bid, state.t)
+
+                # update grouped bids with modified bid
+                grouped_bids[bid.owner][bid.task][bid.n_obs] = updated_bid
+
+        # sort incoming bids by observation number within each task
+        for other_agent,incoming_results in grouped_bids.items():
+            for task,bids in incoming_results.items():
+                # ensure incoming bids are sorted by observation number within each task
+                n_obs_max : Set[int] = set(range(max(bid.n_obs for bid in bids)+1))
+                n_obs_curr : Set[int] = {bid.n_obs for bid in bids}
+
+                # determine missing observation numbers
+                missing_n_obs : Set[int] = n_obs_max - n_obs_curr
+
+                # add empty bids as needed to fill in missing observation numbers
+                for n_obs in missing_n_obs:
+                    # add empty bid for missing observation number
+                    bids.append(Bid(task, other_agent, n_obs, t_bid=state.t))
+
+                # sort bids by observation number
+                incoming_results[task] = sorted(bids, key=lambda b: b.n_obs)
+
+                assert all(n_obs == bid.n_obs for n_obs,bid in enumerate(incoming_results[task])), \
+                    "Incoming bids must be sorted by observation number within each task."
+
+        # iterate through grouped bids and compare with existing results
+        for other_agent,incoming_results in grouped_bids.items():
+            for task,bids in incoming_results.items():
+                # count number of existing and incoming bids
+                n_existing_bids = len(self.results[task]) if task in self.results else 0
+                n_incoming_bids = len(bids)
+
+                # check if task and bid observation numbers align with existing results
+                if task in self.results and n_incoming_bids < n_existing_bids:
+                    # task already exists and number of bids match existing results for this task;
+                    # add empty bids to incoming results for each missing observation numbers
+                    bids.extend([
+                        Bid(task, other_agent, n_obs, t_bid=state.t) 
+                        for n_obs in range(n_incoming_bids, n_existing_bids)
+                    ])
+                elif task not in self.results or n_incoming_bids > n_existing_bids:
+                    # task does not they exist in results or more incoming bids than existing; 
+                    #  initialize missing elements in results with empty bids
+                    self.results[task].extend([
+                        Bid(task, state.agent_name, n_obs, t_bid=state.t)
+                        for n_obs in range(n_existing_bids, n_incoming_bids)
+                    ])
+
+                    # initialize optimistic bidding counter for new bids
+                    self.optimistic_bidding_counters[task].extend([
+                        self.optimistic_bidding_threshold 
+                        for _ in range(n_existing_bids, n_incoming_bids)
+                    ])
+                
+                # process incoming bids
+                while bids:
+                    # get next incoming bid
+                    incoming_bid : Bid = bids.pop(0)
+
+                    # get current bid for this task and observation number
+                    current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
                     
-                    # is already in plan; ignore
-                    planned_observations.pop(0)
-                else:
-                    # add to new observations plan
-                    observations.append(planned_observations.pop(0))
-            else:
-                planned_observations.pop(0)
-
-        # check if compiled observations path is valid
-        if self._debug: assert self.is_observation_path_valid(state, specs, observations)
-
-        # ensure all proposed actions are in the final plan
-        if self._debug: assert all([observation in observations for observation in proposed_observations_bckp])
-
-        # return compiled observations path
-        return observations
-    
-    @runtime_tracker
-    def _schedule_broadcasts(self, 
-                             state: SimulationAgentState, 
-                             current_plan: Plan, 
-                             reward_grid ,
-                             orbitdata: dict
-                             ) -> list:
-        # initiate broadcasts action list     
-        broadcasts : list[BroadcastMessageAction] = []
-        
-        # compile and sort pending measurement requests based on their start time
-        pending_reqs_to_broadcast : list[TaskRequest] = list(self.pending_reqs_to_broadcast) 
-        pending_reqs_to_broadcast.sort(key=lambda a : a.t_start)
-
-        # find best path for broadcasts at the current time
-        path, t_start = self._create_broadcast_path(state, orbitdata, state.t)
-
-        for req in tqdm(pending_reqs_to_broadcast,
-                        desc=f'{state.agent_name}-PLANNER: Scheduling Measurement Request Broadcasts', 
-                        leave=False):
-            
-            # calculate broadcast start time
-            if req.t_start > t_start:
-                path, t_start = self._create_broadcast_path(state, orbitdata, req.t_start)
-                
-            # check broadcast feasibility
-            if t_start < 0: continue
-
-            # create broadcast action
-            msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict(), path=path)
-            broadcast_action = BroadcastMessageAction(msg.to_dict(), t_start)
-            
-            # add to list of broadcasts
-            broadcasts.append(broadcast_action) 
-        
-        # compile bids to be broadcasted
-        compiled_bids : list[Bid] = [bid for bid in self.bids_to_rebroadcast]
-        compiled_bids.extend(self.planner_changes)
-        
-        # sort and make sure the latest update of each task is broadcasted
-        bids : Dict[str, Dict[str, Bid]] = dict()
-        for bid_to_rebroadcast in compiled_bids: 
-            bid_to_rebroadcast : Bid
-            req_id = bid_to_rebroadcast.req_id
-
-            if req_id not in bids:
-                bids[req_id] = {}
-            
-            if bid_to_rebroadcast.main_measurement not in bids[req_id]:
-                bids[req_id][bid_to_rebroadcast.main_measurement] = bid_to_rebroadcast
-
-            else:
-                current_bid : Bid = bids[req_id][bid_to_rebroadcast.main_measurement]
-                if current_bid.t_update <= bid_to_rebroadcast.t_update:
-                    bids[req_id][bid_to_rebroadcast.main_measurement] = bid_to_rebroadcast
-
-        # find best path for broadcasts
-        relay_path, t_start = self._create_broadcast_path(state, orbitdata, state.t)       
-
-        # schedule bid re-broadcast and planner changes
-        bids_out = [MeasurementBidMessage(state.agent_name, state.agent_name, bid_to_rebroadcast.to_dict(), path=relay_path) 
-                    for req_id in tqdm(bids, desc=f'{state.agent_name}-PLANNER: Scheduling Bid Broadcasts', leave=False) 
-                    for _, bid_to_rebroadcast in bids[req_id].items() 
-                    if bid_to_rebroadcast is not None
-                    and t_start >=0]
-        broadcasts.extend([BroadcastMessageAction(msg.to_dict(), t_start) for msg in bids_out])
-
-        # reset broadcast list
-        self.bids_to_rebroadcast = []
-
-        # schedule reward grid sharing
-        # collect relevant targets
-        bidded_reqs : set[Bid] = {req for req in self.known_reqs 
-                                    if req.id in bids}
-        bidded_targets : set[tuple] = {(req.target[0], req.target[1])
-                                        for req in bidded_reqs
-                                        if isinstance(req, TaskRequest)}
-        
-        # collect latest known observations from targets
-        latest_observations : list[ObservationAction] = []
-        for lat,lon in bidded_targets:
-            for instrument,grid_point in reward_grid.get_target_data(lat,lon).items():
-                grid_point : GridPoint
-
-                # collect latest known observation for each ground point
-                if grid_point.observations:
-                    observations : list[dict] = list(grid_point.observations)
-                    observations.sort(key= lambda a: a['t_img'])
-                    latest_observations.append((instrument, observations[-1]))
-
-        # prepare reward grid info broadcasts
-        instruments_used : set = {instrument for instrument,_ in latest_observations}
-        obs_msgs = [ObservationResultsMessage(state.agent_name, 
-                                            state.agent_name, 
-                                            state.to_dict(), 
-                                            {}, 
-                                            instrument_used,
-                                            [observation_data
-                                            for instrument, observation_data in latest_observations
-                                            if instrument == instrument_used]
-                                            )
-                for instrument_used in instruments_used]
-        broadcasts.extend([BroadcastMessageAction(msg.to_dict(), t_start) for msg in obs_msgs])
-
-        # ensure the right number of broadcasts were created
-        assert len(bids_out) <= len(compiled_bids)
-
-        # schedule observation performed mesasges
-        # gather observation plan to be sent out
-        plan_out = [action.to_dict()
-                    for action in current_plan
-                    if isinstance(action,ObservationAction)]
-
-        # check if observations exist in plan
-        if plan_out:
-            # find best path for broadcasts
-            path, t_start = self._create_broadcast_path(state, orbitdata)
-
-            # check feasibility of path found
-            if t_start >= 0:
-                # create plan message
-                msg = PlanMessage(state.agent_name, state.agent_name, plan_out, state.t, path=path)
-                
-                # add plan broadcast to list of broadcasts
-                broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
-                
-                # add action performance broadcast to plan
-                for action_dict in tqdm(plan_out, 
-                      desc=f'{state.agent_name}-PLANNER: Pre-Scheduling Broadcasts', 
-                      leave=False):
-
-                    # path, t_start = self._create_broadcast_path(state, orbitdata, action_dict['t_end']) # TODO improve runtime when simulatin dynamic network
-                    t_start = action_dict['t_end'] # TODO temp solution
-                    msg = ObservationPerformedMessage(state.agent_name, state.agent_name, action_dict)
-                    if t_start >= 0: broadcasts.append(BroadcastMessageAction(msg.to_dict(),t_start))
-
-        if len(broadcasts) > 1:
-            bus_msg = BusMessage(state.agent_name, state.agent_name, [action.msg for action in broadcasts])
-            broadcasts = [BroadcastMessageAction(bus_msg.to_dict(), t_start)]
-
-        return broadcasts
-
-    @runtime_tracker
-    def _compile_broadcast_bids(self, planner_changes : list) -> list:        
-        """ Compiles changes in bids from consensus and planning phase and returns a list of the most updated bids """
-        broadcast_bids = {}
-
-        bids = [bid for bid in self.bids_to_rebroadcast]
-        bids.extend(planner_changes)
-        for bid in bids:
-            bid : Bid
-
-            if bid.req_id not in broadcast_bids:
-                req : TaskRequest = TaskRequest.from_dict(bid.req)
-                broadcast_bids[bid.req_id] = [None for _ in req.dependency_matrix]
-
-            current_bid : Bid = broadcast_bids[bid.req_id][bid.subtask_index]
-            
-            if (current_bid is None 
-                or current_bid in planner_changes
-                or bid.bidder == current_bid.bidder
-                or bid.t_update >= current_bid.t_update
-                ):
-                broadcast_bids[bid.req_id][bid.subtask_index] = bid.copy()       
-
-        out = []
-        for req_id in broadcast_bids:
-            out.extend([bid for bid in broadcast_bids[req_id] if bid is not None])
-            
-        return out
-    
-    @runtime_tracker
-    def _schedule_waits(self, state : SimulationAgentState) -> list:
-        """ schedules periodic rescheduling checks """   
-        return []
-
-    """
-    -----------------------
-        CONSENSUS PHASE
-    -----------------------
-    """
-    @runtime_tracker
-    def consensus_phase(  
-                                self, 
-                                state : SimulationAgentState,
-                                results : dict, 
-                                bundle : list,
-                                bids_received : set,
-                                completed_measurements : set,
-                                level : int = logging.DEBUG
-                            ) -> None:
-        """
-        Evaluates incoming bids and updates current results and bundle
-        """
-        
-        # check if tasks were performed
-        results, bundle, \
-            done_changes, done_rebroadcasts = self.check_request_completion(state, results, bundle, completed_measurements, level)
-
-        # check if tasks expired
-        results, bundle, \
-            exp_changes, exp_rebroadcasts = self.check_request_end_time(state, results, bundle, level)
-
-        # compare bids with incoming messages
-        results, bundle, \
-            comp_changes, comp_rebroadcasts = self.compare_bids(state, results, bundle, bids_received, level)
-
-        # compile changes
-        changes = []
-        changes.extend(done_changes)
-        changes.extend(exp_changes)
-        changes.extend(comp_changes)
-
-        # compile rebroadcasts
-        rebroadcasts = []
-        rebroadcasts.extend(done_rebroadcasts)
-        rebroadcasts.extend(exp_rebroadcasts)
-        rebroadcasts.extend(comp_rebroadcasts)
-
-        return results, bundle, changes, rebroadcasts
-    
-    @runtime_tracker
-    def check_request_completion(self, 
-                                 state : SimulationAgentState,
-                                 results : dict, 
-                                 bundle : list, 
-                                 completed_measurements : set,
-                                 level=logging.DEBUG
-                                 ) -> tuple:
-        """
-        Checks if a subtask or a mutually exclusive subtask has already been performed 
-
-        ### Returns
-            - results
-            - bundle
-            - path
-            - changes
-        """
-        # initialize bundle changes and rebroadcast lists
-        changes = []
-        rebroadcasts = []
-
-        # update results using incoming messages
-        for action in tqdm(completed_measurements,
-                           desc=f'{state.agent_name}-CONSENSUS: Updating bids with completed observations\' status',
-                           leave=False):
-            action : ObservationAction
-
-            # check if observation was performed to respond to a measurement request
-            bids : list[Bid] = [results[completed_req.id][action.instrument_name]
-                                for completed_req in self._get_completed_request(results, action)
-                                if not results[completed_req.id][action.instrument_name].performed]
-            for bid in bids:
-                # set bid as completed in results
-                bid._perform(state.t)
-                results[bid.req_id][action.instrument_name] = bid
-
-                # add to changes 
-                changes.append(bid.copy())
-
-                # add to rebroadcast lists if parent agent performed the observation
-                if bid.winner == state.agent_name: rebroadcasts.append(bid.copy())
-
-        # check for task completion in bundle
-        for task in [(req, instrument_name, current_bid)
-                    for req, instrument_name, current_bid in bundle
-                    if results[req.id][instrument_name].performed]:
-            ## remove all completed tasks from bundle
-            bundle.remove(task)
-        
-        return results, bundle, changes, rebroadcasts
-    
-    @runtime_tracker
-    def _get_completed_request(self,
-                               results : dict, 
-                               observation : ObservationAction
-                               ) -> set:
-        reqs : set[TaskRequest] = {  req 
-                                            for req in self.known_reqs
-                                            if isinstance(req, TaskRequest)
-                                            and req.id in results
-                                            and req.t_start-1e-3 <= observation.t_start <= req.t_end+1e-3
-                                            and abs(req.target[0] - observation.targets[0]) <= 1e-3
-                                            and abs(req.target[1] - observation.targets[1]) <= 1e-3
-                                            and abs(req.target[2] - observation.targets[2]) <= 1e-3
-                                            and observation.instrument_name in req.observation_types
-                                        }
-
-        return reqs
-
-    @runtime_tracker
-    def check_request_end_time(self, 
-                               state : SimulationAgentState,
-                               results : dict, 
-                               bundle : list, 
-                               level=logging.DEBUG
-                               ) -> tuple:
-        """
-        Checks if measurement requests have expired and can no longer be performed
-
-        ### Returns a tuple with elements:
-            - results
-            - bundle
-            - path
-            - changes
-            - rebroadcasts 
-        """
-
-        # initialize bundle changes and rebroadcast lists
-        changes = []
-        rebroadcasts = []
-
-        # release tasks from bundle if `t_end` has passed
-        expired_tasks = [
-            (req, instrument_name, bid) 
-            for req,instrument_name,bid in bundle
-            if isinstance(req, TaskRequest) 
-            and isinstance(bid, Bid)
-            and req.t_end < state.t 
-            and not bid.performed
-        ]
-
-        # if task in the budle has expired, release from bundle with all subsequent tasks
-        if expired_tasks:
-            expired_index = bundle.index(expired_tasks.pop(0))
-            
-            for _ in tqdm(range(expired_index, len(bundle)),
-                           desc=f'{state.agent_name}-CONSENSUS: Releasing expired tasks from bundle',
-                           leave=False):
-
-                # remove from bundle
-                measurement_req, instrument_name, bid = bundle.pop(expired_index)
-                bid : Bid; measurement_req : TaskRequest
-
-                # reset bid results
-                bid._reset(state.t)
-                results[measurement_req.id][instrument_name] = bid
-
-                # add to list of changes and rebroadcasts
-                changes.append(bid.copy())
-                rebroadcasts.append(bid.copy())
-
-        return results, bundle, changes, rebroadcasts
-
-    @runtime_tracker
-    def compare_bids(
-                    self, 
-                    state : SimulationAgentState, 
-                    results : dict, 
-                    bundle : list, 
-                    bids_received : set,
-                    level=logging.DEBUG
-                    ) -> tuple:
-        """
-        Compares the existing results with any incoming task bids and updates the bundle accordingly
-
-        ### Returns
-            - results
-            - bundle
-            - path
-            - changes
-        """
-        changes = []
-        rebroadcasts = []
-
-        for their_bid in tqdm(bids_received,
-                              desc=f'{state.agent_name}-CONSENSUS: Comparing bids',
-                              leave=False):
-            their_bid : Bid            
-            
-            # get matching request
-            req : TaskRequest = self._get_matching_request(their_bid.req_id)
-
-            if req is None: continue
-
-            # check bids are for new requests
-            is_new_req : bool = their_bid.req_id not in results
-
-            if is_new_req:
-                # create a new blank bid and save it to results
-                bids : set[Bid] = self._generate_bids_from_request(req, state)
-                results[their_bid.req_id] = {bid.main_measurement : bid for bid in bids}
-
-                # check who generated the request
-                if(their_bid.bidder == state.agent_name   # bid belongs to me
-                   and their_bid.winner == their_bid.NONE # task has not been bid on
-                   ):
-                    # request was generated by me; add to broadcasts
-                    my_bid : Bid = results[their_bid.req_id][their_bid.main_measurement]
-                    rebroadcasts.append(my_bid.copy())
-                                    
-            # compare bids
-            my_bid : Bid = results[their_bid.req_id][their_bid.main_measurement]
-            # self.log(f'comparing bids...\nmine:  {str(my_bid)}\ntheirs: {str(their_bid)}', level=logging.DEBUG) #DEBUG PRINTOUT
-
-            _, rebroadcast_result = my_bid.compare(their_bid)
-            updated_bid : Bid = my_bid.update(their_bid, state.t)
-            bid_changed = my_bid != updated_bid
-
-            # update results with modified bid
-            results[their_bid.req_id][their_bid.main_measurement] = updated_bid
-            # self.log(f'\nupdated: {my_bid}\n', level=logging.DEBUG) #DEBUG PRINTOUT
-                
-            # if relevant changes were made, add to changes and rebroadcast lists respectively
-            if bid_changed or is_new_req:
-                changes.append(updated_bid)
-
-            if (rebroadcast_result is RebroadcastComparisonResults.REBROADCAST_EMPTY 
-                  or rebroadcast_result is RebroadcastComparisonResults.REBROADCAST_SELF):
-                rebroadcasts.append(updated_bid)
-            elif rebroadcast_result is RebroadcastComparisonResults.REBROADCAST_OTHER:
-                rebroadcasts.append(their_bid)
-
-            # if outbid for a bids in the bundle; release outbid and subsequent bids in bundle and path
-            if ((req, my_bid.main_measurement, my_bid) in bundle 
-                and updated_bid.winner != state.agent_name):
-
-                outbid_index = bundle.index((req, my_bid.main_measurement, my_bid))
-
-                # remove all subsequent bids
-                for bundle_index in range(outbid_index, len(bundle)):
-                    # remove from bundle
-                    measurement_req, main_measurement, current_bid = bundle.pop(outbid_index)
-
-                    # reset bid results
-                    measurement_req : TaskRequest; current_bid : Bid
-                    if bundle_index > outbid_index:
-                        # reset bid
-                        current_bid : Bid; current_bid._reset(state.t)
-
-                        # update results
-                        results[measurement_req.id][main_measurement] = current_bid
-
-                        rebroadcasts.append(current_bid)
-                        changes.append(current_bid)
-
-        return results, bundle, changes, rebroadcasts
-
-    @runtime_tracker
-    def _get_matching_request(self, id : list) -> TaskRequest:
-        # return next([req for req in self.known_reqs if req.id == id], None)
-        
-        reqs = {req for req in self.known_reqs if req.id == id}
-        return reqs.pop() if reqs else None
-
-    """
-    -----------------------
-        PLANNING PHASE
-    -----------------------
-    """
-    def _get_bundle_from_preplan(self, 
-                                 state : SimulationAgentState, 
-                                 reward_grid ,
-                                 results : dict, 
-                                 bundle : list, 
-                                 changes : list) -> tuple:
-        # empty bundle and reset results 
-        for req, main_measurement, bid in bundle:
-            # reset bid
-            bid : Bid; bid._reset(state.t)
-
-            # update results dictionary
-            req : TaskRequest
-            self.results[req.id][main_measurement] = bid
-            
-            # add bid resets to changes list
-            changes.append(bid)
-
-        # empty bundle 
-        bundle : list[Bid] = []
-        
-        # check if new preplan contains observations of known events
-        preplanned_tasks = [(req,action) 
-                            for req in self.active_requests
-                            for action in self.plan
-                            if isinstance(action, ObservationAction)
-                            and req.t_start <= action.t_start <= req.t_end
-                            and abs(req.target[0] - action.targets[0]) <= 1e-3
-                            and abs(req.target[1] - action.targets[1]) <= 1e-3
-                            and abs(req.target[2] - action.targets[2]) <= 1e-3
-                            and action.instrument_name in req.observation_types
-                            ]
-        
-        for req,observation in preplanned_tasks:
-            # calculate utility 
-            utility = reward_grid.estimate_reward(observation)
-            
-            # generate bid
-            bid = Bid(req.id,
-                      observation.instrument_name, 
-                      state.agent_name, 
-                      utility, 
-                      state.agent_name,
-                      observation.t_start, 
-                      observation.look_angle,
-                      self.plan.t 
-                    )
-            
-            # update results
-            results[req.id][observation.instrument_name] = bid
-
-            # place in bundle
-            bundle.append((req, observation.instrument_name, bid))
-
-            # add bid to changes in results
-            changes.append(bid.copy())
-
-            # remove from current plan (will be added back if it wins the bidding process)
-            self.plan.remove(observation, state.t)
-            self.preplan.remove(observation, state.t)
-
-        # order of bundle construction unknown, assume chronological order
-        bundle.sort(key= lambda a : a[2].t_img)
-            
-        return results, bundle, changes 
-
-    @runtime_tracker
-    def planning_phase( self, 
-                        state : SimulationAgentState, 
-                        specs : object,
-                        results : dict, 
-                        bundle : list,
-                        reward_grid ,
-                        orbitdata : OrbitData
-                    ) -> tuple:
-        """
-        Creates a modified plan from all known requests and current plan
-        """
-        try:
-            # initialzie changes and resetted requirement lists
-            changes = []
-            reset_reqs = []
-
-            # if preplan was just generated, extract bundle from preplan
-            if isinstance(self.plan, Preplan):
-                results, bundle, changes = self._get_bundle_from_preplan(state, reward_grid, results, bundle, changes)
+                    # compare incoming bid with existing bids for the same task
+                    updated_bid : Bid = current_bid.update(incoming_bid, state.t)
+
+                    # update results with modified bid
+                    self.results[incoming_bid.task][incoming_bid.n_obs] = updated_bid
+
+                    # check if bid, winner, or observation time were modified
+                    if updated_bid.has_different_winner_values(current_bid): 
+                        # add updated bid to results updates
+                        results_updates.append(updated_bid)
+                    
+                    # # check if previously unperformed bid was performed 
+                    # elif not current_bid.was_performed() and incoming_bid.was_performed():
+                    #     # check if the winner of the performed bid matches current known winner
+                    #     if incoming_bid.winner != current_bid.winner:
+                    #         # winner changed due to performed bid; add updated bid to results updates
+                    #         results_updates.append(updated_bid)
+                    #     else:
+                    #         # winner did not change and plan was executed as expected; 
+                    #         #   no need to add to results updates
+                    #         pass 
+                    #     #     x = 1 # debug breakpoint                        
+                    
+                    # check if both bids corresponded to a performed observation
+                    if current_bid.was_performed() and incoming_bid.was_performed():
+                        # both bids were performed; check which bid was the one that won the comparison
+                        if updated_bid.has_different_winner_values(current_bid):
+                            # current bid lost
+                            loser_bid : Bid = current_bid 
+                        elif updated_bid.has_different_winner_values(incoming_bid):
+                            # incoming bid lost
+                            loser_bid : Bid = incoming_bid
+                        else:
+                            # both bids are identical; skip
+                            continue
+
+                        # there was a bid conflict; both need to be reflected in results
+                        # # TODO test following lines
+                        # raise NotImplementedError("Handling of conflicting performed bids not yet tested.")
                         
-            # -------------------------------------
-            # TEMPORARY FIX: resets bundle and always replans from scratch
-            if len(bundle) > 0:
-                # reset results
-                for req, main_measurement, bid in bundle:
+                        # modify losing bid to reflect updated observation number 
+                        loser_bid.n_obs += 1
+
+                        # check if new bid observation number exceeds existing bids for this task
+                        if loser_bid.n_obs >= len(self.results[loser_bid.task]):
+                            # add empty bid to results for new observation number
+                            self.results[loser_bid.task].append(
+                                Bid(loser_bid.task, state.agent_name, loser_bid.n_obs, t_bid=state.t)
+                            )
+
+                            # initialize optimistic bidding counter for new bid
+                            self.optimistic_bidding_counters[loser_bid.task].append(
+                                self.optimistic_bidding_threshold
+                            )
+
+                        # add updated bid to list of bids to be processed
+                        bids.append(loser_bid)
+               
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        # for task, bids in self.results.items():
+        #     for bid in bids:
+        #         if not bid.has_winner():
+        #             x=1 # debug breakpoint    
+        
+        # if midified_completed_bids and self._debug:
+        #     self._log_results('CONSENSUS PHASE - RESULTS (AFTER COMPARISON)', state, self.results)
+        #     x = 1 # debug breakpoint
+        # -------------------------------
+
+        # return result changes
+        return results_updates
+    
+    def __update_performed_bids(self, state : SimulationAgentState) -> List[Bid]:
+        """ Assumes tasks who were won by other agents and whose imaging time has passed were performed by those agents. """
+
+        # initialize list of performed updates
+        performed_updates = []
+
+        # TODO should this even be done? Agents should announce when they perform bids, not assume so.
+        # TODO implement after testing other parts of consensus planner
+        # # check every bid in results for performed status
+        # for task, bids in self.results.items():
+        #     for n_obs, bid in enumerate(bids):
+        #         # check if bid is already marked as performed
+        #         if bid.was_performed():
+        #             continue # already marked or has no winner; skip
+                
+        #         # check if imaging time has passed
+        #         if np.NINF < bid.t_img < state.t:
+        #             # assume bid has a winner different from this agent
+        #             assert bid.has_winner(), \
+        #                 "Cannot mark bid as performed if it has no winner."
+        #             assert bid.winner != state.agent_name, \
+        #                 "Bid should have been marked as performed by parent agent in previous steps."
+                    
+        #             # mark bid as performed
+        #             bid.set_performed(state.t, performed=True, performer=bid.winner)
+
+        #             # update results
+        #             self.results[task][n_obs] = bid
+
+        #             # add to list of performed updates
+        #             performed_updates.append(bid.copy())
+
+        # return list of performed bids
+        return performed_updates
+         
+    def __update_bundle_from_results(self,
+                                    state : SimulationAgentState
+                                    ) -> Tuple[list, List[List[Bid]]]:
+        """ Update bundle according to latest results. """
+                
+        # initialize list of bundle updates
+        bundle_updates = []
+
+        # count initial bundle size
+        init_bundle_size = len(self.bundle)
+
+        # match observation times from path to bundle entries
+        t_img_bundle = [np.NAN for _ in self.bundle]
+        for idx,(obs_opp, obs_tasks) in enumerate(self.bundle):
+            # find matching observation action in path
+            matching_actions = [obs_action.t_start for obs_action in self.path
+                                if obs_action.obs_opp == obs_opp]
+            assert len(matching_actions) == 1, \
+                "Each bundle observation opportunity must have a matching observation action in the path."
+            t_img_bundle[idx] = matching_actions[0]
+
+        # check if there are any results updates for tasks in the bundle
+        min_updated_idx = min([ idx 
+                                # set index `idx` to be removed from bundle if...
+                                for idx,(_,obs_tasks) in enumerate(self.bundle)
+                                # for an a given bundle entry...
+                                if any( 
+                                        # 1) there is not a bid in results for this task and observation number
+                                        len(self.results[task]) <= n_obs
+                                        # 2) or this agent is no longer the winning bidder
+                                        or not self.results[task][n_obs].is_bidder_winning() 
+                                        # 3) or the imaging time does not match that in the path
+                                        or abs(self.results[task][n_obs].t_img - t_img_bundle[idx]) > self.EPS
+                                        # 4) or the bid was performed
+                                        or self.results[task][n_obs].was_performed()
+                                    for task, n_obs in obs_tasks.items())
+                                ], 
+                                # if no updates found, set to None
+                                default=None)
+        
+        # check if any updates were found
+        if min_updated_idx is None:
+            # no updates to bids in bundle; return original bundle
+            return self.bundle, self.path, bundle_updates
+
+        # split bundle at first updated task
+        revised_bundle = self.bundle[:min_updated_idx]
+
+        # iterate through remaining bundle to update bids
+        for _, obs_tasks in self.bundle[min_updated_idx:]:
+            # reset subsequent bids for all tasks in bundle if the bidder is still listed as the winner
+            for task, n_obs in obs_tasks.items():
+                # initiate list of bids being reset for this task
+                bids_reset = []
+
+                # reset invalid bid along with all subsequent bids  
+                for bid_idx in range(n_obs, len(self.results[task])):
+                    
+                    # check if this agent is still listed as the winning bidder
+                    if not self.results[task][bid_idx].is_bidder_winning():
+                        continue # another agent is winning this bid; skip
+                    elif self.results[task][bid_idx].was_performed():
+                        continue # bid was already performed by this agent; do not reset
+
+                    # get bid to reset and remove from results
+                    bid_to_reset : Bid = self.results[task][bid_idx]
+
                     # reset bid
-                    bid : Bid; bid._reset(state.t)
+                    bid_to_reset.reset(state.t)
 
                     # update results
-                    results[req.id][main_measurement] = bid
+                    self.results[task][bid_idx] = bid_to_reset
 
-                    # add to list of resetted requests
-                    reset_reqs.append((req,main_measurement))
+                    # add to list of resets
+                    bids_reset.append(bid_to_reset)
 
-                # reset bundle 
-                bundle = []
-            # -------------------------------------
-            
-            # get requests that can be bid on by this agent
-            available_reqs : list[tuple] = self._get_available_requests(state, specs, results, bundle, orbitdata, True)
+                # add to violations list
+                bundle_updates.append(bids_reset)
 
-            if not available_reqs: 
-                # no tasks available to be bid on by this agent; return original results
-                return results, bundle, changes 
-
-            if not bundle: # bundle is empty; create bundle from scratch
-                # generate path 
-                max_path = self._generate_path(state, specs, results, available_reqs, reward_grid, orbitdata)
-
-                # update bundle and results 
-                for req,main_measurement,t_img,th_img,u_exp in max_path:
-                    req : TaskRequest
-
-                    # update bid
-                    old_bid : Bid = results[req.id][main_measurement]
-                    new_bid : Bid = old_bid.copy()
-                    new_bid.set(u_exp, t_img, th_img, state.t)
-
-                    # place in bundle
-                    bundle.append((req, main_measurement, new_bid))
-
-                    # if changed, update results
-                    if old_bid != new_bid:
-                        changes.append(new_bid.copy())
-                        results[req.id][main_measurement] = new_bid
-
-                # announce that tasks were reset and were not re-added to the plan
-                path_reqs = {(req, main_measurement) 
-                            for req,main_measurement,*_ in max_path}
-                reset_bids : list[Bid] = [results[req.id][main_measurement]
-                                        for req,main_measurement in reset_reqs
-                                        if (req,main_measurement) not in path_reqs]
-                
-                changes.extend(reset_bids)
-
-            else: # add tasks to the bundle
-                raise NotImplementedError('Repairing bundle not yet implemented')
-
-            # return results
-            return results, bundle, changes 
+        assert len(revised_bundle) + len(self.bundle[min_updated_idx:]) == init_bundle_size, \
+            "Revised bundle size does not match initial bundle size."
         
-        finally:                    
-            if self._debug: 
-                # construct observation sequence from bundle
-                path = self.path_from_bundle(bundle)
-
-                # check if path is valid
-                assert self.is_task_path_valid(state, specs, path, orbitdata)
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        # for task, bids in self.results.items():
+        #     for bid in bids:
+        #         if not bid.has_winner():
+        #             x=1 # debug breakpoint    
         
-    @runtime_tracker
-    def _generate_path(self, 
-                       state :SimulationAgentState, 
-                       specs : object, 
-                       results : dict, 
-                       available_reqs : list, 
-                       reward_grid ,
-                       orbitdata : OrbitData) -> list:
+        # if bundle_updates and self._debug:
+        #     self._log_results('CONSENSUS PHASE - RESULTS (AFTER BUNDLE UPDATE)', state, self.results)
+        #     x = 1 # debug breakpoint
+        # -------------------------------
+
+        # ensure number of bids match bundle entries
+        ## get bids won by this agent from results
+        winning_bids = [bid for bids in self.results.values()
+                        for bid in bids if bid.winner == state.agent_name
+                        and not bid.was_performed()]
+        bids_in_bundle = [self.results[task][n_obs] 
+                            for _,obs_tasks in revised_bundle
+                            for task,n_obs in obs_tasks.items()]
         
-        # sort requests by severity in ascending order
-        available_reqs.sort(key=lambda a : a[0].severity, reverse=True)
-
-        # initialize max path
-        max_path = []
-        max_path_utility = 0.0
-
-        # do iterative greedy addition of requests to the path
-        for req, main_measurement in tqdm(available_reqs,
-                                          desc=f'{state.agent_name}-PLANNER: Generating Bundle',
-                                          leave=False):
-            req : TaskRequest; main_measurement : str
-            
-            max_path_j = [path_element for path_element in max_path]
-            max_path_utility_j = max_path_utility
-
-            # find best placement for task in path
-            for i in range(len(max_path)+1):
-            
-                # copy current path
-                path_j = [path_element_i for path_element_i in max_path]
-                
-                # add request to path
-                path_j.insert(i, (req, main_measurement, -1, -1))
-                
-                # estimate observation time and look angle
-                t_img,th_img = self.calc_imaging_time(state, specs, path_j, req, main_measurement, orbitdata)
-                
-                if t_img < 0.0: continue # no valid imaging time found; skip
-
-                # calculate performance
-                observation = ObservationAction(main_measurement, req.target, th_img, t_img)
-                u_exp = reward_grid.estimate_reward(observation)
-
-                # update path values
-                path_j[i] = (req, main_measurement, t_img, th_img, u_exp)
-
-                # only add to queue if the path can be performed
-                if self.is_task_path_valid(state, specs, path_j, orbitdata): 
-                    # create potential bids for observations in the path
-                    path_bids : list[Bid] = [Bid(req.id, 
-                                                main_measurement, 
-                                                state.agent_name, 
-                                                u_exp, 
-                                                t_img=t_img, 
-                                                th_img=th_img)
-                                            for req,main_measurement,t_img,th_img,u_exp in path_j
-                                            if isinstance(req,TaskRequest)]
-                                            
-                    # calculate path utility 
-                    path_utility : float = self.calc_path_utility(state, specs, path_j, reward_grid)
-
-                    # check if it outbids competitors
-                    if (path_utility > max_path_utility_j                           # path utility is increased
-                        and all([results[bid.req_id][bid.main_measurement] < bid    # all new bids outbid competitors
-                                for bid in path_bids])
-                        ):
-                        # outbids competitors; set new max utility path
-                        max_path_j = [path_element for path_element in path_j]
-                        max_path_utility_j = path_utility
-
-            # update best path 
-            if max_path_utility_j > max_path_utility:
-                max_path = [path_element for path_element in max_path_j]
-
-        # return path of maximum utility
-        return max_path
+        ## count and compare with bundle size
+        total_won_bids = len(winning_bids)
+        total_bundle_entries = len(bids_in_bundle)
         
-    @runtime_tracker
-    def calc_path_utility(self, 
-                          state : SimulationAgentState, 
-                          specs : object, 
-                          path : list, 
-                          reward_grid 
-                          ) -> float:
-        # merge current path with preplan
-        observations : list[ObservationAction] = self.merge_plans(state, specs, path)
+        # DEBUG PRINTOUTS --------
+        # if self._debug and total_bundle_entries != total_won_bids:
+        #     print(f'ERROR: Mismatch between winning bids ({total_won_bids}) and bundle entries ({total_bundle_entries}):')
+        #     self._log_results('CONSENSUS PHASE - RESULTS (INVALID)', state, self.results)
+        #     self._log_bundle('CONSENSUS PHASE - BUNDLE (INVALID)', state, revised_bundle)        
 
-        # sum estimated rewards
-        return sum([reward_grid.estimate_reward(observation) for observation in observations])
+        #     if total_bundle_entries < total_won_bids:                
+        #         missing_bids : Set[Bid] = set(winning_bids) - set(bids_in_bundle)
+        #         out = f'Bids in results but not in bundle ({len(missing_bids)}):\n'
+        #     else:
+        #         missing_bids : Set[Bid] = set(bids_in_bundle) - set(winning_bids)
+        #         out = f'Bids in bundle but not in results ({len(missing_bids)}):\n'
 
-    @runtime_tracker
-    def _get_available_requests(self, 
-                                state : SimulationAgentState, 
-                                specs : object,
-                                results : dict, 
-                                bundle : list,
-                                orbitdata : OrbitData,
-                                sort : bool = False
-                                ) -> list:
-        """ Returns a list of known requests that can be performed within the current planning horizon """
-        # find requests that are known of an are available
-        available_reqs : set[TaskRequest] \
-            = { req for req in self.known_reqs
-                if req.t_start <= state.t <= req.t_end
-                and req.id in results}
+        #     for bid in missing_bids:
+        #         out += f' - {repr(bid)}\n'
+        #     print(out)
+        #-------------------------
 
-        # find requests that can be bid on
-        biddable_reqs = [(req, main_measurement)
-                         for req in available_reqs
-                         for main_measurement in req.observation_types
-                         if self._can_bid(state, specs, results, req, main_measurement)
-                         and self._can_access(state, req, orbitdata)
-                         and (req, main_measurement, results[req.id][main_measurement]) not in bundle
-                         and not self.__request_has_been_performed(results, req, main_measurement, state.t)
-                         ]
-
-        # sorting is not requred, return list of requests
-        if not sort: return biddable_reqs
-
-        # sorts list of available requests based on earliest access times
-        available_reqs_accesses = []
-        for req,main_measurement in biddable_reqs:
-            req : TaskRequest; main_measurement : str
-            
-            # find access times for a given request
-            req_accesses = [
-                (t_img*orbitdata.time_step,req.id,req,main_measurement)
-                for t_img,_,_,lat,lon,*_,instrument,_ in orbitdata.gp_access_data.values
-                if req.t_start <= t_img*orbitdata.time_step <= req.t_end
-                and instrument == main_measurement
-                and abs(lat - req.target[0]) <= 1e-3
-                and abs(lon - req.target[1]) <= 1e-3
-            ]
-
-            # sort in ascending order 
-            req_accesses.sort()
-
-            # save only the earliest access time to request target
-            available_reqs_accesses.append(req_accesses.pop(0))
+        assert total_won_bids == total_bundle_entries, \
+            "Number of winning bids does not match number of bundle entries."
         
-        # sort requests by ascending access time 
-        available_reqs_accesses.sort()
+        ## check that every bundle entry corresponds to a winning bid
+        for _, obs_tasks in revised_bundle:
+            for task, n_obs in obs_tasks.items():
+                bid : Bid = self.results[task][n_obs]
+                assert bid.winner == state.agent_name, \
+                    "Bundle entry does not correspond to a winning bid."
 
-        # return list of available requests sorted by access times
-        return [(req,main_measurement) for *_,req,main_measurement in available_reqs_accesses]
+        # collect list of observation opportunities in the revised bundle 
+        obs_opps_in_revised_bundle = {obs_opp for obs_opp,_ in revised_bundle}
         
-    @abstractmethod
-    def is_task_path_valid(self, state : SimulationAgentState, specs : object, path : list, orbitdata : OrbitData) -> bool:
-        pass
-   
-    @runtime_tracker
-    def _can_access( self, 
-                     state : SimulationAgentState, 
-                     req : TaskRequest,
-                     orbitdata : OrbitData = None
-                     ) -> bool:
-        """ Checks if an agent can access the location of a measurement request """
-        if isinstance(state, SatelliteAgentState):
-            t_arrivals = [t_img*orbitdata.time_step 
-                          for t_img,_,_,lat,lon,*_,instrument,_ in orbitdata.gp_access_data.values
-                          if req.t_start <= t_img*orbitdata.time_step <= req.t_end
-                          and t_img <= self.preplan.t_next
-                          and instrument in req.observation_types
-                          and abs(lat - req.target[0]) <= 1e-3
-                          and abs(lon - req.target[1]) <= 1e-3
-                          ]
-            
-            return len(t_arrivals) > 0
-        else:
-            raise NotImplementedError(f"listing of available requests for agents with state of type {type(state)} not yet supported.")
+        # revise path according to revised bundle
+        revised_path = [obs_action for obs_action in self.path
+                        if obs_action.obs_opp in obs_opps_in_revised_bundle]
 
-        
-    @abstractmethod
-    def _can_bid(self, 
-                state : SimulationAgentState, 
-                specs : object,
-                results : dict,
-                req : TaskRequest, 
-                main_measurement : str
-                ) -> bool:
-        """ Checks if an agent has the ability to bid on a measurement task """
-        pass
-
-    def __request_has_been_performed(self, 
-                                     results : dict, 
-                                     req : TaskRequest, 
-                                     main_measurement : int, 
-                                     t : Union[int, float]) -> bool:
-        """ Check if subtask at hand has already been performed """
-        current_bid : Bid = results[req.id][main_measurement]
-        subtask_already_performed = t > current_bid.t_img and current_bid.winner != Bid.NONE
-
-        return subtask_already_performed or current_bid.performed
-
-    @abstractmethod
-    def calc_imaging_time(self, state : SimulationAgentState, specs : object, path : list, req : TaskRequest, main_measurement : str, orbitdata : OrbitData) -> float:
-        """
-        Computes the ideal" time when a task in the path would be performed
-        ### Returns
-            - t_img (`float`): earliest available imaging time
-        """
-        pass  
-
-    """
-    --------------------
-    LOGGING AND TEARDOWN
-    --------------------
-    """
-    @abstractmethod
-    def log_results(self, dsc : str, state : SimulationAgentState, results : dict, level=logging.DEBUG) -> None:
-        """
-        Logs current results at a given time for debugging purposes
-
-        ### Argumnents:
-            - dsc (`str`): description of what is to be logged
-            - results (`dict`): results to be logged
-            - level (`int`): logging level to be used
-        """
-        pass
+        # return updated bundle and list of updates
+        return revised_bundle, revised_path, bundle_updates
     
-    def log_task_sequence(self, dsc : str, sequence : list, level=logging.DEBUG) -> None:
-        """
-        Logs a sequence of tasks at a given time for debugging purposes
+    def __check_results_constraints(self, state : SimulationAgentState) -> List[Bid]:
+        """ Check results for constraint violations and return list of affected bids. """
+        # initiate list of constraint violations
+        bids_in_violation = []
 
-        ### Argumnents:
-            - dsc (`str`): description of what is to be logged
-            - sequence (`list`): list of tasks to be logged
-            - level (`int`): logging level to be used
-        """
-        out = f'\n{dsc} = ['
-        for req, subtask_index in sequence:
-            req : TaskRequest
-            subtask_index : int
-            split_id = req.id.split('-')
+        # check every task for constraint violations
+        for bids in self.results.values():            
+            # assume the index of every bid matches their observation number
+            assert all(bid.n_obs == i_obs for i_obs, bid in enumerate(bids)), \
+                "Results bids are not sorted by observation number."
             
-            if sequence.index((req, subtask_index)) > 0:
-                out += ', '
-            out += f'({split_id[0]}, {subtask_index})'
-        out += ']\n'
-        print(out) 
+            # remove any trailing bids without a winner
+            while bids and not bids[-1].has_winner():
+                # get bid to reset and remove from results
+                bid_to_reset : Bid = bids.pop(-1)
+
+                # reset bid
+                reset_bid = bid_to_reset.reset(state.t)
+
+                # add to violations list
+                bids_in_violation.append(reset_bid) 
+
+            if len(bids) <= 1: continue # no observation sequence to check for constraints
+            # TODO test following line
+            # assert all(bid.has_winner() for bid in bids), \
+            #     "All bids in results must have a winner after comparing bids."
+            
+            # initialize search for constraint violations
+            invalid_bid_idx : int = None
+            
+            # check every bid for this task
+            for n_obs_idx, bid in enumerate(bids[1:], start=1):
+                # get previous bid to compare constraints with
+                prev_bid : Bid = bids[n_obs_idx - 1]
+
+                # define constraints
+                constraints : List[bool] = [
+                    # Constraint 0: Previous bid must be assigned to a winner
+                    prev_bid.has_winner(),
+                    # Constraint 1: Observation number must be consecutive
+                    prev_bid.n_obs + 1 == bid.n_obs,
+                    # Constraint 2: Imaging time must be after previous imaging time
+                    prev_bid.t_img <= bid.t_img
+                ]
+                    
+                # check if any constraint is violated
+                if not all(constraints):
+                    # mark this bid as invalid
+                    invalid_bid_idx = n_obs_idx
+
+                    # stop searching for constraint violations for this task
+                    break                
+            
+            # check if invalid bid was found
+            if invalid_bid_idx is None: continue # no violations for this task; continue to next task
+
+            # reset invalid bid along with all subsequent bids
+            while len(bids) > invalid_bid_idx:
+                # get bid to reset and remove from results
+                bid_to_reset : Bid = bids.pop(invalid_bid_idx)
+
+                # reset bid
+                reset_bid = bid_to_reset.reset(state.t)
+
+                # add to violations list
+                bids_in_violation.append(reset_bid)                
+
+        # return list of bids in violation
+        return bids_in_violation   
+    
+    def needs_planning(self, *_) -> bool:
+        # -------------------------------
+        # DEBUG BREAKPOINTS
+        # if self.task_announcements_received:
+        #     x = 1 # breakpoint
+        # if self.results_changes_performed:
+        #     x = 1  # breakpoint
+        # if self.bundle_changes_performed:
+        #     x = 1  # breakpoint
+        # -------------------------------
+
+        # trigger replan if either...
+        return (   
+                self.task_announcements_received    # 0) new tasks were announced                 
+                or self.results_changes_performed   # 1) there were relevant updates to bids/results
+                or self.bundle_changes_performed    # 2) incoming bids modified the bundle
+                )
+
+    """
+    ---------------------------
+    BUNDLE-BUILDING PHASE
+    ---------------------------
+    """
+    def generate_plan(self, 
+                      state : SimulationAgentState,
+                      specs : object,
+                      current_plan : Plan,
+                      clock_config : ClockConfig,
+                      orbitdata : OrbitData,
+                      mission : Mission,
+                      tasks : List[GenericObservationTask],
+                      observation_history : ObservationHistory,
+                    ) -> Plan:  
+        """ Generate new plan according to consensus replanning model. """             
+        try:
+            # generate new bundle and path according to replanning model
+            self.bundle, self.path = \
+                self.__replan_observations(state, specs, current_plan, clock_config, orbitdata, mission, tasks, observation_history)
+        
+            # generate maneuver and travel actions from observations
+            maneuvers : list = self._schedule_maneuvers(state, specs, self.path, clock_config, orbitdata)
+
+            # schedule broadcasts
+            broadcasts : list = self._schedule_broadcasts(state, orbitdata)
+
+            # determine next planning time        
+            # t_next = state.t + current_plan.horizon if isinstance(current_plan, PeriodicPlan) else current_plan.t_next
+            t_next = self.preplan.t_next
+            
+            # compile and generate plan
+            prelim_plan = ReactivePlan(maneuvers, self.path, broadcasts, t=state.t, t_next=t_next)
+
+            # schedule periodic replan
+            preplan_waits : list = self._schedule_periodic_replan(state, prelim_plan, t_next)
+
+            # compile final plan
+            self.plan = ReactivePlan(prelim_plan.actions, preplan_waits, t=state.t, t_next=t_next)
+
+            # return final plan
+            return self.plan.copy()
+        
+        finally:
+            # reset replanning flags
+            self.task_announcements_received = False
+            self.results_changes_performed = False
+            self.bundle_changes_performed = False
+
+            # reset new event task inbox
+            self.incoming_event_tasks = list()
+
+    def __replan_observations(self,
+                                state : SimulationAgentState,
+                                specs : object,
+                                current_plan : Plan,
+                                clock_config : ClockConfig,
+                                orbitdata : OrbitData,
+                                mission : Mission,
+                                tasks : List[GenericObservationTask],
+                                observation_history : ObservationHistory,
+                              ) -> tuple:
+
+        # DEBUG PRINTOUTS----------------
+        # if self._debug:
+        #     self._log_results('PLANNING PHASE - RESULTS (BEFORE)', state, self.results)
+        #     self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
+        #     x = 1 # breakpoint
+        # -------------------------------
+
+        # check if relevant changes were made to bundle or tasks
+        if not self.task_announcements_received and not self.bundle_changes_performed:
+            # no changes to tasks or bundle; do not replan
+            return self.bundle, self.path                
+    
+        # check if a new periodic plan was generated by parent agent
+        if isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS:
+            # ensure current bundle and path were reset during consensus phase
+            assert len(self.bundle) == 0, "Current bundle not empty during preplan-based bundle building."
+            assert len(self.path) == 0, "Current path not empty during preplan-based bundle building."        
+            
+            # build bundle from periodic preplan
+            self.bundle, self.path, new_bids = \
+                self._build_bundle_from_preplan(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
+
+            # TODO ensure bids that all observations that were able to be added to bundle match observations in preplan
+            
+        else: # no new periodic plan; generate new plan based on changes to tasks or bundle
+            # build new bundle and path according to replanning model
+            self.bundle, self.path, new_bids = \
+                self._bundle_building_phase(state, specs, current_plan, tasks, clock_config, orbitdata, mission, observation_history)
+
+        # check if new path and bundle are valid
+        self.__validate_new_bundle(state, specs, new_bids)
+
+        # update results
+        self.__update_results_from_bundle(state, new_bids)
+
+        # -------------------------------
+        # DEBUG PRINTOUTS
+        if self._debug and new_bids:
+            self._log_results('PLANNING PHASE - RESULTS (AFTER)', state, self.results)
+            self._log_bundle('PLANNING PHASE - BUNDLE (AFTER)', state, self.bundle)
+            x = 1 # breakpoint
+        # -------------------------------
+
+        return self.bundle, self.path
+    
+    def __validate_new_bundle(self, state : SimulationAgentState, specs : object, new_bids : dict) -> None:
+        """ check if new path is valid """
+        assert len(self.bundle) == len(self.path), \
+            "New bundle and path lengths do not match."
+        assert all([obs_action.t_start >= state.t for obs_action in self.path]), \
+            "New observation path contains actions scheduled in the past."        
+        assert self.is_observation_path_valid(state, self.path, None, None, specs), \
+            "New observation path is not valid."   
+        if self._debug: assert all(bid.t_bid <= state.t for bids in new_bids.values() for bid in bids.values()), \
+            "New bids must be assigned the correct bid time."
+
+        # ensure every task in the path has a matching bundle entry
+        if self._debug:
+            for obs_action in self.path:
+                matching_bundle_entries = [obs_tasks 
+                                            for obs_opp,obs_tasks in self.bundle
+                                            if obs_opp == obs_action.obs_opp]
+                assert len(matching_bundle_entries) == 1, \
+                    "Every observation action in the path must have a matching bundle entry."
+ 
+
+    @abstractmethod
+    def _build_bundle_from_preplan(self,
+                                    state : SimulationAgentState,
+                                    specs : object,
+                                    current_plan : Plan,
+                                    clock_config : ClockConfig,
+                                    orbitdata : OrbitData,
+                                    mission : Mission,
+                                    observation_history : ObservationHistory
+                                    ) -> tuple:    
+        """ Build bundle from latest periodic preplan. """
+
+    @abstractmethod
+    def _bundle_building_phase(self,
+                        state : SimulationAgentState,
+                        specs : object,
+                        current_plan : Plan,
+                        tasks : List[GenericObservationTask],
+                        clock_config : ClockConfig,
+                        orbitdata : OrbitData,
+                        mission : Mission,
+                        observation_history : ObservationHistory
+                        ) -> tuple:        
+        """ 
+        Build bundle according to selected replanning model. 
+        #### Returns:
+            - `new_bundle` : List[List[Tuple[GenericObservationTask, int]]] -- New bundle of bids
+            - `new_path` : List[GenericObservationTask] -- New observation path
+            - `new_bids` : List[Bid] -- New bids generated during bundle building
+        
+        """
+    
+    def __update_results_from_bundle(self, 
+                                     state : SimulationAgentState,
+                                     new_bids : Dict[GenericObservationTask, Dict[int, Bid]]
+                                    ) -> None:
+        """ Update results dictionary from new bundle. """
+        
+        # ==========================================================
+        #  UPDATE RESULTS WITH NEW BIDS
+        # ==========================================================
+        
+        # update results from new bids from new bundle 
+        for _,obs_tasks in self.bundle:
+            for task, n_obs in obs_tasks.items():
+                # get new bid for this task and observation number
+                bid : Bid = new_bids[task][n_obs]
+
+                try:
+                    # get previous bid
+                    previous_bid : Bid = self.results[task][n_obs]
+
+                    # reduce any optimistic bidding counters if needed  
+                    if (previous_bid > bid                          # lower bid value
+                        and previous_bid.t_img > bid.t_img          # earlier imaging time
+                        and previous_bid.winner != state.agent_name # was not winning bid
+                        and bid.winner == state.agent_name          # is now winning bid
+                        ):
+                        # bid was worsened; reduce optimistic bidding counter
+                        self.optimistic_bidding_counters[task][n_obs] -= 1
+
+                        # ensure bid counters are possitive
+                        assert self.optimistic_bidding_counters[task][n_obs] >= 0, \
+                            "Bundle-builder attempted optimistic bid for task with optimistic bid attempt counter already at zero."
+
+                    # update existing bid
+                    self.results[task][n_obs] = bid
+
+                except IndexError:
+                    # bid for new observation number; add to results
+                    self.results[task].append(bid)
+
+                    # add optimistic bidding counter for new bid
+                    self.optimistic_bidding_counters[task].append(self.optimistic_bidding_threshold)
+
+        # collect bids that have been removed from the bundle
+        bids_in_bundle = { (task, n_obs)
+                            for _,obs_tasks in self.bundle
+                            for task,n_obs in obs_tasks.items()}
+        winning_bids = { (task, n_obs)
+                            for task, bids in self.results.items()
+                            for n_obs,bid in enumerate(bids)
+                            if bid.winner == state.agent_name
+                            and not bid.was_performed()}
+        bids_removed_from_bundle = winning_bids - bids_in_bundle
+
+        # reset bids for tasks that are no longer in the bundle
+        for task, n_obs in bids_removed_from_bundle:
+            # get bid to reset
+            bid_to_reset : Bid = self.results[task][n_obs]
+
+            # reset bid
+            bid_to_reset.reset(state.t)
+
+            # update results
+            self.results[task][n_obs] = bid_to_reset
+
+        # remove any trailing bids without a winner
+        for task, bids in self.results.items():
+            while bids and not bids[-1].has_winner():
+                bids.pop(-1)
+                self.optimistic_bidding_counters[task].pop(-1)
+                
+        # ==========================================================
+        #  ENSURE RESULTS CONSISTENCY
+        # ==========================================================
+
+        # ensure number of bids match bundle entries
+        ## get bids won by this agent from results
+        winning_bids = [bid for bids in self.results.values()
+                        for bid in bids if bid.winner == state.agent_name
+                        and not bid.was_performed()]
+        bids_in_bundle = [self.results[task][n_obs] 
+                            for _,obs_tasks in self.bundle 
+                            for task,n_obs in obs_tasks.items()]
+        
+        ## count and compare with bundle size
+        total_won_bids = len(winning_bids)
+        total_bundle_entries = len(bids_in_bundle)
+        
+        # # DEBUG PRINTOUTS --------
+        # if self._debug and total_bundle_entries != total_won_bids:
+        #     print(f'ERROR: Mismatch between winning bids ({total_won_bids}) and bundle entries ({total_bundle_entries}):')
+        #     self._log_results('CONSENSUS PHASE - RESULTS (INVALID)', state, self.results)
+        #     self._log_bundle('CONSENSUS PHASE - BUNDLE (INVALID)', state, self.bundle)        
+
+        #     if total_bundle_entries < total_won_bids:                
+        #         missing_bids : Set[Bid] = set(winning_bids) - set(bids_in_bundle)
+        #         out = f'Bids in results but not in bundle ({len(missing_bids)}):\n'
+        #     else:
+        #         missing_bids : Set[Bid] = set(bids_in_bundle) - set(winning_bids)
+        #         out = f'Bids in bundle but not in results ({len(missing_bids)}):\n'
+
+        #     for bid in missing_bids:
+        #         out += f' - {repr(bid)}\n'
+        #     print(out)
+        # #-------------------------
+
+        assert total_won_bids == total_bundle_entries, \
+            "Number of winning bids does not match number of bundle entries."
+        
+        # ensure all bundle bids match results
+        for _, obs_tasks in self.bundle:
+            for task, n_obs in obs_tasks.items():
+                assert task in self.results, \
+                    "Bundle task not found in results."
+                assert n_obs < len(self.results[task]), \
+                    "Bundle observation number exceeds number of bids in results for task."
+
+                assert task in self.optimistic_bidding_counters, \
+                    "Bundle task not found in optimistic bidding counters."
+                assert n_obs < len(self.optimistic_bidding_counters[task]), \
+                    "Bundle observation number exceeds number of optimistic bidding counters for task."
+                
+                # get matching bid from results
+                bid : Bid = self.results[task][n_obs]
+                
+                # check that every bundle entry corresponds to a winning bid
+                assert bid.winner == state.agent_name, \
+                    "Bundle entry does not correspond to a winning bid."
+
+        # ensure all bundle bids meet requirements; 
+        #   assumes bids outside the bundle will be dealt with durin consensus-phase result updates
+        for _, obs_tasks in self.bundle:    
+            for task, n_obs in obs_tasks.items():
+                bid : Bid = self.results[task][n_obs]
+
+                # check if there is a previous bid to compare with
+                if n_obs == 0:
+                    # there is no previous bid to compare with; define independent constraints
+                    constraints : List[bool] = [
+                        # Constraint 0: Current bid must be assigned to a winner
+                        bid.has_winner(),
+                        # Constraint 1: Observation number must match bundle entry
+                        bid.n_obs == n_obs
+                    ]
+                else:
+                    # there is a previous bid to compare with; get previous bid
+                    prev_bid : Bid = self.results[task][n_obs-1]
+                    
+                    # define dependent constraints
+                    constraints : List[bool] = [
+                        # Constraint 0: Previous bid must be assigned to a winner
+                        prev_bid.has_winner(),
+                        # Constraint 0.5: Current bid must be assigned to a winner
+                        bid.has_winner(),
+                        # Constraint 1: Observation number must be consecutive
+                        prev_bid.n_obs + 1 == bid.n_obs,
+                        # Constraint 2: Imaging time must be after previous imaging time
+                        (prev_bid.t_img <= bid.t_img and bid.winner != state.agent_name) \
+                            or (prev_bid.t_img < bid.t_img and bid.winner == state.agent_name)
+                    ]
+                    
+                # DEBUG PRINTOUTS --------
+                # if self._debug and not all(constraints):
+                #     print(f'ERROR: generated invalid bids during bundle-building phase:')
+                #     self._log_results('INVALID GENERATED BIDS', state, self.results)
+                #     x = 1 # breakpoint
+                #-------------------------
+
+                # check if any constraint is violated
+                assert all(constraints), \
+                    "Generated bids violate constraints; cannot update results."  
+
+    def _calculate_path_utility(self,
+                                state : SimulationAgentState,
+                                specs : object,
+                                cross_track_fovs : Dict[str, float],
+                                path : List[ObservationAction],
+                                observation_history : ObservationHistory,
+                                orbitdata : OrbitData,
+                                mission : Mission,
+                                n_obs : List[Dict[GenericObservationTask, int]],
+                                t_prev : List[Dict[GenericObservationTask, float]]
+                            ) -> float:
+        """ Calculate total expected utility of observation path. """
+        
+        # calculate path value
+        path_value = self._calculate_path_value(specs, cross_track_fovs, path, observation_history, orbitdata, mission, n_obs, t_prev)
+        
+        # calculate path cost
+        path_cost = self._calculate_path_cost(state, specs, path)
+
+        # return path utility
+        return path_value - path_cost
+
+    def _calculate_path_value(self,
+                              specs : object,
+                              cross_track_fovs : Dict[str, float],
+                              path : List[ObservationAction],
+                              observation_history : ObservationHistory,
+                              orbitdata : OrbitData,
+                              mission : Mission,
+                              n_obs : List[Dict[GenericObservationTask, int]],
+                              t_prev : List[Dict[GenericObservationTask, float]]
+                            ) -> float:
+        """ Calculate total expected value of observation path. """
+        # calculate and accumulate expected value of observation
+        task_values = self._calculate_path_values(specs, cross_track_fovs, path, observation_history, orbitdata, mission, n_obs, t_prev)
+
+        # return total task value
+        return sum(task_values) 
+
+    def _calculate_path_values(self,
+                              specs : object,
+                              cross_track_fovs : Dict[str, float],
+                              path : List[ObservationAction],
+                              observation_history : ObservationHistory,
+                              orbitdata : OrbitData,
+                              mission : Mission,
+                              n_obs : List[Dict[GenericObservationTask, int]],
+                              t_prev : List[Dict[GenericObservationTask, float]]
+                            ) -> List[float]:
+        """ Calculate expected value of each observation in the path. """
+        return [self.estimate_observation_opportunity_value(obs.obs_opp,
+                                                 obs.t_start,
+                                                 obs.obs_opp.min_duration,
+                                                 specs,
+                                                 cross_track_fovs,
+                                                 orbitdata,
+                                                 mission,
+                                                 observation_history,
+                                                 n_obs[obs_idx],
+                                                 t_prev[obs_idx])
+                        for obs_idx, obs in enumerate(path)]
+
+    def _count_observations_and_revisit_times_from_path(self,
+                                                        path : List[ObservationAction]
+                                                    ) -> Tuple[List[Dict[GenericObservationTask, int]],
+                                                            List[Dict[GenericObservationTask, float]]]:
+        """ Calculate observation number and revisit time for tasks in the given path given the known bids. """
+
+        # initialize observation counters and previous observation time trackers
+        n_obs = [defaultdict(int) for _ in path]
+        t_prev = [defaultdict(lambda: np.NINF) for _ in path]
+
+        # get all parent tasks in the given path
+        path_tasks : set[GenericObservationTask]= {task 
+                                                   for obs_action in path 
+                                                   for task in obs_action.obs_opp.tasks}
+        
+        # ---HISTORICAL DATA FROM BID RESULTS---
+        # initiate observation history for all parent tasks in path
+        #  only considers performed bids as historical data
+        n_obs_history = {task: 0 for task in path_tasks}
+        t_prev_history = {task: np.NINF for task in path_tasks}
+
+        # iterate through previous bids to populate initial observation numbers and previous observation times
+        for task in path_tasks:
+            # assume parent task is part of results
+            assert task in self.results, \
+                "Parent task in path must be part of results to count observation numbers and revisit times."
+
+            # get previous matching observations for this task
+            peformed_bids = [bid for bid in self.results[task]
+                                if bid.was_performed()]
+            
+            assert all(bid.n_obs == idx for idx, bid in enumerate(peformed_bids)), \
+                "Results bids are not sorted by observation number."
+            
+            # update previous observation counts
+            n_obs_history[task] += len(peformed_bids)
+
+            # calculate latest observation time from previous bids
+            t_latest = max((bid.t_img for bid in peformed_bids), default=np.NINF)
+            
+            # update previous observation times
+            t_prev_history[task] = max(t_prev_history[task], t_latest)
+
+        # ---PATH DATA---
+        # initiate observation counter for all parent tasks in path
+        n_obs_in_path = {task: 0 for task in path_tasks}
+        t_prev_in_path = {task: np.NINF for task in path_tasks}
+
+        # initiate previous observations and times along path
+        for obs_idx, obs in enumerate(path):           
+            for task in obs.obs_opp.tasks:
+                # update overall observation number and revisit times along path using historical and path data
+                n_obs[obs_idx][task] = n_obs_history[task] + n_obs_in_path[task]
+                t_prev[obs_idx][task] = max(t_prev_history[task], t_prev_in_path[task])               
+
+                # update previous path observation counts 
+                n_obs_in_path[task] += 1
+                t_prev_in_path[task] = max(t_prev_in_path[task], obs.t_end)
+
+        # return observation numbers and previous observation times
+        return n_obs, t_prev
+    
+    def _count_observations_and_revisit_times_from_results( self,
+                                                            state : SimulationAgentState,
+                                                            path : List[ObservationAction]
+                                                        ) -> Tuple[List[Dict[GenericObservationTask, int]],
+                                                            List[Dict[GenericObservationTask, float]]]:
+        
+
+        # initialize observation counters and previous observation time trackers
+        n_obs = [dict() for _ in path]
+        t_prev = [dict() for _ in path]
+
+        # ---HISTORICAL DATA FROM BID RESULTS---
+        # iterate through path to populate observation numbers and previous observation times
+        for obs_idx, obs_act in enumerate(path):
+            for task in obs_act.obs_opp.tasks:
+                # assume parent task is part of results
+                assert task in self.results, \
+                    "Parent task in path must be part of results to count observation numbers and revisit times."
+
+                # get matching bid for this observation task
+                matching_bids = [bid for bid in self.results[task]
+                                if abs(bid.t_img - obs_act.t_start) <= self.EPS]
+                
+                # assert  (matching_bids), \
+                #    "Matching bid for observation in path not found in results. Was assigned without updating results."
+                assert len(matching_bids) == 1, \
+                    "There should only be one matching bid for the current time step."
+
+                matching_bid : Bid = matching_bids.pop()
+
+                # get previous matching observations for this task
+                prev_bids = [bid for bid in self.results[task]
+                            if bid.t_img < obs_act.t_start]
+                
+                # update previous observation counts
+                n_obs[obs_idx][task] = matching_bid.n_obs
+                t_prev[obs_idx][task] = max((bid.t_img for bid in prev_bids), default=np.NINF)
+
+        # ensure every parent task in path has values for `n_obs` and `t_prev`
+        assert all(
+            all(task in n_obs[obs_idx] and task in t_prev[obs_idx]
+                for task in obs_action.obs_opp.tasks)
+                for obs_idx,obs_action in enumerate(path)), \
+            "Not all observation opportunity tasks in path have an assigned observation number values."
+        
+        # return observation numbers and previous observation times
+        return n_obs, t_prev
+
+    def _calculate_path_cost(self,
+                             state : SimulationAgentState,
+                             _ : object,
+                             path : List[ObservationAction]
+                            ) -> float:
+        """ Calculate total expected cost of observation path. """
+
+        # TODO implement realistic path cost calculation using agility specs to calculate power consumption between maneuvers.
+
+        # initiate previus observation action with dummy action representing the current state
+        prev_obs = None
+
+        # compute total angle change
+        total_angle_change = 0.0
+        for obs in path:
+            # get previous look angle
+            prev_angle = state.attitude[0] if prev_obs is None else prev_obs.look_angle
+            
+            # calculate angle change
+            total_angle_change += abs(obs.look_angle - prev_angle)
+
+            # update previous observation
+            prev_obs = obs
+        
+        # compute cost from total angle change
+        return self.EPS * total_angle_change  # Placeholder implementation       
+
+    """
+    BROADCAST SCHEDULING
+    """
+    def _schedule_broadcasts(self, state: SimulationAgentState, orbitdata: OrbitData) -> list:
+        """ Schedules broadcasts to be done by this agent """
+        try:
+            if not isinstance(state, SatelliteAgentState):
+                raise NotImplementedError(f'Broadcast scheduling for agents of type `{type(state)}` not yet implemented.')
+            elif orbitdata is None:
+                raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
+
+            # initialize list of broadcasts to be done
+            broadcasts = []       
+
+            # generate bid messages to share bids in results
+            compiled_bid_msgs = [
+                MeasurementBidMessage(state.agent_name, state.agent_name, bid.to_dict())
+                for task,bids in self.results.items()
+                if isinstance(task, EventObservationTask)  # only share bids for event-driven tasks
+                for bid in bids
+            ]
+            compiled_results_msg = BusMessage(state.agent_name, 
+                                              state.agent_name, 
+                                              [bid_msg.to_dict() for bid_msg in compiled_bid_msgs])
+            compiled_results_msg_dict = compiled_results_msg.to_dict()
+            
+            # compile broadcast times for communication opportunities
+            t_broadcasts = []
+
+            # compile broadcast times for each communication target
+            for target in orbitdata.comms_links.keys():
+                # get access intervals with target agent
+                access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, state.t, include_current=True)
+
+                # create broadcast actions for each access interval
+                for next_access in access_intervals:
+                    # if no access opportunities in this planning horizon, skip scheduling
+                    if next_access.is_empty(): continue
+
+                    # get last access interval and calculate broadcast time
+                    t_broadcast : float = max(next_access.left, state.t)
+
+                    # add to list of broadcast times if not already present
+                    if all(abs(t_broadcast - t_existing) > self.EPS for t_existing in t_broadcasts):
+                        t_broadcasts.append(t_broadcast)
+
+            for t_broadcast in t_broadcasts:
+                # generate plan message to share state
+                state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
+
+                # generate plan message to share completed observations
+                observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+
+                # generate plan message to share any task requests generated
+                task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+                
+                # generate results broadcast action
+                bid_msg_action = BroadcastMessageAction(compiled_results_msg_dict, t_broadcast)
+                
+                # add to client broadcast list
+                # TODO decide whether to broadcast state and observations as well
+                broadcasts.extend([
+                                #    state_msg, 
+                                #    observations_msg, 
+                                    task_requests_msg, 
+                                    bid_msg_action
+                                    ])
+
+            if not orbitdata.comms_links:
+                # no communication links available, broadcast task requests for future planning horizons
+                t_broadcast : float = state.t
+
+                # generate plan message to share any task requests generated
+                task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
+
+                # add to client broadcast list
+                broadcasts.append(task_requests_msg)
+
+            # return scheduled broadcasts
+            return broadcasts 
+        
+        finally:
+            assert isinstance(broadcasts, list), "Scheduled broadcasts is not a list."
+            assert all(isinstance(broadcast, BroadcastMessageAction) for broadcast in broadcasts), "Not all scheduled broadcasts are of type `BroadcastMessageAction`."
+
+    """
+    REPLAN SCHEDULING
+    """
+    @runtime_tracker
+    def _schedule_periodic_replan(self, state : SimulationAgentState, prelim_plan : Plan, t_next : float) -> list:
+        """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
+
+        # find wait start time
+        if prelim_plan.is_empty():
+            t_wait_start = state.t 
+        
+        else:
+            actions_within_period = [action for action in prelim_plan 
+                                 if  isinstance(action, AgentAction)
+                                 and action.t_start < t_next]
+
+            if actions_within_period:
+                # last_action : AgentAction = actions_within_period.pop()
+                t_wait_start = min(max([action.t_end for action in actions_within_period]), t_next)
+                                
+            else:
+                t_wait_start = state.t
+
+        # create wait action
+        return [WaitForMessages(t_wait_start, t_next)] if t_wait_start < t_next else []  
+
+    """
+    LOGGING
+    """
+    def _log_results(self, 
+                     dsc : str, 
+                     state : SimulationAgentState, 
+                     results : Dict[GenericObservationTask, List[Bid]],
+                     level=logging.DEBUG, 
+                     n_tasks : int = 20) -> None:
+        out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
+        line = 'Task ID\t n_obs\tins\t\twinner\tbid\tt_img\tt_bid\tv_opt\tperformed\n'
+        
+        # count characters in line for formatting
+        L_LINE = len(line)
+        L_LINE_PADding = 25
+
+        # header
+        out += line 
+
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
+
+        # sort tasks by if they are event-driven and by ID for consistent logging
+        tasks = sorted(results.keys(), key=lambda t: (-int(isinstance(t,EventObservationTask)), repr(t)))
+        if len(tasks) <= n_tasks:
+            tasks_to_print = tasks
+        else:
+            non_empty_tasks = [task for task in tasks if results[task]]
+            empty_tasks = [task for task in tasks if not results[task]]
+
+            n_empties_to_print = n_tasks - len(non_empty_tasks)
+            if n_empties_to_print > 0:
+                tasks_to_print = sorted(non_empty_tasks + empty_tasks[:n_empties_to_print],
+                                        key=lambda t: (-int(isinstance(t,EventObservationTask)), repr(t)))
+            else:
+                tasks_to_print = non_empty_tasks[:n_tasks]
+
+        if not tasks_to_print: out += '\t<empty results>\n'
+
+        for i_tasks,task in enumerate(tasks_to_print):
+            task : GenericObservationTask
+            bids : List[Bid] = results[task]
+
+            if isinstance(task, EventObservationTask):
+                req_id_short = f"{task.id.split('-')[-1]}    "
+            else:
+                req_id_short = f'Default({int(task.location[0][-2])},{int(task.location[0][-1])})'
+            
+            if isinstance(bids, dict):
+                printed_bids = sorted(bids.values(), key=lambda b: b.n_obs)
+            elif isinstance(bids, list):
+                printed_bids = sorted(bids, key=lambda b: b.n_obs)
+            else:
+                raise TypeError("Bids in results must be either a list or a dictionary.")   
+           
+            for i_bid,bid in enumerate(printed_bids):
+                bid : Bid
+                # if bid.winner == bid.NONE: continue
+
+                try:
+                    if bid.winner != bid.NONE:
+                        line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t{bid.winner[0].lower()}{bid.winner[-1]}\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
+                    else:
+                        line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t\tn/a\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
+                except IndexError:
+                    x=  1 # breakpoint
+                out += line
+
+            if not bids:
+                out += f'{req_id_short} <none>\n'        
+
+            if i_tasks < len(tasks_to_print) - 1:
+                for _ in range(L_LINE + L_LINE_PADding):out += '-'
+                out += '\n'
+
+        if len(tasks) > n_tasks: 
+            out += '...\n'   
+         
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
+
+        out += f'Total tasks in results: {len(results)}\n'
+
+        print(out)
+
+    def _log_path(self, 
+                  dsc : str, 
+                  state : SimulationAgentState, 
+                  observation_path : List[ObservationAction], 
+                  level=logging.DEBUG) -> None:
+        out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
+        line = 'i\tt_img\t Task IDs\n'
+        
+        # count characters in line for formatting
+        L_LINE = len(line)
+        L_LINE_PADding = 20
+
+        # header
+        out += line 
+
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
+
+        if not observation_path: out += '\t<empty path>\n'
+
+        n = 15
+        for i,obs in enumerate(observation_path):
+            spec_task : ObservationOpportunity = obs.obs_opp
+            req_id_short = ""
+
+            for task in spec_task.tasks:
+                if isinstance(spec_task, EventObservationTask):
+                    req_id_short += spec_task.id.split('-')[-1] + ","
+                else:
+                    req_id_short += f'Default({int(task.location[0][-2])},{int(task.location[0][-1])}),'
+
+            line = f'{i}\t{np.round(obs.t_start,1)}\t[{req_id_short[:-1]}]\n'
+            out += line
+
+            for _ in range(L_LINE + L_LINE_PADding):
+                out += '-'
+            out += '\n'
+
+            if i > n:
+                out += '\t\t\t...\n'
+                for _ in range(L_LINE + L_LINE_PADding):
+                    out += '-'
+                out += '\n'
+                break
+
+        print(out)
+
+    def _log_bundle(self, 
+                    dsc : str, 
+                    state : SimulationAgentState, 
+                    bundle : List[Tuple[GenericObservationTask, Dict[GenericObservationTask, int]]], 
+                    n_rows : int = 15,
+                    n_tasks : int = 3,
+                    level=logging.DEBUG) -> None:
+        out = f'\nT{np.round(state.t,3)}[s]:\t\'{state.agent_name}\'\n{dsc}\n'
+        line = 'i\t Task IDs\n'
+        
+        # count characters in line for formatting
+        L_LINE = len(line)
+        L_LINE_PADding = 20
+
+        # header
+        out += line 
+
+        # divider 
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
+
+        if not bundle: out += '\t<empty bundle>\n'
+        
+        for i,(_,tasks) in enumerate(bundle):
+            line = f'{i}\t['
+            i_task = 0
+            for task,n_obs in tasks.items():
+                if i_task >= n_tasks: break
+
+                if isinstance(task, EventObservationTask):
+                    req_id_short = task.id.split('-')[-1]
+                else:
+                    req_id_short = f'Default({int(task.location[0][-2])},{int(task.location[0][-1])})'
+
+                line += f'({req_id_short},{n_obs}),'
+                i_task += 1 
+
+            if len(tasks) > n_tasks: line += f' ..., (n_tasks={len(tasks)}),'
+
+            line = line[:-1] + ']\n'
+            out += line
+
+            for _ in range(L_LINE + L_LINE_PADding):
+                out += '-'
+            out += '\n'
+
+            if i > n_rows:
+                out += f'\t\t...\n'
+                break
+        
+        for _ in range(L_LINE + L_LINE_PADding): out += '='
+        out += '\n'
+        
+        # stats
+        out += f'Bundle size: {len(bundle)} observations\n'
+
+        print(out)

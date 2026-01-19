@@ -2,8 +2,7 @@ from enum import Enum
 from typing import Union
 
 import numpy as np
-from chess3d.agents.planning.tasks import SpecificObservationTask
-from chess3d.mission.objectives import MissionObjective
+from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.utils import CoordinateTypes
 from dmas.agents import AgentAction
    
@@ -210,12 +209,12 @@ class FutureBroadcastMessageAction(BroadcastMessageAction):
         - status (`str`): completion status of the task
         - id (`str`) : identifying number for this task in uuid format
     """
-    PLAN = 'PLAN'                   # broadcast latest planner information
-    BIDS = 'BIDS'                   # broadcast latest bids for a task
-    REQUESTS = 'REQUESTS'           # broadcast latest known active measurement requests 
-    OBSERVATIONS = 'OBSERVATIONS'   # broadcast latest observation info
-    REWARD = 'REWARD'               # broadcast latest reward grid information
-    STATE = 'STATE'                 # broadcast latest agent state information
+    PLAN = 'PLAN'                           # broadcast latest planner information
+    BIDS = 'BIDS'                           # broadcast latest bids for a task
+    REQUESTS = 'measurement requests'       # broadcast latest known active measurement requests
+    OBSERVATIONS = 'observation results'    # broadcast latest observation info
+    REWARD = 'REWARD'                       # broadcast latest reward grid information
+    STATE = 'agent state'                   # broadcast latest agent state information
     FUTURE_BROADCAST_TYPES = [PLAN, BIDS, REQUESTS, OBSERVATIONS, REWARD, STATE]
         
     def __init__(self, 
@@ -253,7 +252,7 @@ class ObservationAction(AgentAction):
         - t_start (`float`): start time of the measurement of this action in [s] from the beginning of the simulation
         - t_end (`float`): end time of the measurement of this action in [s] from the beginning of the simulation
         - duration (`float`): duration of the measurement of this action in [s]
-        - task (`SpecificObservationTask`): the specific task associated with this action
+        - obs_opp (`ObservationOpportunity`): the task observation opportunity associated with this action
         - id (`str`) : identifying number for this task in uuid format
     """  
     def __init__(   self,
@@ -261,7 +260,7 @@ class ObservationAction(AgentAction):
                     look_angle : float, 
                     t_start: Union[float, int], 
                     duration: Union[float, int] = 0.0, 
-                    task : SpecificObservationTask = None,
+                    obs_opp : ObservationOpportunity = None,
                     status: str = 'PENDING', 
                     id: str = None, 
                     **_) -> None:
@@ -272,27 +271,27 @@ class ObservationAction(AgentAction):
             - look_angle (`float`): look angle of the observation in [deg]
             - t_start (`float`): start time of the measurement of this action in [s] from the beginning of the simulation
             - duration (`float`): duration of the measurement of this action in [s]
-            - task (`SpecificObservationTask`): the specific task associated with this action
+            - obs_opp (`ObservationOpportunity`): the task observation opportunity associated with this action
             - id (`str`) : identifying number for this task in uuid format
         """
         super().__init__(ActionTypes.OBSERVE.value, t_start, t_start + duration, status, id)
         
         # Concert task from dict if needed
-        task = SpecificObservationTask.from_dict(task) if isinstance(task, dict) else task
+        obs_opp = ObservationOpportunity.from_dict(obs_opp) if isinstance(obs_opp, dict) else obs_opp
         
         # check parameters
         assert isinstance(instrument_name,str), f'`instrument_name` must be of type `str`. Is of type `{type(instrument_name)}`.'
         assert isinstance(look_angle,(int,float)), f'`look_angle` must be a numerical value of type `float` or `int`. Is of type `{type(look_angle)}`'
-        assert isinstance(task,SpecificObservationTask) or task is None, f'`task` must be of type `SpecificObservationTask` or None. Is of type `{type(task)}`.'
+        assert isinstance(obs_opp,ObservationOpportunity) or obs_opp is None, f'`task` must be of type `SpecificObservationTask` or None. Is of type `{type(obs_opp)}`.'
 
         # set parameters
         self.instrument_name = instrument_name
         self.look_angle = look_angle
-        self.task : SpecificObservationTask = task
+        self.obs_opp : ObservationOpportunity = obs_opp
 
     def to_dict(self):
         out = super().to_dict()
-        out['task'] = self.task.to_dict() if self.task else None
+        out['obs_opp'] = self.obs_opp.to_dict() if self.obs_opp else 'None'
         return out
 
 class WaitForMessages(AgentAction):

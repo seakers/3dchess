@@ -191,7 +191,8 @@ class IntervalData(AbstractData):
             columns = [col.replace('index', 'time [s]') for col in df.columns.values]
             
             # get time data in Inteval format
-            data = [(t_start * time_step, t_end * time_step, row) for t_start,t_end,*row in df.values]
+            data = [(t_start * time_step, t_end * time_step, row) 
+                    for t_start,t_end,*row in df.values]
         else:
             # get time column index
             columns = [col for col in df.columns.values]
@@ -206,11 +207,25 @@ class IntervalData(AbstractData):
         """
         Returns interval that contains time `t`. Returns None if no interval contains time `t`
         """
-        intervals = [(t_start,t_end,row) for t_start,t_end,*row in self.data
+        intervals = [(t_start,t_end,row) 
+                     for t_start,t_end,*row in self.data
                      if t_start-1e-6 <= t <= t_end+1e-6]
         intervals.sort()
 
         return intervals[0] if intervals else None
+
+    def lookup_intervals(self, t_start : float, t_end : float) -> List[Interval]:
+        """
+        Returns all intervals that overlap with the interval [t_start, t_end]
+        """
+        intervals = [(t_start_i,t_end_i) 
+                     for t_start_i,t_end_i,_ in self.data
+                     if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
+        intervals.sort()
+        
+        # return clipped intervals that match the requested interval
+        return [Interval(max(t_start_i, t_start),(min(t_end_i, t_end))) 
+                for t_start_i,t_end_i in intervals]
     
     def is_active(self, t : float) -> bool:
         """
@@ -410,6 +425,9 @@ class OrbitData:
             # exclude intervals that contain time `t`
             future_intervals = [(t_start, t_end) for t_start,t_end in future_intervals
                                 if t < t_start] # interval starts after time `t`
+        else:
+            # include current intervals but clip to start at time `t`
+            future_intervals = [(max(t, t_start), t_end) for t_start,t_end in future_intervals]
 
         # check if there are any valid intervals
         if not future_intervals: return None
@@ -560,8 +578,8 @@ class OrbitData:
             
             # get spacecraft and ground station specifications
             spacecraft_list : List[dict] = mission_dict.get('spacecraft', None)
-            ground_station_list : List[dict] = mission_dict.get('groundStation', None)
-            ground_ops_list : List[dict] = mission_dict.get('groundOperator', None)
+            ground_station_list : List[dict] = mission_dict.get('groundStation', [])
+            ground_ops_list : List[dict] = mission_dict.get('groundOperator', [])
             
             # load orbit data for the specified agent
             if agent_name in [spacecraft.get('name') for spacecraft in spacecraft_list]:
@@ -707,14 +725,15 @@ class OrbitData:
                 else:
                     gs_access_data = pd.concat([gs_access_data, gndStn_access_data])
 
-            # load ground station access to ground point data
+            # load agent access to ground operator if one exists
             ground_operator_link_data : Dict[str,pd.DataFrame] = {ground_operator.get('name'): pd.DataFrame(columns=['start index', 'end index'])
-                                                                  for ground_operator in ground_ops_list}
-            ground_operator_link_data[gs_network_name] = pd.concat([ground_operator_link_data[gs_network_name], gs_access_data])
-            for col in ground_operator_link_data[gs_network_name].columns:
-                if col not in ['start index', 'end index']:
-                    ground_operator_link_data[gs_network_name].drop(columns=[col], inplace=True)
-            ground_operator_link_data[gs_network_name] = ground_operator_link_data[gs_network_name].drop_duplicates().reset_index(drop=True)
+                                                                for ground_operator in ground_ops_list}
+            if gs_network_name: 
+                ground_operator_link_data[gs_network_name] = pd.concat([ground_operator_link_data[gs_network_name], gs_access_data])
+                for col in ground_operator_link_data[gs_network_name].columns:
+                    if col not in ['start index', 'end index']:
+                        ground_operator_link_data[gs_network_name].drop(columns=[col], inplace=True)
+                ground_operator_link_data[gs_network_name] = ground_operator_link_data[gs_network_name].drop_duplicates().reset_index(drop=True)
 
             # land coverage data metrics data
             payload = spacecraft.get('instrument', None)
@@ -1113,6 +1132,10 @@ class OrbitData:
                         scenario_sat.pop("notifier") 
                     if "missionProfile" in scenario_sat:
                         scenario_sat.pop("missionProfile")
+                    if "mission" in scenario_sat:
+                        scenario_sat.pop("mission")
+                    if "spacecraftBus" in scenario_sat and "components" in scenario_sat["spacecraftBus"]:
+                        scenario_sat["spacecraftBus"].pop("components")
 
                     if "planner" in mission_sat:
                         mission_sat.pop("planner")
@@ -1122,6 +1145,10 @@ class OrbitData:
                         mission_sat.pop("notifier") 
                     if "missionProfile" in mission_sat:
                         mission_sat.pop("missionProfile")
+                    if "mission" in mission_sat:
+                        mission_sat.pop("mission")
+                    if "spacecraftBus" in mission_sat and "components" in mission_sat["spacecraftBus"]:
+                        mission_sat["spacecraftBus"].pop("components")
 
                     if scenario_sat != mission_sat:
                         return True

@@ -1,6 +1,7 @@
 import argparse
 from enum import Enum
 import logging
+import math
 import os
 import shutil
 
@@ -354,6 +355,15 @@ def arg_parser() -> tuple:
     level = levels.get(args.level)
 
     return scenario_name, plot_results, save_plot, no_graphic, level
+
+def argmax(values, rel_tol=1e-9, abs_tol=0.0):
+        """ returns the index of the highest value in a list of values """
+        max_val = max(values)
+        for i, val in enumerate(values):
+            if math.isclose(val, max_val, rel_tol=rel_tol, abs_tol=abs_tol):
+                return i        
+            
+        raise ValueError("No maximum value found in the list.")
 
 def str_to_list(lst_string : str, list_type : type = str) -> list:
     """ reverts a list that has been printed into a string back into a list """

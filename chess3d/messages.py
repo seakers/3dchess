@@ -1,5 +1,9 @@
 from enum import Enum
+from typing import Dict, List
 from dmas.messages import *
+
+from chess3d.agents.planning.decentralized.consensus.bids import Bid
+from chess3d.agents.planning.tasks import GenericObservationTask
 
 class SimulationMessageTypes(Enum):
     MEASUREMENT_REQ = 'MEASUREMENT_REQ'
@@ -7,6 +11,7 @@ class SimulationMessageTypes(Enum):
     AGENT_STATE = 'AGENT_STATE'
     CONNECTIVITY_UPDATE = 'CONNECTIVITY_UPDATE'
     MEASUREMENT_BID = 'MEASUREMENT_BID'
+    BID_RESULTS = 'BID_RESULTS'
     PLAN = 'PLAN'
     SENSES = 'SENSES'
     OBSERVATION = 'OBSERVATION'
@@ -27,6 +32,8 @@ def message_from_dict(msg_type : str, **kwargs) -> SimulationMessage:
         return AgentConnectivityUpdate(**kwargs)
     elif msg_type == SimulationMessageTypes.MEASUREMENT_BID.value:
         return MeasurementBidMessage(**kwargs)
+    elif msg_type == SimulationMessageTypes.BID_RESULTS.value:
+        return BidResultsMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.PLAN.value:
         return PlanMessage(**kwargs)
     elif msg_type == SimulationMessageTypes.SENSES.value:
@@ -138,6 +145,12 @@ class ObservationResultsMessage(SimulationMessage):
             raise AttributeError(f'`observation_action` must be of type `dict`; is of type {type(observation_action)}.')
         if not isinstance(agent_state, dict):
             raise AttributeError(f'`agent_state` must be of type `dict`; is of type {type(agent_state)}.')
+        if not isinstance(instrument, dict):
+            raise AttributeError(f'`instrument` must be of type `dict`; is of type {type(instrument)}.')
+        if not isinstance(observation_data, list):
+            raise AttributeError(f'`observation_data` must be of type `list`; is of type {type(observation_data)}.')
+        if not all(isinstance(data, dict) for data in observation_data):
+            raise AttributeError(f'elements of `observation_data` must be of type `dict`.')
 
         self.agent_state = agent_state
         self.observation_action = observation_action
@@ -194,6 +207,53 @@ class MeasurementBidMessage(SimulationMessage):
         """
         super().__init__(src, dst, SimulationMessageTypes.MEASUREMENT_BID.value, id, path)
         self.bid = bid
+
+class BidResultsMessage(SimulationMessage):
+    """
+    ## Bid Results Message
+
+    Informs another agents of the bid results information held by the sender
+
+    ### Attributes:
+        - src (`str`): name of the simulation element sending this message
+        - dst (`str`): name of the intended simulation element to receive this message
+        - bid_results (`dict`): bid results information being shared
+        - msg_type (`str`): type of message being sent
+        - id (`str`) : Universally Unique IDentifier for this message
+    """
+    def __init__(self, 
+                src: str, 
+                dst: str, 
+                results: Dict[GenericObservationTask, List[Bid]], 
+                id: str = None,
+                path : list = [],
+                **_):
+        raise NotImplementedError("BidResultsMessage has been disabled.")
+    #     """
+    #     Creates an instance of a bid results message
+
+    #     ### Arguments:
+    #         - src (`str`): name of the simulation element sending this message
+    #         - dst (`str`): name of the intended simulation element to receive this message
+    #         - bid_results (`dict`): bid results information being shared
+    #         - id (`str`) : Universally Unique IDentifier for this message
+    #     """
+    #     super().__init__(src, dst, SimulationMessageTypes.BID_RESULTS.value, id, path)
+    #     self.results = {
+    #         task: [bid for bid in bid_list]
+    #         for task, bid_list in results.items()
+    #     }
+
+    # def to_dict(self) -> dict:
+    #     """
+    #     Converts the Bid Results Message to a dictionary format
+    #     """
+    #     msg_dict = super().to_dict()
+    #     msg_dict['results'] = {
+    #         task_id: [bid.to_dict() for bid in bid_list]
+    #         for task_id, bid_list in self.results.items()
+    #     }
+    #     return msg_dict
 
 class PlanMessage(SimulationMessage):
     """
