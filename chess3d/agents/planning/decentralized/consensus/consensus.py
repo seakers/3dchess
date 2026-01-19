@@ -145,7 +145,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if (results_updates or bundle_updates) and self._debug:
+        if (task_updates or results_updates or bundle_updates) and self._debug:
             self._log_results('CONSENSUS PHASE - RESULTS (AFTER)', state, self.results)
             self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
             # self._log_path('CONSENSUS PHASE - PATH (AFTER)', state, self.path)
@@ -181,14 +181,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
         """ Perform consensus phase to update bids and bundle. """
 
         # check for new default mission tasks
-        new_default_tasks = self._process_default_tasks(state, tasks)
+        new_default_tasks = self.__process_default_tasks(state, tasks)
 
         # check for new urgent tasks
         new_urgent_task_added \
-            = self._process_incoming_urgent_tasks(state, incoming_reqs, incoming_bids)
+            = self.__process_incoming_task_requests(state, incoming_reqs, incoming_bids)
 
         # check if planned tasks expired
-        expired_tasks = self._remove_expired_tasks(state)
+        expired_tasks = self.__remove_expired_tasks(state)
 
         # check if new base plan is available
         preplan_obs, preplan_resets \
@@ -196,13 +196,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
         
         # check if tasks in the bundle were performed by parent agent
         self.bundle, self.path, performed_bundle_updates \
-            = self._update_performed_bundle_observations(state, performed_observations)
+            = self.__update_performed_bundle_observations(state, performed_observations)
 
         # compare results with incoming bids and update bundle
-        comparison_updates = self._compare_incoming_bids(state, incoming_bids)
+        comparison_updates = self.__compare_incoming_bids(state, incoming_bids)
 
         # check if bids in results would have been performed by other agents
-        performed_updates = self._update_performed_bids(state)
+        performed_updates = self.__update_performed_bids(state)
         
         # compile updates and return list of updates
         task_updates = list(chain.from_iterable([
@@ -214,7 +214,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                                     # new_urgent_task_added, 
                                                     expired_tasks, 
                                                     preplan_obs,
-                                                    # performed_bundle_updates,
+                                                    performed_bundle_updates,
                                                     comparison_updates, 
                                                     performed_updates,
                                                    ]))   
@@ -227,10 +227,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
         while True:
             # update bundle from results updates
             self.bundle, self.path, results_bundle_updates \
-                = self._update_bundle_from_results(state)
+                = self.__update_bundle_from_results(state)
 
             # enforce constraints in results
-            constraint_violations = self._check_results_constraints(state)
+            constraint_violations = self.__check_results_constraints(state)
 
             # append updates to compiling lists
             bundle_updates.extend(results_bundle_updates)
@@ -297,7 +297,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return updates
         return preplan_path, bundle_resets
 
-    def _process_default_tasks(self, state: SimulationAgentState, tasks: List[GenericObservationTask]) -> List[Bid]:
+    def __process_default_tasks(self, state: SimulationAgentState, tasks: List[GenericObservationTask]) -> List[Bid]:
         """ Processes new default mission tasks and updates results accordingly. """
         # initialize list of newly added bids from new tasks
         new_task_added = []
@@ -321,12 +321,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return list of new task bids added to results
         return new_task_added
     
-    def _process_incoming_urgent_tasks(self, 
+    def __process_incoming_task_requests(self, 
                                        state: SimulationAgentState, 
                                        incoming_reqs : List[TaskRequest],
                                        incoming_bids : List[Bid]
                                        ) -> List[Bid]:
-        """ Processes new urgent tasks and updates results accordingly. """
+        """ Processes new urgent task requests and updates results accordingly. """
         # initialize list of newly added bids from new tasks
         new_task_added = []
 
@@ -385,7 +385,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return list of new task bids added to results
         return new_task_added
     
-    def _remove_expired_tasks(self, state : SimulationAgentState) -> List[Bid]:
+    def __remove_expired_tasks(self, state : SimulationAgentState) -> List[Bid]:
         """ Remove expired tasks from results. """
 
         # initialize list of removed bids
@@ -423,7 +423,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return list of removed bids
         return removed_bids
     
-    def _update_performed_bundle_observations(self, state : SimulationAgentState, performed_observations : List[ObservationAction]) -> Tuple[list, List[Bid]]:
+    def __update_performed_bundle_observations(self, state : SimulationAgentState, performed_observations : List[ObservationAction]) -> Tuple[list, List[Bid]]:
         """ Checks if planned observations were performed by parent agent and updates results accordingly. """
         
         # initialize list of bundle updates
@@ -508,7 +508,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return revised bundle and list of performed bids
         return revised_bundle, revised_path, bundle_updates
 
-    def _compare_incoming_bids(self,
+    def __compare_incoming_bids(self,
                        state : SimulationAgentState,
                        incoming_bids : List[Bid]
                        ) -> Tuple[List[Bid], List[Bid]]:
@@ -628,16 +628,17 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         # add updated bid to results updates
                         results_updates.append(updated_bid)
                     
-                    # check if bid was performed 
-                    elif not current_bid.was_performed() and incoming_bid.was_performed():
-                        # check if the winner of the performed bid matches current known winner
-                        if incoming_bid.was_performed() and incoming_bid.winner != current_bid.winner:
-                            # winner changed due to performed bid; add updated bid to results updates
-                            results_updates.append(updated_bid)
-                        else:
-                            # winner did not change; no need to add to results updates
-                            pass 
-                            x = 1 # debug breakpoint                        
+                    # # check if previously unperformed bid was performed 
+                    # elif not current_bid.was_performed() and incoming_bid.was_performed():
+                    #     # check if the winner of the performed bid matches current known winner
+                    #     if incoming_bid.winner != current_bid.winner:
+                    #         # winner changed due to performed bid; add updated bid to results updates
+                    #         results_updates.append(updated_bid)
+                    #     else:
+                    #         # winner did not change and plan was executed as expected; 
+                    #         #   no need to add to results updates
+                    #         pass 
+                    #     #     x = 1 # debug breakpoint                        
                     
                     # check if both bids corresponded to a performed observation
                     if current_bid.was_performed() and incoming_bid.was_performed():
@@ -689,7 +690,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return result changes
         return results_updates
     
-    def _update_performed_bids(self, state : SimulationAgentState) -> List[Bid]:
+    def __update_performed_bids(self, state : SimulationAgentState) -> List[Bid]:
         """ Assumes tasks who were won by other agents and whose imaging time has passed were performed by those agents. """
 
         # initialize list of performed updates
@@ -724,7 +725,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return list of performed bids
         return performed_updates
          
-    def _update_bundle_from_results(self,
+    def __update_bundle_from_results(self,
                                     state : SimulationAgentState
                                     ) -> Tuple[list, List[List[Bid]]]:
         """ Update bundle according to latest results. """
@@ -869,7 +870,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return updated bundle and list of updates
         return revised_bundle, revised_path, bundle_updates
     
-    def _check_results_constraints(self, state : SimulationAgentState) -> List[Bid]:
+    def __check_results_constraints(self, state : SimulationAgentState) -> List[Bid]:
         """ Check results for constraint violations and return list of affected bids. """
         # initiate list of constraint violations
         bids_in_violation = []
@@ -1615,6 +1616,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
             else:
                 tasks_to_print = non_empty_tasks[:n_tasks]
 
+        if not tasks_to_print: out += '\t<empty results>\n'
+
         for i_tasks,task in enumerate(tasks_to_print):
             task : GenericObservationTask
             bids : List[Bid] = results[task]
@@ -1677,10 +1680,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
 
-        if not observation_path:
-            out += '\t<empty path>\n'
-            for _ in range(L_LINE + L_LINE_PADding): out += '-'
-            out += '\n'
+        if not observation_path: out += '\t<empty path>\n'
 
         n = 15
         for i,obs in enumerate(observation_path):
@@ -1730,11 +1730,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         for _ in range(L_LINE + L_LINE_PADding): out += '='
         out += '\n'
 
-        if not bundle:
-            out += '\t<empty bundle>\n'
-            for _ in range(L_LINE + L_LINE_PADding): out += '-'
-            out += '\n'
-
+        if not bundle: out += '\t<empty bundle>\n'
         
         for i,(_,tasks) in enumerate(bundle):
             line = f'{i}\t['
