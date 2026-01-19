@@ -5,6 +5,7 @@ class TemporalRequirementAttributes(Enum):
     REVISIT_TIME = 'revisit_time [s]'
     CO_OBSERVATION_TIME = 'coobservation_time [s]'
     RESPONSE_TIME = 'response_time [s]'
+    RESPONSE_TIME_NORM = 'response_time [normalized]'
     OBS_TIME = 't_img [s]'
 
 class ObservationRequirementAttributes(Enum):
@@ -18,6 +19,7 @@ class ObservationRequirementAttributes(Enum):
     LOOK_ANGLE = 'look_angle [deg]'
     INCIDENCE_ANGLE = 'incidence_angle [deg]'
     OFF_NADIR_ANGLE = 'off-nadir axis angle [deg]'
+    ECLIPSE = 'eclipse'
 
 class SpatialCoverageRequirementAttributes(Enum):
     LOCATION = 'location'

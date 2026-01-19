@@ -120,6 +120,7 @@ class PerformancePreferenceStrategies(Enum):
     # Higher val = better   
     EXP_SATURATION = 'exp_saturation'
     LOG_THRESHOLD = 'log_threshold'
+    DEMINISHING_RETURNS = 'diminishing_returns'
     
     # Lower val = better
     EXP_DECAY = 'exp_decay'
@@ -418,7 +419,71 @@ class LogThresholdRequirement(PerformanceRequirement):
             f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.LOG_THRESHOLD.value}'"
         
         # unpack dictionary
-        req_type = dict.get("req_type")
+        attribute = dict.get("attribute")
+        slope = dict.get("slope")
+        threshold = dict.get("threshold")
+        id = dict.get("id", None) 
+
+        # initiate requirement
+        return cls(attribute, slope, threshold, id)
+
+class DeminishingReturnsRequirement(PerformanceRequirement):
+    def __init__(self, 
+                 attribute : str, 
+                 slope : float, 
+                 threshold : float, 
+                 id = None
+                ):
+        """
+        ### Diminishing Returns Requirement
+        
+        Initializes a requirement that uses the derivative of a logarithmic threshold preference function.
+        - :`req_type`: The type of requirement (e.g., "capability", "temporal", "spatial").
+        - :`attribute`: The attribute being measured (e.g., "data collected", "observations made").
+        - :`slope`: The slope of the logarithmic function (higher values lead to steeper transitions). Must be positive.
+        - :`threshold`: The threshold value at which preference value is 0.5. Must be non-negative.
+        - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
+        """
+        # initiate parent class
+        super().__init__(attribute, PerformancePreferenceStrategies.LOG_THRESHOLD.value, id)
+        
+        # validate inputs
+        assert isinstance(slope, (int, float)), "Slope must be a number"
+        assert slope > 0, "Slope must be positive"
+        assert isinstance(threshold, (int, float)), "Threshold must be a number"
+        assert threshold >= 0, "Threshold must be non-negative"
+
+        # set attributes
+        self.slope : float = slope
+        self.threshold : float = threshold
+    
+    def _eval_preference_function(self, value : int) -> float:
+        # validate inputs
+        assert isinstance(value, int) and value > 0, \
+            "Value must be a positive integer"
+        
+        # calculate preference values of value and value-1
+        p_i_mins_1  = 1 / (1 + np.exp(-self.slope * (value - 1 - self.threshold)))
+        p_i = 1 / (1 + np.exp(-self.slope * (value - self.threshold)))
+    
+        # return preference value
+        return max(0.0, p_i - p_i_mins_1)
+
+    def __repr__(self):
+        return super().__repr__()[:-1] + f", slope={self.slope}, threshold={self.threshold})"
+    
+    @classmethod
+    def from_dict(cls, dict: Dict[str, Union[str, float]]) -> 'DeminishingReturnsRequirement':
+        """Create a diminishing returns requirement from a dictionary."""
+
+        # validate input dictionary
+        required_keys = ['req_type', 'attribute', 'slope', 'threshold']
+        assert all(key in dict for key in required_keys), \
+            f"Dictionary must contain the keys: {required_keys}"
+        assert dict.get("strategy").lower() == PerformancePreferenceStrategies.DEMINISHING_RETURNS.value, \
+            f"Strategy does not match requirement definition. Must be '{PerformancePreferenceStrategies.DEMINISHING_RETURNS.value}'"
+        
+        # unpack dictionary
         attribute = dict.get("attribute")
         slope = dict.get("slope")
         threshold = dict.get("threshold")

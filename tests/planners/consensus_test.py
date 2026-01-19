@@ -16,15 +16,15 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         # test case toggles
         ## common cases
-        self.single_sat_toy = False
-        self.multiple_sat_toy = False
-        self.single_sat_lakes = False
-        self.multiple_sat_lakes = False
+        self.single_sat_toy = False     # NOT IMPLEMENTED YET
+        self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
+        self.single_sat_lakes = False   
+        self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
         self.toy_1 = False  # single sat    default mission     single target, no events
-        self.toy_2 = False  # single sat    no default mission  ne event
-        self.toy_3 = False  # two sats      no default mission  one event
+        self.toy_2 = False  # single sat    no default mission  one event
+        self.toy_3 = True  # two sats      no default mission  one event
         self.toy_4 = False  # two sats      no default mission  one event           optimistic bidding
         self.toy_5 = False  # two sats      no default mission  one event           comm delays
         self.toy_6 = False  # two sats      no default mission  two targets         two events
@@ -44,7 +44,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_20 = False # two sats       default mission     multiple targets    two events           preplan w/short horizon + replan
 
         self.toy_21 = False # single sat    no default mission     multiple targets    two events announced by GS  replan
-        self.toy_22 = True # two sats      no default mission     multiple targets    two events announced by GS   replan
+        self.toy_22 = False # two sats      no default mission     multiple targets    two events announced by GS   replan
 
     def toy_planner_config(self):
         return {

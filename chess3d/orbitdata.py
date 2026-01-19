@@ -191,7 +191,8 @@ class IntervalData(AbstractData):
             columns = [col.replace('index', 'time [s]') for col in df.columns.values]
             
             # get time data in Inteval format
-            data = [(t_start * time_step, t_end * time_step, row) for t_start,t_end,*row in df.values]
+            data = [(t_start * time_step, t_end * time_step, row) 
+                    for t_start,t_end,*row in df.values]
         else:
             # get time column index
             columns = [col for col in df.columns.values]
@@ -206,11 +207,25 @@ class IntervalData(AbstractData):
         """
         Returns interval that contains time `t`. Returns None if no interval contains time `t`
         """
-        intervals = [(t_start,t_end,row) for t_start,t_end,*row in self.data
+        intervals = [(t_start,t_end,row) 
+                     for t_start,t_end,*row in self.data
                      if t_start-1e-6 <= t <= t_end+1e-6]
         intervals.sort()
 
         return intervals[0] if intervals else None
+
+    def lookup_intervals(self, t_start : float, t_end : float) -> List[Interval]:
+        """
+        Returns all intervals that overlap with the interval [t_start, t_end]
+        """
+        intervals = [(t_start_i,t_end_i) 
+                     for t_start_i,t_end_i,_ in self.data
+                     if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
+        intervals.sort()
+        
+        # return clipped intervals that match the requested interval
+        return [Interval(max(t_start_i, t_start),(min(t_end_i, t_end))) 
+                for t_start_i,t_end_i in intervals]
     
     def is_active(self, t : float) -> bool:
         """

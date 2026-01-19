@@ -82,7 +82,7 @@
                         },
                         {
                             "req_type": "performance",
-                            "attribute": "observation_time [s]",
+                            "attribute": "t_img [s]",
                             "strategy" : "discrete_intervals",
                             "thresholds": [0.0, 7200.0],
                             "scores": [1.0, 0.0]

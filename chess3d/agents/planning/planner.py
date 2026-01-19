@@ -761,10 +761,12 @@ class AbstractPlanner(ABC):
             # update observation performance information
             obs_perf.update({ 
                 SpatialCoverageRequirementAttributes.LOCATION.value : [loc],
-                TemporalRequirementAttributes.OBS_TIME.value : t_img,
-                TemporalRequirementAttributes.RESPONSE_TIME.value : t_img - task.availability.left,
                 TemporalRequirementAttributes.DURATION.value : d_img,
                 TemporalRequirementAttributes.REVISIT_TIME.value : t_img - t_prev,
+                #TODO Co-observation time
+                TemporalRequirementAttributes.RESPONSE_TIME.value : t_img - task.availability.left,
+                TemporalRequirementAttributes.RESPONSE_TIME_NORM.value : (t_img - task.availability.left) / task.availability.span() if task.availability.span() > 0 else 0.0,
+                TemporalRequirementAttributes.OBS_TIME.value : t_img,
                 "t_end" : t_img + d_img,
                 ObservationRequirementAttributes.OBSERVATION_NUMBER.value : n_obs + 1, # including this observation
             })
@@ -812,7 +814,8 @@ class AbstractPlanner(ABC):
                         for *_,grid_index,gp_index in task.location}
         
         # get ground points accessesible during the availability of the task
-        raw_access_data : Dict[str,list] = orbitdata.gp_access_data.lookup_interval(t_img, t_img + d_img)
+        raw_access_data : Dict[str,list] \
+            = orbitdata.gp_access_data.lookup_interval(t_img, t_img + d_img)
 
         # extract ground point accesses that are within the agent's field of view
         accessible_gps_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
@@ -830,7 +833,17 @@ class AbstractPlanner(ABC):
         observation_performances = {col : [accessible_gps_performances[col][i] 
                                            for i in valid_access_data_indeces]
                                     for col in accessible_gps_performances}
-        
+
+        # get agent eclipse data
+        agent_eclipse_intervals : list[Interval] \
+            = orbitdata.eclipse_data.lookup_intervals(t_img, t_img + d_img)
+
+        # include eclipse data for each observation in the performance metrics
+        observation_performances[ObservationRequirementAttributes.ECLIPSE.value] = [
+            int(any([t in interval for interval in agent_eclipse_intervals]))
+            for t in observation_performances['time [s]']
+        ]
+
         # return estimated observation performances
         return observation_performances
 

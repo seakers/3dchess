@@ -93,6 +93,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         self.t_share = -1   
 
         # replanning flags 
+        self.task_announcements_received = False
         self.results_changes_performed = False
         self.bundle_changes_performed = False
 
@@ -135,7 +136,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # -------------------------------
 
         # perform consensus phase for incoming task bids
-        results_updates, bundle_updates, self.last_performed_observations \
+        task_updates, results_updates, bundle_updates, self.last_performed_observations \
               = self._consensus_phase(state, incoming_reqs, incoming_bids, tasks, current_plan, performed_observations)
 
         # assume bundle and results are now consistent
@@ -152,9 +153,11 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # -------------------------------
 
         # set replanning flags
+        # 0) there were new tasks that were not previously considered by agent
+        self.task_announcements_received = len(task_updates) > 0
         # 1) there were relevant updates to bids/results
         self.results_changes_performed = len(results_updates) > 0
-        # 2) incoming bids modified the bundle
+        # 2) incoming bids modified tasks in my bundle
         self.bundle_changes_performed = len(bundle_updates) > 0
 
     def __collect_incoming_bids(self, misc_messages : List[SimulationMessage]) -> List[Bid]:
@@ -174,7 +177,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         tasks : List[GenericObservationTask],
                         current_plan : Plan,
                         performed_observations : List[ObservationAction]
-                    ) -> List[Bid]:
+                    ) -> Tuple[List[Bid], List[Bid], List[Bid], List[ObservationAction]]:
         """ Perform consensus phase to update bids and bundle. """
 
         # check for new default mission tasks
@@ -202,9 +205,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
         performed_updates = self._update_performed_bids(state)
         
         # compile updates and return list of updates
-        results_updates = list(chain.from_iterable([
+        task_updates = list(chain.from_iterable([
                                                     new_default_tasks,
                                                     new_urgent_task_added, 
+                                                ]))
+        results_updates = list(chain.from_iterable([
+                                                    # new_default_tasks,
+                                                    # new_urgent_task_added, 
                                                     expired_tasks, 
                                                     preplan_obs,
                                                     # performed_bundle_updates,
@@ -219,18 +226,18 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # update bundle and enforce constraints iteratively on results
         while True:
             # update bundle from results updates
-            self.bundle, self.path, constraint_bundle_updates \
+            self.bundle, self.path, results_bundle_updates \
                 = self._update_bundle_from_results(state)
 
             # enforce constraints in results
             constraint_violations = self._check_results_constraints(state)
 
-            # append updates to compiled lists
+            # append updates to compiling lists
+            bundle_updates.extend(results_bundle_updates)
             results_updates.extend(constraint_violations)
-            bundle_updates.extend(constraint_bundle_updates)
 
             # check for further updates
-            if not constraint_bundle_updates and not constraint_violations:
+            if not results_bundle_updates and not constraint_violations:
                 break # no more updates; exit loop       
         
         # collect performed observation opportunities
@@ -238,12 +245,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
             = [obs_opp for obs_opp,_ in performed_bundle_updates]
                 
         # return lists of updates
-        return results_updates, bundle_updates, performed_observation_opportunities   
+        return task_updates, results_updates, bundle_updates, performed_observation_opportunities   
 
     def __update_bundle_from_preplan(self, 
                                      state : SimulationAgentState, 
                                      current_plan : Plan
-                                    ) -> List[Bid]:
+                                    ) -> tuple:
         """ Update latest preplan if new plan is available. """
         # check if new periodic plan is available
         if not isinstance(current_plan, PeriodicPlan) or abs(state.t - current_plan.t) > self.EPS:
@@ -287,9 +294,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # reset path
         self.path = []
 
-        if bundle_resets:
-            x=1 # debug breakpoint
-
+        # return updates
         return preplan_path, bundle_resets
 
     def _process_default_tasks(self, state: SimulationAgentState, tasks: List[GenericObservationTask]) -> List[Bid]:
@@ -940,28 +945,22 @@ class ConsensusPlanner(AbstractReactivePlanner):
                        current_plan : Plan,
                        orbitData : OrbitData
                     ) -> bool:
-        try:
-            # -------------------------------
-            # DEBUG BREAKPOINTS
-            if self.results_changes_performed:
-                x = 1  # Placeholder implementation
-            if self.bundle_changes_performed:
-                x = 1  # Placeholder implementation
-            # -------------------------------
+        # -------------------------------
+        # DEBUG BREAKPOINTS
+        # if self.task_announcements_received:
+        #     x = 1 # breakpoint
+        # if self.results_changes_performed:
+        #     x = 1  # breakpoint
+        # if self.bundle_changes_performed:
+        #     x = 1  # breakpoint
+        # -------------------------------
 
-            # trigger replan if either...
-            return (                    
-                    self.results_changes_performed      # 1) there were relevant updates to bids/results
-                    or self.bundle_changes_performed    # 2) incoming bids modified the bundle
-                    )
-        
-        finally:
-            # reset replanning flags
-            self.results_changes_performed = False
-            self.bundle_changes_performed = False
-
-            # reset new event task inbox
-            self.incoming_event_tasks = list()
+        # trigger replan if either...
+        return (   
+                self.task_announcements_received    # 0) new tasks were announced                 
+                or self.results_changes_performed   # 1) there were relevant updates to bids/results
+                or self.bundle_changes_performed    # 2) incoming bids modified the bundle
+                )
 
     """
     ---------------------------
@@ -979,20 +978,117 @@ class ConsensusPlanner(AbstractReactivePlanner):
                       observation_history : ObservationHistory,
                     ) -> Plan:  
         """ Generate new plan according to consensus replanning model. """             
+        try:
+            # DEBUG RETURN------------------- 
+            # do not modify plan
+            # return current_plan.copy()
+            # -------------------------------
 
-        # DEBUG RETURN------------------- 
-        # do not modify plan
-        # return current_plan.copy()
-        # -------------------------------
+            # # DEBUG PRINTOUTS----------------
+            # # if self._debug:
+            # #     self._log_results('PLANNING PHASE - RESULTS (BEFORE)', state, self.results)
+            # #     self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
+            # #     x = 1 # breakpoint
+
+            # # -------------------------------
+        
+            # # check if a new periodic plan was generated by parent agent
+            # if isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS:
+            #     # ensure current bundle and path were reset during consensus phase
+            #     assert len(self.bundle) == 0, "Current bundle not empty during preplan-based bundle building."
+            #     assert len(self.path) == 0, "Current path not empty during preplan-based bundle building."        
+                
+            #     # build bundle from periodic preplan
+            #     self.bundle, self.path, new_bids = \
+            #         self._build_bundle_from_preplan(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
+
+            #     # TODO ensure bids that all observations that were able to be added to bundle match observations in preplan
+
+            #     # check if new path and bundle are valid
+            #     self.__validate_new_bundle(state, specs, new_bids)
+
+            #     # update results
+            #     self.__update_results_from_bundle(state, new_bids)
+
+            # elif self.task_announcements_received or self.bundle_changes_performed:
+            #     # build new bundle and path according to replanning model
+            #     self.bundle, self.path, new_bids = \
+            #         self._bundle_building_phase(state, specs, current_plan, tasks, clock_config, orbitdata, mission, observation_history)
+                
+            #     # check if new path and bundle are valid
+            #     self.__validate_new_bundle(state, specs, new_bids)
+
+            #     # update results
+            #     self.__update_results_from_bundle(state, new_bids)
+            
+            # # -------------------------------
+            # # DEBUG PRINTOUTS
+            # if self._debug and new_bids:
+            #     self._log_results('PLANNING PHASE - RESULTS (AFTER)', state, self.results)
+            #     self._log_bundle('PLANNING PHASE - BUNDLE (AFTER)', state, self.bundle)
+            #     x = 1 # breakpoint
+            # # -------------------------------
+
+            # generate new bundle and path according to replanning model
+            self.bundle, self.path = \
+                self.__replan_observations(state, specs, current_plan, clock_config, orbitdata, mission, tasks, observation_history)
+        
+            # generate maneuver and travel actions from observations
+            maneuvers : list = self._schedule_maneuvers(state, specs, self.path, clock_config, orbitdata)
+
+            # schedule broadcasts
+            broadcasts : list = self._schedule_broadcasts(state, orbitdata)
+
+            # determine next planning time        
+            # t_next = state.t + current_plan.horizon if isinstance(current_plan, PeriodicPlan) else current_plan.t_next
+            t_next = self.preplan.t_next
+            
+            # compile and generate plan
+            prelim_plan = ReactivePlan(maneuvers, self.path, broadcasts, t=state.t, t_next=t_next)
+
+            # schedule periodic replan
+            preplan_waits : list = self._schedule_periodic_replan(state, prelim_plan, t_next)
+
+            # compile final plan
+            self.plan = ReactivePlan(prelim_plan.actions, preplan_waits, t=state.t, t_next=t_next)
+
+            # clear new urgent tasks
+            self.incoming_event_tasks = list()
+
+            # return final plan
+            return self.plan.copy()
+        
+        finally:
+            # reset replanning flags
+            self.results_changes_performed = False
+            self.bundle_changes_performed = False
+
+            # reset new event task inbox
+            self.incoming_event_tasks = list()
+
+    def __replan_observations(self,
+                                state : SimulationAgentState,
+                                specs : object,
+                                current_plan : Plan,
+                                clock_config : ClockConfig,
+                                orbitdata : OrbitData,
+                                mission : Mission,
+                                tasks : List[GenericObservationTask],
+                                observation_history : ObservationHistory,
+                              ) -> tuple:
 
         # DEBUG PRINTOUTS----------------
         # if self._debug:
         #     self._log_results('PLANNING PHASE - RESULTS (BEFORE)', state, self.results)
         #     self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
         #     x = 1 # breakpoint
-
         # -------------------------------
 
+        # check if relevant changes were made to bundle or tasks
+        if not self.task_announcements_received and not self.bundle_changes_performed:
+            # no changes to tasks or bundle; do not replan
+            return self.bundle, self.path                
+    
         # check if a new periodic plan was generated by parent agent
         if isinstance(current_plan, PeriodicPlan) and abs(state.t - current_plan.t) <= self.EPS:
             # ensure current bundle and path were reset during consensus phase
@@ -1004,26 +1100,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 self._build_bundle_from_preplan(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
 
             # TODO ensure bids that all observations that were able to be added to bundle match observations in preplan
-
-        else:
+            
+        else: # no new periodic plan; generate new plan based on changes to tasks or bundle
             # build new bundle and path according to replanning model
             self.bundle, self.path, new_bids = \
                 self._bundle_building_phase(state, specs, current_plan, tasks, clock_config, orbitdata, mission, observation_history)
-        
-        # check if new path is valid
-        assert len(self.bundle) == len(self.path), \
-            "New bundle and path lengths do not match."
-        if self._debug:
-            for obs_action in self.path:
-                if not any([obs_action.obs_opp == obs_opp for obs_opp,_ in self.bundle]):
-                    x = 1 # debug breakpoint
-        assert all([obs_action.t_start >= state.t for obs_action in self.path]), \
-            "New observation path contains actions scheduled in the past."        
-        assert self.is_observation_path_valid(state, self.path, None, None, specs), \
-            "New observation path is not valid."   
-        # Dict[GenericObservationTask, Dict[int, Bid]]
-        assert all(bid.t_bid <= state.t for bids in new_bids.values() for bid in bids.values()), \
-            "New bids must be assigned the correct bid time."
+
+        # check if new path and bundle are valid
+        self.__validate_new_bundle(state, specs, new_bids)
 
         # update results
         self.__update_results_from_bundle(state, new_bids)
@@ -1035,32 +1119,20 @@ class ConsensusPlanner(AbstractReactivePlanner):
             self._log_bundle('PLANNING PHASE - BUNDLE (AFTER)', state, self.bundle)
             x = 1 # breakpoint
         # -------------------------------
+
+        return self.bundle, self.path
     
-        # generate maneuver and travel actions from observations
-        maneuvers : list = self._schedule_maneuvers(state, specs, self.path, clock_config, orbitdata)
+    def __validate_new_bundle(self, state : SimulationAgentState, specs : object, new_bids : dict) -> None:
+        """ check if new path is valid """
+        assert len(self.bundle) == len(self.path), \
+            "New bundle and path lengths do not match."
+        assert all([obs_action.t_start >= state.t for obs_action in self.path]), \
+            "New observation path contains actions scheduled in the past."        
+        assert self.is_observation_path_valid(state, self.path, None, None, specs), \
+            "New observation path is not valid."   
+        if self._debug: assert all(bid.t_bid <= state.t for bids in new_bids.values() for bid in bids.values()), \
+            "New bids must be assigned the correct bid time."
 
-        # schedule broadcasts
-        broadcasts : list = self._schedule_broadcasts(state, orbitdata)
-
-        # determine next planning time        
-        # t_next = state.t + current_plan.horizon if isinstance(current_plan, PeriodicPlan) else current_plan.t_next
-        t_next = self.preplan.t_next
-        
-        # compile and generate plan
-        prelim_plan = ReactivePlan(maneuvers, self.path, broadcasts, t=state.t, t_next=t_next)
-
-        # schedule periodic replan
-        preplan_waits : list = self._schedule_periodic_replan(state, prelim_plan, t_next)
-
-        # compile final plan
-        self.plan = ReactivePlan(prelim_plan.actions, preplan_waits, t=state.t, t_next=t_next)
-
-        # clear new urgent tasks
-        self.incoming_event_tasks = list()
-
-        # return final plan
-        return self.plan.copy()
-        
     @runtime_tracker
     def _schedule_periodic_replan(self, state : SimulationAgentState, prelim_plan : Plan, t_next : float) -> list:
         """ Creates and schedules a waitForMessage action such that it triggers a periodic replan """
