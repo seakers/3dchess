@@ -168,13 +168,15 @@ cython_debug/
 **tests/**/results
 *geodata*
 swifa/
-**experiments/stress_test/resources/orbits/**
+
+# Experiments
+**experiments/orbit_connectivity/resources/orbits/**.csv
 
 *.tar
 *.tar*
 *.tar.xz
 *.png
-.zip
+*.zip
 
 # Gurobi
 *.lic

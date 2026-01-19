@@ -119,7 +119,7 @@ SPACECRAFT_TEMPLATE = {
 # ========================================
 #   Walker Delta Constellation Functions
 # ========================================
-def generate_walker_delta_specifications(i : float, t : int, f : int = 1) -> List[tuple]:
+def generate_walker_delta_specifications(i : float, t : int) -> List[tuple]:
     """ 
     Generate Walker delta constellation specifications for a low, a medium, and a high connectivity ISL constellation 
 
@@ -132,16 +132,33 @@ def generate_walker_delta_specifications(i : float, t : int, f : int = 1) -> Lis
             The change in true anomaly (in degrees) for equivalent satellites 
             in neighbouring planes is equal to f * 360° / t.
     """
-    specifications = [
-        (i,t,p,f) 
-        for p in range(1, t+1)
-        if t % p == 0
-    ]
+    # initiate list of specifications
+    specifications = []
+
+    # check if `t` is less than 10
+    if t <= 10:
+        # generate all possible planes and phasings
+        p_values = list(range(1, t+1)) # all possible planes
+        f_values = list(range(0, t))   # all possible phasings
+    else:
+        # sample 10 possible planes 
+        p_values = sorted(set( np.linspace(1, t, num=10, dtype=int).tolist() ))
+        f_values = sorted(set( np.linspace(0, t-1, num=10, dtype=int).tolist() ))
+
+    # generate specifications for p = 1 to t planes
+    for p in p_values:
+        # generate specifications for f = 0 to t-1
+        for f in f_values:
+            # append specification
+            specifications.append( (i, t, p, f) )
+
+            # only need to evaluate f=0 for single plane constellations
+            if p == 1: break
 
     # return all specifications
     return specifications
     
-def walker_to_orbital_params(alt : float, i : float, t : float, p : int, f : int) -> List[dict]:
+def walker_delta_to_orbital_params(alt : float, i : float, t : float, p : int, f : int) -> List[dict]:
     """
     Converts Walker delta constellation specifications to orbital parameters.
 
@@ -152,13 +169,15 @@ def walker_to_orbital_params(alt : float, i : float, t : float, p : int, f : int
             The change in true anomaly (in degrees) for equivalent satellites 
             in neighbouring planes is equal to f * 360° / t.
     """
-    assert t % p == 0, "Number of satellites must be divisible by number of planes."
 
     # initialize list of orbital parameters
     orbital_params = []
 
-    # calculate number of satellites per plane and RAAN spacing
-    sats_per_plane = t // p
+    # calculate number of satellites per plane 
+    min_sats_per_plane = t // p
+    remaining_sats_to_assign = t % p
+
+    # calculate RAAN spacing and initial phasing
     raan_spacing = calc_raan_spacing(p)
     aop_phasing = calc_initial_phasing(t, f)
 
@@ -167,6 +186,10 @@ def walker_to_orbital_params(alt : float, i : float, t : float, p : int, f : int
         # calculate plane RAAN and initial aop
         raan = plane_idx * raan_spacing
         aop = plane_idx * aop_phasing 
+
+        # calculate sats per plane (distribute remaining sats)
+        sats_per_plane = min_sats_per_plane 
+        sats_per_plane += 1 if plane_idx < remaining_sats_to_assign else 0
 
         # generate orbital parameters for each satellite in plane
         for sat_idx in range(sats_per_plane):
@@ -185,34 +208,34 @@ def walker_to_orbital_params(alt : float, i : float, t : float, p : int, f : int
 
     return orbital_params
 
+def calc_raan_spacing(n_planes : int) -> float:
+    """ Calculate the RAAN spacing between planes in degrees. """
+    # return spacing
+    return 360.0 / n_planes
+
 def calc_initial_phasing(t: int, f : int) -> float:
     """ Calculate the initial phases for each satellite in degrees. """
     return f * 360 / t
 
 def calc_ta_spacing(t: int, p : int) -> float:
     """ Calculate the in-plane spacing between satellites in degrees. """
-    # ensure valid inputs
-    assert t % p == 0, "Number of satellites must be divisible by number of planes."
-
     # calculate number of satellites per plane
     sats_per_plane = t // p
 
     # return spacing
     return 360.0 / sats_per_plane
 
-def calc_raan_spacing(n_planes : int) -> float:
-    """ Calculate the RAAN spacing between planes in degrees. """
-    # return spacing
-    return 360.0 / n_planes
-
-def propagate_walker_delta_constellation(alt : float, i : float, t : int, p : int, f : int, T : float, debug : bool = True) -> str:
+def propagate_walker_delta_constellation(alt : float, i : float, t : int, p : int, f : int, T : float, TRIAL : int, debug : bool = True) -> str:
     """ Propagate a Walker delta constellation and save the orbit data to disk. """
     # define data directory
-    data_dir = f'./orbits/walker_delta_{t}sat_{p}planes'
-    data_filename = os.path.join(data_dir,'MissionSpecs.json')
+    data_path = f'./orbits/trial_{TRIAL}/'
+    data_name = f'walker_delta_{t}sat_{p}planes_{f}phasing'
+    data_dir = os.path.join(data_path, data_name)
+    os.makedirs(data_dir, exist_ok=True)
+    data_filename = os.path.join(data_dir, 'MissionSpecs.json')
     
     # convert to orbital parameters
-    orbital_params = walker_to_orbital_params(alt, i, t, p, f)
+    orbital_params = walker_delta_to_orbital_params(alt, i, t, p, f)
 
     # DEBUG print results
     print("="*80 + "\n")
@@ -223,7 +246,7 @@ def propagate_walker_delta_constellation(alt : float, i : float, t : int, p : in
         for idx, params in enumerate(orbital_params):
             if prev_param and prev_param['raan'] != params['raan']:
                 print("  " + "-"*80)
-            print(f"  Sat-{idx+1}:\tinc={params['inc']}°\traan={params['raan']}°\taop={params['aop']}°\tta={params['ta']}°")
+            print(f"  Sat-{idx+1}:\tinc={params['inc']}°\traan={round(params['raan'],3)}°\taop={round(params['aop'],3)}°\tta={round(params['ta'],3)}°")
             prev_param = params
         print("="*80 + "\n")
     else:
@@ -251,13 +274,13 @@ def propagate_walker_delta_constellation(alt : float, i : float, t : int, p : in
 
         # compare with current specifications
         if existing_mission_spec == mission_spec: 
-            print(f"Propagation already exists for walker_delta_{t}sat_{p}planes. Skipping propagation...\n\n")
+            print(f"Propagation already exists for `walker_delta_{t}sat_{p}planes_{f}phasing`. Skipping propagation...\n\n")
             return data_dir
         else:
             for key in mission_spec:
                 if existing_mission_spec[key] != mission_spec[key]:
                     print(f"Difference found in key: `{key}`")
-            print(f"Existing propagation specifications differ from current specifications for walker_delta_{t}sat_{p}planes. Re-propagating...\n\n")
+            print(f"Existing propagation specifications differ from current specifications for `walker_delta_{t}sat_{p}planes`. Re-propagating...\n\n")
 
     # create mission for propagation
     mission : Mission = Mission.from_json(mission_spec)  
@@ -282,7 +305,6 @@ def propagate_walker_delta_constellation(alt : float, i : float, t : int, p : in
         mission_specs_file.write(json.dumps(mission_spec, indent=4))
 
     return data_dir
-
 
 # ========================================
 # String of Pearls Constellation Functions
@@ -463,122 +485,167 @@ if __name__ == "__main__":
     # terminal welcome message
     print_welcome(f'Internal Validation Orbit Generator')
 
+    # define trial number
+    TRIAL = 2
+
     # define common orbital parameters
     alt = 550.0     # altitude [km]
     i = 98.0        # inclination [degrees]
     # n_sats_candidates = [8, 12, 24, 36, 48, 60, 96, 144]  # total number of satellites
-    # n_sats_candidates = [12, 36, 60, 144]  # total number of satellites
-    # n_sats_candidates = [8, 24, 48, 96]  # total number of satellites
-    n_sats_candidates = [144]  # total number of satellites
-    # n_sats_candidates = [8, 12, 24]  # total number of satellites
+    
+    # n_sats_candidates = [2, 4, 8, 12, 24, 48, 96, 204]  # total number of satellites
+    n_sats_candidates = [4, 8, 12, 48]  # total number of satellites
 
     # calculate orbital period
     T = 2 * np.pi * np.sqrt( (R + alt)**3 / GM )
     T /= 2 # propagate for half an orbital period
 
-    # initiate results compilation lists
-    time_series_df : pd.DataFrame = None
-    compiled_df : pd.DataFrame = None    
+    # define whether to override existing compiled metrics
+    override : bool = False
 
-    # evaluate each candidate number of satellites
-    for n_sats in n_sats_candidates:
-        # generate walker delta specifications
-        walker_specs = generate_walker_delta_specifications(i, n_sats)
+    # define path to compiled metrics
+    compiled_metrics_path = os.path.join('./orbits/compiled_walker_delta_connectivity_metrics.csv')
+    if os.path.isfile(compiled_metrics_path) and not override:
+        # if file exists and no override is required, skip computation and load existing metrics
+        print(f"Compiled connectivity metrics file already exists at: {compiled_metrics_path}. Loading existing metrics...\n")
+        compiled_df : pd.DataFrame = pd.read_csv(compiled_metrics_path)
+        
+    else:
 
-        # initialize results compilation lists
-        metrics_columns : List[str] = ['alt [km]', 'inc [deg]', 'num sats', 'num planes', 'phasing param',
-                                        # 'fully connected time frac', 
-                                        'max lcc [norm]', 
-                                        'max lcc frac', 
-                                        'avg lcc [norm]', 
-                                        'avg num components'
-                                        ]
-        metrics_data : list = []    
+        # initiate results compilation lists
+        time_series_df : pd.DataFrame = None
+        compiled_df : pd.DataFrame = None    
 
-        # evaluate each specification
-        for i,t,p,f in walker_specs:
-            # ensure total number of satellites matches specifications
-            assert t == n_sats, "Total number of satellites does not match specified value."
+        # evaluate each candidate number of satellites
+        for n_sats in n_sats_candidates:
+            # generate walker delta specifications
+            walker_specs = generate_walker_delta_specifications(i, n_sats)
+
+            # initialize results compilation lists
+            metrics_columns : List[str] = ['alt [km]', 'inc [deg]', 'num sats', 'num planes', 'num planes [norm]', 'phasing param', 'phasing [deg]',
+                                            # 'fully connected time frac', 
+                                            'max lcc [norm]', 
+                                            'max lcc frac', 
+                                            'avg lcc [norm]', 
+                                            'avg num components'
+                                            ]
+            metrics_data : list = []    
+
+            # evaluate each specification
+            for i,t,p,f in walker_specs:    
+                # propagate constellation and save to disk
+                data_dir : str = propagate_walker_delta_constellation(alt, i, t, p, f, T, TRIAL)
+
+                # Load temporal graph and event times
+                TG, times, time_step = load_graph_snapshot_series(data_dir,T)
+
+                # Generate time-series connectivity metrics
+                metrics_series_df = generate_time_series_metrics(i, t, p, f, TG, times, time_step, data_dir, overwrite=True)
+                
+                # Add to results dataframe
+                time_series_df = pd.concat([time_series_df, metrics_series_df], ignore_index=False) \
+                                if time_series_df is not None else metrics_series_df
     
-            # propagate constellation and save to disk
-            data_dir : str = propagate_walker_delta_constellation(alt, i, t, p, f, T)
+                # Evaluate scalar metrics
+                # normalized parameters
+                p_norm = p / t
+                phasing_deg = f * 360 / t                
 
-            # Load temporal graph and event times
-            TG, times, time_step = load_graph_snapshot_series(data_dir,T)
+                # Largest Connected Component 
+                avg_largest_cc_norm = metrics_series_df['lcc [norm]'].mean()
+                            
+                max_largest_cc_norm = metrics_series_df['lcc [norm]'].max()
+                largest_cc_norm_series = metrics_series_df[metrics_series_df["lcc [norm]"] == max_largest_cc_norm]
+                max_largest_cc_norm_fraction = len(largest_cc_norm_series) / len(metrics_series_df)
 
-            # Generate time-series connectivity metrics
-            metrics_series_df = generate_time_series_metrics(i, t, p, f, TG, times, time_step, data_dir, overwrite=True)
-            
-            # Add to results dataframe
-            time_series_df = pd.concat([time_series_df, metrics_series_df], ignore_index=False) \
-                             if time_series_df is not None else metrics_series_df
- 
-            # TODO Evaluate scalar metrics
+                # Connected Component Count
+                avg_n_components = metrics_series_df['num components'].mean()
 
-            # Largest Connected Component 
-            avg_largest_cc_norm = metrics_series_df['lcc [norm]'].mean()
-                        
-            max_largest_cc_norm = metrics_series_df['lcc [norm]'].max()
-            largest_cc_norm_series = metrics_series_df[metrics_series_df["lcc [norm]"] == max_largest_cc_norm]
-            max_largest_cc_norm_fraction = len(largest_cc_norm_series) / len(metrics_series_df)
+                # Percentage Time Fully Connected
+                n_fully_connected = len(metrics_series_df[metrics_series_df['num components'] == 1])
+                fully_connected_fraction = n_fully_connected / len(metrics_series_df)
 
-            # Connected Component Count
-            avg_n_components = metrics_series_df['num components'].mean()
+                # compile results
+                scalar_metrics = [
+                            # fully_connected_fraction, 
+                            max_largest_cc_norm, 
+                            max_largest_cc_norm_fraction, 
+                            avg_largest_cc_norm, 
+                            avg_n_components
+                        ]
 
-            # Percentage Time Fully Connected
-            n_fully_connected = len(metrics_series_df[metrics_series_df['num components'] == 1])
-            fully_connected_fraction = n_fully_connected / len(metrics_series_df)
+                metrics = [alt,i,t,p,p_norm,f,phasing_deg]
+                metrics.extend(scalar_metrics)
+                
+                # Add to results list
+                metrics_data.append(metrics)
 
-            # compile results
-            scalar_metrics = [
-                        # fully_connected_fraction, 
-                        max_largest_cc_norm, 
-                        max_largest_cc_norm_fraction, 
-                        avg_largest_cc_norm, 
-                        avg_n_components
-                    ]
+            # generate metrics dataframe for this number of satellites
+            metrics_df = pd.DataFrame(data=metrics_data, columns=metrics_columns) 
 
-            metrics = [alt,i,t,p,f]
-            metrics.extend(scalar_metrics)
-            
-            # Add to results list
-            metrics_data.append(metrics)
+            # compile results dataframe
+            compiled_df = pd.concat([compiled_df, metrics_df], ignore_index=True) \
+                            if compiled_df is not None else metrics_df
 
-        # sort metrics data 
-        # metrics_data.sort(key=lambda x: (-x[5],-x[6],-x[7],-x[8],x[9])) # sort by metrics
-
-        # generate metrics dataframe for this number of satellites
-        metrics_df = pd.DataFrame(data=metrics_data, columns=metrics_columns) 
-
-        # compile results dataframe
-        compiled_df = pd.concat([compiled_df, metrics_df], ignore_index=True) \
-                        if compiled_df is not None else metrics_df
+        # Save results metrics to csv
+        compiled_df.to_csv(compiled_metrics_path, index=False)
+        print(f"Compiled connectivity scalar metrics saved to: \n   `{compiled_metrics_path}`\n")
     
     # compile final results metrics
     print("Compiled Scalar Metrics:")
-    print(compiled_df)
-
-    # Save results metrics to csv
-    compiled_metrics_path = os.path.join('./orbits/compiled_walker_delta_connectivity_metrics.csv')
-    compiled_df.to_csv(compiled_metrics_path, index=False)
-    print(f"Compiled connectivity scalar metrics saved to: \n   `{compiled_metrics_path}`\n")
+    # print(compiled_df)
+    print(compiled_df.describe().iloc[1:].round(2))
 
     # plot 
     print("Plotting compiled time-series metrics...")
     sns.set_theme(style="whitegrid")
 
     # Largest Connected Component over time
-    ax1 = sns.relplot(data=time_series_df, x='time [s]', y='lcc [norm]', row="num sats", hue="num planes", kind="line", palette="Set2")
-    ax1.set_titles("Largest Connected Component Over Time (n_sats={row_name})")
+    # ax1 = sns.relplot(data=time_series_df, 
+    #                   x='time [s]', 
+    #                   y='lcc [norm]', 
+    #                   row="num sats", 
+    #                   hue="num planes", 
+    #                   kind="line", 
+    #                   palette="Set2")
+    # ax1.set_titles("Largest Connected Component Over Time (n_sats={row_name})")
 
-    # Number of Components over time
-    ax2 = sns.relplot(data=time_series_df, x='time [s]', y='num components', row="num sats", hue="num planes", kind="line", palette="Set2")
-    ax2.set_titles("Number of Components Over Time (n_sats={row_name})")
+    # # Number of Components over time
+    # ax2 = sns.relplot(data=time_series_df, 
+    #                   x='time [s]', 
+    #                   y='num components', 
+    #                   row="num sats", 
+    #                   hue="num planes", 
+    #                   kind="line", 
+    #                   palette="Set2")
+    # ax2.set_titles("Number of Components Over Time (n_sats={row_name})")
 
     # Scatter Plots
-    ax3 = sns.relplot(data=compiled_df, x='max lcc [norm]', y='max lcc frac', row='num sats', hue='num planes', size='avg lcc [norm]', kind='scatter', palette="Set2")
-    ax3.set_titles("Max LCC vs. Avg LCC (n_sats={row_name})")
+    print("Plotting compiled scalar metrics...")
+    # ax3 = sns.relplot(data=compiled_df, 
+    #                   x='max lcc [norm]', 
+    #                   y='max lcc frac', 
+    #                   row='num sats', 
+    #                   hue='num planes', 
+    #                   size='avg lcc [norm]', 
+    #                   kind='scatter', 
+    #                   palette="Set2")
+    ax3 = sns.pairplot(data=compiled_df, 
+                       hue='num sats',
+                       diag_kind="hist",
+                       vars = ['num sats', 'num planes [norm]', 'phasing [deg]',
+                                # 'fully connected time frac', 
+                                'max lcc [norm]', 
+                                'max lcc frac', 
+                                'avg lcc [norm]', 
+                                'avg num components'
+                                ],
+                    #    x_vars=['max lcc [norm]', 'avg lcc [norm]', 'max lcc frac', 'avg num components'],
+                    #    y_vars=['max lcc [norm]', 'avg lcc [norm]', 'max lcc frac', 'avg num components'],
+                       palette = "Set2"
+                       )
+    # ax3.set_titles("Max LCC vs. Avg LCC (n_sats={row_name})")
 
     plt.show()
 
-    x = 1
+    print('DONE!')
