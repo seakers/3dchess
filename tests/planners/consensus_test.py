@@ -42,9 +42,10 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_18 = False # static relay scenario
         self.toy_19 = False # single sat    default mission     multiple targets    two events           preplan w/short horizon + replan
         self.toy_20 = False # two sats       default mission     multiple targets    two events           preplan w/short horizon + replan
-
         self.toy_21 = False # single sat    no default mission     multiple targets    two events announced by GS  replan
         self.toy_22 = False # two sats      no default mission     multiple targets    two events announced by GS   replan
+
+        # self.toy_21 = False # one sat and one GS no default mission     multiple targets    two events announced relay sat  
 
     def toy_planner_config(self):
         return {
@@ -2036,6 +2037,14 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.simulation.print_results()
 
         print(f"{scenario_name}: DONE")
+
+    def test_toy_case_23(self):
+        """
+        ## TOY TEST CASE 23
+
+        Test case for a single satelite reacting to event announcements from an announcer satellite and negotiating with a ground station with no observation capabilities.
+        """
+
 
     # def test_toy_case_2X(self):
     #     """
