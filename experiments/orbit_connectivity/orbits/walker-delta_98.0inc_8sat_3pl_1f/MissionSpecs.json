@@ -454,12 +454,6 @@
             }
         }
     ],
-    "grid": [
-        {
-            "@type": "customGrid",
-            "covGridFilePath": "./grids/toy.csv"
-        }
-    ],
     "scenario": {
         "connectivity": "LOS"
     },

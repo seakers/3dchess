@@ -4,11 +4,15 @@ from copy import deepcopy
 import json
 import os
 import shutil
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
-from orbitpy.mission import Mission
+import pandas as pd
+from tqdm import tqdm
 
+import networkx as nx
+
+from orbitpy.mission import Mission
 from chess3d.utils import print_welcome
 
 class Constellation(ABC):
@@ -31,12 +35,12 @@ class Constellation(ABC):
                         # "stepSize": 10
                     },
                     "spacecraft": [],
-                    "grid": [
-                        {
-                            "@type": "customGrid",
-                            "covGridFilePath": "./grids/toy.csv"
-                        }
-                    ],
+                    # "grid": [
+                    #     {
+                    #         "@type": "customGrid",
+                    #         "covGridFilePath": "./grids/toy.csv"
+                    #     }
+                    # ],
                     "scenario" : {
                         "connectivity": "LOS"
                     },
@@ -92,7 +96,7 @@ class Constellation(ABC):
                             },
                             "state": {
                                 "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
-                                "sma": 7078, # ~700 km altitude
+                                "sma": 7078,
                                 "ecc": 0.01,
                                 "inc": 60.0,
                                 "raan": 0.0,
@@ -102,15 +106,7 @@ class Constellation(ABC):
                         }
                 }
     
-    @abstractmethod
-    def to_orbital_parameter_list(self) -> List[dict]:
-        """ Converts constellation specifications to orbital parameters."""
-
-    @abstractmethod
-    def default_out_dir(self) -> str:
-        """ Returns the default output directory for the constellation propagation. """
-        
-    def propagate(self, propagation_period : float = None, out_dir : str = None, debug : bool = False) -> str:
+    def propagate(self, out_dir : str = None, propagation_period : float = None, debug : bool = False) -> str:
         """ Propagates the constellation and saves results to specified output directory. """
 
         # define output directory
@@ -123,20 +119,7 @@ class Constellation(ABC):
         data_filename = os.path.join(out_dir, 'MissionSpecs.json')
         
         # convert to orbital parameters
-        orbital_params : List[dict] = self.to_orbital_parameter_list()
-
-        # DEBUG print results
-        if debug:
-            print("="*80 + "\n")
-            print(f"Walker Delta Constellation - i:t/p/f = {round(self.inc,2)}°:{self.num_sats}/{self.num_planes}/{self.phasing_param}")
-            print("-"*82)
-            prev_param = None
-            for idx, params in enumerate(orbital_params):
-                if prev_param and prev_param['raan'] != params['raan']:
-                    print("  " + "-"*80)
-                print(f"  Sat-{idx+1}:\tinc={params['inc']}°\traan={round(params['raan'],3)}°\taop={round(params['aop'],3)}°\tta={round(params['ta'],3)}°")
-                prev_param = params
-            print("="*80 + "\n")            
+        orbital_params : List[dict] = self.to_orbital_parameter_list(debug)      
 
         # create satellite specification
         spacecraft = []
@@ -148,7 +131,7 @@ class Constellation(ABC):
             spacecraft.append(sat_spec)
 
         # calculate propagation period
-        propagation_period = self.T / 2 / 3600.0 / 24.0 \
+        propagation_period = self.get_default_propagation_period() \
             if propagation_period is None else propagation_period
 
         # create mission specification
@@ -170,7 +153,7 @@ class Constellation(ABC):
                 for key in mission_spec:
                     if existing_mission_spec[key] != mission_spec[key]:
                         print(f"Difference found in key: `{key}`")
-                print(f"Existing propagation specifications differ from current specifications for `walker_delta_{self.num_sats}sat_{self.num_planes}planes`. Re-propagating...\n\n")
+                print(f"Existing propagation specifications differ from current specifications for `walker_delta_{self.num_sats}sat_{self.num_planes}planes`.\nRe-propagating...")
         else:
             print("Propagating orbits...")
         
@@ -196,7 +179,240 @@ class Constellation(ABC):
         print(f"Saved mission specifications to \n   `{out_dir}`")
 
         # return output directory
-        return out_dir   
+        return out_dir     
+    
+    @abstractmethod
+    def default_out_dir(self) -> str:
+        """ Returns the default output directory for the constellation propagation. """
+    
+    @abstractmethod
+    def to_orbital_parameter_list(self, debug: bool = False) -> List[dict]:
+        """ Converts constellation specifications to orbital parameters."""
+
+    @abstractmethod
+    def get_default_propagation_period(self) -> float:
+        """ Returns the default propagation period for the constellation in days. """
+
+    def evaluate_connectivity(self, out_dir : str = None, overwrite : bool = False, debug : bool = False) -> Tuple[pd.DataFrame, dict]:
+        """ Evaluates the connectivity of the constellation and saves results to specified output directory. """
+
+        # define output directory
+        out_dir = self.default_out_dir() if out_dir is None else out_dir
+
+        # check if propagation data exists
+        mission_specs_path = os.path.join(out_dir, 'MissionSpecs.json')
+        if not os.path.exists(mission_specs_path):
+            # propagation data does not exist, propagate constellation
+            print(f"No propagation data found for constellation at: `{out_dir}`. Propagating constellation...\n")
+            self.propagate(out_dir=out_dir, debug=debug)
+
+        # get time-series conectivity metrics
+        metrics_series_df : pd.DataFrame = self.__get_time_series_metrics(out_dir, overwrite, debug)
+
+        ## largest connected component - LCC
+        avg_largest_cc_norm = metrics_series_df['lcc [norm]'].mean()
+                    
+        max_largest_cc_norm = metrics_series_df['lcc [norm]'].max()
+        largest_cc_norm_series = metrics_series_df[metrics_series_df["lcc [norm]"] == max_largest_cc_norm]
+        max_largest_cc_norm_fraction = len(largest_cc_norm_series) / len(metrics_series_df)
+
+        # connected components count
+        avg_n_components = metrics_series_df['num components'].mean()
+
+        # compile scalar metrics 
+        scalar_metrics = {
+                    'max lcc [norm]' : max_largest_cc_norm, 
+                    'max lcc time-fraction [norm]' : max_largest_cc_norm_fraction, 
+                    'avg lcc [norm]' : avg_largest_cc_norm, 
+                    'avg num components' : avg_n_components
+                }
+        
+        # return results
+        return metrics_series_df, scalar_metrics
+
+    def __get_time_series_metrics(self, data_dir : str, overwrite : bool, debug : bool) -> pd.DataFrame:
+        # define path to orbit data directory
+        data_dir = self.default_out_dir() if data_dir is None else data_dir
+
+        # define path to save metrics
+        metrics_path = os.path.join(data_dir, 'connectivity_series.csv')
+
+        # check if file already exists
+        if os.path.exists(metrics_path) and not overwrite:
+            # file exists and no overwrite is required, skip computation
+            print(f"Connectivity metrics file already exists at: {metrics_path}. Loading existing metrics...\n")
+            
+            # load existing metrics
+            metrics_series_df = pd.read_csv(metrics_path)
+            
+            # print metrics summary
+            assert not metrics_series_df.empty, "Loaded connectivity metrics dataframe is empty!"
+            if debug:
+                print('Connectivity Metrics:')
+                print(metrics_series_df.describe().iloc[1:].round(2))
+                print(f"\nConnectivity metrics loaded from:\n   `{metrics_path}`\n")
+        
+        else:# file does not exist or require overwrite, compute metrics
+            metrics_series_df = self.__generate_time_series_metrics(data_dir, debug)
+        
+        # return metrics dataframe
+        return metrics_series_df
+
+    def __generate_time_series_metrics(self, data_dir : str, debug : bool) -> pd.DataFrame:
+        # define path to save metrics
+        metrics_path = os.path.join(data_dir, 'connectivity_series.csv')
+        
+        # Load temporal graph and event times
+        TG, times, T, time_step = self.__generate_access_graph_time_series(data_dir)
+        
+        # initialize metrics
+        n_components_series = []
+        n_components_fraction_series = []
+        largest_cc_size_series = []
+        largest_cc_norm_series = []
+
+        # Evaluate constellation connectivity metrics
+        for G in tqdm(TG, desc=f'Evaluating connectivity metrics', unit='time steps'):
+            # compute connectivity metrics
+            connected_components = list(nx.connected_components(G))
+            n_cc = nx.number_connected_components(G)
+            n_cc_frac = n_cc / G.number_of_nodes()
+            largest_cc_size = len(max(connected_components, key=len)) if n_cc > 0 else 0
+            largest_cc_norm = largest_cc_size / G.number_of_nodes() 
+
+            # store metrics
+            n_components_series.append(n_cc)
+            n_components_fraction_series.append(n_cc_frac)
+            largest_cc_size_series.append(largest_cc_size)
+            largest_cc_norm_series.append(largest_cc_norm)
+
+        # get constellation parameters time series
+        metrics_series_dict = self._get_constellation_params_time_series(times)
+
+        # add connectivity metrics to dictionary
+        metrics_series_dict.update({
+            'time index' : times,
+            'time [s]' : [t * time_step for t in times],
+            'num components' : n_components_series,
+            'n components [norm]' : n_components_fraction_series,
+            'lcc' : largest_cc_size_series,
+            'lcc [norm]' : largest_cc_norm_series
+        })
+
+        # compile to dataframe
+        metrics_series_df = pd.DataFrame(metrics_series_dict)
+
+        # save to csv
+        metrics_series_df.to_csv(metrics_path, index=False)
+        
+        # print metrics summary
+        if debug:
+            print('Connectivity Metrics:')
+            print(metrics_series_df.describe().iloc[1:].round(2))
+            print(f"\nConnectivity metrics saved to: \n   `{metrics_path}`\n")
+
+        return metrics_series_df
+    
+    def __generate_access_graph_time_series(self, data_dir : str) -> Tuple[List[nx.Graph],List[int],float,float]:
+        # load access events and nodes
+        events, nodes, T, time_step = self.__load_access_event_intervals(data_dir)
+
+        # create linear time space
+        t_start = 0
+        t_end = int(T // time_step)
+        times = list(range(t_start, t_end+1))
+
+        # initiate list of graph snapshots    
+        snapshot_graphs: list[nx.Graph] = []
+
+        # create snapshot for each time step
+        for t in times:
+            # get active events at time t
+            active = [(u,b,t_start,t_end) for u,b,t_start,t_end in events 
+                    if t_start <= t <= t_end]
+
+            # create graph snapshot
+            G = nx.Graph()
+            
+            # specify snapshot time
+            G.graph["time"] = float(t)
+
+            # add nodes
+            G.add_nodes_from(nodes)
+
+            # add edges
+            G.add_edges_from(zip([e[0] for e in active], [e[1] for e in active]))
+
+            # append to snapshots list
+            snapshot_graphs.append(G)
+
+        # return list of graph snapshots and corresponding times with time step
+        return snapshot_graphs, times, T, time_step
+
+    def __load_access_event_intervals(self, data_dir : str) -> Tuple[list,list,float]:
+        # initiale list of events for temporal graph
+        events : List[tuple] = []
+
+        # initiate set of nodes
+        nodes = set()
+
+        # define mission specification file path
+        mission_specs_path = os.path.join(data_dir, 'MissionSpecs.json')
+
+        # get propagation duration from mission specs
+        with open(mission_specs_path, 'r') as mission_specs_file:
+            mission_specs = json.load(mission_specs_file)
+            propagation_duration_days = mission_specs['duration']
+            propagation_duration_seconds = propagation_duration_days * 24 * 3600
+            T = propagation_duration_seconds            
+
+        # define path to comms data directory
+        comms_data_dir = os.path.join(data_dir, 'comm')
+        
+        # initiate time step variable
+        time_step = np.NAN
+
+        # load comms data for every inter-satellite link
+        for filename in tqdm(os.listdir(comms_data_dir), desc=f'Loading inter-satellite link data'):
+            # parse filename
+            isl_names = filename.split('.')[0]
+            sat1, _, sat2 = isl_names.split('_')
+
+            # add nodes to list
+            nodes.update( {sat1, sat2} )
+            
+            # define full path to comms data file
+            comms_data_path = os.path.join(comms_data_dir, filename)
+
+            # read propagation time-step
+            time_data =  pd.read_csv(comms_data_path, nrows=2)
+            _, _, _, _, time_step = time_data.at[1,time_data.axes[1][0]].split(' ')
+            time_step = float(time_step)
+
+            # load communications data
+            df : pd.DataFrame = pd.read_csv(comms_data_path, skiprows=range(3))
+
+            # skip if dataframe is empty
+            if df.empty: continue
+
+            # add edges to temporal graph
+            for t_start,t_end in df.values:
+                # convert to integer time-steps
+                t_start = int(t_start)
+                t_end = int(t_end)
+
+                # add contact as an event to list 
+                events.append( (sat1, sat2, t_start, t_end) )
+        
+        # sort events by start time
+        events.sort(key=lambda e: e[2])
+        
+        # return contact events, list of nodes, total propagation time, and time step
+        return events, list(nodes), T, time_step 
+    
+    @abstractmethod
+    def _get_constellation_params_time_series(self, times: List[int]) -> Dict[str, List]:
+        """ Returns a dictionary of constellation parameters as they evolve over time. """       
 
 class WalkerConstellation(Constellation):
     def __init__(self,
@@ -224,7 +440,10 @@ class WalkerConstellation(Constellation):
         self.num_planes = num_planes
         self.phasing_param = phasing_param
 
-    def to_orbital_parameter_list(self) -> List[dict]:
+    def get_default_propagation_period(self):
+        return self.T / 2 / 3600.0 / 24.0 # propagate for half an orbit by default
+
+    def to_orbital_parameter_list(self, debug: bool = False) -> List[dict]:
         """
         Converts constellation specifications to a list of orbital parameters.
 
@@ -267,7 +486,7 @@ class WalkerConstellation(Constellation):
                 params = {
                     "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
                     "sma": WalkerConstellation.R + self.alt,
-                    "ecc": 0.001,
+                    "ecc": 0.001, # assume nearly circular orbits
                     "inc": self.inc,
                     "raan": raan,
                     "aop": aop,
@@ -275,11 +494,38 @@ class WalkerConstellation(Constellation):
                 }
                 orbital_params.append(params)
 
+        # print results for debugging
+        if debug:
+            print("="*80 + "\n")
+            print(f"Walker Delta Constellation - i:t/p/f = {round(self.inc,2)}°:{self.num_sats}/{self.num_planes}/{self.phasing_param}")
+            print("-"*82)
+            prev_param = None
+            for idx, params in enumerate(orbital_params):
+                if prev_param and prev_param['raan'] != params['raan']:
+                    print("  " + "-"*80)
+                print(f"  Sat-{idx+1}:\tinc={params['inc']}°\traan={round(params['raan'],3)}°\taop={round(params['aop'],3)}°\tta={round(params['ta'],3)}°")
+                prev_param = params
+            print("="*80 + "\n")     
+
+        # return list of orbital parameters
         return orbital_params
     
     @abstractmethod
     def calc_raan_spacing(self) -> float:
         """ Calculates the RAAN spacing between orbital planes."""
+    
+    def _get_constellation_params_time_series(self, times: List[int]) -> Dict[str, List]:
+        return {
+            "inc [deg]" : [self.inc] * len(times),
+            "num sats" : [self.num_sats] * len(times),
+            "num planes" : [self.num_planes] * len(times),
+            "num planes [norm]" : [self.num_planes / self.num_sats] * len(times),
+            "ta phasing param" : [self.phasing_param] * len(times),
+            "ta phasing angle [deg]" : [self.phasing_param * (360.0 / self.num_sats)] * len(times)
+        }
+    
+    def __str__(self) -> str:
+        return f"Walker Constellation: i:t/p/f = {round(self.inc,2)}°:{self.num_sats}/{self.num_planes}/{self.phasing_param}"
      
 class WalkerDeltaConstellation(WalkerConstellation):
     def __init__(self,
@@ -324,7 +570,9 @@ if __name__ == "__main__":
     # terminal welcome message
     print_welcome(f'Walker Delta Constellation Example')
     
-    # example usage
+    # example 1: Walker Delta Constellation
+    
+    # define constellation
     walker = WalkerDeltaConstellation(
         alt = 550.0,
         inc = 98.0,
@@ -332,4 +580,35 @@ if __name__ == "__main__":
         num_planes = 3,
         phasing_param = 1
     )
+
+    # propagate constellation 
     walker_data = walker.propagate(debug=True)
+
+    # evaluate connectivity
+    walker_metrics_df, walker_scalar_metrics = walker.evaluate_connectivity(debug=True, overwrite=True)
+
+    # print scalar metrics
+    print("Scalar Connectivity Metrics:")
+    for metric_name, metric_value in walker_scalar_metrics.items():
+        print(f"  {metric_name} : {round(metric_value,3)}")
+    print("\n")
+
+    # example 2: Walker Star Constellation
+
+    # define constellation
+    walker_star = WalkerStarConstellation(
+        alt = 550.0,
+        inc = 98.0,
+        num_sats = 8,
+        num_planes = 4,
+        phasing_param = 1
+    )
+
+    # evauate constellation connectivity without pre-propagation
+    walker_star_metrics_df, walker_star_scalar_metrics = walker_star.evaluate_connectivity(debug=True, overwrite=True)
+
+    # print scalar metrics
+    print("Scalar Connectivity Metrics:")
+    for metric_name, metric_value in walker_star_scalar_metrics.items():
+        print(f"  {metric_name} : {round(metric_value,3)}")
+    print("\n")
