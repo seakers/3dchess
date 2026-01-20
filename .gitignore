@@ -170,7 +170,7 @@ cython_debug/
 swifa/
 
 # Experiments
-**experiments/orbit_connectivity/resources/orbits/**.csv
+**experiments/orbit_connectivity/orbits/*/comm**
 
 *.tar
 *.tar*
