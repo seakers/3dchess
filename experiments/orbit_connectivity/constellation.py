@@ -213,8 +213,9 @@ class Constellation(ABC):
         avg_largest_cc_norm = metrics_series_df['lcc [norm]'].mean()
                     
         max_largest_cc_norm = metrics_series_df['lcc [norm]'].max()
-        largest_cc_norm_series = metrics_series_df[metrics_series_df["lcc [norm]"] == max_largest_cc_norm]
-        max_largest_cc_norm_fraction = len(largest_cc_norm_series) / len(metrics_series_df)
+        max_largest_cc_norm_series = metrics_series_df[metrics_series_df["lcc [norm]"] == max_largest_cc_norm]
+
+        max_largest_cc_norm_fraction = len(max_largest_cc_norm_series) / len(metrics_series_df)
 
         # connected components count
         avg_n_components = metrics_series_df['num components'].mean()
@@ -240,7 +241,7 @@ class Constellation(ABC):
         # check if file already exists
         if os.path.exists(metrics_path) and not overwrite:
             # file exists and no overwrite is required, skip computation
-            print(f"Connectivity metrics file already exists at: {metrics_path}. Loading existing metrics...\n")
+            print(f"Connectivity metrics file already exists at:\n   `{metrics_path}`.\nLoading existing metrics...")
             
             # load existing metrics
             metrics_series_df = pd.read_csv(metrics_path)
@@ -272,7 +273,7 @@ class Constellation(ABC):
         largest_cc_norm_series = []
 
         # Evaluate constellation connectivity metrics
-        for G in tqdm(TG, desc=f'Evaluating connectivity metrics', unit='time steps'):
+        for G in tqdm(TG, desc=f'Evaluating connectivity metrics', unit='time steps', leave=debug):
             # compute connectivity metrics
             connected_components = list(nx.connected_components(G))
             n_cc = nx.number_connected_components(G)
@@ -373,7 +374,7 @@ class Constellation(ABC):
         time_step = np.NAN
 
         # load comms data for every inter-satellite link
-        for filename in tqdm(os.listdir(comms_data_dir), desc=f'Loading inter-satellite link data'):
+        for filename in tqdm(os.listdir(comms_data_dir), desc=f'Loading inter-satellite link data', leave=False):
             # parse filename
             isl_names = filename.split('.')[0]
             sat1, _, sat2 = isl_names.split('_')
