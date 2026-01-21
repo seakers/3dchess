@@ -1,4 +1,3 @@
-from collections import defaultdict
 import copy
 import os
 from typing import List
@@ -42,9 +41,10 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_18 = False # static relay scenario
         self.toy_19 = False # single sat    default mission     multiple targets    two events           preplan w/short horizon + replan
         self.toy_20 = False # two sats       default mission     multiple targets    two events           preplan w/short horizon + replan
-
         self.toy_21 = False # single sat    no default mission     multiple targets    two events announced by GS  replan
         self.toy_22 = False # two sats      no default mission     multiple targets    two events announced by GS   replan
+
+        self.toy_23 = False 
 
     def toy_planner_config(self):
         return {
@@ -150,6 +150,70 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                         "@type": "eventAnnouncer",
                         "debug": "False",                        
                         "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
+                    }
+                },
+                "mission" : mission_name,
+            }
+
+            for gs_network_name in gs_network_names
+        ]
+
+        # return ground operator specifications
+        return ground_ops
+    
+    def setup_cbba_ground_operators(self, mission_name : str, gs_network_names : List[str]) -> List[dict]:
+        """ create ground operator specifications for the scenario. """
+        
+        # generate ground operator specifications
+        ground_ops = [
+            {
+                "name" : gs_network_name,
+                "@id" : gs_network_name.lower(),
+                "planner" : {
+                    "replanner": {
+                        "@type": "consensus",
+                        "model": "heuristicInsertion",
+                        "heuristic" : "taskPriority",
+                        "replanThreshold": 1,
+                        "optimisticBiddingThreshold": 1,
+                        "debug": "True"
+                    }
+                },
+                "mission" : mission_name,
+            }
+
+            for gs_network_name in gs_network_names
+        ]
+
+        # return ground operator specifications
+        return ground_ops
+    
+    def setup_announcing_cbba_ground_operators(self, event_name : str, mission_name : str, gs_network_names : List[str]) -> List[dict]:
+        """ create ground operator specifications for the scenario. """
+
+        # validate event file exists
+        assert isinstance(event_name, str), "`event_name` must be a string"
+        assert os.path.isfile(f"./tests/planners/resources/events/{event_name}.csv"), \
+            f"Event file not found: {event_name}.csv"
+        
+        # generate ground operator specifications
+        ground_ops = [
+            {
+                "name" : gs_network_name,
+                "@id" : gs_network_name.lower(),
+                "planner" : {
+                    "preplanner": {
+                        "@type": "eventAnnouncer",
+                        "debug": "False",                        
+                        "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
+                    },
+                    "replanner": {
+                        "@type": "consensus",
+                        "model": "heuristicInsertion",
+                        "heuristic" : "taskPriority",
+                        "replanThreshold": 1,
+                        "optimisticBiddingThreshold": 1,
+                        "debug": "True"
                     }
                 },
                 "mission" : mission_name,
@@ -2036,6 +2100,15 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.simulation.print_results()
 
         print(f"{scenario_name}: DONE")
+
+    def test_toy_case_23(self):
+        """
+        ## TOY CASE 23
+        Test case for a single satellite responding to event announcements from a ground station while 
+        bidding against it.
+        """
+
+        if not self.toy_23: return
 
     # def test_toy_case_2X(self):
     #     """

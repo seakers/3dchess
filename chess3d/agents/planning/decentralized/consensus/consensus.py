@@ -20,7 +20,7 @@ from chess3d.agents.planning.decentralized.consensus.bids import Bid
 from chess3d.agents.science.reward import *
 from chess3d.messages import BusMessage, MeasurementBidMessage
 from chess3d.mission.mission import Mission
-from chess3d.agents.states import SatelliteAgentState, SimulationAgentState
+from chess3d.agents.states import GroundOperatorAgentState, SatelliteAgentState, SimulationAgentState
 from chess3d.orbitdata import OrbitData
 from chess3d.utils import Interval
 
@@ -1031,6 +1031,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
         #     self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
         #     x = 1 # breakpoint
         # -------------------------------
+
+        if isinstance(state, GroundOperatorAgentState):
+            # ground operator agent; no replanning needed
+            return self.bundle, self.path
+        elif not isinstance(state, SatelliteAgentState):
+            raise NotImplementedError("Consensus planner only implemented for satellite and ground station agents.")
 
         # check if relevant changes were made to bundle or tasks
         if not self.task_announcements_received and not self.bundle_changes_performed:
