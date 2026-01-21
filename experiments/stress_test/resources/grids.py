@@ -290,3 +290,5 @@ if __name__ == "__main__":
     # generate grids and plots for all types and number of groundpoints
     for n_points,grid_type,rand,inland,bounds in tqdm(grids_to_generate, desc='Generating coverage grids', unit=' grids'):
         main(n_points, grid_type, rand, bounds, world, inland, plot=True, seed=seed, overwrite=False)
+
+    print("All grids generated!")

@@ -1,7 +1,7 @@
 {
     "missions" : [
         {
-            "name": "stress_test_mission",
+            "name": "generic response mission",
             "objectives" : [
                 {
                     "objective_type" : "event_driven",
