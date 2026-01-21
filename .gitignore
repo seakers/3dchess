@@ -171,7 +171,8 @@ swifa/
 
 # Experiments
 **experiments/orbit_connectivity/orbits/**
-**experiments/stress_test/resources/**/*.csv
+**experiments/stress_test/resources/grids/**/*.csv
+**experiments/stress_test/resources/trials/**/*.csv
 
 *.tar
 *.tar*

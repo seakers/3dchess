@@ -198,6 +198,11 @@ def create_fibonacci_grid(n_points : int,
             if lon > 180:
                 lon -= 360
 
+            # filter latitudes outside bounds
+            if lat < bounds[0] or lat > bounds[1]:
+                continue
+
+            # add point if inland mask not set or point is inland
             if not inland_mask or any(world.contains(Point(lon, lat))):
                 groundpoints.add((lat,lon))
 
@@ -216,6 +221,9 @@ def create_fibonacci_grid(n_points : int,
 def plot_grid(grid_path : str, grid_type : str, rand : bool, n_points : int, inland : bool, overwrite : bool) -> None:
     # get plot path
     plot_path = grid_path.replace('.csv', '.png')
+    plot_path = plot_path.replace('grids', 'grids/plots')
+
+    os.makedirs(os.path.dirname(plot_path), exist_ok=True)
 
     # check if plot already exists
     if os.path.isfile(plot_path) and not overwrite: return 

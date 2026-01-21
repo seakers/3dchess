@@ -445,7 +445,7 @@ class DeminishingReturnsRequirement(PerformanceRequirement):
         - :`id`: Optional unique identifier for the requirement. If not provided, a UUID will be generated.
         """
         # initiate parent class
-        super().__init__(attribute, PerformancePreferenceStrategies.LOG_THRESHOLD.value, id)
+        super().__init__(attribute, PerformancePreferenceStrategies.DEMINISHING_RETURNS.value, id)
         
         # validate inputs
         assert isinstance(slope, (int, float)), "Slope must be a number"
