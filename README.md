@@ -41,7 +41,7 @@ monitoring system.
 
 
 ## Installation
-1. Install the [`dmas`](https://github.com/seakers/DMASpy) library and all of its dependencies is required for running these scenarios.
+1. Install the [`dmas`](https://github.com/seakers/DMASpy) and [`execsatm`](https://github.com/seakers/execsatm) libraries and all of its dependencies is required for running these scenarios.
 
 2. Install `chess3d` library.
 ```
@@ -57,7 +57,7 @@ make runtest
 See [`scenarios`](./scenarios/README.md) directory for further details. (NOTE: README might be outdated as of 10/20/25)
 
 ## Acknowledgments
-This work has been funded by grants from the National Aeronautics and Space Administration (NASA) Earth Science Technology Office (ESTO) through the Advanced Information Systems Technology (AIST) Program.
+This work was supported by the National Aeronautics and Space Administration (NASA) Earth Science Technology Office (ESTO) through the Advanced Information Systems Technology (AIST) Program, and by the Mexican Ministry of Science, Humanities, Technology, and Innovation (SECIHTI) through its Graduate Scholarships for Studies in Science and Humanities Abroad Fellowship.
 
 ## Contact 
 **Principal Investigator:** 
