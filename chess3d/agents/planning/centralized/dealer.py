@@ -544,7 +544,12 @@ class DealerPlanner(AbstractPeriodicPlanner):
         """
         Schedules broadcasts to be performed based on the generated plans for each agent.
         """
+        # initialize list to hold broadcast actions
         broadcasts : list[BroadcastMessageAction] = []
+
+        # initialize set of times when broadcasts are scheduled
+        t_access_starts = set()    
+
         for client,client_plan in self.client_plans.items():
             if self.sharing == self.OPPORTUNISTIC:
                 # get next access interval
@@ -553,9 +558,16 @@ class DealerPlanner(AbstractPeriodicPlanner):
                 # if no access opportunities in this planning horizon, skip scheduling
                 if not next_access: continue
 
+                # collect access start times for future reference
+                t_access_starts.add(next_access.left)
+
                 # calculate broadcast time
-                t_broadcast : float = max(next_access.left, state.t)
-                # t_broadcast : float = max(next_access.left+5e-3, state.t)
+                # t_broadcast : float = max(next_access.left, state.t)
+                t_broadcast : float = max(
+                                        min(next_access.left + 5*self.EPS,    # give buffer time for access to start
+                                            next_access.right),               # ensure broadcast is before access ends
+                                    state.t)                                # ensure broadcast is not in the past
+
 
                 # if broadcast time is beyond the next planning period, skip scheduling
                 if t_broadcast >= state.t + self.period: continue
@@ -589,6 +601,10 @@ class DealerPlanner(AbstractPeriodicPlanner):
             else:
                 raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')          
            
+        # connection waits; allows for messages to be received right after access start times
+        waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
+        broadcasts.extend(waits)
+
         # return sorted broadcasts by broadcast start time
         return sorted(broadcasts, key=lambda x: x.t_start)
     

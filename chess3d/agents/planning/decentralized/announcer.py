@@ -97,7 +97,7 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
     def _schedule_observations(self, *_) -> list:
         return [] # No scheduling, only announcing events
     
-    def _schedule_broadcasts(self, state, _, orbitdata : OrbitData, __ = None) -> List[BroadcastMessageAction]:
+    def _schedule_broadcasts(self, state : SimulationAgentState, _, orbitdata : OrbitData, __ = None) -> List[BroadcastMessageAction]:
         # initialize broadcasts from parent planner
         # broadcasts : List[BroadcastMessageAction] = super()._schedule_broadcasts(state, observations, orbitdata, t)
         broadcasts : List[BroadcastMessageAction] = []
