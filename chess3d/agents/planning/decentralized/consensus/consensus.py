@@ -1582,15 +1582,18 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                     # exclude broadcasts of future information; 
                                     #  these would be redundant with those scheduled here 
                                     and not isinstance(action, FutureBroadcastMessageAction)]
-            t_access_starts.update([preplan_broadcast.t_start - 5*self.EPS for preplan_broadcast in preplan_broadcasts])
             broadcasts.extend(preplan_broadcasts)
-
+            
             # connection waits; allows for messages to be received right after access start times
             waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
+            
+            # include established zero-length waits from preplan
+            preplan_waits = [action for action in self.preplan.actions
+                                    # extract only wait-for-message actions
+                                    if isinstance(action, WaitForMessages)
+                                    and action.t_end - action.t_start <= self.EPS]
+            waits.extend(preplan_waits)            
             broadcasts.extend(waits)
-
-            if preplan_broadcasts:
-                x = 1 # breakpoint
 
             # return scheduled broadcasts
             return broadcasts 

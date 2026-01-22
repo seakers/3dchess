@@ -605,6 +605,9 @@ class DealerPlanner(AbstractPeriodicPlanner):
         waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
         broadcasts.extend(waits)
 
+        # TODO test waits functionality
+        if waits: raise NotImplementedError('Waits for messages not yet tested in dealer broadcasts.')
+
         # return sorted broadcasts by broadcast start time
         return sorted(broadcasts, key=lambda x: x.t_start)
     
