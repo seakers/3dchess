@@ -45,13 +45,10 @@ class AbstractData(ABC):
     @abstractmethod
     def from_dataframe(df : pd.DataFrame, time_step : float, name : str = 'param') -> 'AbstractData':
         """ Creates an instance of the class from a pandas DataFrame. """
-        ...
     
     @abstractmethod
     def update_expired_values(self, t :float) -> None:
-        """ Updates the data by removing all values that are older than time `t`. """
-        ...
-    
+        """ Updates the data by removing all values that are older than time `t`. """    
 
 class TimeIndexedData(AbstractData):
     def __init__(self, 
