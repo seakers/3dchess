@@ -117,6 +117,12 @@ class TestAgentConnectivity(unittest.TestCase):
                             "mission" : self.MISSION_NAME
                     }
         
+    """
+    ============================================
+        MISSION BUILDING UTILITIES
+    ============================================
+    """
+        
     def build_mission(self, connectivity : str) -> dict:
         # copy mission template
         d = copy.deepcopy(self.mission_template)
@@ -135,7 +141,7 @@ class TestAgentConnectivity(unittest.TestCase):
         sat2 = copy.deepcopy(self.spacecraft_template)
         sat2['name'] = 'sat_2'
         sat2['@id'] = 'sat_2'
-        sat2['orbitState']['state']['inc'] = 0.0
+        sat2['orbitState']['state']['inc'] = 180.0
         sat2['orbitState']['state']['ta'] = sat1['orbitState']['state']['ta'] - 60.0 # phase offset by 60.0[deg]
 
         # compile ground stations
@@ -198,15 +204,21 @@ class TestAgentConnectivity(unittest.TestCase):
         # load and return orbit data
         return satellite_names, ground_operator_names, OrbitData.from_directory(orbitdata_dir)
 
+    """
+    ============================================
+        TEST CASES
+    ============================================
+    """
+
     def test_full_connectivity(self):
         # load orbit data
-        *_, orbit_data = self.generate_orbit_data(ConnectivityLevels.FULL, False)
+        *_, orbit_data = self.generate_orbit_data(ConnectivityLevels.FULL.value, False)
 
         # get mission duration 
         mission_duration = self.mission_template['duration'] * 24.0 * 3600 # in seconds
 
         # check connectivity for each agent
-        for sender_name,sender_orbitdata in tqdm(orbit_data.items(), desc=f'Verifying Full Connectivity', leave=False):
+        for sender_name,sender_orbitdata in tqdm(orbit_data.items(), desc=f'Verifying Full Connectivity Case', leave=True):
             for interval_data in tqdm(sender_orbitdata.comms_links.values(), desc=f'  Checking links for {sender_name}', leave=False):
                 # ensure only a single access interval exists between sender and receiver
                 self.assertTrue(len(interval_data) == 1)
@@ -215,7 +227,132 @@ class TestAgentConnectivity(unittest.TestCase):
                 t_start,t_end,*_ = interval_data.data[0]
                 self.assertTrue(abs(t_start - 0.0) <= sender_orbitdata.time_step)
                 self.assertTrue(abs(t_end - mission_duration) <= sender_orbitdata.time_step)
-        x = 1
+        
+    def test_los_connectivity(self):
+        # load orbit data
+        _, ground_operator_names, orbit_data = self.generate_orbit_data(ConnectivityLevels.LOS.value, False)
+
+        # check connectivity for each agent
+        for sender_name,sender_orbitdata in tqdm(orbit_data.items(), desc=f'Verifying LOS Connectivity Case', leave=True):
+            # compare loaded data to printed coverage data
+            for receiver_name, interval_data in tqdm(sender_orbitdata.comms_links.items(), desc=f'  Checking links for {sender_name}', leave=False):
+                # set reference access times depending on receiver type
+                if receiver_name in ground_operator_names:
+                    # receiver is ground station, sender must be a satellite; set appropriate reference access times 
+                    if "1" in sender_name:
+                        t_refs = [(5168 * sender_orbitdata.time_step, 5513 * sender_orbitdata.time_step)]
+                    
+                    elif "2" in sender_name:
+                        t_refs = [(2824 * sender_orbitdata.time_step, 3182 * sender_orbitdata.time_step)]
+
+                    else:
+                        raise ValueError(f'Unknown sender name: {sender_name}')
+                else:
+                    # receiver is a satellite; check if sender is ground station
+                    if sender_name in ground_operator_names:
+                        # sender is a ground station; set appropriate reference access times 
+                        if "1" in receiver_name:                            
+                            t_refs = [(5168 * sender_orbitdata.time_step, 5513 * sender_orbitdata.time_step)]
+                        
+                        elif "2" in receiver_name:
+                            t_refs = [(2824 * sender_orbitdata.time_step, 3182 * sender_orbitdata.time_step)]
+
+                        else:
+                            raise ValueError(f'Unknown sender name: {sender_name}')
+                    else:
+                        # both sender and receiver are satellites; set reference access times 
+                        t_refs = [
+                            (1102 * sender_orbitdata.time_step, 1843 * sender_orbitdata.time_step),
+                            (3726 * sender_orbitdata.time_step, 4479 * sender_orbitdata.time_step),
+                            (6336 * sender_orbitdata.time_step, 6376 * sender_orbitdata.time_step)
+                        ]                 
+
+                # debug prints
+                # print(f"Checking link {sender_name} -> {receiver_name}")
+                # print(f"  Reference access intervals:")
+                # for t_ref_start,t_ref_end in t_refs: print(f"    ({t_ref_start}, {t_ref_end})")
+                # print(f"  Loaded access intervals:")
+                # for t_start,t_end,*_ in interval_data.data: print(f"    ({t_start}, {t_end})")
+
+                # ensure number of accesses match reference times
+                self.assertTrue(len(interval_data) == len(t_refs))
+
+                # ensure access interval spans entire mission duration
+                for (t_ref_start,t_rev_end),(t_start,t_end, *_) in zip(t_refs, interval_data.data):
+                    self.assertTrue(abs(t_start - t_ref_start) <= sender_orbitdata.time_step)
+                    self.assertTrue(abs(t_end - t_rev_end) <= sender_orbitdata.time_step)
+        
+        
+    def test_isl_connectivity(self):
+        # load orbit data
+        _, ground_operator_names, orbit_data = self.generate_orbit_data(ConnectivityLevels.ISL.value, False)
+
+        # check connectivity for each agent
+        for sender_name,sender_orbitdata in tqdm(orbit_data.items(), desc=f'Verifying ISL Connectivity Case', leave=True):
+            # compare loaded data to printed coverage data
+            for receiver_name, interval_data in tqdm(sender_orbitdata.comms_links.items(), desc=f'  Checking links for {sender_name}', leave=False):
+                # set reference access times depending on receiver type
+                if receiver_name in ground_operator_names or sender_name in ground_operator_names:
+                    # eitherreceiver is ground station, sender must be a satellite; no accesses should be available
+                    t_refs = []
+                    
+                else:
+                    # both sender and receiver are satellites; set reference access times 
+                    t_refs = [
+                        (1102 * sender_orbitdata.time_step, 1843 * sender_orbitdata.time_step),
+                        (3726 * sender_orbitdata.time_step, 4479 * sender_orbitdata.time_step),
+                        (6336 * sender_orbitdata.time_step, 6376 * sender_orbitdata.time_step)
+                    ]                 
+
+                # ensure number of accesses match reference times
+                self.assertTrue(len(interval_data) == len(t_refs))
+
+                # ensure access interval spans entire mission duration
+                for (t_ref_start,t_rev_end),(t_start,t_end, *_) in zip(t_refs, interval_data.data):
+                    self.assertTrue(abs(t_start - t_ref_start) <= sender_orbitdata.time_step)
+                    self.assertTrue(abs(t_end - t_rev_end) <= sender_orbitdata.time_step)
+
+    def test_gs_connectivity(self):
+        # load orbit data
+        _, ground_operator_names, orbit_data = self.generate_orbit_data(ConnectivityLevels.GS.value, False)
+
+        # check connectivity for each agent
+        for sender_name,sender_orbitdata in tqdm(orbit_data.items(), desc=f'Verifying GS Connectivity Case', leave=True):
+            # compare loaded data to printed coverage data
+            for receiver_name, interval_data in tqdm(sender_orbitdata.comms_links.items(), desc=f'  Checking links for {sender_name}', leave=False):
+                # set reference access times depending on receiver type
+                if receiver_name in ground_operator_names or sender_name in ground_operator_names:
+                    # either receiver is ground station, sender must be a satellite; set appropriate reference access times 
+                    if "1" in sender_name or "1" in receiver_name:
+                        t_refs = [(5168 * sender_orbitdata.time_step, 5513 * sender_orbitdata.time_step)]
+                    
+                    elif "2" in sender_name or "2" in receiver_name:
+                        t_refs = [(2824 * sender_orbitdata.time_step, 3182 * sender_orbitdata.time_step)]
+
+                    else:
+                        raise ValueError(f'Unknown sender name: {sender_name}')
+                    
+                else:
+                    # both sender and receiver are satellites; no accesses should be available
+                    t_refs = []                 
+
+                # ensure number of accesses match reference times
+                self.assertTrue(len(interval_data) == len(t_refs))
+
+                # ensure access interval spans entire mission duration
+                for (t_ref_start,t_rev_end),(t_start,t_end, *_) in zip(t_refs, interval_data.data):
+                    self.assertTrue(abs(t_start - t_ref_start) <= sender_orbitdata.time_step)
+                    self.assertTrue(abs(t_end - t_rev_end) <= sender_orbitdata.time_step)
+
+    def test_no_connectivity(self):
+        # load orbit data
+        _, _, orbit_data = self.generate_orbit_data(ConnectivityLevels.NONE.value, False)
+
+        # check connectivity for each agent
+        for sender_name,sender_orbitdata in tqdm(orbit_data.items(), desc=f'Verifying No Connectivity Case', leave=True):
+            for interval_data in tqdm(sender_orbitdata.comms_links.values(), desc=f'  Checking links for {sender_name}', leave=False):
+                # ensure no access intervals exist between sender and receiver
+                self.assertTrue(len(interval_data) == 0)
 
 if __name__ == '__main__':
     # print banner

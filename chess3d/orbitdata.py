@@ -1188,9 +1188,9 @@ class OrbitData:
             mission.execute()                
             print("Propagation done!")
 
-            # save specifications of propagation in the orbit data directory
-            with open(os.path.join(data_dir,'MissionSpecs.json'), 'w') as mission_specs:
-                mission_specs.write(json.dumps(scenario_specs, indent=4))
+        # save specifications of propagation in the orbit data directory
+        with open(os.path.join(data_dir,'MissionSpecs.json'), 'w') as mission_specs:
+            mission_specs.write(json.dumps(scenario_specs, indent=4))
 
         return data_dir
     
