@@ -17,7 +17,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## common cases
         self.single_sat_toy = False     # NOT IMPLEMENTED YET
         self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
-        self.single_sat_lakes = True   
+        self.single_sat_lakes = False   
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
@@ -45,6 +45,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_22 = False # two sats      no default mission     multiple targets    two events announced by GS   replan
 
         self.toy_23 = False 
+        self.toy_24 = True
 
     def toy_planner_config(self):
         return {
@@ -2104,11 +2105,316 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
     def test_toy_case_23(self):
         """
         ## TOY CASE 23
-        Test case for a single satellite responding to event announcements from a ground station while 
-        bidding against it.
+        Test case for a single satellite responding to event announcements from a announcer satelite
+          while bidding against a ground operator agent.
+
+        Contacts:
+        - Sat 0 and 1 contact:     0.00[s] - 7200.00[s]
+        - Sat 0 and GS contact: 5796.28[s] - 6262.09[s]
+        - Sat 1 and GS contact: 5796.28[s] - 6262.09[s]
+
+        Timeline
+        - T:0.00[s] Simulation starts
+        - T:0.00[s] Sat 0 and 1 contact starts
+        - T:0.001[s] Event 1 starts
+        - T:0.001[s] Sat 0 informs Sat 1 of Event 1
+        - T:0.001[s] Sat 1 determines it is winning n=1 for Event 1 for t=36.1[s]
+        - T:0.001[s] Sat 1 determines it is winning n=2 for Event 1 for t=6373.40[s]
+        - T:0.001[s] Sat 1 informs Sat 0 that it is winning n=1 for Event 1 for t=36.1[s]
+        - T:0.001[s] Sat 1 informs Sat 0 that it is winning n=2 for Event 1 for t=6373.40[s]
+
+        - T:36.1[s] Sat 1 performs observation n=1 of Event 1
+        - T:36.1[s] Sat 1 informs Sat 0 that it performed n=1 for Event 1 for t=36.1[s]
+        
+        - T:5796.28[s] Sat 0 and GS contact starts
+        - T:5796.28[s] Sat 1 and GS contact starts
+        - T:5796.28[s] Sat 0 informs GS of Event 1
+        - T:5796.28[s] Sat 1 informs GS that it won n=1 for Event 1 for t=36.1[s]
+        - T:5796.28[s] Sat 1 informs GS that it is winning n=2 for Event 1 for t=6373.4[s]
+        - T:5796.28[s] GS determines Sat 1 won n=1 for Event 1 for t=36.1[s]
+        - T:5796.28[s] GS determines Sat 1 is winning n=2 for Event 1 for t=6373.4[s]
+        - T:5796.28[s] GS informs Sat 1 that Sat 1 won n=1 for Event 1 for t=36.1[s]
+        - T:5796.28[s] GS informs Sat 1 that Sat 1 is winning n=2 for Event 1 for t=6373.4[s]
+
+        - T:6000.0[s] Event 2 starts
+        - T:6000.0[s] Sat 0 informs Sat 1 of Event 2
+        - T:6000.0[s] Sat 1 determines it is not worth to perform observations for Event 2
+
+        - T:6262.09[s] Sat 0 and GS contact ends
+        - T:6262.09[s] Sat 1 and GS contact ends
+
+        - T:6373.40[s] Sat 1 performs observation n=2 of Event 1 for t=6373.40[s]
+        - T:6373.40[s] Sat 1 informs Sat 0 that it won n=2 for Event 1 for t=6373.40[s]
+
+        - T:7200.0[s] Event 1 ends
+        - T:7200.0[s] Event 2 ends
+        - T:7200.0[s] Simulation ends
         """
 
         if not self.toy_23: return
+
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        grid_name = 'toy_23'
+        scenario_name = f'toy_23-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_23'
+        mission_filename = 'toy_missions'
+        mission_name = 'toy_mission_23'
+        gs_network = 'gs_toy_23'
+
+        # SAT0 : announcer satellite 
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_announcer'
+        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['groundStationNetwork'] = gs_network
+        announcer_spacecraft['mission'] = mission_name
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config() # no preplan capability
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = 0.0
+        ractive_spacecraft_1['groundStationNetwork'] = gs_network
+        ractive_spacecraft_1['mission'] = mission_name
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_filename,
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                       ractive_spacecraft_1
+                                                    ]
+                                                   )
+
+        # compile ground stations and operators
+        scenario_specs['groundStation'] = self.compile_ground_stations([gs_network])
+        scenario_specs['groundOperator'] = self.setup_cbba_ground_operators(mission_name, [gs_network])
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs, overwrite=True)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
+    
+    def test_toy_case_24(self):
+        """
+        ## TOY CASE 23
+        Test case for a two satellites responding to event announcements from a announcer satelite
+          while bidding against a ground operator agent. Satellites can never see eachother, can only
+          share information via the ground station.
+
+        Events
+        - Event 1:   0.001[s] - 7200.0[s]
+        - Event 2:  6000.0[s] - 7200.0[s]
+          
+        Agent Contacts:
+        - Sat 0 and 2 contact:            NAN
+        - Sat 1 and 2 contact:            NAN
+        - Sat 0 and 1 contact:     0.00[s] - 7200.00[s]
+        - Sat 0 and GS contact:    0.00[s] - 96.41[s]
+        - Sat 1 and GS contact:    0.00[s] - 96.41[s]
+        - Sat 2 and GS contact:  669.70[s] - 1135.28[s]
+        - Sat 0 and GS contact: 5969.01[s] - 6436.63[s]
+        - Sat 1 and GS contact: 5969.01[s] - 6436.63[s]
+        - Sat 2 and GS contact: 7007.65[s] - 7200.0[s]
+
+        Coverage:
+        - Sat 1 over Event 1: 36.17[s] - 37.26[s]
+        - Sat 2 over Event 1: 1684.40[s] - 1685.53[s]     
+        - Sat 1 over Event 1: 6373.40[s] - 6374.53[s]
+        - Sat 1 over Event 2: 6373.40[s] - 6374.53[s]
+
+        Timeline
+        - T:0.00[s] Simulation starts
+        - T:0.00[s] Sat 0 and 1 contact starts
+        - T:0.00[s] Sat 0 and GS contact starts
+        - T:0.00[s] Sat 1 and GS contact starts
+
+        - T:0.001[s] Event 1 starts
+        - T:0.001[s] Sat 0 informs Sat 1 of Event 1
+        - T:0.001[s] Sat 1 determines it is winning n=1 for Event 1 for t=36.1[s]
+        - T:0.001[s] Sat 1 determines it is winning n=2 for Event 1 for t=6373.40[s]
+        - T:0.001[s] Sat 1 informs Sat 0 that it is winning n=1 for Event 1 for t=36.1[s]
+        - T:0.001[s] Sat 1 informs Sat 0 that it is winning n=2 for Event 1 for t=6373.40[s]
+        - T:0.001[s] Sat 1 informs GS that it is winning n=1 for Event 1 for t=36.1[s]
+        - T:0.001[s] Sat 1 informs GS that it is winning n=2 for Event 1 for t=6373.40[s]
+        - T:0.001[s] GS determines Sat 1 is winning n=1 for Event 1 for t=36.1[s]
+        - T:0.001[s] GS determines Sat 1 is winning n=2 for Event 1 for t=6373.40[s]
+        - T:0.001[s] GS informs Sat 0 that Sat 1 is winning n=1 for Event 1 for t=36.1[s]
+        - T:0.001[s] GS informs Sat 1 that Sat 1 is winning n=2 for Event 1 for t=6373.40[s]
+
+        - T:36.1[s] Sat 1 performs observation n=1 of Event 1
+        - T:36.1[s] Sat 1 informs Sat 0 that it performed n=1 for Event 1 for t=36.1[s]
+        - T:36.1[s] Sat 1 informs GS that it performed n=1 for Event 1 for t=36.1[s]
+        - T:36.1[s] GS determines Sat 1 won n=1 for Event 1 for t=36.1[s]
+        - T:36.1[s] GS informs Sat 0 that Sat 1 won n=1 for Event 1 for t=36.1[s]
+        - T:36.1[s] GS informs Sat 1 that Sat 1 won n=1 for Event 1 for t=36.1[s]
+
+        - T:96.41[s] Sat 0 and GS contact ends
+        - T:96.41[s] Sat 1 and GS contact ends
+
+        - T:669.70[s] Sat 2 and GS contact starts
+        - T:669.70[s] GS informs Sat 2 that Sat 1 won n=1 for Event 1 for t=36.1[s]
+        - T:669.70[s] GS informs Sat 2 that Sat 1 is winning n=2 for Event 1 for t=6373.40[s]
+        - T:669.70[s] Sat 2 determines it is winning n=2 for Event 1 for t=1684.40[s]
+        - T:669.70[s] Sat 2 informs GS that it is winning n=2 for Event 1 for t=1684.40[s]
+        - T:669.70[s] GS determines Sat 2 is winning n=2 for Event 1 for t=1684.40[s]
+        - T:669.70[s] GS informs Sat 2 that Sat 2 is winning n=2 for Event 1 for t=1684.40[s]
+        
+        - T:1135.28[s] Sat 2 and GS contact ends
+
+        - T:1684.40[s] Sat 2 performs observation n=2 of Event 1 for t=1684.40[s]
+        - T:1684.40[s] Sat 2 determines it won n=2 of Event 1 for t=1684.40[s]
+
+        - T:5969.01[s] Sat 0 and GS contact starts
+        - T:5969.01[s] Sat 1 and GS contact starts
+        - T:5969.01[s] GS informs Sat 0 that Sat 2 is winning n=2 for Event 1 for t=1684.40[s]
+        - T:5969.01[s] GS informs Sat 1 that Sat 2 is winning n=2 for Event 1 for t=1684.40[s]
+        - T:5969.01[s] Sat 1 determines Sat 2 is winning n=2 for Event 1 for t=1684.40[s]
+        - T:5969.01[s] Sat 1 determines it is winning n=3 for Event 1 for t=6373.40[s]
+        - T:5969.01[s] Sat 1 informs GS that Sat 2 is winning n=2 for Event 1 for t=1684.40[s]
+        - T:5969.01[s] Sat 1 informs GS that it is winning n=3 for Event 1 for t=6373.40[s]
+        - T:5969.01[s] GS determines Sat 1 is winning n=3 for Event 1 for t=6373.40[s]
+        
+        - T:6000.0[s] Event 2 starts
+        - T:6000.0[s] Sat 0 informs Sat 1 of Event 2
+        - T:6000.0[s] Sat 1 determines it is not worth to perform observations for Event 2
+
+        - T:6373.40[s] Sat 1 performs observation n=3 of Event 1 for t=6373.40[s]
+
+        - T:6436.63[s] Sat 0 and GS contact ends
+        - T:6436.63[s] Sat 1 and GS contact ends
+
+        - T:7007.65[s] Sat 2 and GS contact starts
+
+        - T:7200.0[s] Event 1 ends
+        - T:7200.0[s] Event 2 ends
+        - T:7200[s] Sat 0 and 1 contact ends
+        - T:7200[s] Sat 2 and GS contact ends
+        - T:7200.0[s] Simulation ends
+        
+        
+
+        
+        - T:5796.28[s] Sat 0 and GS contact starts
+        - T:5796.28[s] Sat 1 and GS contact starts
+        - T:5796.28[s] Sat 0 informs GS of Event 1
+        - T:5796.28[s] Sat 1 informs GS that it won n=1 for Event 1 for t=36.1[s]
+        - T:5796.28[s] Sat 1 informs GS that it is winning n=2 for Event 1 for t=6373.4[s]
+        - T:5796.28[s] GS determines Sat 1 won n=1 for Event 1 for t=36.1[s]
+        - T:5796.28[s] GS determines Sat 1 is winning n=2 for Event 1 for t=6373.4[s]
+        - T:5796.28[s] GS informs Sat 1 that Sat 1 won n=1 for Event 1 for t=36.1[s]
+        - T:5796.28[s] GS informs Sat 1 that Sat 1 is winning n=2 for Event 1 for t=6373.4[s]
+
+        - T:6000.0[s] Sat 0 informs Sat 1 of Event 2
+        - T:6000.0[s] Sat 1 determines it is not worth to perform observations for Event 2
+
+        - T:6262.09[s] Sat 0 and GS contact ends
+        - T:6262.09[s] Sat 1 and GS contact ends
+
+        - T:6373.40[s] Sat 1 performs observation n=2 of Event 1 for t=6373.40[s]
+        - T:6373.40[s] Sat 1 informs Sat 0 that it won n=2 for Event 1 for t=6373.40[s]
+        """
+
+        if not self.toy_24: return
+
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        # duration = 1200 / 3600 / 24.0
+        grid_name = 'toy_24'
+        scenario_name = f'toy_24-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = 'toy_24'
+        mission_filename = 'toy_missions'
+        mission_name = 'toy_mission_24'
+        gs_network = 'gs_toy_24'
+
+        # SAT0 : announcer satellite 
+        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft['@id'] = 'sat0_announcer'
+        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
+        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft['orbitState']['state']['ta'] = 0.0
+        announcer_spacecraft['groundStationNetwork'] = gs_network
+        announcer_spacecraft['mission'] = mission_name
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config() # no preplan capability
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = announcer_spacecraft['orbitState']['state']['ta']
+        ractive_spacecraft_1['groundStationNetwork'] = gs_network
+        ractive_spacecraft_1['mission'] = mission_name
+
+        # SAT2 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_2['@id'] = 'sat2_vnir'
+        ractive_spacecraft_2['name'] = 'sat2'
+        ractive_spacecraft_2['planner'] = self.toy_planner_config() # no preplan capability
+        ractive_spacecraft_2['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_2['orbitState']['state']['ta'] = ractive_spacecraft_1['orbitState']['state']['ta'] - 60.0 # phase offset by 60.0[deg]
+        ractive_spacecraft_2['groundStationNetwork'] = gs_network
+        ractive_spacecraft_2['mission'] = mission_name
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_filename,
+                                                   spacecraft=[
+                                                       announcer_spacecraft,
+                                                       ractive_spacecraft_1,
+                                                       ractive_spacecraft_2
+                                                    ]
+                                                   )
+
+        # compile ground stations and operators
+        scenario_specs['groundStation'] = self.compile_ground_stations([gs_network])
+        scenario_specs['groundOperator'] = self.setup_cbba_ground_operators(mission_name, [gs_network])
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs, overwrite=True)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
 
     # def test_toy_case_2X(self):
     #     """

@@ -284,10 +284,10 @@ class Plan(ABC):
 
         # removed expired actions
         expired_actions = [action for action in self.actions
-                           if action.t_end < t]
+                           if 1e-9 < t - action.t_end]
         for action in expired_actions: self.actions.remove(action)
 
-    def get_next_actions(self, t : float) -> list:
+    def get_next_actions(self, t : float, earliest : bool = True) -> list:
         """ returns a list of dicts """
 
         # get next available action to perform
@@ -306,7 +306,8 @@ class Plan(ABC):
         # check if actions are contained in output plan
         if plan_out:
             # there are actions in output plan; return plan
-            return plan_out
+            #   only return the first action to be performed if earliest is True
+            return [plan_out[0]] if earliest else plan_out 
         else:
             # no actions in output plan; wait for future actions
             t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next

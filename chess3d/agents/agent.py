@@ -80,6 +80,10 @@ class AbstractAgent(Agent):
         # update state
         self.update_state()
 
+        # handle peer broadcasts
+        agent_broadcasts = await self.get_agent_broadcasts()
+        senses.extend(agent_broadcasts)
+
         # sense environment
         env_updates = await self.sense_environment()
         env_resp = BusMessage(**env_updates)
@@ -92,9 +96,9 @@ class AbstractAgent(Agent):
         env_broadcasts = await self.get_environment_broadcasts()
         senses.extend(env_broadcasts)
 
-        # handle peer broadcasts
-        agent_broadcasts = await self.get_agent_broadcasts()
-        senses.extend(agent_broadcasts)
+        # # handle peer broadcasts
+        # agent_broadcasts = await self.get_agent_broadcasts()
+        # senses.extend(agent_broadcasts)
 
         return senses
     
@@ -137,30 +141,38 @@ class AbstractAgent(Agent):
     
     @runtime_tracker
     async def update_state_environment(self, env_resp : BusMessage)-> list:
+        # initiate list of senses
         senses = []
-        for resp in env_resp.msgs:
-            # unpackage message
-            resp : dict
-            resp_msg : SimulationMessage = message_from_dict(**resp)
+        
+        # convert bus to list of messages
+        env_resp_msgs = [message_from_dict(**msg) for msg in env_resp.msgs]
 
-            if isinstance(resp_msg, AgentStateMessage):
-                # update state
-                state_msg = AgentStateMessage(  self.get_element_name(), 
-                                                self.get_element_name(),
-                                                self.state.to_dict()
-                                            )
-                senses.append(state_msg)               
+        # separate messages by type
+        env_state_msgs = [msg for msg in env_resp_msgs if isinstance(msg, AgentStateMessage)]
+        env_conn_msgs = [msg for msg in env_resp_msgs if isinstance(msg, AgentConnectivityUpdate)]
 
-            elif isinstance(resp_msg, AgentConnectivityUpdate):
-                if resp_msg.connected == 1:
-                    # subscribe from broadcasts
-                    self.subscribe_to_broadcasts(resp_msg.target)
-                else:
-                    # add randomness to avoid sync issues with possible concurrent broadcasts
-                    await asyncio.sleep(np.random.random() * 1e-9)
+        # process state update messages
+        for state_msg in env_state_msgs:
+            # update state
+            state_msg = AgentStateMessage(  self.get_element_name(), 
+                                            self.get_element_name(),
+                                            self.state.to_dict()
+                                        )
+            senses.append(state_msg)  
 
-                    # unsubscribe from broadcasts
-                    self.unsubscribe_to_broadcasts(resp_msg.target)
+        env_conn_msgs.sort(key=lambda x: x.connected, reverse=True) # process connect messages first
+        for conn_msg in env_conn_msgs:
+            if bool(conn_msg.connected):                                        
+                # subscribe from broadcasts
+                self.subscribe_to_broadcasts(conn_msg.target)
+
+            else:
+                # add randomness to avoid sync issues with possible concurrent broadcasts
+                await asyncio.sleep(np.random.random() * 1e-8)
+
+                # unsubscribe from broadcasts
+                self.unsubscribe_to_broadcasts(conn_msg.target)
+
         return senses 
     
     async def __empty_queue(self, q : asyncio.Queue) -> list:
@@ -171,7 +183,7 @@ class AbstractAgent(Agent):
             msgs.append(message_from_dict(**d))
 
             # give other agents time to finish sending their messages
-            await asyncio.sleep(1e-2)
+            await asyncio.sleep(1e-2 * np.random.random())
         return msgs
     
     @runtime_tracker
@@ -293,7 +305,14 @@ class AbstractAgent(Agent):
         msg_out.dst = self.get_network_name()
         await self.send_peer_broadcast(msg_out)
 
+        # add randomness to avoid sync issues
+        await asyncio.sleep(np.random.random() * 1e-6) 
+
+        # log broadcast
         self.log(f'\n\tSent broadcast!\n\tfrom:\t{msg_out.src}\n\tto:\t{msg_out.dst}',level=logging.DEBUG)
+
+        # ask for a small time wait to allow other agents to process the broadcast
+        await self.sim_wait(0.0)
 
         # return completion status
         return AgentAction.COMPLETED
@@ -307,12 +326,69 @@ class AbstractAgent(Agent):
         self.state.update_state(t_curr, status=SimulationAgentState.LISTENING)
         if save: self.state_history.append(self.state.to_dict())
 
+        # check type of simulation clock
+        if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
+            or isinstance(self._clock_config, EventDrivenClockConfig)) 
+            and self.external_inbox.empty()
+            ):
+            # give the agent time to finish processing messages before submitting a tic-request
+            t_wait = 5e-3 if t_curr <= 1e-3 else 1e-5
+            await asyncio.sleep(t_wait)
+
         # check if messages have already been received
         if not self.external_inbox.empty(): # messages in inbox; end wait
+            # give other agents time to finish sending their messages  
+            await self.sim_wait(0.0)
+
+            # update action completion status
             return AgentAction.COMPLETED
         
         else: # no messages in inbox; wait for incoming messages
-            
+
+            # ========================
+
+            # initiate broadcast wait and timeout tasks
+            receive_broadcast = asyncio.create_task(self.external_inbox.get())
+            timeout = asyncio.create_task(self.sim_wait(action.t_end - t_curr))
+
+            # wait for first task to be completed
+            done, _ = await asyncio.wait([timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
+
+            # check which task was finished first 
+            if receive_broadcast in done:
+                # messages were received before timeout
+                try:
+                    # cancel timeout timer and end wait
+                    timeout.cancel()
+                    await timeout
+
+                except asyncio.CancelledError:
+                    # give the agent time to finish processing messages before continuing
+                    t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
+                    await asyncio.sleep(t_wait)
+
+                    # restore message to inbox so it can be processed during `sense()`
+                    await self.external_inbox.put(receive_broadcast.result())    
+
+                    # update action completion status
+                    return AgentAction.COMPLETED                
+
+            else:
+                # timeout ended
+                try:
+                    # cancel message wait
+                    receive_broadcast.cancel()
+                    await receive_broadcast
+
+                except asyncio.CancelledError:
+                    # update action completion status
+                    if self.external_inbox.empty():
+                        return AgentAction.ABORTED
+                    else:
+                        return AgentAction.COMPLETED
+
+            # ========================
+
             # # check type of simulation clock
             # if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
             #     or isinstance(self._clock_config, EventDrivenClockConfig)) 
@@ -363,55 +439,6 @@ class AbstractAgent(Agent):
             #         else:
             #             return AgentAction.COMPLETED
 
-
-            # check type of simulation clock
-            if ((isinstance(self._clock_config, FixedTimesStepClockConfig) 
-                or isinstance(self._clock_config, EventDrivenClockConfig)) 
-                and self.external_inbox.empty()
-                ):
-                # give the agent time to finish processing messages before submitting a tic-request
-                t_wait = 5e-3 if t_curr <= 1e-3 else 1e-5
-                await asyncio.sleep(t_wait)
-
-            # initiate broadcast wait and timeout tasks
-            receive_broadcast = asyncio.create_task(self.external_inbox.get())
-            timeout = asyncio.create_task(self.sim_wait(action.t_end - t_curr))
-
-            # wait for first task to be completed
-            done, _ = await asyncio.wait([timeout, receive_broadcast], return_when=asyncio.FIRST_COMPLETED)
-
-            # check which task was finished first 
-            if receive_broadcast in done:
-                # messages were received before timeout
-                try:
-                    # cancel timeout timer and end wait
-                    timeout.cancel()
-                    await timeout
-
-                except asyncio.CancelledError:
-                    # give the agent time to finish processing messages before continuing
-                    t_wait = 1e-3 if t_curr < 1e-3 else 1e-5
-                    await asyncio.sleep(t_wait)
-
-                    # restore message to inbox so it can be processed during `sense()`
-                    await self.external_inbox.put(receive_broadcast.result())    
-
-                    # update action completion status
-                    return AgentAction.COMPLETED                
-
-            else:
-                # timeout ended
-                try:
-                    # cancel message wait
-                    receive_broadcast.cancel()
-                    await receive_broadcast
-
-                except asyncio.CancelledError:
-                    # update action completion status
-                    if self.external_inbox.empty():
-                        return AgentAction.ABORTED
-                    else:
-                        return AgentAction.COMPLETED
 
     async def __wait_for_messages(self, t_curr : float) -> None:
         """ Waits for all incoming messages to be received at fixed time intervals. """
@@ -506,7 +533,7 @@ class AbstractAgent(Agent):
 
             # wait for the designated duration of the measurmeent 
             dt = action.t_end - self.get_current_time()
-            if dt > 0: await self.sim_wait(dt) 
+            if dt >= 0: await self.sim_wait(dt) 
 
             # return action completion            
             return AgentAction.COMPLETED
@@ -650,7 +677,7 @@ class AbstractAgent(Agent):
                             break
 
                         else:
-                            # unrelated message received; ignore message
+                            # unrelated manager message received; store message for later
                             self.log(f'some other manager message was received. ignoring...')
                             ignored.append((dst, src, content))
                     
@@ -666,20 +693,21 @@ class AbstractAgent(Agent):
                 raise NotImplementedError(f'`sim_wait()` for clock of type {type(self._clock_config)} not yet supported.')
         
         except asyncio.CancelledError as e:
-            # if still waiting on  cancel request
+            # cancel tic request if confirmation was not received when this task was interupted
             if confirmation is not None and toc_msg is None:
                 tic_cancel = CancelTicRequest(self.get_element_name(), t0, tf)
                 await self._send_manager_msg(tic_cancel, zmq.PUB)
 
+            # wait for pending tasks to be aborted
             if wait_for_response is not None and not wait_for_response.done():
                 wait_for_response.cancel()
                 await wait_for_response
-
             if pending is not None:
                 for task in pending:
                         task.cancel()
                         await task
 
+            # re-raise cancellation error
             raise e
 
         finally:
@@ -842,6 +870,17 @@ class SimulatedAgent(AbstractAgent):
         states.sort(key = lambda a : a.state['t'])
         state : SimulationAgentState = SimulationAgentState.from_dict(states[-1].state)                                                          
 
+        # --- FOR DEBUGGING PURPOSES ONLY: ---
+        # if "sat" in self.get_element_name().lower() and "2" in self.get_element_name().lower():
+        # if state.t >= 660.0:
+        #     if "gs" in self.get_element_name().lower():
+        #         self.__log_plan(self.plan, "CURRENT PLAN", logging.WARNING)
+        #         x = 1
+        #     elif "2" in self.get_element_name().lower():
+        #         self.__log_plan(self.plan, "CURRENT PLAN", logging.WARNING)
+        #         x = 1
+        # -------------------------------------
+
         # update plan completion
         self.__update_plan_completion(completed_actions, 
                                     aborted_actions, 
@@ -850,8 +889,6 @@ class SimulatedAgent(AbstractAgent):
 
         # process performed observations
         generated_reqs : list[TaskRequest] = self.__process_observations(incoming_reqs, observations)
-        if generated_reqs:
-            x = 1
         incoming_reqs.extend(generated_reqs)
         
         # compile measurements performed by myself or other agents NOTE do we still need this feature?
@@ -967,12 +1004,11 @@ class SimulatedAgent(AbstractAgent):
                 x = 1 # breakpoint
                 # -------------------------------------
 
-        plan_out = self.get_next_actions(state)
-
-        # --- FOR DEBUGGING PURPOSES ONLY: ---
-        # plan_out_dict = [action.to_dict() for action in plan_out]
-        # self.__log_plan(plan_out_dict, "PLAN OUT", logging.WARNING)
-        # x = 1 # breakpoint
+        # --- FOR DEBUGGING PURPOSES ONLY: ---        
+        plan_out = self.get_next_actions(state, True)
+        self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
+        if "sat2" in self.get_element_name().lower() and state.t>=660.0:
+            x = 1 # breakpoint
         # -------------------------------------
         
         return plan_out
@@ -1137,10 +1173,10 @@ class SimulatedAgent(AbstractAgent):
         self.observation_history.update(observations)
 
     @runtime_tracker
-    def get_next_actions(self, state : SimulationAgentState) -> List[AgentAction]:
+    def get_next_actions(self, state : SimulationAgentState, earliest : bool = True) -> List[AgentAction]:
         try:
             # get list of next actions from plan
-            plan_out : List[AgentAction] = self.plan.get_next_actions(state.t)
+            plan_out : List[AgentAction] = self.plan.get_next_actions(state.t, earliest)
 
             # check for future broadcast message actions in plan
             future_broadcasts = [action for action in plan_out

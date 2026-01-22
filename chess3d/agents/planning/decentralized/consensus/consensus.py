@@ -10,7 +10,7 @@ from dmas.utils import runtime_tracker
 from dmas.agents import AgentAction
 from dmas.clocks import ClockConfig
 
-from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
+from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, IdleAction, ObservationAction, WaitForMessages
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
 from chess3d.agents.planning.observations import ObservationOpportunity
@@ -114,7 +114,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         pending_actions : List[AgentAction]
                     ) -> None:
         """ Updates internal knowledge based on incoming percepts """
-
         # update base percepts
         super().update_percepts(state, incoming_reqs, relay_messages, completed_actions)
 
@@ -131,8 +130,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
             self._log_results('CONSENSUS PHASE - RESULTS (BEFORE)', state, self.results)
             self._log_bundle('CONSENSUS PHASE - BUNDLE (BEFORE)', state, self.bundle)
             print(f'`{state.agent_name}` - Received {len(incoming_bids)} incoming bids and {len(self.incoming_event_tasks)} task requests.')
-
-            x = 1 # debug breakpoint
         # -------------------------------
 
         # perform consensus phase for incoming task bids
@@ -145,7 +142,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if (task_updates or results_updates or bundle_updates) and self._debug:
+        # if (task_updates or results_updates or bundle_updates) and self._debug:
+        if self._debug:
             self._log_results('CONSENSUS PHASE - RESULTS (AFTER)', state, self.results)
             self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
             # self._log_path('CONSENSUS PHASE - PATH (AFTER)', state, self.path)
@@ -979,12 +977,24 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     ) -> Plan:  
         """ Generate new plan according to consensus replanning model. """             
         try:
-            # generate new bundle and path according to replanning model
-            self.bundle, self.path = \
-                self.__replan_observations(state, specs, current_plan, clock_config, orbitdata, mission, tasks, observation_history)
-        
-            # generate maneuver and travel actions from observations
-            maneuvers : list = self._schedule_maneuvers(state, specs, self.path, clock_config, orbitdata)
+            # check if agent is capable of scheduling observations
+            if isinstance(state, SatelliteAgentState):
+                # satellite agents can schedule maneuvers and observations;
+
+                #  generate new bundle and path according to replanning model
+                self.bundle, self.path = \
+                    self.__replan_observations(state, specs, current_plan, clock_config, orbitdata, mission, tasks, observation_history)
+            
+                # generate maneuver and travel actions from observations
+                maneuvers : list = self._schedule_maneuvers(state, specs, self.path, clock_config, orbitdata)
+            
+            elif isinstance(state, GroundOperatorAgentState):
+                # ground operator agents do not schedule maneuvers
+                maneuvers : list = []
+
+            else:
+                # other agent types not supported
+                raise NotImplementedError("Consensus planner only implemented for satellite and ground station agents.")
 
             # schedule broadcasts
             broadcasts : list = self._schedule_broadcasts(state, orbitdata)
@@ -1031,12 +1041,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
         #     self._log_bundle('PLANNING PHASE - BUNDLE (BEFORE)', state, self.bundle)
         #     x = 1 # breakpoint
         # -------------------------------
-
-        if isinstance(state, GroundOperatorAgentState):
-            # ground operator agent; no replanning needed
-            return self.bundle, self.path
-        elif not isinstance(state, SatelliteAgentState):
-            raise NotImplementedError("Consensus planner only implemented for satellite and ground station agents.")
 
         # check if relevant changes were made to bundle or tasks
         if not self.task_announcements_received and not self.bundle_changes_performed:
@@ -1506,7 +1510,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
     def _schedule_broadcasts(self, state: SimulationAgentState, orbitdata: OrbitData) -> list:
         """ Schedules broadcasts to be done by this agent """
         try:
-            if not isinstance(state, SatelliteAgentState):
+            if not isinstance(state, (SatelliteAgentState, GroundOperatorAgentState)):
                 raise NotImplementedError(f'Broadcast scheduling for agents of type `{type(state)}` not yet implemented.')
             elif orbitdata is None:
                 raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
@@ -1528,11 +1532,16 @@ class ConsensusPlanner(AbstractReactivePlanner):
             
             # compile broadcast times for communication opportunities
             t_broadcasts = []
-
+            t_access_starts = set()
+            
             # compile broadcast times for each communication target
             for target in orbitdata.comms_links.keys():
+                
                 # get access intervals with target agent
                 access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, state.t, include_current=True)
+
+                # collect access start times for future reference
+                t_access_starts.update([access.left for access in access_intervals if not access.is_empty()])
 
                 # create broadcast actions for each access interval
                 for next_access in access_intervals:
@@ -1540,7 +1549,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     if next_access.is_empty(): continue
 
                     # get last access interval and calculate broadcast time
-                    t_broadcast : float = max(next_access.left, state.t)
+                    # t_broadcast : float = max(next_access.left, state.t)
+                    t_broadcast : float = max(
+                                              min(next_access.left + 5*self.EPS,    # give buffer time for access to start
+                                                  next_access.right),               # ensure broadcast is before access ends
+                                            state.t)                                # ensure broadcast is not in the past
+                    # t_broadcast : float = min(
+                    #     max(next_access.left, state.t) + 5*self.EPS, next_access.right
+                    # ) 
 
                     # add to list of broadcast times if not already present
                     if all(abs(t_broadcast - t_existing) > self.EPS for t_existing in t_broadcasts):
@@ -1564,8 +1580,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 broadcasts.extend([
                                 #    state_msg, 
                                 #    observations_msg, 
+                                    bid_msg_action,
                                     task_requests_msg, 
-                                    bid_msg_action
                                     ])
 
             if not orbitdata.comms_links:
@@ -1578,12 +1594,16 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 # add to client broadcast list
                 broadcasts.append(task_requests_msg)
 
+            # connection waits; allows for messages to be received right after access start times
+            waits = [WaitForMessages(t_access_start, t_access_start + self.EPS) for t_access_start in t_access_starts]
+            broadcasts.extend(waits)
+
             # return scheduled broadcasts
             return broadcasts 
         
         finally:
             assert isinstance(broadcasts, list), "Scheduled broadcasts is not a list."
-            assert all(isinstance(broadcast, BroadcastMessageAction) for broadcast in broadcasts), "Not all scheduled broadcasts are of type `BroadcastMessageAction`."
+            # assert all(isinstance(broadcast, BroadcastMessageAction) for broadcast in broadcasts), "Not all scheduled broadcasts are of type `BroadcastMessageAction`."
 
     """
     REPLAN SCHEDULING
