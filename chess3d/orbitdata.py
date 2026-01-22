@@ -13,7 +13,7 @@ import numpy as np
 from datetime import datetime, timedelta, timezone
 from orbitpy.mission import Mission
 
-from chess3d.utils import Interval
+from execsatm.utils import Interval
 
 INTERPOLATION_IGNORED_COLUMNS = [
     'GP index',

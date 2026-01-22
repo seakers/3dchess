@@ -2,9 +2,7 @@ from typing import Union
 import numpy as np
 import uuid
 
-from chess3d.agents.planning.tasks import EventObservationTask, GenericObservationTask
-from chess3d.utils import Interval
-
+from execsatm.tasks import GenericObservationTask
     
 class TaskRequest:
     def __init__(self,

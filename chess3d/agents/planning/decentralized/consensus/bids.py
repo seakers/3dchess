@@ -1,11 +1,10 @@
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from enum import Enum
 from typing import Any, Callable, Dict, Union
 
 import numpy as np
 
-from chess3d.agents.planning.tasks import GenericObservationTask
+from execsatm.tasks import GenericObservationTask
 
 
 def bid_comparison_input_checks( func : Callable ) -> Callable:

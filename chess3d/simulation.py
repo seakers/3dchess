@@ -23,10 +23,13 @@ from dmas.clocks import *
 from dmas.network import NetworkConfig
 from dmas.clocks import *
 
+from execsatm.mission import *
+from execsatm.objectives import MissionObjective, EventDrivenObjective
+from execsatm.requirements import CapabilityRequirement, ExplicitCapabilityRequirement
+from execsatm.utils import Interval
+
 from chess3d.agents.agents import *
 from chess3d.agents.science.processing import LookupProcessor
-from chess3d.mission.mission import *
-from chess3d.mission.requirements import CapabilityRequirement, ExplicitCapabilityRequirement
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
 from chess3d.nodes.environment import SimulationEnvironment
@@ -46,7 +49,7 @@ from chess3d.agents.planning.decentralized.consensus.heuristic import HeuristicI
 from chess3d.agents.science.module import *
 from chess3d.agents.states import SatelliteAgentState, SimulationAgentTypes
 from chess3d.agents.agent import SimulatedAgent
-from chess3d.utils import *
+from chess3d.utils import setup_results_directory
 
 class Simulation:
     def __init__(self,

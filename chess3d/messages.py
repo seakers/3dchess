@@ -2,8 +2,9 @@ from enum import Enum
 from typing import Dict, List
 from dmas.messages import *
 
+from execsatm.tasks import GenericObservationTask
+
 from chess3d.agents.planning.decentralized.consensus.bids import Bid
-from chess3d.agents.planning.tasks import GenericObservationTask
 
 class SimulationMessageTypes(Enum):
     MEASUREMENT_REQ = 'MEASUREMENT_REQ'

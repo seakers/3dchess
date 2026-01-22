@@ -1,15 +1,16 @@
 import pandas as pd
 from zmq import asyncio as azmq
 
+from instrupy.base import Instrument
+
 from dmas.modules import *
+
+from execsatm.mission import Mission
 
 from chess3d.agents.states import SimulationAgentState
 from chess3d.agents.science.processing import DataProcessor
 from chess3d.agents.science.requests import *
 from chess3d.messages import *
-from chess3d.mission.mission import Mission
-
-from instrupy.base import Instrument
 
 
 class ScienceModule(InternalModule):

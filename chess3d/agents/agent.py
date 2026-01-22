@@ -14,10 +14,14 @@ from dmas.modules import InternalModule
 from dmas.utils import runtime_tracker
 from zmq import SocketType
 
+from execsatm.tasks import DefaultMissionTask, GenericObservationTask
+from execsatm.mission import Mission
+from execsatm.objectives import DefaultMissionObjective
+from execsatm.requirements import GridSpatialRequirement, SinglePointSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
+
 from chess3d.agents.planning.plan import ReactivePlan, Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
-from chess3d.agents.planning.tasks import DefaultMissionTask, EventObservationTask, GenericObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory, ObservationTracker
 from chess3d.agents.science.requests import TaskRequest
 from chess3d.agents.states import SimulationAgentState
@@ -25,9 +29,6 @@ from chess3d.agents.actions import *
 from chess3d.messages import *
 from chess3d.agents.science.module import ScienceModule
 from chess3d.agents.science.processing import DataProcessor
-from chess3d.mission.mission import Mission
-from chess3d.mission.objectives import DefaultMissionObjective
-from chess3d.mission.requirements import GridSpatialRequirement, SinglePointSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
 from chess3d.orbitdata import OrbitData
 
 class AbstractAgent(Agent):

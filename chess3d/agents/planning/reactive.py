@@ -4,14 +4,14 @@ from typing import List
 
 from dmas.modules import ClockConfig
 
+from execsatm.tasks import GenericObservationTask
+from execsatm.mission import Mission
+
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
-from chess3d.agents.planning.tasks import GenericObservationTask
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.states import SimulationAgentState
-from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
-
 
 class AbstractReactivePlanner(AbstractPlanner):
     """ Repairs previously constructed plans according to external inputs and changes in state. """

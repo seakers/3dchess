@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Union
 
 import numpy as np
-from chess3d.agents.planning.observations import ObservationOpportunity
+from execsatm.observations import ObservationOpportunity
 from chess3d.utils import CoordinateTypes
 from dmas.agents import AgentAction
    

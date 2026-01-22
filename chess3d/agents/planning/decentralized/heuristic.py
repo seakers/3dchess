@@ -5,11 +5,12 @@ from dmas.utils import runtime_tracker
 from dmas.clocks import ClockConfig
 from tqdm import tqdm
 
+from execsatm.mission import Mission
+from execsatm.observations import ObservationOpportunity
+
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.tracker import ObservationHistory
-from chess3d.mission.mission import Mission
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.planning.observations import ObservationOpportunity
 from chess3d.agents.states import *
 from chess3d.agents.actions import *
 from chess3d.agents.science.requests import *
