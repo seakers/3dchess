@@ -4,7 +4,7 @@ import unittest
 
 from chess3d.mission.mission import Mission
 from chess3d.simulation import Simulation
-from chess3d.utils import print_welcome
+from chess3d.utils import print_banner
 
 
 class TestMissionLoading(unittest.TestCase):
@@ -206,7 +206,7 @@ class TestFederatedMission(unittest.TestCase):
         mission_name = 'toy_missions'
 
         # terminal welcome message
-        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
+        print_banner(f'Federated Mission Scenario Test: `{scenario_name}`')
 
         # Generate scenario
         satellite = self.spacecraft_template.copy()
@@ -392,7 +392,7 @@ class TestFederatedMission(unittest.TestCase):
         spacecraft['planner']['preplanner']['horizon'] =  500
 
         # terminal welcome message
-        print_welcome(f'Federated Mission Scenario Test: `{scenario_name}`')
+        print_banner(f'Federated Mission Scenario Test: `{scenario_name}`')
 
         # Generate scenario
         scenario_specs = self.setup_scenario_specs(duration,

@@ -2,7 +2,7 @@ import unittest
 
 from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
 from chess3d.agents.science.requests import TaskRequest
-from chess3d.utils import Interval, print_welcome
+from chess3d.utils import Interval, print_banner
 
 class TestTaskRequests(unittest.TestCase):
     def setUp(self):
@@ -114,7 +114,7 @@ class TestTaskRequests(unittest.TestCase):
 
 if __name__ == '__main__':
     # terminal welcome message
-    print_welcome('Task Request Definitions Test')
+    print_banner('Task Request Definitions Test')
     
     # run tests
     unittest.main()

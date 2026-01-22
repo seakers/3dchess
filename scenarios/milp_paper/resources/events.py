@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import tqdm
 
-from chess3d.utils import print_welcome, LEVELS
+from chess3d.utils import print_banner, LEVELS
 
 
 def main(experiments_name : str,
@@ -226,7 +226,7 @@ if __name__ == "__main__":
     overwrite = args.overwrite
 
     # print welcome
-    print_welcome('Event generator for Parametric Study')
+    print_banner('Event generator for Parametric Study')
 
     # run simulation
     main(experiment_name, 

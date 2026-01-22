@@ -6,7 +6,7 @@ import pandas as pd
 from scipy.stats._qmc import LatinHypercube
 from tqdm import tqdm
 
-from chess3d.utils import print_welcome
+from chess3d.utils import print_banner
 
 def main(params : List[Tuple[str, list]], lhs_samples : int = 1, seed : int = 1000):
     # generate results directory
@@ -92,7 +92,7 @@ def main(params : List[Tuple[str, list]], lhs_samples : int = 1, seed : int = 10
 
 if __name__ == "__main__":
     # print welcome
-    print_welcome('Experiment generator for Preplanner Parametric Study')
+    print_banner('Experiment generator for Preplanner Parametric Study')
 
     # define experiment parameters
     params = [

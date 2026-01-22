@@ -7,12 +7,12 @@ from tqdm import tqdm
 import pandas as pd
 import seaborn as sns
 
-from chess3d.utils import print_welcome
+from chess3d.utils import print_banner
 
 
 if __name__ == "__main__":
     # print welcome
-    print_welcome('Event generator for Internal Validation Study')
+    print_banner('Event generator for Internal Validation Study')
 
     # set seed
     seed = 1000

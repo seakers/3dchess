@@ -6,7 +6,7 @@ from tqdm import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
 
-from chess3d.utils import print_welcome
+from chess3d.utils import print_banner
 
 from constellation import WalkerDeltaConstellation
 
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     
     """
     # terminal welcome message
-    print_welcome(f'Walker Delta Constellation Connectivity Experiment')
+    print_banner(f'Walker Delta Constellation Connectivity Experiment')
 
     # set inclination and altitude
     inc = 98.0  # [deg]

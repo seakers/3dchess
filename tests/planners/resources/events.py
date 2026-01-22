@@ -7,7 +7,7 @@ import pandas as pd
 import tqdm
 
 from chess3d.mission.events import GeophysicalEvent
-from chess3d.utils import print_welcome, LEVELS
+from chess3d.utils import print_banner, LEVELS
 
 
 def main(
@@ -211,7 +211,7 @@ def create_events(experiments_dir : str,
 if __name__ == "__main__":
 
     # print welcome
-    print_welcome('Event generator for Mission Tests')
+    print_banner('Event generator for Mission Tests')
 
     grids_names = [
         # "HydroLAKES_polys_v10_simple_1000",

@@ -13,7 +13,7 @@ from tqdm import tqdm
 import networkx as nx
 
 from orbitpy.mission import Mission
-from chess3d.utils import print_welcome
+from chess3d.utils import print_banner
 
 class Constellation(ABC):
     R = 6378 # Earth radius in km    
@@ -569,7 +569,7 @@ class WalkerStarConstellation(WalkerConstellation):
 if __name__ == "__main__":
 
     # terminal welcome message
-    print_welcome(f'Walker Delta Constellation Example')
+    print_banner(f'Walker Delta Constellation Example')
     
     # example 1: Walker Delta Constellation
     

@@ -10,7 +10,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from chess3d.simulation import Simulation
-from chess3d.utils import print_welcome, LEVELS
+from chess3d.utils import print_banner, LEVELS
 
 
 def main(
@@ -193,7 +193,7 @@ def main(
         scenario_specs['spacecraft'] = sats
 
         # print welcome message
-        print_welcome(experiment_name)
+        print_banner(experiment_name)
 
         # define results output file name
         results_dir = os.path.join(scenario_dir, 'results', experiment_name)

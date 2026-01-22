@@ -58,14 +58,21 @@ def setup_results_directory(scenario_path : str, scenario_name : str, agent_name
 
     return results_path
 
-def print_welcome(scenario_name = None) -> None:
+def print_banner(scenario_name = None) -> None:
+    # clear the console
     os.system('cls' if os.name == 'nt' else 'clear')
+
+    # construct banner string
     out = "\n======================================================"
     out += '\n   _____ ____        ________  __________________\n  |__  // __ \      / ____/ / / / ____/ ___/ ___/\n   /_ </ / / /_____/ /   / /_/ / __/  \__ \\__ \ \n ___/ / /_/ /_____/ /___/ __  / /___ ___/ /__/ / \n/____/_____/      \____/_/ /_/_____//____/____/ (v1.1)'
     out += "\n======================================================"
     out += '\n\tTexas A&M University - SEAK Lab ©'
     out += "\n======================================================"
+    
+    # include scenario name if provided
     if scenario_name is not None: out += f"\nSCENARIO: {scenario_name}"
+
+    # print banner
     print(out)
 
 def arg_parser() -> tuple:

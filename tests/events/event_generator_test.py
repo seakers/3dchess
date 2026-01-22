@@ -4,12 +4,12 @@ import unittest
 import pandas as pd
 
 from chess3d.simulation import Simulation
-from chess3d.utils import print_welcome
+from chess3d.utils import print_banner
 
 class TestNaivePlanner(unittest.TestCase):
     def setUp(self) -> None:
         # terminal welcome message
-        print_welcome('Naive Planner Test')
+        print_banner('Naive Planner Test')
         
         # load scenario json file
         self.scenario_specs : dict = {
