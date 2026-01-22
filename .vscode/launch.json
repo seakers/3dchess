@@ -15,35 +15,48 @@
             "args": [
             ]
         },
-        {
-            "name": "TEST: Event Generation",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/tests/events/event_generator_test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            }
-        },
-        {
-            "name": "TEST: Reward Grid",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/tests/rewards/reward_grid_test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            }
-        },
+        // TODO: update reward grid test
+        // {
+        //     "name": "TEST: Reward Grid",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${workspaceRoot}/tests/rewards/reward_grid_test.py",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "cwd": "${workspaceRoot}",
+        //     "env": {
+        //         "PYTHONPATH": "${workspaceRoot}"
+        //     }
+        // },
         {
             "name": "TEST: Task Request Definition",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceRoot}/tests/tasks/requests_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            }
+        },
+        {
+            "name": "TEST: Ground Station Agent Definition",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/agents/gs_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            }
+        },
+        {
+            "name": "TEST: Agent Connectivity Options",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/connectivity/connectivity_test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceRoot}",
@@ -112,18 +125,6 @@
         //         "PYTHONPATH": "${workspaceRoot}"
         //     }
         // },
-        {
-            "name": "TEST: Ground Station Agent Definition",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceRoot}/tests/agents/gs_test.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${workspaceRoot}",
-            "env": {
-                "PYTHONPATH": "${workspaceRoot}"
-            }
-        },
         {
             "name": "PLANNER TEST: Dealer-Worker Preplanner",
             "type": "debugpy",

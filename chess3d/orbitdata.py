@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import copy
+from enum import Enum
 import json
 from math import ceil
 import os
@@ -10,10 +11,17 @@ from typing import Dict, List, Tuple
 import pandas as pd
 import numpy as np
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from orbitpy.mission import Mission
 
 from execsatm.utils import Interval
+
+class ConnectivityLevels(Enum):
+    FULL = 'FULL'   # constant fully connected network
+    LOS = 'LOS'     # line-of-sight links between satellites and ground stations
+    ISL = 'ISL'     # satellite inter-satellite links only
+    GS = 'GS'       # satellite-to-ground station links only
+    NONE = 'NONE'   # no inter-agent connectivity
 
 INTERPOLATION_IGNORED_COLUMNS = [
     'GP index',
@@ -191,14 +199,14 @@ class IntervalData(AbstractData):
             columns = [col.replace('index', 'time [s]') for col in df.columns.values]
             
             # get time data in Inteval format
-            data = [(t_start * time_step, t_end * time_step, row) 
+            data = [(t_start * time_step, t_end * time_step, *row) 
                     for t_start,t_end,*row in df.values]
         else:
             # get time column index
             columns = [col for col in df.columns.values]
             
             # get time data in Inteval format
-            data = [(t_start, t_end, row) for t_start,t_end,*row in df.values]
+            data = [(t_start, t_end, *row) for t_start,t_end,*row in df.values]
 
         # return IntervalData object
         return IntervalData(name, columns, data)
@@ -240,6 +248,9 @@ class IntervalData(AbstractData):
         self.data = [(t_start,t_end,row) for t_start,t_end,row in self.data
                      if t <= t_end or abs(t - t_end) <= 1e-6]
         
+    def __len__(self):
+        return len(self.data)
+        
 class OrbitData:
     """
     Stores and queries data regarding an agent's orbital data. 
@@ -277,7 +288,9 @@ class OrbitData:
         self.position_data : TimeIndexedData = TimeIndexedData.from_dataframe(position_data, self.time_step, 'position')   
 
         # TODO validate access data
-        assert all([('start index' in df.columns and 'end index' in df.columns) for df in satellite_link_data.values()]), 'start index or end index column not found in satellite link data'
+        assert all([('start index' in df.columns and 'end index' in df.columns) 
+                    for df in satellite_link_data.values()]), \
+                        'start index or end index column not found in satellite link data'
         
         # access times to other satellites
         self.satellite_links : Dict[str, IntervalData] = {satellite_name : IntervalData.from_dataframe(satellite_link_data[satellite_name], self.time_step, f"{satellite_name.lower()}-isl")
@@ -535,7 +548,7 @@ class OrbitData:
     """
     LOAD FROM PRE-COMPUTED DATA
     """
-    def from_directory(orbitdata_dir: str):
+    def from_directory(orbitdata_dir: str) -> Dict[str, 'OrbitData']:
         """
         Loads orbit data from a directory containig a json file specifying the details of the mission being simulated.
         If the data has not been previously propagated, it will do so and store it in the same directory as the json file
@@ -588,7 +601,8 @@ class OrbitData:
                 return OrbitData.load_gstat_data(agent_name, spacecraft_list, ground_station_list, ground_ops_list, orbitdata_path, mission_dict)
             else:
                 raise ValueError(f'Orbitdata for agent `{agent_name}` not found in precomputed data.')
-            
+    
+    @staticmethod
     def load_spacecraft_data(
                              agent_name : str, 
                              spacecraft_list : List[dict], 
@@ -601,6 +615,13 @@ class OrbitData:
         Loads orbit data for a spacecraft from pre-computed csv files in scenario directory
         """
 
+        # get scenario settings
+        scenario_dict : dict = mission_dict.get('scenario', None)
+
+        # get connectivity setting
+        connectivity : str = scenario_dict.get('connectivity', None) \
+            if scenario_dict else ConnectivityLevels.LOS.value # default to LOS if not specified
+
         # find the desired spacecraft specifications in the mission dictionary
         for spacecraft_idx,spacecraft in enumerate(spacecraft_list):
             # get spacecraft name
@@ -610,7 +631,8 @@ class OrbitData:
             if name != agent_name: continue
 
             # define agent folder
-            agent_folder = "sat" + str(spacecraft_idx) + '/'
+            sat_id = "sat" + str(spacecraft_idx)
+            agent_folder = sat_id + '/'
 
             # load eclipse data
             eclipse_file = os.path.join(orbitdata_path, agent_folder, "eclipses.csv")
@@ -639,43 +661,32 @@ class OrbitData:
             isl_data = dict()
             comms_path = os.path.join(orbitdata_path, 'comm')
             for file in os.listdir(comms_path):                
+                # remove file extension and split sender and receiver
                 isl = re.sub(".csv", "", file)
                 sender, _, receiver = isl.split('_')
 
-                if 'sat' + str(spacecraft_idx) in sender or 'sat' + str(spacecraft_idx) in receiver:
+                # check if this ISL involves the current spacecraft
+                if sat_id in sender or sat_id in receiver:
+
+                    # generate ISL access file path
                     isl_file = os.path.join(comms_path, file)
-                    if 'sat' + str(spacecraft_idx) in sender:
+
+                    # load ISL data depending on whether the current spacecraft is the sender or receiver
+                    if sat_id in sender:
+                        # sat_id in sender
                         receiver_index = int(re.sub("[^0-9]", "", receiver))
                         receiver_name = spacecraft_list[receiver_index].get('name')
-                        if (
-                            (scenario_dict := mission_dict.get('scenario', None)) 
-                            and scenario_dict.get('connectivity', None).upper() == "FULL"
-                            ):
-                            # modify connectivity if specified 
-                            columns = ['start index', 'end index']
-                            duration = timedelta(days=float(mission_dict["duration"]))
-                            data = [[0.0, duration.total_seconds()]]
-                            assert data[0][1] > 0.0
-                            isl_data[receiver_name] = pd.DataFrame(data=data, columns=columns)
-                        else:
-                            # load connectivity
-                            isl_data[receiver_name] = pd.read_csv(isl_file, skiprows=range(3))
+
+                        # load ISL data
+                        isl_data[receiver_name] = OrbitData.load_isl_data(isl_file, connectivity, duration, time_step)
+                        
                     else:
+                        # sat_id in receiver
                         sender_index = int(re.sub("[^0-9]", "", sender))
                         sender_name = spacecraft_list[sender_index].get('name')
-                        if (
-                            (scenario_dict := mission_dict.get('scenario', None)) 
-                            and scenario_dict.get('connectivity', None).upper() == "FULL"
-                            ):
-                            # modify connectivity if specified 
-                            columns = ['start index', 'end index']
-                            duration = timedelta(days=float(mission_dict["duration"]))
-                            data = [[0.0, duration.total_seconds()]]
-                            assert data[0][1] > 0.0
-                            isl_data[sender_name] = pd.DataFrame(data=data, columns=columns)
-                        else:
-                            # load connectivity
-                            isl_data[sender_name] = pd.read_csv(isl_file, skiprows=range(3))
+                        
+                        # load ISL data
+                        isl_data[sender_name] = OrbitData.load_isl_data(isl_file, connectivity, duration, time_step)
 
             # compile list of ground stations that are part of the desired network
             gs_network_name = spacecraft.get('groundStationNetwork', None)
@@ -700,7 +711,40 @@ class OrbitData:
 
                 # load ground station access data
                 gndStn_access_file = os.path.join(orbitdata_path, agent_folder, file)
-                gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
+                
+                if connectivity.upper() == ConnectivityLevels.FULL.value:
+                    # fully connected network; modify connectivity 
+                    columns = ['start index', 'end index']
+                    
+                    # generate mission-long connectivity access                    
+                    data = [[0.0, duration * 24 * 3600 // time_step + 1]]  # full connectivity from start to end of mission
+                    assert data[0][1] > 0.0
+
+                    # return modified connectivity
+                    gndStn_access_data = pd.DataFrame(data=data, columns=columns)
+                
+                elif connectivity.upper() == ConnectivityLevels.LOS.value:
+                    # line-of-sight driven connectivity; load ground station access data
+                    gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
+                
+                elif connectivity.upper() == ConnectivityLevels.GS.value:
+                    # ground station-only connectivity; load ground station access data
+                    gndStn_access_data = pd.read_csv(gndStn_access_file, skiprows=range(3))
+
+                elif connectivity.upper() == ConnectivityLevels.ISL.value:
+                    # inter-satellite link-driven connectivity; create empty dataframe
+                    columns = ['start index', 'end index']
+                    gndStn_access_data = pd.DataFrame(data=[], columns=columns)
+
+                elif connectivity.upper() == ConnectivityLevels.NONE.value:
+                    # no inter-agent connectivity; create empty dataframe
+                    columns = ['start index', 'end index']
+                    gndStn_access_data = pd.DataFrame(data=[], columns=columns)
+
+                else:
+                    # fallback; unsupported connectivity level
+                    raise ValueError(f'Unsupported connectivity level: {connectivity}.')
+                
                 nrows, _ = gndStn_access_data.shape
 
                 # get ground station information
@@ -824,6 +868,44 @@ class OrbitData:
         
         raise ValueError(f'Orbitdata for satellite `{agent_name}` not found in precalculated data.')
     
+    @staticmethod
+    def load_isl_data(isl_file : str, connectivity : str, duration_days : float, time_step : float) -> pd.DataFrame:
+        if connectivity.upper() == ConnectivityLevels.FULL.value:
+            # fully connected network; modify connectivity 
+            columns = ['start index', 'end index']
+            
+            # generate mission-long connectivity access
+            duration = timedelta(days=float(duration_days))
+            data = [[0.0, duration.total_seconds() // time_step + 1]]
+            assert data[0][1] > 0.0
+
+            # return modified connectivity
+            return pd.DataFrame(data=data, columns=columns)
+
+        elif connectivity.upper() == ConnectivityLevels.LOS.value:
+            # line-of-sight driven connectivity; load connectivity and store data
+            # TODO if ISL definition is modified in orbitpy, make sure this case is updated accordingly
+            return pd.read_csv(isl_file, skiprows=range(3))
+
+        elif connectivity.upper() == ConnectivityLevels.ISL.value:
+            # inter-satellite link driven connectivity; load connectivity and store data
+            # TODO if ISL definition is modified in orbitpy, make sure this case is updated accordingly
+            return pd.read_csv(isl_file, skiprows=range(3))
+
+        elif connectivity.upper() == ConnectivityLevels.GS.value:
+            # ground station-only connectivity; create empty dataframe
+            columns = ['start index', 'end index']
+            return pd.DataFrame(data=[], columns=columns)
+
+        elif connectivity.upper() == ConnectivityLevels.NONE.value:
+            # no inter-agent connectivity; create empty dataframe
+            columns = ['start index', 'end index']
+            return pd.DataFrame(data=[], columns=columns)
+            
+        # fallback case for unsupported connectivity levels
+        raise ValueError(f'Unsupported connectivity level: {connectivity}')
+
+    @staticmethod
     def load_gstat_data(
                              agent_name : str, 
                              spacecraft_list : List[dict], 
@@ -833,6 +915,15 @@ class OrbitData:
                              mission_dict : dict
                              ) -> object:
         
+        
+        # get scenario settings
+        scenario_dict : dict = mission_dict.get('scenario', None)
+
+        # get connectivity setting
+        connectivity : str = scenario_dict.get('connectivity', None) \
+            if scenario_dict else ConnectivityLevels.LOS.value # default to LOS if not specified
+        
+        # find the desired ground operator specifications in the mission dictionary
         for ground_ops in ground_ops_list:
              # get spacecraft name
             name = ground_ops.get('name')
@@ -853,16 +944,13 @@ class OrbitData:
                 # spacecraft is not part of the ground station network; skip
                 if spacecraft.get('groundStationNetwork', None) != name: continue
 
-                # initiate access data for this spacecraft
-                satellite_access_data = pd.DataFrame(columns=['start index', 'end index'])
-
                 # load access time for this spacecraft with each ground_station in the network
                 for file in os.listdir(os.path.join(orbitdata_path,"sat" + str(sat_idx))):
                     if 'state' not in file: continue
 
                     # load propagation time data
-                    agent_access_file = os.path.join(orbitdata_path, "sat" + str(sat_idx), file)
-                    time_data =  pd.read_csv(agent_access_file, nrows=3)
+                    agent_access_df = os.path.join(orbitdata_path, "sat" + str(sat_idx), file)
+                    time_data =  pd.read_csv(agent_access_df, nrows=3)
                     _, epoch_type, _, epoch = time_data.at[0,time_data.axes[1][0]].split(' ')
                     epoch_type = epoch_type[1 : -1]
                     epoch = float(epoch)
@@ -877,7 +965,9 @@ class OrbitData:
                                 "duration" : duration }
                     
                     break # only need to load time data once
+
                 if time_data is not None: break # only need to load time data once
+
             # ensure time data was found
             assert time_data is not None, \
                 f'No propagation data found for any spacecraft in ground station network `{agent_name}`.'
@@ -915,8 +1005,43 @@ class OrbitData:
                     if gndStn_idx not in gs_network_station_indices: continue 
 
                     # load ground station access data
-                    agent_access_file = os.path.join(orbitdata_path, "sat" + str(sat_idx), file)
-                    satellite_access_data = pd.concat([satellite_access_data, pd.read_csv(agent_access_file, skiprows=range(3))])
+                    # agent_access_file = os.path.join(orbitdata_path, "sat" + str(sat_idx), file)
+                    if connectivity.upper() == ConnectivityLevels.FULL.value:
+                        # fully connected network; modify connectivity 
+                        columns = ['start index', 'end index']
+                        
+                        # generate mission-long connectivity access                    
+                        data = [[0.0, duration * 24 * 3600 // time_step + 1]]  # full connectivity from start to end of mission
+                        assert data[0][1] > 0.0
+
+                        # return modified connectivity
+                        agent_access_df = pd.DataFrame(data=data, columns=columns)
+                    
+                    elif connectivity.upper() == ConnectivityLevels.LOS.value:
+                        # line-of-sight driven connectivity; load ground station access data
+                        agent_access_file = os.path.join(orbitdata_path, "sat" + str(sat_idx), file)
+                        agent_access_df = pd.read_csv(agent_access_file, skiprows=range(3))
+                    
+                    elif connectivity.upper() == ConnectivityLevels.GS.value:
+                        # ground station-only connectivity; load ground station access data
+                        agent_access_file = os.path.join(orbitdata_path, "sat" + str(sat_idx), file)
+                        agent_access_df = pd.read_csv(agent_access_file, skiprows=range(3))
+
+                    elif connectivity.upper() == ConnectivityLevels.ISL.value:
+                        # inter-satellite link-driven connectivity; create empty dataframe
+                        columns = ['start index', 'end index']
+                        agent_access_df = pd.DataFrame(data=[], columns=columns)
+
+                    elif connectivity.upper() == ConnectivityLevels.NONE.value:
+                        # no inter-agent connectivity; create empty dataframe
+                        columns = ['start index', 'end index']
+                        agent_access_df = pd.DataFrame(data=[], columns=columns)
+
+                    else:
+                        # fallback; unsupported connectivity level
+                        raise ValueError(f'Unsupported connectivity level: {connectivity}.')
+                    
+                    satellite_access_data = pd.concat([satellite_access_data, agent_access_df])
 
                 # remove duplicates
                 satellite_access_data = satellite_access_data.drop_duplicates().reset_index(drop=True)
@@ -964,7 +1089,7 @@ class OrbitData:
                 
         raise ValueError(f'Orbitdata for satellite `{agent_name}` not found in precalculated data.')
                
-    def precompute(scenario_specs : dict) -> str:
+    def precompute(scenario_specs : dict, overwrite : bool = False) -> str:
         """
         Pre-calculates coverage and position data for a given scenario
         """
@@ -987,7 +1112,7 @@ class OrbitData:
         else:
             changes_to_scenario : bool = OrbitData._check_changes_to_scenario(scenario_specs, data_dir)
 
-        if not changes_to_scenario:
+        if not changes_to_scenario and not overwrite:
             # if propagation data files already exist, load results
             print('Orbit data found!')
         else:

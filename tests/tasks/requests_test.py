@@ -1,8 +1,10 @@
 import unittest
 
-from chess3d.agents.planning.tasks import DefaultMissionTask, GenericObservationTask
+from execsatm.tasks import DefaultMissionTask, GenericObservationTask
+from execsatm.utils import Interval
+
 from chess3d.agents.science.requests import TaskRequest
-from chess3d.utils import Interval, print_banner
+from chess3d.utils import print_banner
 
 class TestTaskRequests(unittest.TestCase):
     def setUp(self):
