@@ -8,7 +8,7 @@ from dmas.modules import ClockConfig
 from dmas.utils import runtime_tracker
 from tqdm import tqdm
 
-from chess3d.agents.actions import BroadcastMessageAction
+from chess3d.agents.actions import BroadcastMessageAction, WaitForMessages
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.plan import PeriodicPlan, Plan
 from chess3d.agents.planning.tasks import EventObservationTask
@@ -97,9 +97,10 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
     def _schedule_observations(self, *_) -> list:
         return [] # No scheduling, only announcing events
     
-    def _schedule_broadcasts(self, state, observations, orbitdata, t = None):
+    def _schedule_broadcasts(self, state, _, orbitdata : OrbitData, __ = None) -> List[BroadcastMessageAction]:
         # initialize broadcasts from parent planner
-        broadcasts : List[BroadcastMessageAction] = super()._schedule_broadcasts(state, observations, orbitdata, t)
+        # broadcasts : List[BroadcastMessageAction] = super()._schedule_broadcasts(state, observations, orbitdata, t)
+        broadcasts : List[BroadcastMessageAction] = []
 
         # get list of future events
         future_events : List[GeophysicalEvent] = [event for event in self.events if event.is_available(state.t)]
@@ -153,6 +154,9 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
             # create single broadcast action for all requests
             broadcasts.append(BroadcastMessageAction(bus_broadcast.to_dict(), t_broadcast))
 
+        # initialize set of times when broadcasts are scheduled
+        t_access_starts = set()    
+
         # create broadcasts for each request
         for req in tqdm(task_requests, 
                         desc=f'{state.agent_name}/PREPLANNER: Scheduling broadcasts for generated task requests',
@@ -163,13 +167,20 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
                 # get access intervals with the client agent within the planning horizon
                 access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, req.t_req, include_current=True)
 
+                # collect access start times for future reference
+                t_access_starts.update([access.left for access in access_intervals if not access.is_empty()])
+
                 # create broadcast actions for each access interval
                 for next_access in access_intervals:
                     # if no access opportunities in this planning horizon, skip scheduling
                     if next_access.is_empty(): continue
 
                     # get last access interval and calculate broadcast time
-                    t_broadcast : float = max(next_access.left, req.t_req)
+                    # t_broadcast : float = max(next_access.left, req.t_req)
+                    t_broadcast : float = max(
+                                              min(next_access.left + 5*self.EPS,    # give buffer time for access to start
+                                                  next_access.right),               # ensure broadcast is before access ends
+                                            state.t)                                # ensure broadcast is not in the past
 
                     # generate plan message to share any task requests generated
                     task_requests_msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
@@ -178,5 +189,9 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
                     broadcast = BroadcastMessageAction(task_requests_msg.to_dict(), t_broadcast)
 
                     broadcasts.append(broadcast)
+
+        # connection waits; allows for messages to be received right after access start times
+        waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
+        broadcasts.extend(waits)
 
         return broadcasts

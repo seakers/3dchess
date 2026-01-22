@@ -31,10 +31,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
     DYNAMIC_PROGRAMMING = 'dynamicProgramming'
     MILP = 'mixedIntegerLinearProgramming'
     MODELS = [HEURISTIC_INSERTION, DYNAMIC_PROGRAMMING, MILP]
-    
-    # Constants
-    EPS = 1e-6
-
+   
     def __init__(self, 
                  model : str,
                  replan_threshold : int,
@@ -126,10 +123,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if isinstance(current_plan, PeriodicPlan) and self._debug:
+        if self._debug and incoming_bids:
             self._log_results('CONSENSUS PHASE - RESULTS (BEFORE)', state, self.results)
-            self._log_bundle('CONSENSUS PHASE - BUNDLE (BEFORE)', state, self.bundle)
             print(f'`{state.agent_name}` - Received {len(incoming_bids)} incoming bids and {len(self.incoming_event_tasks)} task requests.')
+            self._log_bundle('CONSENSUS PHASE - BUNDLE (BEFORE)', state, self.bundle)
         # -------------------------------
 
         # perform consensus phase for incoming task bids
@@ -145,6 +142,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # if (task_updates or results_updates or bundle_updates) and self._debug:
         if self._debug:
             self._log_results('CONSENSUS PHASE - RESULTS (AFTER)', state, self.results)
+            print(f'`{state.agent_name}` - Received {len(incoming_bids)} incoming bids and {len(self.incoming_event_tasks)} task requests.')
             self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
             # self._log_path('CONSENSUS PHASE - PATH (AFTER)', state, self.path)
             x = 1 # debug breakpoint
@@ -630,17 +628,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         # add updated bid to results updates
                         results_updates.append(updated_bid)
                     
-                    # # check if previously unperformed bid was performed 
-                    # elif not current_bid.was_performed() and incoming_bid.was_performed():
-                    #     # check if the winner of the performed bid matches current known winner
-                    #     if incoming_bid.winner != current_bid.winner:
-                    #         # winner changed due to performed bid; add updated bid to results updates
-                    #         results_updates.append(updated_bid)
-                    #     else:
-                    #         # winner did not change and plan was executed as expected; 
-                    #         #   no need to add to results updates
-                    #         pass 
-                    #     #     x = 1 # debug breakpoint                        
+                    # check if previously unperformed bid was performed 
+                    elif not current_bid.was_performed() and incoming_bid.was_performed():
+                        # bid was performed; add updated bid to results updates
+                        results_updates.append(updated_bid)                 
                     
                     # check if both bids corresponded to a performed observation
                     if current_bid.was_performed() and incoming_bid.was_performed():
@@ -1554,20 +1545,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                               min(next_access.left + 5*self.EPS,    # give buffer time for access to start
                                                   next_access.right),               # ensure broadcast is before access ends
                                             state.t)                                # ensure broadcast is not in the past
-                    # t_broadcast : float = min(
-                    #     max(next_access.left, state.t) + 5*self.EPS, next_access.right
-                    # ) 
 
                     # add to list of broadcast times if not already present
                     if all(abs(t_broadcast - t_existing) > self.EPS for t_existing in t_broadcasts):
                         t_broadcasts.append(t_broadcast)
 
             for t_broadcast in t_broadcasts:
-                # generate plan message to share state
-                state_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.STATE, t_broadcast)
-
-                # generate plan message to share completed observations
-                observations_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.OBSERVATIONS, t_broadcast)
+                # TODO decide whether to broadcast state and observations as well
 
                 # generate plan message to share any task requests generated
                 task_requests_msg = FutureBroadcastMessageAction(FutureBroadcastMessageAction.REQUESTS, t_broadcast)
@@ -1576,10 +1560,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 bid_msg_action = BroadcastMessageAction(compiled_results_msg_dict, t_broadcast)
                 
                 # add to client broadcast list
-                # TODO decide whether to broadcast state and observations as well
                 broadcasts.extend([
-                                #    state_msg, 
-                                #    observations_msg, 
                                     bid_msg_action,
                                     task_requests_msg, 
                                     ])
@@ -1594,9 +1575,22 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 # add to client broadcast list
                 broadcasts.append(task_requests_msg)
 
+            # include established broadcasts from preplan
+            preplan_broadcasts = [action for action in self.preplan.actions
+                                    # extract only broadcast actions
+                                    if isinstance(action, BroadcastMessageAction)
+                                    # exclude broadcasts of future information; 
+                                    #  these would be redundant with those scheduled here 
+                                    and not isinstance(action, FutureBroadcastMessageAction)]
+            t_access_starts.update([preplan_broadcast.t_start - 5*self.EPS for preplan_broadcast in preplan_broadcasts])
+            broadcasts.extend(preplan_broadcasts)
+
             # connection waits; allows for messages to be received right after access start times
-            waits = [WaitForMessages(t_access_start, t_access_start + self.EPS) for t_access_start in t_access_starts]
+            waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
             broadcasts.extend(waits)
+
+            if preplan_broadcasts:
+                x = 1 # breakpoint
 
             # return scheduled broadcasts
             return broadcasts 

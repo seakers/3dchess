@@ -46,6 +46,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         self.toy_23 = False 
         self.toy_24 = True
+        self.toy_25 = False
+        self.toy_26 = False
 
     def toy_planner_config(self):
         return {
@@ -359,7 +361,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -460,7 +462,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -575,7 +577,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -687,7 +689,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -791,7 +793,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -900,7 +902,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -1097,7 +1099,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -1160,7 +1162,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -1353,7 +1355,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -1416,7 +1418,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -1491,7 +1493,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -1653,7 +1655,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['sma'] = self.R + 400.0 
@@ -1750,7 +1752,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['sma'] = self.R + 400.0 
@@ -1844,7 +1846,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -1909,7 +1911,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -2166,7 +2168,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -2301,46 +2303,32 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         - T:6000.0[s] Sat 1 determines it is not worth to perform observations for Event 2
 
         - T:6373.40[s] Sat 1 performs observation n=3 of Event 1 for t=6373.40[s]
+        - T:6373.40[s] Sat 1 determines it won n=3 of Event 1 for t=6373.40[s]
+        - T:6373.40[s] Sat 1 informs Sat 0 that it won n=3 for Event 1 for t=6373.40[s]
+        - T:6373.40[s] Sat 1 informs GS that it won n=3 for Event 1 for t=6373.40[s]
+        - T:6373.40[s] GS determines Sat 1 won n=3 for Event 1 for t=6373.40[s]
+        - T:6373.40[s] GS informs Sat 0 that Sat 1 won n=3 for Event 1 for t=6373.40[s]
+        - T:6373.40[s] GS informs Sat 1 that Sat 1 won n=3 for Event 1 for t=6373.40[s]
 
         - T:6436.63[s] Sat 0 and GS contact ends
         - T:6436.63[s] Sat 1 and GS contact ends
 
         - T:7007.65[s] Sat 2 and GS contact starts
+        - T:7007.65[s] GS informs Sat 2 that Sat 1 won n=3 for Event 1 for t=6373.40[s]
+        - T:7007.65[s] Sat 2 determines that Sat 1 won n=3 for Event 1 for t=6373.40[s]
 
         - T:7200.0[s] Event 1 ends
         - T:7200.0[s] Event 2 ends
         - T:7200[s] Sat 0 and 1 contact ends
         - T:7200[s] Sat 2 and GS contact ends
-        - T:7200.0[s] Simulation ends
-        
-        
-
-        
-        - T:5796.28[s] Sat 0 and GS contact starts
-        - T:5796.28[s] Sat 1 and GS contact starts
-        - T:5796.28[s] Sat 0 informs GS of Event 1
-        - T:5796.28[s] Sat 1 informs GS that it won n=1 for Event 1 for t=36.1[s]
-        - T:5796.28[s] Sat 1 informs GS that it is winning n=2 for Event 1 for t=6373.4[s]
-        - T:5796.28[s] GS determines Sat 1 won n=1 for Event 1 for t=36.1[s]
-        - T:5796.28[s] GS determines Sat 1 is winning n=2 for Event 1 for t=6373.4[s]
-        - T:5796.28[s] GS informs Sat 1 that Sat 1 won n=1 for Event 1 for t=36.1[s]
-        - T:5796.28[s] GS informs Sat 1 that Sat 1 is winning n=2 for Event 1 for t=6373.4[s]
-
-        - T:6000.0[s] Sat 0 informs Sat 1 of Event 2
-        - T:6000.0[s] Sat 1 determines it is not worth to perform observations for Event 2
-
-        - T:6262.09[s] Sat 0 and GS contact ends
-        - T:6262.09[s] Sat 1 and GS contact ends
-
-        - T:6373.40[s] Sat 1 performs observation n=2 of Event 1 for t=6373.40[s]
-        - T:6373.40[s] Sat 1 informs Sat 0 that it won n=2 for Event 1 for t=6373.40[s]
+        - T:7200.0[s] Simulation ends       
+       
         """
 
         if not self.toy_24: return
 
         # setup scenario parameters
         duration = 2.0 / 24.0
-        # duration = 1200 / 3600 / 24.0
         grid_name = 'toy_24'
         scenario_name = f'toy_24-{self.planner_name()}'
         connectivity = 'LOS'
@@ -2352,7 +2340,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # SAT0 : announcer satellite 
         announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'SAT0'
+        announcer_spacecraft['name'] = 'sat0'
         announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
         announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         announcer_spacecraft['orbitState']['state']['inc'] = 0.0
@@ -2416,6 +2404,149 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         print(f"{scenario_name}: DONE")
 
+    def test_toy_case_25(self):
+        """
+        ## TOY CASE 25
+
+        Test case for one satellite responding to event announcements from a ground operator agent
+          while bidding against the same ground operator agent. 
+        """
+
+        if not self.toy_25: return
+
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        n_case = 25
+        grid_name = f'toy_{n_case}'
+        scenario_name = f'toy_{n_case}-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = f'toy_{n_case}'
+        mission_filename = 'toy_missions'
+        mission_name = f'toy_mission_{n_case}'
+        gs_network = f'gs_toy_{n_case}'
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config() # no preplan capability
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = 0.0
+        ractive_spacecraft_1['groundStationNetwork'] = gs_network
+        ractive_spacecraft_1['mission'] = mission_name
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_filename,
+                                                   spacecraft=[
+                                                       ractive_spacecraft_1
+                                                    ]
+                                                   )
+
+        # compile ground stations
+        scenario_specs['groundStation'] = self.compile_ground_stations([gs_network])
+
+        # define ground operator with CBBA + announcer capability
+        scenario_specs['groundOperator'] = self.setup_announcing_cbba_ground_operators(event_name, mission_name, [gs_network])
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs, overwrite=True)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
+
+    def test_toy_case_26(self):
+        """
+        ## TOY CASE 26
+
+        Test case for two satellites responding to event announcements from a ground operator agent
+          while bidding against the same ground operator agent. 
+        """
+
+        if not self.toy_26: return
+        
+        # setup scenario parameters
+        duration = 2.0 / 24.0
+        n_case = 26
+        grid_name = f'toy_{n_case}'
+        scenario_name = f'toy_{n_case}-{self.planner_name()}'
+        connectivity = 'LOS'
+        event_name = f'toy_{n_case}'
+        mission_filename = 'toy_missions'
+        mission_name = f'toy_mission_{n_case}'
+        gs_network = f'gs_toy_{n_case}'
+
+        # SAT1 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_1['@id'] = 'sat1_vnir'
+        ractive_spacecraft_1['name'] = 'sat1'
+        ractive_spacecraft_1['planner'] = self.toy_planner_config() # no preplan capability
+        ractive_spacecraft_1['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_1['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_1['orbitState']['state']['ta'] = 10.0
+        ractive_spacecraft_1['groundStationNetwork'] = gs_network
+        ractive_spacecraft_1['mission'] = mission_name
+
+        # SAT2 : reactive satellite with narrow swath instrument
+        ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        ractive_spacecraft_2['@id'] = 'sat2_vnir'
+        ractive_spacecraft_2['name'] = 'sat2'
+        ractive_spacecraft_2['planner'] = self.toy_planner_config() # no preplan capability
+        ractive_spacecraft_2['spacecraftBus']['components']['adcs']['maxRate'] = 1.5
+        ractive_spacecraft_2['instrument'] = self.instruments['VNIR hyp'] # narrow swath instrument
+        ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
+        ractive_spacecraft_2['orbitState']['state']['ta'] = ractive_spacecraft_1['orbitState']['state']['ta'] - 60.0 # phase offset by 60.0[deg]
+        ractive_spacecraft_2['groundStationNetwork'] = gs_network
+        ractive_spacecraft_2['mission'] = mission_name
+
+        # terminal welcome message
+        print_welcome(f'`{scenario_name}` PLANNER TEST')
+
+        # Generate scenario
+        scenario_specs = self.setup_scenario_specs(duration,
+                                                   grid_name, 
+                                                   scenario_name, 
+                                                   connectivity,
+                                                   event_name,
+                                                   mission_filename,
+                                                   spacecraft=[
+                                                       ractive_spacecraft_1,
+                                                       ractive_spacecraft_2
+                                                    ]
+                                                   )
+
+        # compile ground stations
+        scenario_specs['groundStation'] = self.compile_ground_stations([gs_network])
+
+        # define ground operator with CBBA + announcer capability
+        scenario_specs['groundOperator'] = self.setup_announcing_cbba_ground_operators(event_name, mission_name, [gs_network])
+
+        # initialize mission
+        self.simulation : Simulation = Simulation.from_dict(scenario_specs, overwrite=True)
+
+        # execute mission
+        self.simulation.execute()
+
+        # print results
+        self.simulation.print_results()
+
+        print(f"{scenario_name}: DONE")
+
     # def test_toy_case_2X(self):
     #     """
     #     ## TOY CASE 2X
@@ -2458,7 +2589,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         duration = 250.0 / 3600.0 / 20.0
         grid_name = 'lake_event_points'
         scenario_name = f'single_sat_lake_scenario-{self.planner_name()}'
-        connectivity = 'FULL'
+        connectivity = 'LOS'
         event_name = 'lake_events_seed-1000'
         mission_name = 'lake_missions'
 
@@ -2509,7 +2640,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         # # SAT0 : announcer satellite 
         # announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
         # announcer_spacecraft['@id'] = 'sat0_announcer'
-        # announcer_spacecraft['name'] = 'SAT0'
+        # announcer_spacecraft['name'] = 'sat0'
         # announcer_spacecraft['planner'] = self.setup_announcer_config(None)
         # announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
         # announcer_spacecraft['orbitState']['state']['inc'] = 0.0

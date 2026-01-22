@@ -1007,8 +1007,6 @@ class SimulatedAgent(AbstractAgent):
         # --- FOR DEBUGGING PURPOSES ONLY: ---        
         plan_out = self.get_next_actions(state, True)
         self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
-        if "sat2" in self.get_element_name().lower() and state.t>=660.0:
-            x = 1 # breakpoint
         # -------------------------------------
         
         return plan_out
@@ -1227,7 +1225,7 @@ class SimulatedAgent(AbstractAgent):
 
                 else: # unsupported broadcast type
                     raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
-            
+
             # create bus message if there are messages to broadcast
             msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
 
@@ -1238,17 +1236,18 @@ class SimulatedAgent(AbstractAgent):
             for future_broadcast in future_broadcasts: 
                 self.plan.remove(future_broadcast, state.t)
 
-            # add broadcast message action from current plan
-            self.plan.add(broadcast, state.t)
-
             # get indices of future broadcast message actions in output plan
             future_broadcast_indices = [i for i, action in enumerate(plan_out) if action in future_broadcasts]
 
             # remove future message actions from output plan
             for i in sorted(future_broadcast_indices, reverse=True): plan_out.pop(i)
             
-            # replace future message action with broadcast action in out plan
-            plan_out.insert(min(future_broadcast_indices), broadcast)    
+            if msgs:
+                # add broadcast message action from current plan
+                self.plan.add(broadcast, state.t)
+                
+                # replace future message action with broadcast action in out plan
+                plan_out.insert(min(future_broadcast_indices), broadcast)    
 
             # --- FOR DEBUGGING PURPOSES ONLY: ---
             # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)

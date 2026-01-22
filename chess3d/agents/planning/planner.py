@@ -31,6 +31,9 @@ class AbstractPlanner(ABC):
     """ 
     Describes a generic planner that, given a new set of percepts, decides whether to generate a new plan
     """
+    # Constants
+    EPS = 1e-6
+    
     def __init__(self, 
                  debug : bool = False,
                  logger : logging.Logger = None) -> None:
