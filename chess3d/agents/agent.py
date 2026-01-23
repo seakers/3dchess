@@ -782,11 +782,7 @@ class SimulatedAgent(AbstractAgent):
         return tasks
 
     @runtime_tracker
-    async def think(self, senses : list):
-
-
-        # raise Exception("Debugging Exception: Remove before running full simulation.")
-
+    async def think(self, senses : list) -> list:
         # unpack and sort senses
         relay_messages, incoming_reqs, observations, \
             states, action_statuses, misc_messages = self._read_incoming_messages(senses)

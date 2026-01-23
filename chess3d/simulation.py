@@ -6,6 +6,7 @@ from datetime import timedelta
 import logging
 import os
 import random
+import threading
 from typing import Any
 from tqdm import tqdm
 import zmq
@@ -259,18 +260,63 @@ class Simulation:
         # return initialized mission
         return Simulation(results_path, orbitdata_dir, missions, manager, environment, agents, monitor, level)
     
-    def execute(self, plot_results : bool = False, save_plot : bool = False) -> None:
+    def execute(self) -> None:
         """ executes the simulation """
-        # run each simulation element in parallel
+        # count number of parallel pools
         n_pools = len(self.agents) + 3
-        with concurrent.futures.ThreadPoolExecutor(n_pools) as pool:
-            pool.submit(self.monitor.run, *[])
-            pool.submit(self.manager.run, *[])
-            pool.submit(self.environment.run, *[])
-            for agent in self.agents:                
-                agent : SimulatedAgent
-                pool.submit(agent.run, *[])  
 
+        # # run each simulation element in parallel
+        # with concurrent.futures.ThreadPoolExecutor(n_pools) as pool:
+        #     pool.submit(self.monitor.run, *[])
+        #     pool.submit(self.manager.run, *[])
+        #     pool.submit(self.environment.run, *[])
+        #     for agent in self.agents:                
+        #         agent : SimulatedAgent
+        #         pool.submit(agent.run, *[])  
+
+        stop_event = threading.Event()
+
+        # If your run() methods can accept stop_event, do it.
+        # If they can't yet, see the wrapper approach below.
+        def _run_component(name, fn, *args, **kwargs):
+            try:
+                # return fn(*args, stop_event=stop_event, **kwargs)
+                return fn(*args, **kwargs)
+            
+            except Exception as e:
+                stop_event.set()
+                raise e # ensures the exception is stored in the Future
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_pools) as pool:
+            futures : list[concurrent.futures.Future] = []
+            futures.append(pool.submit(_run_component, "monitor", self.monitor.run))
+            futures.append(pool.submit(_run_component, "manager", self.manager.run))
+            futures.append(pool.submit(_run_component, "environment", self.environment.run))
+
+            for i, agent in enumerate(self.agents):
+                futures.append(pool.submit(_run_component, f"agent[{i}]", agent.run))
+
+            # Wait for the first exception or completion
+            done, not_done = concurrent.futures.wait(futures, 
+                                                     return_when=concurrent.futures.FIRST_EXCEPTION)
+
+            # If any finished future raised, propagate it and stop everyone
+            for fut in done:
+                exc = fut.exception()
+                if exc is not None:
+                    # Signal all threads to stop
+                    stop_event.set()
+
+                    # Cancel tasks that haven't started
+                    for nf in not_done: nf.cancel()
+
+                    # Re-raise the original exception in the main thread
+                    raise exc
+
+            # Otherwise, ensure all succeeded (and surface any late exceptions)
+            for fut in futures: fut.result()
+        
+        x = 1
     
     def print_results(self, precission : int = 5) -> None:
         print(f"\n\n{'='*22} RESULTS {'='*23}\n")
