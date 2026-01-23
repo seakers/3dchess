@@ -72,6 +72,8 @@ class Simulation:
         self.agents : list[SimulatedAgent] = agents
         self.monitor : ResultsMonitor = monitor
         self.level=level
+
+        self.__executed : bool = False
         
     def from_dict(mission_specs : dict, overwrite : bool = False, level=logging.WARNING):
         """ Loads simulation from input json """
@@ -278,7 +280,7 @@ class Simulation:
 
         # If your run() methods can accept stop_event, do it.
         # If they can't yet, see the wrapper approach below.
-        def _run_component(name, fn, *args, **kwargs):
+        def _run_component(fn, *args, **kwargs):
             try:
                 # return fn(*args, stop_event=stop_event, **kwargs)
                 return fn(*args, **kwargs)
@@ -289,16 +291,14 @@ class Simulation:
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=n_pools) as pool:
             futures : list[concurrent.futures.Future] = []
-            futures.append(pool.submit(_run_component, "monitor", self.monitor.run))
-            futures.append(pool.submit(_run_component, "manager", self.manager.run))
-            futures.append(pool.submit(_run_component, "environment", self.environment.run))
-
-            for i, agent in enumerate(self.agents):
-                futures.append(pool.submit(_run_component, f"agent[{i}]", agent.run))
+            futures.append(pool.submit(_run_component, self.monitor.run))
+            futures.append(pool.submit(_run_component, self.manager.run))
+            futures.append(pool.submit(_run_component, self.environment.run))
+            futures.extend([pool.submit(_run_component, agent.run) for agent in self.agents])
 
             # Wait for the first exception or completion
             done, not_done = concurrent.futures.wait(futures, 
-                                                     return_when=concurrent.futures.FIRST_EXCEPTION)
+                                                        return_when=concurrent.futures.FIRST_EXCEPTION)
 
             # If any finished future raised, propagate it and stop everyone
             for fut in done:
@@ -316,9 +316,13 @@ class Simulation:
             # Otherwise, ensure all succeeded (and surface any late exceptions)
             for fut in futures: fut.result()
         
-        x = 1
+        # set executed flag
+        self.__executed = True
     
     def print_results(self, precission : int = 5) -> None:
+        # ensure simulation has been executed
+        assert self.__executed, "Simulation must be successfully executed before printing results."
+        
         print(f"\n\n{'='*22} RESULTS {'='*23}\n")
 
         # define file name

@@ -1229,6 +1229,8 @@ class SimulatedAgent(AbstractAgent):
         
     def print_results(self):
         try:
+            # raise Exception("Debugging Exception: Remove before running full simulation.")
+
             # log known and generated requests
             if self.processor is not None:
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
