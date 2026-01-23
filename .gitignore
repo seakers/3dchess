@@ -171,10 +171,10 @@ cython_debug/
 swifa/
 
 # Experiments
-**experiments/0_0_orbit_connectivity/orbits
-**experiments/stress_test/resources/grids/**/*.csv
-**experiments/stress_test/resources/trials/**/*.csv
-**experiments/stress_test/resources/events/**/*.csv
+**experiments/0_0_orbit_connectivity/orbits/**
+**experiments/1_0_cbba_stress_test/resources/grids/**/*.csv
+**experiments/1_0_cbba_stress_test/resources/trials/**/*.csv
+**experiments/1_0_cbba_stress_test/resources/events/**/*.csv
 
 *.tar
 *.tar*
