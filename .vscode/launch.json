@@ -174,6 +174,18 @@
             }
         },
         {
+            "name": "TEST: Output Metrics",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/tests/simulation/metrics_test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            }
+        },
+        {
             "name": "PLANNER TEST: Consensus Replanner",
             "type": "debugpy",
             "request": "launch",
@@ -197,7 +209,7 @@
                 "PYTHONPATH": "${workspaceRoot}"
             },
             "args": [
-                "-n", "test_trials-1000_seed",
+                "-n", "toy_trials",
                 "-o", "False",
                 "-d", "True"
             ]

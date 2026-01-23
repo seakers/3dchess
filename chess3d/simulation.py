@@ -553,10 +553,11 @@ class Simulation:
         events_requested : Dict[tuple, list] = {}
         events_observed : Dict[tuple, list] = {}
 
-        for event in tqdm(events.values, 
+        # for event in tqdm(events.values, 
+        for _,event in tqdm(events.iterrows(), 
                           desc='Calssifying event accesses, detections, and observations', 
                           leave=True):
-
+            
             event_tuple, access_intervals, matching_detections, matching_requests, matching_observations \
                 = self.classify_observation(event, 
                                             orbitdata, 
@@ -587,7 +588,6 @@ class Simulation:
 
         for event, access_intervals in tqdm(events_observable.items(), desc='Compiling possible co-observations', leave=False):
             # get event characteristics
-            # event_type : str = event[6]
             event_type : str = event[3]
             
             # get types of observations that can be performed for this event
@@ -635,7 +635,7 @@ class Simulation:
 
         for event, observations in tqdm(events_observed.items(), desc='Compiling co-observations', leave=False):
             # get event characteristics
-            event_type : str = event[6]
+            event_type : str = event[3]
             
             # get types of observations that can be performed for this event
             co_observation_params = set()
@@ -703,18 +703,22 @@ class Simulation:
                             events_co_observable_partially, events_co_obs_partially
     
     def classify_observation(self, 
-                             event : tuple, 
+                            #  event : tuple, 
+                             event : pd.Series, 
                              orbitdata : Dict[str, OrbitData],
                              event_detections : pd.DataFrame, 
                              measurement_reqs : pd.DataFrame, 
                              observations_performed : pd.DataFrame,
                              observations_per_gp : dict) -> tuple:
         # unpackage event
-        event = tuple(event) 
-
-        # event format: gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
-        # gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,event_id = event
-        gp_index,lat,lon,event_type,t_start,duration,severity,instruments,event_id = event
+        gp_index = event['gp_index']
+        lat = event['lat [deg]']
+        lon = event['lon [deg]']
+        t_start = event['start time [s]']
+        duration = event['duration [s]']
+        severity = event['severity']
+        event_type = event['event type']
+        event_id = event['id']
 
         # get matching objectives
         # TODO group reqs and agents by mission to avoid double counting
@@ -800,7 +804,10 @@ class Simulation:
                                 ]
         matching_observations.sort(key= lambda a : a[6])
 
-        return event, access_intervals, matching_detections, matching_requests, matching_observations
+        # package relevant event information
+        event_tuple = (gp_index, lat, lon, event_type, t_start, duration, severity, event_id)
+
+        return event_tuple, access_intervals, matching_detections, matching_requests, matching_observations
 
     def str2interval(self, s : str) -> Interval:
         s = s.replace(']','')

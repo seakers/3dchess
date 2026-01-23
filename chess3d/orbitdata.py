@@ -15,6 +15,7 @@ from datetime import timedelta
 from orbitpy.mission import Mission
 
 from execsatm.utils import Interval
+from tqdm import tqdm
 
 class ConnectivityLevels(Enum):
     FULL = 'FULL'   # static fully connected network between all agents
@@ -196,7 +197,7 @@ class IntervalData(AbstractData):
             columns = [col.replace('index', 'time [s]') for col in df.columns.values]
             
             # get time data in Inteval format
-            data = [(t_start * time_step, t_end * time_step, *row) 
+            data = [(t_start*time_step, t_end*time_step, *row) 
                     for t_start,t_end,*row in df.values]
         else:
             # get time column index
@@ -224,7 +225,7 @@ class IntervalData(AbstractData):
         Returns all intervals that overlap with the interval [t_start, t_end]
         """
         intervals = [(t_start_i,t_end_i) 
-                     for t_start_i,t_end_i,_ in self.data
+                     for t_start_i,t_end_i,*_ in self.data
                      if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
         intervals.sort()
         
@@ -657,7 +658,7 @@ class OrbitData:
             # load inter-satellite link data
             isl_data = dict()
             comms_path = os.path.join(orbitdata_path, 'comm')
-            for file in os.listdir(comms_path):                
+            for file in tqdm(os.listdir(comms_path), desc=f'Loading ISL data for {agent_name}', unit='file', leave=False):                
                 # remove file extension and split sender and receiver
                 isl = re.sub(".csv", "", file)
                 sender, _, receiver = isl.split('_')
@@ -693,7 +694,7 @@ class OrbitData:
             # load ground station access data
             gs_access_data = pd.DataFrame(columns=['start index', 'end index', 'gndStn id', 'gndStn name','lat [deg]','lon [deg]'])
             agent_orbitdata_path = os.path.join(orbitdata_path, agent_folder)
-            for file in os.listdir(agent_orbitdata_path):
+            for file in tqdm(os.listdir(agent_orbitdata_path), desc=f'Loading ground station access data for {agent_name}', unit='file', leave=False):
                 # check if file is a ground station access file
                 if 'gndStn' not in file: continue
 
@@ -784,7 +785,7 @@ class OrbitData:
             gp_access_data = pd.DataFrame(columns=['time index','GP index','pnt-opt index','lat [deg]','lon [deg]', 'agent','instrument',
                                                             'observation range [km]','look angle [deg]','incidence angle [deg]','solar zenith [deg]'])
 
-            for instrument in payload:
+            for instrument in tqdm(payload, desc=f'Loading land coverage data for {agent_name}', unit='instrument', leave=False):
                 if instrument is None: continue 
 
                 i_ins = payload.index(instrument)
@@ -843,7 +844,7 @@ class OrbitData:
             gp_access_data['agent name'] = [spacecraft['name']] * nrows
 
             grid_data_compiled = []
-            for grid in mission_dict.get('grid'):
+            for grid in tqdm(mission_dict.get('grid'), desc=f'Loading grid data for {agent_name}', unit='grid', leave=False):
                 grid : dict
                 i_grid = mission_dict.get('grid').index(grid)
                 
