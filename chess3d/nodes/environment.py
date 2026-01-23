@@ -182,8 +182,13 @@ class SimulationEnvironment(EnvironmentNode):
                 # handle incoming messages or requests
                 req_status : bool = await self.handle_request(socks, agent_socket, agent_broadcasts, manager_socket)
                 
-                # check if request was processed correctly
-                if not req_status: return                    
+                # check if end of simulation message was received
+                if not req_status: 
+                    # print final results
+                    self.print_results()
+                    
+                    # exit live loop
+                    return                    
 
         except asyncio.CancelledError:
             self.log(f'`live()` interrupted. {e}', level=logging.DEBUG)
@@ -256,9 +261,6 @@ class SimulationEnvironment(EnvironmentNode):
                 = [ TaskRequest.from_dict(msg['req'])
                     for msg in bus_msg.msgs
                     if msg['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value]
-            
-            if measurement_reqs:
-                x =1 
 
             # add to list of received measurement requests 
             self.measurement_reqs.update(measurement_reqs)
@@ -296,7 +298,6 @@ class SimulationEnvironment(EnvironmentNode):
             # update internal clock
             self.log(f"received message of type {content['msg_type']}. updating internal clock to {t}[s]...")
             await self.update_current_time(t)
-
 
             # wait for all agent's to send their updated states
             self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
@@ -592,7 +593,7 @@ class SimulationEnvironment(EnvironmentNode):
                 and instrument_name in measurements  #TODO include better reasoning
                 ]
     
-    async def teardown(self) -> None:
+    def print_results(self) -> None:
         try:
             self.t_f = time.perf_counter()
 
@@ -603,21 +604,21 @@ class SimulationEnvironment(EnvironmentNode):
 
             # log and save results
             # self.log(f"MEASUREMENTS RECEIVED:\n{len(observations_performed.values)}\n\n", level=logging.WARNING)
-            observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
+            observations_performed.to_parquet(f"{self.results_path}/measurements.parquet", index=False)
             
             # commpile list of broadcasts performed
             broadcasts_performed : pd.DataFrame = self.compile_broadcasts()
 
             # log and save results
             # self.log(f"BROADCASTS RECEIVED:\n{len(broadcasts_performed.values)}\n\n", level=logging.WARNING)
-            broadcasts_performed.to_csv(f"{self.results_path}/broadcasts.csv", index=False)
+            broadcasts_performed.to_parquet(f"{self.results_path}/broadcasts.parquet", index=False)
 
             # compile list of measurement requests 
             measurement_reqs : pd.DataFrame = self.compile_requests()
 
             # log and save results
             # self.log(f"MEASUREMENT REQUESTS RECEIVED:\n{len(measurement_reqs.values)}\n\n", level=logging.WARNING)
-            measurement_reqs.to_csv(f"{self.results_path}/requests.csv", index=False)
+            measurement_reqs.to_parquet(f"{self.results_path}/requests.parquet", index=False)
 
             # log performance stats
             runtime_dir = os.path.join(self.results_path, "runtime")
@@ -652,23 +653,99 @@ class SimulationEnvironment(EnvironmentNode):
                 # save time-series
                 time_series = [[v] for v in self.stats[routine]]
                 routine_df = pd.DataFrame(data=time_series, columns=['dt'])
-                routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
-                routine_df.to_csv(routine_dir,index=False)
+                routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.parquet")
+                routine_df.to_parquet(routine_dir,index=False)
 
             stats_df = pd.DataFrame(data, columns=columns)
             # self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-            stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
-
-            # print final time
-            print('\n')
-            self.log(f'successfully shutdown', level=logging.WARNING)
+            stats_df.to_parquet(f"{self.results_path}/runtime_stats.parquet", index=False)
         
-        except asyncio.CancelledError as e:
-            raise e
         except Exception as e:
             print('\n','\n','\n')
             print(e.with_traceback())
-            raise e        
+            raise e       
+
+    async def teardown(self) -> None:
+        # print final time
+        print('\n')
+        self.log(f'successfully shutdown', level=logging.WARNING)
+        
+    #     try:
+    #         self.t_f = time.perf_counter()
+
+    #         self.log('Compiling results...',level=logging.WARNING)
+
+    #         # compile observations performed
+    #         observations_performed : pd.DataFrame = self.compile_observations()
+
+    #         # log and save results
+    #         # self.log(f"MEASUREMENTS RECEIVED:\n{len(observations_performed.values)}\n\n", level=logging.WARNING)
+    #         observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
+            
+    #         # commpile list of broadcasts performed
+    #         broadcasts_performed : pd.DataFrame = self.compile_broadcasts()
+
+    #         # log and save results
+    #         # self.log(f"BROADCASTS RECEIVED:\n{len(broadcasts_performed.values)}\n\n", level=logging.WARNING)
+    #         broadcasts_performed.to_csv(f"{self.results_path}/broadcasts.csv", index=False)
+
+    #         # compile list of measurement requests 
+    #         measurement_reqs : pd.DataFrame = self.compile_requests()
+
+    #         # log and save results
+    #         # self.log(f"MEASUREMENT REQUESTS RECEIVED:\n{len(measurement_reqs.values)}\n\n", level=logging.WARNING)
+    #         measurement_reqs.to_csv(f"{self.results_path}/requests.csv", index=False)
+
+    #         # log performance stats
+    #         runtime_dir = os.path.join(self.results_path, "runtime")
+    #         if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
+
+    #         columns = ['routine','t_avg','t_std','t_med','t_max','t_min','n','t_total']
+    #         data = []
+
+    #         n_decimals = 3
+    #         for routine in tqdm(self.stats, desc="ENVIRONMENT: Compiling runtime statistics", leave=False):
+    #             # compile stats
+    #             n = len(self.stats[routine])
+    #             t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+    #             t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+    #             t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+    #             t_max = np.round(max(self.stats[routine]),n_decimals) if n > 0 else -1
+    #             t_min = np.round(min(self.stats[routine]),n_decimals) if n > 0 else -1
+    #             t_total = n * t_avg
+
+    #             line_data = [ 
+    #                             routine,
+    #                             t_avg,
+    #                             t_std,
+    #                             t_median,
+    #                             t_max,
+    #                             t_min,
+    #                             n,
+    #                             t_total
+    #                             ]
+    #             data.append(line_data)
+
+    #             # save time-series
+    #             time_series = [[v] for v in self.stats[routine]]
+    #             routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+    #             routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
+    #             routine_df.to_csv(routine_dir,index=False)
+
+    #         stats_df = pd.DataFrame(data, columns=columns)
+    #         # self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+    #         stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
+
+    #         # print final time
+    #         print('\n')
+    #         self.log(f'successfully shutdown', level=logging.WARNING)
+        
+    #     except asyncio.CancelledError as e:
+    #         raise e
+    #     except Exception as e:
+    #         print('\n','\n','\n')
+    #         print(e.with_traceback())
+    #         raise e        
             
     def compile_observations(self) -> pd.DataFrame:
         try:
@@ -688,27 +765,29 @@ class SimulationEnvironment(EnvironmentNode):
                     if columns is None:
                         columns = [key for key in obs]
                         columns.insert(0, 'observer')
-                        columns.insert(2, 't_img')
-                        columns.remove('t_start')
-                        columns.remove('t_end')
+                        # columns.insert(2, 't_img')
+                        # columns.remove('t_start')
+                        # columns.remove('t_end')
 
                     # add observation to data list
                     obs['observer'] = observer
                     for key in columns:
                         val = obs.get(key, None)
                         if isinstance(val, list):
-                            if len(val) == 1:
-                                obs[key] = val[0]
-                            else:
-                                obs[key] = [val[0], val[-1]]
+                            obs[key] = val[0]
+                            # if len(val) == 1:
+                            #     obs[key] = val[0]
+                            # else:
+                            #     obs[key] = [val[0], val[-1]]
 
-                    obs['t_img'] = [obs['t_start'], obs['t_end']]
-                    obs.pop('t_start')
-                    obs.pop('t_end')
+                    # obs['t_img'] = [obs['t_start'], obs['t_end']]
+                    # obs.pop('t_start')
+                    # obs.pop('t_end')
 
                     data.append([obs[key] for key in columns])
 
             return pd.DataFrame(data=data, columns=columns)
+        
         except Exception as e:
             print(e.with_traceback())
             raise e

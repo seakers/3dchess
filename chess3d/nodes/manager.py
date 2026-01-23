@@ -53,7 +53,11 @@ class SimulationManager(AbstractManager):
     
     @runtime_tracker
     async def _execute(self) -> None:
-        return await super()._execute()
+        # main execution loop
+        await super()._execute()
+
+        # print results
+        self.print_results()
 
     async def sim_wait(self, delay: float) -> None:
         """
@@ -345,8 +349,8 @@ class SimulationManager(AbstractManager):
                 read_task.cancel()
                 await read_task
     
-    async def teardown(self) -> None:
-        # log performance stats
+    def print_results(self) -> None:
+        # print performance stats
         results_dir = os.path.join(self.results_path, self.get_element_name().lower())
         if not os.path.isdir(results_dir): os.mkdir(results_dir)
         
@@ -387,6 +391,8 @@ class SimulationManager(AbstractManager):
 
         stats_df = pd.DataFrame(data, columns=headers)
         # self.log(f'\nMANAGER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-        stats_df.to_csv(f"{results_dir}/runtime_stats.csv", index=False)
-        
+        stats_df.to_parquet(f"{results_dir}/runtime_stats.parquet", index=False)
+
+    async def teardown(self) -> None:
+        await super().teardown()        
         self.log(f'sucessfully shutdown ', level=logging.WARNING)

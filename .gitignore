@@ -176,6 +176,7 @@ swifa/
 **experiments/1_0_cbba_stress_test/resources/trials/**/*.csv
 **experiments/1_0_cbba_stress_test/resources/events/**/*.csv
 
+*.parquet
 *.tar
 *.tar*
 *.tar.xz

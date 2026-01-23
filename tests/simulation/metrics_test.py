@@ -234,7 +234,7 @@ class TestSimulationOutputs(unittest.TestCase):
         self.simulation.execute()
 
         # print results
-        self.simulation.print_results()
+        # self.simulation.print_results()
 
         # TODO : add assertions to validate outputs
 

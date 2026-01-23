@@ -12,5 +12,6 @@ setup(
     author_email='aguilaraj15@tamu.edu',
     packages=['chess3d'],
     scripts=[],
-    install_requires=['matplotlib', 'neo4j', 'pyzmq', 'tqdm', 'instrupy', 'orbitpy', 'dmas', 'execsatm', 'pytest', 'gurobipy', 'skyfield'] 
+    install_requires=['matplotlib', 'neo4j', 'pyzmq', 'tqdm', 'instrupy', 'orbitpy', 'dmas', 
+                      'execsatm', 'pytest', 'gurobipy', 'skyfield', 'pandas', 'numpy', 'pyarrow', 'fastparquet'], 
 )
