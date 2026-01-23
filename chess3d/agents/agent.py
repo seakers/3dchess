@@ -556,77 +556,78 @@ class AbstractAgent(Agent):
         manager_message = NodeDeactivatedMessage(self.get_element_name(), SimulationElementRoles.MANAGER.value)
         await self._send_manager_msg(manager_message, zmq.PUB)
 
-    async def teardown(self) -> None:
-        try:
-            # TODO log agent capabilities
+    # async def teardown(self) -> None:
+    #     try:
+    #         # TODO log agent capabilities
 
-            # log states
-            n_decimals = 3
-            headers = ['t', 'x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'attitude', 'status']
-            data = []
+    #         # log states
+    #         n_decimals = 3
+    #         headers = ['t', 'x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'attitude', 'status']
+    #         data = []
 
-            for state_dict in self.state_history:
-                line_data = [
-                                np.round(state_dict['t'],3),
+    #         for state_dict in self.state_history:
+    #             line_data = [
+    #                             np.round(state_dict['t'],3),
 
-                                np.round(state_dict['pos'][0],n_decimals),
-                                np.round(state_dict['pos'][1],n_decimals),
-                                np.round(state_dict['pos'][2],n_decimals),
+    #                             np.round(state_dict['pos'][0],n_decimals),
+    #                             np.round(state_dict['pos'][1],n_decimals),
+    #                             np.round(state_dict['pos'][2],n_decimals),
 
-                                np.round(state_dict['vel'][0],n_decimals),
-                                np.round(state_dict['vel'][1],n_decimals),
-                                np.round(state_dict['vel'][2],n_decimals),
+    #                             np.round(state_dict['vel'][0],n_decimals),
+    #                             np.round(state_dict['vel'][1],n_decimals),
+    #                             np.round(state_dict['vel'][2],n_decimals),
                                 
-                                np.round(state_dict['attitude'][0],n_decimals),
+    #                             np.round(state_dict['attitude'][0],n_decimals),
 
-                                state_dict['status']
-                            ]
-                data.append(line_data)
+    #                             state_dict['status']
+    #                         ]
+    #             data.append(line_data)
             
-            state_df = pd.DataFrame(data,columns=headers)
-            # self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
-            state_df.to_csv(f"{self.results_path}/states.csv", index=False)
+    #         state_df = pd.DataFrame(data,columns=headers)
+    #         # self.log(f'\nSTATE HISTORY\n{str(state_df)}\n', level=logging.WARNING)
+    #         state_df.to_csv(f"{self.results_path}/states.csv", index=False)
 
-            # log performance stats
-            runtime_dir = os.path.join(self.results_path, "runtime")
-            if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
+    #         # log performance stats
+    #         runtime_dir = os.path.join(self.results_path, "runtime")
+    #         if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
 
-            headers = ['routine','t_avg','t_std','t_med','t_max','t_min','n', 't_total']
-            data = []
+    #         headers = ['routine','t_avg','t_std','t_med','t_max','t_min','n', 't_total']
+    #         data = []
 
-            for routine in self.stats:
-                # compile stats
-                t_avg = np.mean(self.stats[routine])
-                t_std = np.std(self.stats[routine])
-                t_median = np.median(self.stats[routine])
-                t_max = max(self.stats[routine])
-                t_min = min(self.stats[routine])
-                n = len(self.stats[routine])
-                t_total = n * t_avg
+    #         for routine in self.stats:
+    #             # compile stats
+    #             t_avg = np.mean(self.stats[routine])
+    #             t_std = np.std(self.stats[routine])
+    #             t_median = np.median(self.stats[routine])
+    #             t_max = max(self.stats[routine])
+    #             t_min = min(self.stats[routine])
+    #             n = len(self.stats[routine])
+    #             t_total = n * t_avg
 
-                line_data = [ 
-                                routine,
-                                np.round(t_avg,n_decimals),
-                                np.round(t_std,n_decimals),
-                                np.round(t_median,n_decimals),
-                                t_max,
-                                t_min,
-                                n,
-                                t_total
-                                ]
-                data.append(line_data)
+    #             line_data = [ 
+    #                             routine,
+    #                             np.round(t_avg,n_decimals),
+    #                             np.round(t_std,n_decimals),
+    #                             np.round(t_median,n_decimals),
+    #                             t_max,
+    #                             t_min,
+    #                             n,
+    #                             t_total
+    #                             ]
+    #             data.append(line_data)
 
-                # save time-series
-                time_series = [[v] for v in self.stats[routine]]
-                routine_df = pd.DataFrame(data=time_series, columns=['dt'])
-                routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
-                routine_df.to_csv(routine_dir,index=False)
+    #             # save time-series
+    #             time_series = [[v] for v in self.stats[routine]]
+    #             routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+    #             routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
+    #             routine_df.to_csv(routine_dir,index=False)
 
-            stats_df = pd.DataFrame(data, columns=headers)
-            # self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-            stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
-        except Exception as e:
-            x = 1
+    #         stats_df = pd.DataFrame(data, columns=headers)
+    #         # self.log(f'\nAGENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+    #         stats_df.to_csv(f"{self.results_path}/agent_runtime_stats.csv", index=False)
+        
+    #     except Exception as e:
+    #         x = 1
 
     async def sim_wait(self, delay: float, timeout : float=1*60) -> None:
         try:  
@@ -856,6 +857,9 @@ class SimulatedAgent(AbstractAgent):
     @runtime_tracker
     async def think(self, senses : list):
 
+
+        # raise Exception("Debugging Exception: Remove before running full simulation.")
+
         # unpack and sort senses
         relay_messages, incoming_reqs, observations, \
             states, action_statuses, misc_messages = self._read_incoming_messages(senses)
@@ -1011,8 +1015,8 @@ class SimulatedAgent(AbstractAgent):
         
         # --- FOR DEBUGGING PURPOSES ONLY: ---        
         # self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
-        # -------------------------------------
-        
+        # -------------------------------------        
+
         # return next actions to perform
         return plan_out
     
@@ -1299,11 +1303,9 @@ class SimulatedAgent(AbstractAgent):
         except Exception as e:
             print(e)
             raise e
-
-    async def teardown(self):
+        
+    def print_results(self):
         try:
-            await super().teardown()
-
             # log known and generated requests
             if self.processor is not None:
                 columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
@@ -1369,10 +1371,14 @@ class SimulatedAgent(AbstractAgent):
                                     observation_tracker.latest_observation
                                 ]
                     data.append(line_data)
-            x = 1
+            
             df = pd.DataFrame(data, columns=headers)
             # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
             df.to_csv(f"{self.results_path}/observation_history.csv", index=False)
+
+            # log performance stats
+            runtime_dir = os.path.join(self.results_path, "runtime")
+            if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
 
             # log performance stats
             n_decimals = 5
@@ -1470,5 +1476,176 @@ class SimulatedAgent(AbstractAgent):
         except Exception as e:
             print(f'AGENT TEARDOWN ERROR: {e}')
             raise e
-            x = 1
+
+    # async def teardown(self):
+    #     try:
+    #         await super().teardown()
+
+        #     # log known and generated requests
+        #     if self.processor is not None:
+        #         columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+        #         data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
+        #                 for event in self.processor.known_events]
+                
+        #         df = pd.DataFrame(data=data, columns=columns)        
+        #         df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
+
+        #         columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+        #         data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
+        #                 for event in self.processor.detected_events]
+        #     else:
+        #         columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
+        #         data = []
+
+        #     df = pd.DataFrame(data=data, columns=columns)        
+        #     df.to_csv(f"{self.results_path}/events_detected.csv", index=False)   
+        
+        #     # log plan history
+        #     headers = ['plan_index', 't_plan', 'desc', 't_start', 't_end']
+        #     data = []
+            
+        #     for i in range(len(self.plan_history)):
+        #         t_plan, plan = self.plan_history[i]
+        #         t_plan : float; plan : list[AgentAction]
+
+        #         for action in plan:
+        #             desc = f'{action.action_type}'
+        #             if isinstance(action, ObservationAction):
+        #                 desc += f'_{action.instrument_name}'
+                        
+        #             line_data = [   i,
+        #                             np.round(t_plan,3),
+        #                             desc,
+        #                             np.round(action.t_start,3 ),
+        #                             np.round(action.t_end,3 )
+        #                         ]
+        #             data.append(line_data)
+
+        #     df = pd.DataFrame(data, columns=headers)
+        #     # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+        #     df.to_csv(f"{self.results_path}/planner_history.csv", index=False)
+            
+        #     # log observation history
+        #     headers = ['grid_index','gp_index', 'lat [deg]', 'lon [deg]', 'n_obs', 't_last', 'latest_observation']
+        #     data = []
+        #     for grid_index, grid in self.observation_history.history.items():
+        #         grid : dict[int, ObservationTracker]
+        #         for gp_index, observation_tracker in grid.items():
+        #             observation_tracker : ObservationTracker
+        #             if observation_tracker.n_obs == 0:
+        #                 # no observations for this grid point
+        #                 continue
+
+        #             # log observation tracker
+        #             line_data = [   grid_index,
+        #                             gp_index,
+        #                             np.round(observation_tracker.lat,3),
+        #                             np.round(observation_tracker.lon,3),
+        #                             observation_tracker.n_obs,
+        #                             np.round(observation_tracker.t_last,3),
+        #                             observation_tracker.latest_observation
+        #                         ]
+        #             data.append(line_data)
+        #     x = 1
+        #     df = pd.DataFrame(data, columns=headers)
+        #     # self.log(f'\nPLANNER HISTORY\n{str(df)}\n', level=logging.WARNING)
+        #     df.to_csv(f"{self.results_path}/observation_history.csv", index=False)
+
+        #     # log performance stats
+        #     n_decimals = 5
+        #     headers = ['routine','t_avg','t_std','t_med', 't_max', 't_min', 'n', 't_total']
+        #     data = []
+
+        #     for routine in self.stats:
+        #         n = len(self.stats[routine])
+        #         t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
+        #         t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
+        #         t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
+        #         t_max = np.round(max(self.stats[routine]),n_decimals) if n > 0 else -1
+        #         t_min = np.round(min(self.stats[routine]),n_decimals) if n > 0 else -1
+        #         t_total = t_avg * n
+
+        #         line_data = [ 
+        #                         routine,
+        #                         t_avg,
+        #                         t_std,
+        #                         t_median,
+        #                         t_max,
+        #                         t_min,
+        #                         n,
+        #                         t_total
+        #                         ]
+        #         data.append(line_data)
+
+        #         # save time-series
+        #         time_series = [[v] for v in self.stats[routine]]
+        #         routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+        #         routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-planner_{routine}.csv")
+        #         routine_df.to_csv(routine_dir,index=False)
+
+        #     if isinstance(self.preplanner, AbstractPeriodicPlanner):
+        #         for routine in self.preplanner.stats:
+        #             n = len(self.preplanner.stats[routine])
+        #             t_avg = np.round(np.mean(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+        #             t_std = np.round(np.std(self.preplanner.stats[routine]),n_decimals) if n > 0 else 0.0
+        #             t_median = np.round(np.median(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+        #             t_max = np.round(max(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+        #             t_min = np.round(min(self.preplanner.stats[routine]),n_decimals) if n > 0 else -1
+        #             t_total = t_avg * n
+
+        #             line_data = [ 
+        #                             f"preplanner/{routine}",
+        #                             t_avg,
+        #                             t_std,
+        #                             t_median,
+        #                             t_max,
+        #                             t_min,
+        #                             n,
+        #                             t_total
+        #                             ]
+        #             data.append(line_data)
+
+        #             # save time-series
+        #             time_series = [[v] for v in self.preplanner.stats[routine]]
+        #             routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+        #             routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-preplanner_{routine}.csv")
+        #             routine_df.to_csv(routine_dir,index=False)
+
+        #     if isinstance(self.replanner, AbstractReactivePlanner):
+        #         for routine in self.replanner.stats:
+        #             n = len(self.replanner.stats[routine])
+        #             t_avg = np.round(np.mean(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+        #             t_std = np.round(np.std(self.replanner.stats[routine]),n_decimals) if n > 0 else 0.0
+        #             t_median = np.round(np.median(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+        #             t_max = np.round(max(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+        #             t_min = np.round(min(self.replanner.stats[routine]),n_decimals) if n > 0 else -1
+        #             t_total = t_avg * n
+
+        #             line_data = [ 
+        #                             f"replanner/{routine}",
+        #                             t_avg,
+        #                             t_std,
+        #                             t_median,
+        #                             t_max,
+        #                             t_min,
+        #                             n,
+        #                             t_total
+        #                             ]
+        #             data.append(line_data)
+
+        #             # save time-series
+        #             time_series = [[v] for v in self.replanner.stats[routine]]
+        #             routine_df = pd.DataFrame(data=time_series, columns=['dt'])
+        #             routine_dir = os.path.join(f"{self.results_path}/runtime", f"time_series-replanner_{routine}.csv")
+        #             routine_df.to_csv(routine_dir,index=False)
+
+        #     stats_df = pd.DataFrame(data, columns=headers)
+        #     # self.log(f'\nPLANNER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
+        #     # self.log(f'total: {sum(stats_df["t_total"])}', level=logging.WARNING)
+        #     stats_df.to_csv(f"{self.results_path}/planner_runtime_stats.csv", index=False)
+
+        # except Exception as e:
+        #     print(f'AGENT TEARDOWN ERROR: {e}')
+        #     raise e
+    #         x = 1
             
