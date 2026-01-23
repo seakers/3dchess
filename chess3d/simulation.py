@@ -587,7 +587,8 @@ class Simulation:
 
         for event, access_intervals in tqdm(events_observable.items(), desc='Compiling possible co-observations', leave=False):
             # get event characteristics
-            event_type : str = event[6]
+            # event_type : str = event[6]
+            event_type : str = event[3]
             
             # get types of observations that can be performed for this event
             co_observation_params = set()
@@ -712,7 +713,8 @@ class Simulation:
         event = tuple(event) 
 
         # event format: gp_index,lat [deg],lon [deg],start time [s],duration [s],severity,event type,decorrelation time [s],id
-        gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,event_id = event
+        # gp_index,lat,lon,t_start,duration,severity,event_type,t_corr,event_id = event
+        gp_index,lat,lon,event_type,t_start,duration,severity,instruments,event_id = event
 
         # get matching objectives
         # TODO group reqs and agents by mission to avoid double counting

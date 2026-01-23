@@ -185,6 +185,24 @@
                 "PYTHONPATH": "${workspaceRoot}"
             }
         },
+        {
+            "name": "EXPERIMENT 1: CBBA Stress Test (DEBUG)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceRoot}/experiments/1_0_cbba_stress_test/study.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}"
+            },
+            "args": [
+                "-n", "test_trials-1000_seed",
+                "-o", "False",
+                "-d", "True"
+            ]
+        },
+
         // {
         //     "name": "SCENARIO: Algal Blooms",
         //     "type": "debugpy",

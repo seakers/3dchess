@@ -946,7 +946,8 @@ class SimulatedAgent(AbstractAgent):
                 self.plan_history.append((state.t, plan_copy))
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                # if self.preplanner._debug: self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 
@@ -1001,15 +1002,18 @@ class SimulatedAgent(AbstractAgent):
                 pending_actions = []
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 
-        # --- FOR DEBUGGING PURPOSES ONLY: ---        
+        # get next actions to perform
         plan_out = self.get_next_actions(state, True)
-        self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
+        
+        # --- FOR DEBUGGING PURPOSES ONLY: ---        
+        # self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
         # -------------------------------------
         
+        # return next actions to perform
         return plan_out
     
     @runtime_tracker

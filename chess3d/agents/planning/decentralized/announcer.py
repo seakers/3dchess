@@ -62,7 +62,7 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
                 row['duration [s]'],
                 row['severity'],
                 row['start time [s]'],
-                row['id']
+                row.get('id',None)
             )
             events.append(event)
 

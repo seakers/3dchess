@@ -1,0 +1,849 @@
+{
+    "epoch": {
+        "@type": "GREGORIAN_UT1",
+        "year": 2020,
+        "month": 1,
+        "day": 1,
+        "hour": 0,
+        "minute": 0,
+        "second": 0
+    },
+    "duration": 0.03321077886481061,
+    "propagator": {
+        "@type": "J2 ANALYTICAL PROPAGATOR"
+    },
+    "spacecraft": [
+        {
+            "@id": "sat_1",
+            "name": "sat_1",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 0.0,
+                    "aop": 0.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_2",
+            "name": "sat_2",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 0.0,
+                    "aop": 0.0,
+                    "ta": 180.0
+                }
+            }
+        },
+        {
+            "@id": "sat_3",
+            "name": "sat_3",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 25.714285714285715,
+                    "aop": 24.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_4",
+            "name": "sat_4",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 51.42857142857143,
+                    "aop": 48.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_5",
+            "name": "sat_5",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 77.14285714285714,
+                    "aop": 72.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_6",
+            "name": "sat_6",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 102.85714285714286,
+                    "aop": 96.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_7",
+            "name": "sat_7",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 128.57142857142858,
+                    "aop": 120.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_8",
+            "name": "sat_8",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 154.28571428571428,
+                    "aop": 144.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_9",
+            "name": "sat_9",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 180.0,
+                    "aop": 168.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_10",
+            "name": "sat_10",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 205.71428571428572,
+                    "aop": 192.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_11",
+            "name": "sat_11",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 231.42857142857144,
+                    "aop": 216.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_12",
+            "name": "sat_12",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 257.14285714285717,
+                    "aop": 240.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_13",
+            "name": "sat_13",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 282.8571428571429,
+                    "aop": 264.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_14",
+            "name": "sat_14",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 308.57142857142856,
+                    "aop": 288.0,
+                    "ta": 0.0
+                }
+            }
+        },
+        {
+            "@id": "sat_15",
+            "name": "sat_15",
+            "spacecraftBus": {
+                "name": "BlueCanyon",
+                "mass": 20,
+                "volume": 0.5,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                }
+            },
+            "instrument": {
+                "name": "VNIR hyper",
+                "@id": "vnir_hyp_imager",
+                "@type": "VNIR",
+                "detectorWidth": 6.6e-06,
+                "focalLength": 3.6,
+                "orientation": {
+                    "referenceFrame": "NADIR_POINTING",
+                    "convention": "REF_FRAME_ALIGNED"
+                },
+                "fieldOfViewGeometry": {
+                    "shape": "RECTANGULAR",
+                    "angleHeight": 2.5,
+                    "angleWidth": 2.5
+                },
+                "maneuver": {
+                    "maneuverType": "SINGLE_ROLL_ONLY",
+                    "A_rollMin": -50,
+                    "A_rollMax": 50
+                },
+                "spectral_resolution": "Multispectral"
+            },
+            "orbitState": {
+                "date": {
+                    "@type": "GREGORIAN_UT1",
+                    "year": 2020,
+                    "month": 1,
+                    "day": 1,
+                    "hour": 0,
+                    "minute": 0,
+                    "second": 0
+                },
+                "state": {
+                    "@type": "KEPLERIAN_EARTH_CENTERED_INERTIAL",
+                    "sma": 6928.0,
+                    "ecc": 0.001,
+                    "inc": 98.0,
+                    "raan": 334.2857142857143,
+                    "aop": 312.0,
+                    "ta": 0.0
+                }
+            }
+        }
+    ],
+    "scenario": {
+        "connectivity": "LOS"
+    },
+    "settings": {
+        "coverageType": "GRID COVERAGE",
+        "outDir": "./orbits/walker-delta_98.0inc_15sat_14pl_1f"
+    }
+}

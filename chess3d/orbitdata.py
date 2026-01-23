@@ -17,9 +17,9 @@ from orbitpy.mission import Mission
 from execsatm.utils import Interval
 
 class ConnectivityLevels(Enum):
-    FULL = 'FULL'   # constant fully connected network
-    LOS = 'LOS'     # line-of-sight links between satellites and ground stations
-    ISL = 'ISL'     # satellite inter-satellite links only
+    FULL = 'FULL'   # static fully connected network between all agents
+    LOS = 'LOS'     # line-of-sight links between all agents
+    ISL = 'ISL'     # inter-satellite links only
     GS = 'GS'       # satellite-to-ground station links only
     NONE = 'NONE'   # no inter-agent connectivity
 
@@ -242,7 +242,7 @@ class IntervalData(AbstractData):
         """ 
         Updates the data by removing all intervals that have ended before time `t`. 
         """
-        self.data = [(t_start,t_end,row) for t_start,t_end,row in self.data
+        self.data = [(t_start,t_end,*row) for t_start,t_end,*row in self.data
                      if t <= t_end or abs(t - t_end) <= 1e-6]
         
     def __len__(self):
@@ -1134,6 +1134,9 @@ class OrbitData:
 
             # set grid 
             grid_dicts : list = scenario_specs.get("grid", None)
+            grid_dicts = [grid_dicts] if isinstance(grid_dicts, dict) else grid_dicts
+            assert isinstance(grid_dicts, list), 'Grid specifications must be provided as a list of dictionaries.'
+
             for grid_dict in grid_dicts:
                 grid_dict : dict
                 if grid_dict is not None:
@@ -1188,6 +1191,8 @@ class OrbitData:
         # save specifications of propagation in the orbit data directory
         with open(os.path.join(data_dir,'MissionSpecs.json'), 'w') as mission_specs:
             mission_specs.write(json.dumps(scenario_specs, indent=4))
+            assert os.path.exists(os.path.join(data_dir,'MissionSpecs.json')), \
+                'Mission specifications not saved correctly!'
 
         return data_dir
     
