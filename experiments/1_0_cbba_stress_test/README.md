@@ -43,11 +43,29 @@
 
 ## Running Trials
 
+### Full Factorial Trials
+Full list of combinations from test matrix
 ```
-cd ~/Documents/GitHub/
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
 python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials -o False -l LOWER -u UPPER
 ```
 
+### Latin Hypercube Sampling Trials
+Cases selected from full list of combinations using a LHS $n_{sample} = 2$.
+
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n lhs_trials-2_samples-1000_seed -o False -l LOWER -u UPPER
+```
+
+In case you want to run the cases from full factorial that are not considered in the LHS cases:
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_no_lhs -o False -l LOWER -u UPPER
+```
 <!-- ### Mission Definition
 #### Mission 1 - Reactive Event Scheduling
 ##### Default Mission Objectives

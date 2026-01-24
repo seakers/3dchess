@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from chess3d.constellations import Constellation, WalkerDeltaConstellation
+from chess3d.orbitdata import OrbitData
 from chess3d.simulation import Simulation
 from chess3d.utils import LEVELS, print_banner
 
@@ -100,9 +101,10 @@ def create_grid_specifications(base_path : str, target_distribution : int) -> di
         "covGridFilePath": grid_path
     }]
 
-def create_propagator_settings_specifications(base_path : str, num_sats : float, gnd_segment : str, target_distribution) -> dict:
+def create_propagator_settings_specifications(base_path : str, scenario_id : int, num_sats : float, gnd_segment : str, target_distribution) -> dict:
     # define out_dir name
-    scenario_name = f"nsats-{num_sats}_gndseg-{gnd_segment.lower()}_tgtdist-{int(target_distribution)}"
+    # scenario_name = f"nsats-{num_sats}_gndseg-{gnd_segment.lower()}_tgtdist-{int(target_distribution)}"
+    scenario_name = f"scenario_{scenario_id}"
     
     # make out_dir if it does not exist
     out_dir = os.path.join(base_path, 'orbit_data', scenario_name)
@@ -243,10 +245,56 @@ def create_ground_operator_specifications(base_path : str, scenario_id : int, gr
     # return ground operator specifications
     return [ground_operator_specs]
 
+def generate_scenario_mission_specs(mission_specs_template : dict, duration : float, step_size : float, 
+                                    base_path : str, trial_filename : str, scenario_id : int,
+                                    num_sats : int, gnd_segment : str, target_distribution : int,
+                                    spacecraft_specs_template : dict, instrument_specs : dict,
+                                    ground_operator_specs_template : dict) -> dict:
+    
+    """ Generate mission specifications for a given scenario. """
+    # create mission specifications from template
+    mission_specs = copy.deepcopy(mission_specs_template)
+    
+    # set simulation duration and propagator step size
+    mission_specs['duration'] = duration
+    mission_specs['propagator']['stepSize'] = step_size
+
+    # set scenario specifications
+    mission_specs['scenario'] = create_scenario_specifications(base_path, trial_filename, scenario_id)
+
+    # set target distribution type
+    mission_specs['grid'] = create_grid_specifications(base_path, target_distribution)
+
+    # set propagator settings
+    mission_specs['settings'] \
+        = create_propagator_settings_specifications(base_path, scenario_id, num_sats, gnd_segment, target_distribution)
+    
+    # create satellite specifications
+    mission_specs['spacecraft'] \
+        = create_spacecraft_specifications(num_sats, spacecraft_specs_template, instrument_specs, 
+                                            base_path, scenario_id, gnd_segment)
+    
+    # set ground operator specifications if specified
+    if gnd_segment.lower() != "none":
+        # get network name from ground segment type
+        network_name = "gs_nen_1.csv" if "single" in gnd_segment.lower() else "gs_nen_full.csv"
+        
+        # set up ground stations for coverage calculations
+        mission_specs['groundStation'] \
+            = load_ground_stations(base_path, network_name)
+
+        # assign ground operator to mission specs
+        mission_specs['groundOperator'] \
+            = create_ground_operator_specifications(base_path, scenario_id, ground_operator_specs_template)
+        
+    # return mission specifications
+    return mission_specs
+
 def main(trial_filename : str, 
          lower_bound : int, 
          upper_bound : int, 
          level : int, 
+         propagate_only : bool,
          overwrite : bool, 
          reevaluate : bool, 
          debug : bool):
@@ -282,40 +330,49 @@ def main(trial_filename : str,
         print(f" - Task Arrival Rate: {task_arrival_rate}")
         print(f" - Target Distribution: (-{target_distribution}°, +{target_distribution}°)")
 
-        # create mission specifications from template
-        mission_specs = copy.deepcopy(mission_specs_template)
-        
-        # set simulation duration and propagator step size
-        mission_specs['duration'] = duration
-        mission_specs['propagator']['stepSize'] = step_size
+        # generate mission specifications for the scenario
+        mission_specs : dict = generate_scenario_mission_specs(
+            mission_specs_template, duration, step_size, 
+            base_path, trial_filename, scenario_id,
+            num_sats, gnd_segment, target_distribution,
+            spacecraft_specs_template, instrument_specs,
+            ground_operator_specs_template
+        )
 
-        # set scenario specifications
-        mission_specs['scenario'] = create_scenario_specifications(base_path, trial_filename, scenario_id)
-
-        # set target distribution type
-        mission_specs['grid'] = create_grid_specifications(base_path, target_distribution)
-
-        # set propagator settings
-        mission_specs['settings'] \
-            = create_propagator_settings_specifications(base_path, num_sats, gnd_segment, target_distribution)
+        # # create mission specifications from template
+        # mission_specs = copy.deepcopy(mission_specs_template)
         
-        # create satellite specifications
-        mission_specs['spacecraft'] \
-            = create_spacecraft_specifications(num_sats, spacecraft_specs_template, instrument_specs, 
-                                              base_path, scenario_id, gnd_segment)
+        # # set simulation duration and propagator step size
+        # mission_specs['duration'] = duration
+        # mission_specs['propagator']['stepSize'] = step_size
+
+        # # set scenario specifications
+        # mission_specs['scenario'] = create_scenario_specifications(base_path, trial_filename, scenario_id)
+
+        # # set target distribution type
+        # mission_specs['grid'] = create_grid_specifications(base_path, target_distribution)
+
+        # # set propagator settings
+        # mission_specs['settings'] \
+        #     = create_propagator_settings_specifications(base_path, scenario_id, num_sats, gnd_segment, target_distribution)
         
-        # set ground operator specifications if specified
-        if gnd_segment.lower() != "none":
-            # get network name from ground segment type
-            network_name = "gs_nen_1.csv" if "single" in gnd_segment.lower() else "gs_nen_full.csv"
+        # # create satellite specifications
+        # mission_specs['spacecraft'] \
+        #     = create_spacecraft_specifications(num_sats, spacecraft_specs_template, instrument_specs, 
+        #                                       base_path, scenario_id, gnd_segment)
+        
+        # # set ground operator specifications if specified
+        # if gnd_segment.lower() != "none":
+        #     # get network name from ground segment type
+        #     network_name = "gs_nen_1.csv" if "single" in gnd_segment.lower() else "gs_nen_full.csv"
             
-            # set up ground stations for coverage calculations
-            mission_specs['groundStation'] \
-                = load_ground_stations(base_path, network_name)
+        #     # set up ground stations for coverage calculations
+        #     mission_specs['groundStation'] \
+        #         = load_ground_stations(base_path, network_name)
 
-            # assign ground operator to mission specs
-            mission_specs['groundOperator'] \
-                = create_ground_operator_specifications(base_path, scenario_id, ground_operator_specs_template)
+        #     # assign ground operator to mission specs
+        #     mission_specs['groundOperator'] \
+        #         = create_ground_operator_specifications(base_path, scenario_id, ground_operator_specs_template)
             
         # run experiment
         print_banner(f"Scenario ID: {scenario_id}")
@@ -324,34 +381,59 @@ def main(trial_filename : str,
         results_dir = os.path.join(base_path, 'results', f"{trial_filename}_scenario_{scenario_id}")
         results_summary_path = os.path.join(results_dir, 'summary.csv')
 
-        ## initialize mission if results do not exist or overwrite/reevaluate is set
+        # check if propagation-only toggle was selected
+        if propagate_only:
+            # if selected; only precompute orbit data
+            print(" - Propagating orbit data only...")
+            orbitdata_dir = OrbitData.precompute(mission_specs)
+            print (f" - Orbit data propagated and stored at: `{orbitdata_dir}`")
+            
+            # skip to next trial
+            continue 
+
+        # initialize simulation mission
+        print(" - Running full simulation...")
+        
+        # check if results do not exist or overwrite/reevaluate is set
         if not os.path.isfile(results_summary_path) or overwrite or reevaluate:
             mission : Simulation = Simulation.from_dict(mission_specs, overwrite=overwrite, level=level)
 
-        # # check if output directory was properly initalized
-        # assert os.path.isdir(results_dir), \
-        #     f"Results directory not properly initialized at: {results_dir}"
+        # check if output directory was properly initalized
+        assert os.path.isdir(results_dir), \
+            f"Results directory not properly initialized at: {results_dir}"
 
-        # # execute mission if it hasn't been performed yet or if results need to be overwritten
-        # if (not os.path.isdir(results_dir) 
-        #     or any([len(os.listdir(os.path.join(results_dir, d))) <= 2 
-        #             for d in os.listdir(results_dir)
-        #             if os.path.isdir(os.path.join(results_dir, d))
-        #             and 'manager' not in d]) 
-        #     or overwrite
-        #     ): 
+        # define conditions to execute mission
+        execute_conditions = [
+            # there is no results directory generated yet
+            not os.path.isdir(results_dir), 
             
-        #     mission.execute()
-        # else:
-        #     print('Simulation data found!')
+            # there are incomplete results directories for any agent
+            any([len(os.listdir(os.path.join(results_dir, d))) <= 2 
+                    for d in os.listdir(results_dir)
+                    if os.path.isdir(os.path.join(results_dir, d))
+                    and 'manager' not in d]) ,
+            
+            # overwrite flag was set
+            overwrite
+        ]
 
-        # # print results if it hasn't been performed yet or if results need to be reevaluated
-        # if not os.path.isfile(results_summary_path) or reevaluate: mission.print_results()
+        # execute mission if any of the conditions are met
+        if any(execute_conditions): 
+            print (' - Executing simulation mission...')
+            mission.execute()
+        else:
+            print(' - Simulation data found! Skipping execution...')
 
-        # # check if summary file was properly generated at the end of the simulation
-        # if not os.path.isfile(results_summary_path): raise Exception(f'`Scenario {scenario_id}` not executed properly.')
+        # print results if it hasn't been performed yet or if results need to be reevaluated
+        if not os.path.isfile(results_summary_path) or reevaluate: 
+            print(' - Printing simulation results...')
+            mission.print_results()
 
-    # finish study
+        # ensure if summary file was properly generated at the end of the simulation
+        assert os.path.isfile(results_summary_path), \
+            f"Results summary file not found at: {results_summary_path}"
+
+    # study done
     return
 
 if __name__ == "__main__":
@@ -386,6 +468,12 @@ if __name__ == "__main__":
                         help='logging level',
                         required=False,
                         type=str) 
+    parser.add_argument('-p', 
+                        '--propagate-only',
+                        default=False,
+                        help='toggles to only precompute orbit data without running full simulation',
+                        required=False,
+                        type=bool) 
     parser.add_argument('-o', 
                         '--overwrite',
                         default=False,
@@ -413,12 +501,13 @@ if __name__ == "__main__":
     lower_bound = args.lower_bound
     upper_bound = args.upper_bound
     level = LEVELS.get(args.level)
+    propagate_only = args.propagate_only
     overwrite = args.overwrite
     reevaluate = args.reevaluate
     debug = args.debug
 
     # run main study
-    main(trial_filename, lower_bound, upper_bound, level, overwrite, reevaluate, debug)
+    main(trial_filename, lower_bound, upper_bound, level, propagate_only, overwrite, reevaluate, debug)
 
     # print outro
     print('\n' + '='*54)
