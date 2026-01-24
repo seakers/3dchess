@@ -386,8 +386,8 @@ class SimulationManager(AbstractManager):
             # save time-series
             time_series = [[v] for v in self.stats[routine]]
             routine_df = pd.DataFrame(data=time_series, columns=['dt'])
-            routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
-            routine_df.to_csv(routine_dir,index=False)
+            routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.parquet")
+            routine_df.to_parquet(routine_dir,index=False)
 
         stats_df = pd.DataFrame(data, columns=headers)
         # self.log(f'\nMANAGER RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)

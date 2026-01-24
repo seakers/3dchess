@@ -267,15 +267,6 @@ class Simulation:
         # count number of parallel pools
         n_pools = len(self.agents) + 3
 
-        # # run each simulation element in parallel
-        # with concurrent.futures.ThreadPoolExecutor(n_pools) as pool:
-        #     pool.submit(self.monitor.run, *[])
-        #     pool.submit(self.manager.run, *[])
-        #     pool.submit(self.environment.run, *[])
-        #     for agent in self.agents:                
-        #         agent : SimulatedAgent
-        #         pool.submit(agent.run, *[])  
-
         stop_event = threading.Event()
 
         # If your run() methods can accept stop_event, do it.
@@ -319,80 +310,254 @@ class Simulation:
         # set executed flag
         self.__executed = True
     
-    def print_results(self, precission : int = 5) -> None:
-        # ensure simulation has been executed
-        assert self.__executed, "Simulation must be successfully executed before printing results."
+    def print_results(self, reevaluate : bool = False, precission : int = 5) -> pd.DataFrame:
+        # validate execution
+        self.__validate_execution()
         
-        print(f"\n\n{'='*22} RESULTS {'='*23}\n")
+        # print divider
+        print(f"\n\n{'='*22} SIMULATION RESULTS {'='*23}\n")
 
-        # define file name
+        # define results summary filename
         summary_path = os.path.join(f"{self.results_path}","summary.csv")
 
+        # check if results summary file exists 
+        if os.path.isfile(summary_path) and not reevaluate:
+            # file exists and reevaluate is False; skip results summary generation
+            print(f"Results summary already exists at: `{summary_path}`")
+            results_summary : pd.DataFrame = pd.read_csv(summary_path)
+
+        else:
+            # collect results
+            agent_orbitdata, agent_missions, observations_performed, \
+                events, events_detected, task_reqs, known_tasks = self.__collect_results()           
+
+            # summarize results
+            print('Generating results summary...')
+            results_summary : pd.DataFrame \
+                = self._summarize_results(agent_orbitdata, agent_missions, observations_performed, \
+                                          events, events_detected, task_reqs, known_tasks, precission)
+
+            # log and save results summary
+            print(f"\n\n{'='*20}{'='*20}\n")
+            print(f"\nSIMULATION RESULTS SUMMARY:\n{str(results_summary)}\n\n")
+            results_summary.to_csv(summary_path, index=False)
+
+        # return results summary
+        return results_summary
+    
+    def __validate_execution(self) -> None:
+        """ Validates that the simulation has been executed successfully before printing results. """
+        # ensure simulation has been executed
+        if not self.__executed:
+            print('WARNING: Simulation instance has not been executed yet. Evaluating existing scenario results...\n')
+        # assert self.__executed, "Simulation must be successfully executed before printing results."
+
+        # ensure all simulation elements have populated their results directories
+        results_dirs = [
+            os.path.join(self.results_path, 'manager'),
+            os.path.join(self.results_path, 'environment')
+        ]
+        results_dirs.extend([
+            os.path.join(self.results_path, agent.get_element_name().lower()) 
+            for agent in self.agents
+        ])
+        for dir in results_dirs:
+            assert os.path.isdir(dir), \
+                f"Results directory for simulation element not found: `{dir}`"
+            assert len(os.listdir(dir)) > 0, \
+                f"Results directory for simulation element is empty: `{dir}`"
+        
+        return
+    
+    def __collect_results(self) -> tuple:
         # collect results
         print('Collecting orbit data...')
-        orbitdata : dict = OrbitData.from_directory(self.orbitdata_dir) if self.orbitdata_dir is not None else None
+        agent_orbitdata : dict = OrbitData.from_directory(self.orbitdata_dir) \
+            if self.orbitdata_dir is not None else None
 
+        # collect missions
+        print('Collecting mission data...')
+        agent_missions : Dict[str, Mission] = {agent.get_element_name(): agent.mission 
+                                               for agent in self.agents}
+
+        # collect observations
         print('Collecting observations performed data...')
-        # observations_performed_path = os.path.join(self.environment.results_path, 'measurements.csv')
-        # observations_performed = pd.read_csv(observations_performed_path)
         try:
-            observations_performed_path = os.path.join(self.environment.results_path, 'measurements.csv')
-            observations_performed = pd.read_csv(observations_performed_path)
+            observations_performed_path = os.path.join(self.environment.results_path, 'measurements.parquet')
+            observations_performed = pd.read_parquet(observations_performed_path)
             print('SUCCESS!')
+
         except pd.errors.EmptyDataError:
             columns = ['observer','t_img','lat','lon','range','look','incidence','zenith','instrument_name']
             observations_performed = pd.DataFrame(data=[],columns=columns)
-            print('No observations were performed.')
+            print('No observations were performed during the simulation.')
 
-        # load all senario events
+        # load all scenario events
         print('Loading event data...')
-        events = pd.read_csv(self.environment.events_path) 
+        events_df = pd.read_csv(self.environment.events_path)         
 
-        # filter out events that do not occurr during this simulation
-        events = events[events['start time [s]'] <= self.manager._clock_config.get_total_seconds()] 
+        # filter out events that do not occur during this simulation
+        events_df = events_df[events_df['start time [s]'] <= self.manager._clock_config.get_total_seconds()] 
+
+        # convert event to dataframe to list of GeophysicalEvent
+        events : list[GeophysicalEvent] = []
+        for _,row in events_df.iterrows():
+            event = GeophysicalEvent(
+                row['event type'],
+                (row['lat [deg]'], row['lon [deg]'], row.get('grid index', 0), row['gp_index']),
+                row['start time [s]'],
+                row['duration [s]'],
+                row['severity'],
+                row['start time [s]'],
+                row.get('id',None)
+            )
+            events.append(event)
 
         # compile events detected
         print('Collecting event detection data...')
-        event_detections = None
+        events_detected_df : pd.DataFrame = None
         for agent in self.agents:
             _,agent_name = agent.name.split('/')
-            events_detected_path = os.path.join(self.results_path, agent_name.lower(), 'events_detected.csv')
+            events_detected_path = os.path.join(self.results_path, agent_name.lower(), 'events_detected.parquet')
             if not os.path.isfile(events_detected_path): continue
-            
-            events_detected_temp = pd.read_csv(events_detected_path)
 
-            if event_detections is None: 
-                event_detections = events_detected_temp
-            else:
-                event_detections = pd.concat([event_detections, events_detected_temp], axis=0)
+            # load detected events            
+            events_detected_temp = pd.read_parquet(events_detected_path)
 
-        assert event_detections is not None, \
-            "Coundn't load Event Detection file for any agent."
+            # concatenate to main dataframe
+            events_detected_df = pd.concat([events_detected_df, events_detected_temp], axis=0) \
+                if events_detected_df is not None else events_detected_temp
 
-        # compile mesurement requests
+        assert events_detected_df is not None, \
+            "Couldn't load Event Detection file for any agent."
+        
+        # remove duplicates
+        events_detected_df = events_detected_df.drop_duplicates().reset_index(drop=True)
+        
+        # convert to list of GeophysicalEvent
+        events_detected : list[GeophysicalEvent] = []
+        for _,row in events_detected_df.iterrows():
+            event = GeophysicalEvent(
+                row['event type'],
+                (row['lat [deg]'], row['lon [deg]'], row.get('grid index', 0), row['gp_index']),
+                row['start time [s]'],
+                row['duration [s]'],
+                row['severity'],
+                row['detection time [s]'],
+                row.get('id',None)
+            )
+            events_detected.append(event)
+
+        # compile measurement requests
         print('Collecting measurement request data...')
         try:
-            measurement_reqs = pd.read_csv((os.path.join(self.environment.results_path, 'requests.csv')))
+            task_reqs_df = pd.read_parquet((os.path.join(self.environment.results_path, 'requests.parquet')))
         except pd.errors.EmptyDataError:
-            columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Measurment Types']
-            measurement_reqs = pd.DataFrame(data=[],columns=columns)
+            columns = ['id','requester','lat [deg]','lon [deg]','severity','t start','t end','t corr','Measurment Types']
+            task_reqs_df = pd.DataFrame(data=[],columns=columns)
+        # remove duplicates
+        task_reqs_df = task_reqs_df.drop_duplicates().reset_index(drop=True)
 
-        # summarize results
-        print('Generating results summary...')
-        results_summary : pd.DataFrame = self.summarize_results(orbitdata, observations_performed, events, event_detections, measurement_reqs, precission)
+        # convert to list of TaskRequest
+        task_reqs = []
+        for _,row in task_reqs_df.iterrows():
+            matching_events : list[GeophysicalEvent] = [
+                event for event in events
+                if event.id == row['event id']
+            ]
+            assert matching_events, \
+                f"No matching event found for measurement request with event id `{row['event id']}`"
+            
+            # get name of agent requesting the task
+            requester = row['requester']
+            
+            # get matching `EventDrivenObjective`
+            relevant_objectives = [objective for objective in agent_missions[requester]
+                                    if isinstance(objective, EventDrivenObjective)
+                                    and objective.parameter == row['parameter']]
+            # ensure exactly one matching objective found
+            assert relevant_objectives, \
+                f"No matching EventDrivenObjective found in mission for requester `{requester}` and parameter `{row['parameter']}`."
+            
+            # create event-driven task 
+            task = EventObservationTask(
+                row['parameter'],
+                event=matching_events[0],
+                objective=relevant_objectives[0]
+            )
+            
+            # create task request
+            req = TaskRequest(
+                task,
+                row['requester'],
+                agent_missions[requester].name,
+                row['t_req'],
+                row['event id']
+            )
 
-        # log and save results summary
-        # print(f"\n\n{'#'*20}{'#'*20}\n")
-        print(f"\nSIMULATION RESULTS SUMMARY:\n{str(results_summary)}\n\n")
-        results_summary.to_csv(summary_path, index=False)
+            # add to list of task requests
+            task_reqs.append(req)
 
-    def summarize_results(self, 
-                          orbitdata : dict,
-                          observations_performed : pd.DataFrame, 
-                          events : pd.DataFrame,
-                          event_detections : pd.DataFrame,
-                          measurement_reqs : pd.DataFrame,
-                          n_decimals : int = 5) -> pd.DataFrame:
+        # compile default tasks from every agent
+        default_tasks_df : pd.DataFrame = None
+        for agent in self.agents:
+            _,agent_name = agent.name.split('/')
+            known_tasks_path = os.path.join(self.results_path, agent_name.lower(), 'known_tasks.parquet')
+            if not os.path.isfile(known_tasks_path): continue
+            
+            # load default tasks
+            default_tasks_temp = pd.read_parquet(known_tasks_path)
+
+            # concatenate to main dataframe
+            default_tasks_df = pd.concat([default_tasks_df, default_tasks_temp], axis=0) \
+                if not default_tasks_temp.empty else default_tasks_df
+
+        # remove duplicates
+        default_tasks_df = default_tasks_df.drop_duplicates().reset_index(drop=True)
+        
+        # convert to list of tasks
+        known_tasks : list[GenericObservationTask] = []
+        for _,row in default_tasks_df.iterrows():
+            # get name of agent requesting the task
+            requester = row['requester']
+            if row['task type'] != GenericObservationTask.DEFAULT:
+                raise ValueError(f"Unknown task type `{row['task type']}` found in known tasks file.")
+            
+            # get matching `DefaultMissionObjective`
+            relevant_objectives = [objective for objective in agent_missions[requester]
+                                    if isinstance(objective, DefaultMissionObjective)
+                                    and objective.parameter == row['parameter']]
+            # ensure exactly one matching objective found
+            assert relevant_objectives, \
+                f"No matching DefaultMissionObjective found in mission for requester `{requester}` and parameter `{row['parameter']}`."
+            
+            task = DefaultMissionTask(
+                row['parameter'],
+                (row['lat [deg]'], row['lon [deg]'], row['grid index'], row['gp index']),
+                row['t end'] - row['t start'],
+                row['priority'],
+                relevant_objectives[0],
+                row['id']
+            )
+            known_tasks.append(task)
+
+        # suplement with event observation tasks
+        known_tasks.extend([req.task for req in task_reqs 
+                            if req.task not in known_tasks])
+
+        # return collected results
+        return agent_orbitdata, agent_missions, observations_performed, events, events_detected, task_reqs, known_tasks
+
+    def _summarize_results(self, 
+                            agent_orbitdata : Dict[str, OrbitData], 
+                            agent_missions : Dict[str, Mission],
+                            observations_performed : pd.DataFrame, 
+                            events : list[GeophysicalEvent], 
+                            events_detected : list[GeophysicalEvent], 
+                            task_reqs : list[TaskRequest], 
+                            known_tasks : list[GenericObservationTask],
+                            n_decimals : int = 5
+                        ) -> pd.DataFrame:
         
         # classify observations
         observations_per_gp, events_per_gp, gps_accessible, \
@@ -401,10 +566,10 @@ class Simulation:
                     events_co_observable, events_co_obs, \
                     events_co_observable_fully, events_co_obs_fully, \
                         events_co_observable_partially, events_co_obs_partially \
-                                = self.classify_observations(orbitdata,
+                                = self._classify_observations(orbitdata,
                                                              observations_performed, 
                                                              events, 
-                                                             event_detections,
+                                                             events_detected,
                                                              measurement_reqs)       
 
         # count observations performed
@@ -415,7 +580,7 @@ class Simulation:
                     n_events_co_observable, n_events_co_obs, n_total_event_co_obs, \
                         n_events_co_observable_fully, n_events_fully_co_obs, n_total_event_fully_co_obs, \
                             n_events_co_observable_partially, n_events_partially_co_obs, n_total_event_partially_co_obs \
-                                = self.count_observations(  orbitdata, 
+                                = self._count_observations(  orbitdata, 
                                                             observations_performed, 
                                                             observations_per_gp,
                                                             events, 
@@ -441,7 +606,7 @@ class Simulation:
                         p_event_co_observable, p_event_co_obs, p_event_co_obs_if_co_observable, p_event_co_obs_if_detected, p_event_co_obs_if_co_observable_and_detected, \
                             p_event_co_observable_fully, p_event_co_obs_fully, p_event_co_obs_fully_if_co_observable_fully, p_event_co_obs_fully_if_detected, p_event_co_obs_fully_if_co_observable_fully_and_detected, \
                                 p_event_co_observable_partial, p_event_co_obs_partial, p_event_co_obs_partial_if_co_observable_partially, p_event_co_obs_partial_if_detected, p_event_co_obs_partial_if_co_observable_partially_and_detected \
-                                    = self.calc_event_probabilities(orbitdata, 
+                                    = self._calc_event_probabilities(orbitdata, 
                                                                     gps_accessible,
                                                                     observations_performed, 
                                                                     observations_per_gp,
@@ -461,8 +626,8 @@ class Simulation:
                                                                     events_co_obs_partially)
         
         # calculate event revisit times
-        t_gp_reobservation = self.calc_groundpoint_coverage_metrics(observations_per_gp)
-        t_event_reobservation = self.calc_event_coverage_metrics(events_observed)
+        t_gp_reobservation = self._calc_groundpoint_coverage_metrics(observations_per_gp)
+        t_event_reobservation = self._calc_event_coverage_metrics(events_observed)
 
         # Generate summary
         summary_headers = ['stat_name', 'val']
@@ -558,7 +723,7 @@ class Simulation:
 
         return pd.DataFrame(summary_data, columns=summary_headers)
                        
-    def classify_observations(self, 
+    def _classify_observations(self, 
                               orbitdata : dict,
                               observations_performed : pd.DataFrame,
                               events : pd.DataFrame,
@@ -867,7 +1032,7 @@ class Simulation:
         vals = [float(val) for val in s]
         return Interval(vals[0],vals[1])
 
-    def count_observations(self, 
+    def _count_observations(self, 
                            orbitdata : dict, 
                            observations_performed : pd.DataFrame, 
                            observations_per_gp : dict,
@@ -980,7 +1145,7 @@ class Simulation:
                             n_events_co_observable_fully, n_events_fully_co_obs, n_total_event_fully_co_obs, \
                                 n_events_co_observable_partially, n_events_partially_co_obs, n_total_event_partially_co_obs
 
-    def calc_event_probabilities(self,
+    def _calc_event_probabilities(self,
                                  orbitdata : dict, 
                                  gps_accessible : dict,
                                  observations_performed : pd.DataFrame, 
@@ -1008,7 +1173,7 @@ class Simulation:
                     n_events_co_observable, n_events_co_obs, n_total_event_co_obs, \
                         n_events_co_observable_fully, n_events_fully_co_obs, n_total_event_fully_co_obs, \
                             n_events_co_observable_partially, n_events_partially_co_obs, n_total_event_partially_co_obs \
-                                = self.count_observations(  orbitdata, 
+                                = self._count_observations(  orbitdata, 
                                                             observations_performed, 
                                                             observations_per_gp,
                                                             events, 
@@ -1165,7 +1330,7 @@ class Simulation:
                                 p_event_co_observable_fully, p_event_co_obs_fully, p_event_co_obs_fully_if_co_observable_fully, p_event_co_obs_fully_if_detected, p_event_co_obs_fully_if_co_observable_fully_and_detected, \
                                     p_event_co_observable_partial, p_event_co_obs_partial, p_event_co_obs_partial_if_co_observable_partially, p_event_co_obs_partial_if_detected, p_event_co_obs_partial_if_co_observable_partially_and_detected
 
-    def calc_groundpoint_coverage_metrics(self,
+    def _calc_groundpoint_coverage_metrics(self,
                                     observations_per_gp: dict
                                     ) -> tuple:
         # event reobservation times
@@ -1202,7 +1367,7 @@ class Simulation:
 
         return t_reobservation
     
-    def calc_event_coverage_metrics(self, events_observed : dict) -> tuple:
+    def _calc_event_coverage_metrics(self, events_observed : dict) -> tuple:
         t_reobservations : list = []
         for event in events_observed:
             prev_observation = None

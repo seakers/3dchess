@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 
 from chess3d.utils import print_banner
 
-from chess3d.constellation import WalkerDeltaConstellation
+from chess3d.constellations import WalkerDeltaConstellation
 
 def pareto_front(df: pd.DataFrame, objectives: dict) -> pd.DataFrame:
     """

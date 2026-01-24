@@ -1,3 +1,4 @@
+from collections import defaultdict
 from itertools import chain
 import logging
 import os
@@ -14,7 +15,7 @@ from dmas.modules import InternalModule
 from dmas.utils import runtime_tracker
 from zmq import SocketType
 
-from execsatm.tasks import DefaultMissionTask, GenericObservationTask
+from execsatm.tasks import GenericObservationTask, DefaultMissionTask, EventObservationTask
 from execsatm.mission import Mission
 from execsatm.objectives import DefaultMissionObjective
 from execsatm.requirements import GridSpatialRequirement, SinglePointSpatialRequirement, SpatialCoverageRequirement, MultiPointSpatialRequirement
@@ -1229,25 +1230,30 @@ class SimulatedAgent(AbstractAgent):
         
     def print_results(self):
         try:
-            # raise Exception("Debugging Exception: Remove before running full simulation.")
+            # log known default tasks
+            columns = ['id', 'task type', 'requester', 'parameter', 'lat [deg]', 'lon [deg]', 'grid index', 'gp index', 't start', 't end', 'priority']
+            data = [(task.id,task.task_type, self.get_element_name(), task.parameter, task.location[0][0], task.location[0][1], task.location[0][2], task.location[0][3],
+                    task.availability.left, task.availability.right, task.priority)
+                for task in self.tasks
+                if isinstance(task, DefaultMissionTask)
+            ]
+            df = pd.DataFrame(data=data, columns=columns)        
+            df.to_parquet(f"{self.results_path}/known_tasks.parquet", index=False)
 
             # log known and generated requests
+            columns = ['id','requester','lat [deg]','lon [deg]','severity','t start','t end','t corr','event type']
             if self.processor is not None:
-                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
-                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
+                data_known = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
                         for event in self.processor.known_events]
-                
-                df = pd.DataFrame(data=data, columns=columns)        
-                df.to_csv(f"{self.results_path}/events_known.csv", index=False)   
-
-                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
-                data = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
+                data_detected = [(event.id, self.processor.event_requesters[event], event.location[0], event.location[1], event.severity, event.t_start, event.t_start+event.d_exp, np.Inf, event.event_type)
                         for event in self.processor.detected_events]
             else:
-                columns = ['ID','Requester','lat [deg]','lon [deg]','Severity','t start','t end','t corr','Event Types']
-                data = []
+                data_known, data_detected = [], []
+                
+            df = pd.DataFrame(data=data_known, columns=columns)        
+            df.to_parquet(f"{self.results_path}/events_known.parquet", index=False)   
 
-            df = pd.DataFrame(data=data, columns=columns)        
+            df = pd.DataFrame(data=data_detected, columns=columns)        
             df.to_parquet(f"{self.results_path}/events_detected.parquet", index=False)
         
             # log plan history
@@ -1275,8 +1281,7 @@ class SimulatedAgent(AbstractAgent):
             df.to_parquet(f"{self.results_path}/planner_history.parquet", index=False)
             
             # log observation history
-            headers = ['grid_index','gp_index', 'lat [deg]', 'lon [deg]', 'n_obs', 't_last', 'latest_observation']
-            data = []
+            data = defaultdict(list)
             for grid_index, grid in self.observation_history.history.items():
                 grid : dict[int, ObservationTracker]
                 for gp_index, observation_tracker in grid.items():
@@ -1284,19 +1289,14 @@ class SimulatedAgent(AbstractAgent):
                     if observation_tracker.n_obs == 0:
                         # no observations for this grid point
                         continue
-
-                    # log observation tracker
-                    line_data = [   grid_index,
-                                    gp_index,
-                                    np.round(observation_tracker.lat,3),
-                                    np.round(observation_tracker.lon,3),
-                                    observation_tracker.n_obs,
-                                    np.round(observation_tracker.t_last,3),
-                                    observation_tracker.latest_observation
-                                ]
-                    data.append(line_data)
+                    
+                    for key, value in observation_tracker.latest_observation.items():
+                        if isinstance(value, list):
+                            data[key].append(value[0])  # assuming single value lists
+                        else:
+                            data[key].append(value)
             
-            df = pd.DataFrame(data, columns=headers)
+            df = pd.DataFrame(data)
             df.to_parquet(f"{self.results_path}/observation_history.parquet", index=False)
 
             # log performance stats

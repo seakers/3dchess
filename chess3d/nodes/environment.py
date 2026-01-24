@@ -15,6 +15,7 @@ from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
 from instrupy.util import SphericalGeometry, ViewGeometry
 
 from execsatm.events import GeophysicalEvent
+from execsatm.tasks import EventObservationTask
 
 from chess3d.agents.science.requests import *
 from chess3d.orbitdata import OrbitData
@@ -793,7 +794,7 @@ class SimulationEnvironment(EnvironmentNode):
             raise e
     
     def compile_broadcasts(self) -> pd.DataFrame:
-        columns = ['t_msg', 'Sender', 'Message Type', 
+        columns = ['t_msg', 'sender', 'message type', 
                 #    'Message'
                    ]
         data = [[msg['t_msg'], 
@@ -806,13 +807,19 @@ class SimulationEnvironment(EnvironmentNode):
         return pd.DataFrame(data=data, columns=columns)
     
     def compile_requests(self) -> pd.DataFrame:
-        columns = ['request ID', 'Requester', 'event ID', 'mission name', 't_req']
+        columns = ['request id', 'requester', 'event id', 'parameter', 't_req', 'mission name']
         data = [[req.id,
                  req.requester,
                  req.task.event.id,
+                 req.task.parameter,
+                 req.t_req,
                  req.mission_name,
-                 req.t_req] 
-                 for req in self.measurement_reqs]
+                 ] 
+                 for req in self.measurement_reqs
+                 if isinstance(req.task, EventObservationTask)]
+        
+        assert all(isinstance(req.task, EventObservationTask) for req in self.measurement_reqs), \
+            'Only `EventObservationTask` measurement requests are currently supported in the results compilation.'
 
         return pd.DataFrame(data=data, columns=columns)
 

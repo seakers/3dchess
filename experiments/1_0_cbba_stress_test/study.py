@@ -9,7 +9,7 @@ from typing import List, Tuple
 import numpy as np
 import pandas as pd
 
-from chess3d.constellation import Constellation, WalkerDeltaConstellation
+from chess3d.constellations import Constellation, WalkerDeltaConstellation
 from chess3d.simulation import Simulation
 from chess3d.utils import LEVELS, print_banner
 
