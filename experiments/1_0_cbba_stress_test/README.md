@@ -44,6 +44,7 @@
 ## Running Trials
 
 ```
+cd ~/Documents/GitHub/
 python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials -o False -l LOWER -u UPPER
 ```
 
