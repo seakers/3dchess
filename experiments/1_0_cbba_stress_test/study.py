@@ -268,6 +268,7 @@ def main(trial_filename : str,
 
     # set simulation duration
     duration = 0.5 / 24.0 if debug else 1.0     # [days]
+    step_size = 100 if debug else 10            # [s]
 
     # iterate through each trial
     for scenario_id,num_sats,gnd_segment,task_arrival_rate,target_distribution in trials.itertuples(index=False):
@@ -284,8 +285,9 @@ def main(trial_filename : str,
         # create mission specifications from template
         mission_specs = copy.deepcopy(mission_specs_template)
         
-        # set simulation duration
+        # set simulation duration and propagator step size
         mission_specs['duration'] = duration
+        mission_specs['propagator']['stepSize'] = step_size
 
         # set scenario specifications
         mission_specs['scenario'] = create_scenario_specifications(base_path, trial_filename, scenario_id)
@@ -326,28 +328,28 @@ def main(trial_filename : str,
         if not os.path.isfile(results_summary_path) or overwrite or reevaluate:
             mission : Simulation = Simulation.from_dict(mission_specs, overwrite=overwrite, level=level)
 
-        # check if output directory was properly initalized
-        assert os.path.isdir(results_dir), \
-            f"Results directory not properly initialized at: {results_dir}"
+        # # check if output directory was properly initalized
+        # assert os.path.isdir(results_dir), \
+        #     f"Results directory not properly initialized at: {results_dir}"
 
-        # execute mission if it hasn't been performed yet or if results need to be overwritten
-        if (not os.path.isdir(results_dir) 
-            or any([len(os.listdir(os.path.join(results_dir, d))) <= 2 
-                    for d in os.listdir(results_dir)
-                    if os.path.isdir(os.path.join(results_dir, d))
-                    and 'manager' not in d]) 
-            or overwrite
-            ): 
+        # # execute mission if it hasn't been performed yet or if results need to be overwritten
+        # if (not os.path.isdir(results_dir) 
+        #     or any([len(os.listdir(os.path.join(results_dir, d))) <= 2 
+        #             for d in os.listdir(results_dir)
+        #             if os.path.isdir(os.path.join(results_dir, d))
+        #             and 'manager' not in d]) 
+        #     or overwrite
+        #     ): 
             
-            mission.execute()
-        else:
-            print('Simulation data found!')
+        #     mission.execute()
+        # else:
+        #     print('Simulation data found!')
 
-        # print results if it hasn't been performed yet or if results need to be reevaluated
-        if not os.path.isfile(results_summary_path) or reevaluate: mission.print_results()
+        # # print results if it hasn't been performed yet or if results need to be reevaluated
+        # if not os.path.isfile(results_summary_path) or reevaluate: mission.print_results()
 
-        # check if summary file was properly generated at the end of the simulation
-        if not os.path.isfile(results_summary_path): raise Exception(f'`Scenario {scenario_id}` not executed properly.')
+        # # check if summary file was properly generated at the end of the simulation
+        # if not os.path.isfile(results_summary_path): raise Exception(f'`Scenario {scenario_id}` not executed properly.')
 
     # finish study
     return

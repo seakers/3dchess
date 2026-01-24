@@ -11,7 +11,7 @@
     "duration": 1.0,
     "propagator": {
         "@type": "J2 ANALYTICAL PROPAGATOR",
-        "stepSize": 100
+        "stepSize": 10
     },
     "spacecraft" : [],
     "grid" : {

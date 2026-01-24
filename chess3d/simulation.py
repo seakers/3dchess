@@ -552,10 +552,10 @@ class Simulation:
                             agent_orbitdata : Dict[str, OrbitData], 
                             agent_missions : Dict[str, Mission],
                             observations_performed : pd.DataFrame, 
-                            events : list[GeophysicalEvent], 
-                            events_detected : list[GeophysicalEvent], 
-                            task_reqs : list[TaskRequest], 
-                            known_tasks : list[GenericObservationTask],
+                            events : List[GeophysicalEvent], 
+                            events_detected : List[GeophysicalEvent], 
+                            task_reqs : List[TaskRequest], 
+                            known_tasks : List[GenericObservationTask],
                             n_decimals : int = 5
                         ) -> pd.DataFrame:
         

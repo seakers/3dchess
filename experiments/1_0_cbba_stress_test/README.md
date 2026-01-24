@@ -41,6 +41,11 @@
 | | |
 **Total Cases:** 144
 
+## Running Trials
+
+```
+python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials -o False -l LOWER -u UPPER
+```
 
 <!-- ### Mission Definition
 #### Mission 1 - Reactive Event Scheduling
