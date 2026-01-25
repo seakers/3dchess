@@ -60,11 +60,24 @@ conda activate ./.venv
 python ./experiments/1_0_cbba_stress_test/study.py -n lhs_trials-2_samples-1000_seed -o False -l LOWER -u UPPER
 ```
 
+Propagate only cases
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n lhs_trials-2_samples-1000_seed -o False -p True
+```
+
 In case you want to run the cases from full factorial that are not considered in the LHS cases:
 ```
 cd ~/Documents/GitHub/3dchess
 conda activate ./.venv
 python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_no_lhs -o False -l LOWER -u UPPER
+```
+
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_no_lhs -o False -p True
 ```
 <!-- ### Mission Definition
 #### Mission 1 - Reactive Event Scheduling

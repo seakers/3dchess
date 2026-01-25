@@ -411,7 +411,8 @@ def main(trial_filename : str,
             any([len(os.listdir(os.path.join(results_dir, d))) <= 2 
                     for d in os.listdir(results_dir)
                     if os.path.isdir(os.path.join(results_dir, d))
-                    and 'manager' not in d]) ,
+                    and 'manager' not in d]
+                ),
             
             # overwrite flag was set
             overwrite

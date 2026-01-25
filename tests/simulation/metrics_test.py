@@ -132,7 +132,7 @@ class TestSimulationOutputs(unittest.TestCase):
                                         "heuristic" : "taskPriority",
                                         "replanThreshold": 1,
                                         "optimisticBiddingThreshold": 1,
-                                        "debug": "False"
+                                        "debug": "True"
                                 }
                             },
                             "groundStationNetwork" : self.GS_NETWORK_NAME,

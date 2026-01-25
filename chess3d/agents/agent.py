@@ -291,9 +291,12 @@ class AbstractAgent(Agent):
         return status
     
     @runtime_tracker
-    async def perform_broadcast(self, action : BroadcastMessageAction) -> str:
+    async def perform_broadcast(self, action : BroadcastMessageAction) -> str:        
         # extract message from action
         msg_out : SimulationMessage = message_from_dict(**action.msg)
+
+        if isinstance(msg_out, BusMessage) and len(msg_out.msgs) == 0:
+            raise ValueError('cannot perform broadcast of empty `BusMessage`.')
 
         # update state
         self.state.update_state(self.get_current_time(), status=SimulationAgentState.MESSAGING)
@@ -1107,7 +1110,8 @@ class SimulatedAgent(AbstractAgent):
     def get_next_actions(self, state : SimulationAgentState, earliest : bool = True) -> List[AgentAction]:
         try:
             # get list of next actions from plan
-            plan_out : List[AgentAction] = self.plan.get_next_actions(state.t, earliest)
+            # plan_out : List[AgentAction] = self.plan.get_next_actions(state.t, earliest)
+            plan_out : List[AgentAction] = self.plan.get_next_actions(state.t, False)
 
             # check for future broadcast message actions in plan
             future_broadcasts = [action for action in plan_out
@@ -1116,7 +1120,7 @@ class SimulatedAgent(AbstractAgent):
             # no future broadcasts; return plan as is
             if not future_broadcasts: return plan_out
 
-            # compile broadcast messages
+            # if there are future broadcast; compile broadcast information
             msgs : list[SimulationMessage] = []
             for future_broadcast in future_broadcasts:
                 
@@ -1153,45 +1157,65 @@ class SimulatedAgent(AbstractAgent):
                     msgs.extend([MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
                             for req in self.known_reqs
                             if req.task.is_available(state.t)       # only active or future events
-                            and req.requester == state.agent_name   # only requests created by myself
+                            and (not future_broadcast.only_own_info
+                                 and req.task in future_broadcast.desc)  # include requests from all agents if `only_own_info` is not set
+                            or (future_broadcast.only_own_info and 
+                                req.requester == state.agent_name)  # only requests created by myself if `only_own_info` is set
                             ])
 
                 else: # unsupported broadcast type
                     raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
-
-            # create bus message if there are messages to broadcast
-            msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
-
-            # create state broadcast message action
-            broadcast = BroadcastMessageAction(msg.to_dict(), future_broadcast.t_start)
-
+            
             # remove future message action from current plan
             for future_broadcast in future_broadcasts: 
                 self.plan.remove(future_broadcast, state.t)
 
-            # get indices of future broadcast message actions in output plan
-            future_broadcast_indices = [i for i, action in enumerate(plan_out) if action in future_broadcasts]
+            # check if requested information from future messages was found
+            if not msgs: 
 
-            # remove future message actions from output plan
-            for i in sorted(future_broadcast_indices, reverse=True): plan_out.pop(i)
+                # remove future broadcast actions from plan if they exist
+                plan_out = [action for action in plan_out 
+                            if not isinstance(action, FutureBroadcastMessageAction)]
+
+                # return next actions
+                return plan_out
             
-            if msgs:
-                # add broadcast message action from current plan
-                self.plan.add(broadcast, state.t)
+            else:
+                # create bus message if there are messages to broadcast
+                msg = BusMessage(state.agent_name, state.agent_name, [msg.to_dict() for msg in msgs])
+
+                # create state broadcast message action
+                broadcast = BroadcastMessageAction(msg.to_dict(), future_broadcasts[0].t_start)
+
+                # get indices of future broadcast message actions in output plan
+                future_broadcast_indices = [i for i, action in enumerate(plan_out) if action in future_broadcasts]
+
+                # remove future message actions from output plan
+                for i in sorted(future_broadcast_indices, reverse=True): plan_out.pop(i)
                 
-                # replace future message action with broadcast action in out plan
-                plan_out.insert(min(future_broadcast_indices), broadcast)    
+                if msgs:
+                    # add broadcast message action from current plan
+                    self.plan.add(broadcast, state.t)
+                    
+                    # replace future message action with broadcast action in out plan
+                    plan_out.insert(min(future_broadcast_indices), broadcast)    
 
-            # --- FOR DEBUGGING PURPOSES ONLY: ---
-            # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
-            x = 1 # breakpoint
-            # -------------------------------------
+                # --- FOR DEBUGGING PURPOSES ONLY: ---
+                # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
+                x = 1 # breakpoint
+                # -------------------------------------
 
-            return plan_out
+                return plan_out
         
         finally:
+            assert plan_out, \
+                "No actions were returned from `get_next_actions()`."
             assert all([action.t_start <= state.t + 1e-3 for action in plan_out]), \
                 "All returned actions must start at or before the current time."
+             # ensure no future broadcast message actions in output plan
+            assert all([not isinstance(action, FutureBroadcastMessageAction) for action in plan_out]), \
+                "No future broadcast message actions should be present in the output plan."
+
     
     def get_latest_observations(self, 
                                 state : SimulationAgentState,

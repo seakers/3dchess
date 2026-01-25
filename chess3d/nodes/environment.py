@@ -596,8 +596,10 @@ class SimulationEnvironment(EnvironmentNode):
     
     def print_results(self) -> None:
         try:
+            # set final simulation time
             self.t_f = time.perf_counter()
 
+            # log results compilation start
             self.log('Compiling results...',level=logging.WARNING)
 
             # compile observations performed
@@ -797,6 +799,7 @@ class SimulationEnvironment(EnvironmentNode):
         columns = ['t_msg', 'sender', 'message type', 
                 #    'Message'
                    ]
+
         data = [[msg['t_msg'], 
                  msg['src'], 
                  msg['msg_type'],

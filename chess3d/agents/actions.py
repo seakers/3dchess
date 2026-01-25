@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Union
+from typing import Any, Union
 
 import numpy as np
 from execsatm.observations import ObservationOpportunity
@@ -194,6 +194,10 @@ class BroadcastMessageAction(AgentAction):
             - id (`str`) : identifying number for this task in uuid format
         """
         super().__init__(ActionTypes.BROADCAST.value, t_start, t_start, status=status, id=id)
+        
+        assert isinstance(msg, dict), f'`msg` must be of type `dict`. Is of type `{type(msg)}`.'
+        assert len(msg) > 0, '`msg` cannot be an empty dictionary.'
+
         self.msg = msg
 
 class FutureBroadcastMessageAction(BroadcastMessageAction):
@@ -220,6 +224,8 @@ class FutureBroadcastMessageAction(BroadcastMessageAction):
     def __init__(self, 
                 broadcast_type : str,
                 t_start : Union[float, int],
+                only_own_info : bool = True,
+                desc : Any = None,
                 status : str = 'PENDING',
                 id: str = None, 
                 **_
@@ -230,17 +236,23 @@ class FutureBroadcastMessageAction(BroadcastMessageAction):
         ### Arguments
             - broadcast_type (`dict`): type of broadcast to be performed
             - t_start (`float`): start time of this action in [s] from the beginning of the simulation
+            - own_info (`bool`): whether to only include own agent's information in the broadcast
             - status (`str`): completion status of the task
             - id (`str`) : identifying number for this task in uuid format
         """
         # initialize parent class
-        super().__init__(dict(), t_start, status, id)
+        try:
+            super().__init__(dict(), t_start, status, id)
+        except AssertionError:
+            pass  # bypass parent class msg check since msg is not yet known:
 
         # validate inputs
         assert broadcast_type in self.FUTURE_BROADCAST_TYPES, f'`broadcast_type` must be one of {self.FUTURE_BROADCAST_TYPES}. Is `{broadcast_type}`.'
     
         # set parameters
         self.broadcast_type = broadcast_type
+        self.only_own_info = only_own_info
+        self.desc = desc
 
 class ObservationAction(AgentAction):
     """
