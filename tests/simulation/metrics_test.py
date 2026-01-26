@@ -74,7 +74,7 @@ class TestSimulationOutputs(unittest.TestCase):
                                 "components": {
                                     "adcs" : {
                                         "maxTorque" : 1000,
-                                        "maxRate" : 1
+                                        "maxRate" : 15
                                     }
                                 }
                             },
@@ -132,7 +132,7 @@ class TestSimulationOutputs(unittest.TestCase):
                                         "heuristic" : "taskPriority",
                                         "replanThreshold": 1,
                                         "optimisticBiddingThreshold": 1,
-                                        "debug": "True"
+                                        "debug": "False"
                                 }
                             },
                             "groundStationNetwork" : self.GS_NETWORK_NAME,
@@ -233,9 +233,16 @@ class TestSimulationOutputs(unittest.TestCase):
         # execute mission
         self.simulation.execute()
 
-        # print results
-        self.simulation.print_results()
+        # process results
+        results_summary = self.simulation.process_results(reevaluate=True, print_to_csv=True)
 
+        # ensure results summary is a dataframe
+        self.assertIsInstance(results_summary, pd.DataFrame)
+
+        # ensure summary file was created
+        summary_path =os.path.join(f"{self.simulation.results_path}","summary.csv")
+        self.assertTrue(os.path.isfile(summary_path))
+        
         # TODO : add assertions to validate outputs
 
         print(f"DONE")

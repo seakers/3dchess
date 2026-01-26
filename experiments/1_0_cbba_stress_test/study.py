@@ -428,7 +428,7 @@ def main(trial_filename : str,
         # print results if it hasn't been performed yet or if results need to be reevaluated
         if not os.path.isfile(results_summary_path) or reevaluate: 
             print(' - Printing simulation results...')
-            mission.print_results()
+            mission.process_results()
 
         # ensure if summary file was properly generated at the end of the simulation
         assert os.path.isfile(results_summary_path), \

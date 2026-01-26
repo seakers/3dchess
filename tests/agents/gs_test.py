@@ -117,7 +117,7 @@ class TestGroundStationAgents(AgentTester, unittest.TestCase):
         self.simulation.execute()
 
         # print results
-        self.simulation.print_results()
+        self.simulation.process_results()
 
 if __name__ == '__main__':
     # run tests

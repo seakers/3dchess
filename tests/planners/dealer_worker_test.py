@@ -115,7 +115,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         self.simulation.execute()
 
         # print results
-        self.simulation.print_results()
+        self.simulation.process_results()
 
     def test_multiple_sats_lakes(self):
         # setup scenario parameters
@@ -176,7 +176,7 @@ class TestDealerWorker(PlannerTester, unittest.TestCase):
         self.simulation.execute()
 
         # print results
-        self.simulation.print_results()
+        self.simulation.process_results()
 
 
 if __name__ == '__main__':

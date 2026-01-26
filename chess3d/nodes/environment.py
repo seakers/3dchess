@@ -185,18 +185,15 @@ class SimulationEnvironment(EnvironmentNode):
                 
                 # check if end of simulation message was received
                 if not req_status: 
-                    # print final results
-                    self.print_results()
-                    
-                    # exit live loop
-                    return                    
+                    # print final results and exit live loop
+                    return self.print_results()                   
 
         except asyncio.CancelledError:
             self.log(f'`live()` interrupted. {e}', level=logging.DEBUG)
             return
 
         except Exception as e:
-            self.log(f'`live()` failed. {e}', level=logging.ERROR)
+            self.log(f'`live()` failed. {e.with_traceback()}', level=logging.ERROR)
             raise e
     
     @runtime_tracker

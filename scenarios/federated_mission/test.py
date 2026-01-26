@@ -251,7 +251,7 @@ class TestFederatedMission(unittest.TestCase):
         self.simulation.execute()
 
         # print results
-        self.simulation.print_results()
+        self.simulation.process_results()
 
         print('DONE')
 
@@ -415,7 +415,7 @@ class TestFederatedMission(unittest.TestCase):
         self.simulation.execute()
 
         # print results
-        self.simulation.print_results()
+        self.simulation.process_results()
 
         print('DONE')
 

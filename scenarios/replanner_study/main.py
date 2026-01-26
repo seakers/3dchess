@@ -221,7 +221,7 @@ def main(
             print('Simulation data found!')
 
         # print results if it hasn't been performed yet or if results need to be reevaluated
-        if not os.path.isfile(results_summary_path) or reeval: mission.print_results()
+        if not os.path.isfile(results_summary_path) or reeval: mission.process_results()
 
         # check if summary file was properly generated at the end of the simulation
         if not os.path.isfile(results_summary_path): raise Exception(f'`{row["Name"]}` not executed properly.')
