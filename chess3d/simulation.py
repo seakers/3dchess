@@ -320,7 +320,7 @@ class Simulation:
         self.__validate_execution()
         
         # print divider
-        print(f"\n\n{'='*22} SIMULATION RESULTS {'='*23}\n")
+        print(f"\n\n{'='*30} SIMULATION RESULTS {'='*30}\n")
 
         # define results summary filename
         summary_path = os.path.join(f"{self.results_path}","summary.csv")
@@ -344,8 +344,10 @@ class Simulation:
                                           events, events_detected, task_reqs, tasks_known, agent_broadcasts_df, precision)
 
         # log results summary
-        print(f"\n\n{'='*20}{'='*20}\n")
-        print(f"\nSIMULATION RESULTS SUMMARY:\n{str(results_summary)}\n\n")
+        print(f"\n\n{'-'*80}\n")
+        print(f"\nSIMULATION RESULTS SUMMARY:\n")
+        print(results_summary.to_string(index=False))
+        print(f"\n{'='*80}\n")
 
         # save summary to csv if needed
         if print_to_csv: results_summary.to_csv(summary_path, index=False)
@@ -669,7 +671,7 @@ class Simulation:
         t_event_reobservation = self._calc_event_coverage_metrics(events_observed)
 
         # Generate summary
-        summary_headers = ['stat_name', 'val']
+        summary_headers = ['Metric ', 'Value']
         summary_data = [
                     # Dates
                     # ['Simulation Start Date', self.environment._clock_config.start_date], 
@@ -726,6 +728,7 @@ class Simulation:
                     ['P(Event at a GP)', np.round(p_event_at_gp,n_decimals)],
 
                     # Event Observation Probabilities
+                    # TODO add co-observation probabilities
                     ['P(Event Observable)', np.round(p_event_observable,n_decimals)],
                     ['P(Event Re-observable)', np.round(p_event_re_observable,n_decimals)],
                     ['P(Event Co-observable)', np.round(p_event_co_observable,n_decimals)],
@@ -741,29 +744,30 @@ class Simulation:
 
                     ['P(Event Observation | Observation)', np.round(p_event_obs_if_obs,n_decimals)],
                     ['P(Event Re-observation | Observation)', np.round(p_event_re_obs_if_obs,n_decimals)],
-                    ['P(Event Co-observation | Observation)', np.round(p_event_co_obs_if_obs,n_decimals)],
-                    ['P(Event Full Co-observation | Observation)', np.round(p_event_co_obs_partially_if_obs,n_decimals)],
-                    ['P(Event Partial Co-observation | Observation)', np.round(p_event_co_obs_fully_if_obs,n_decimals)],
+                    # ['P(Event Co-observation | Observation)', np.round(p_event_co_obs_if_obs,n_decimals)],
+                    # ['P(Event Full Co-observation | Observation)', np.round(p_event_co_obs_partially_if_obs,n_decimals)],
+                    # ['P(Event Partial Co-observation | Observation)', np.round(p_event_co_obs_fully_if_obs,n_decimals)],
 
                     ['P(Event Observed | Observable)', np.round(p_event_observed_if_observable,n_decimals)],
                     ['P(Event Re-observed | Re-observable)', np.round(p_event_re_obs_if_re_observable,n_decimals)],
-                    ['P(Event Co-observed | Co-observable)', np.round(p_event_co_obs_if_co_observable,n_decimals)],
-                    ['P(Event Fully Co-observed | Fully Co-observable)', np.round(p_event_co_obs_fully_if_co_observable_fully,n_decimals)],
-                    ['P(Event Partially Co-observed | Partially Co-observable)', np.round(p_event_co_obs_partial_if_co_observable_partially,n_decimals)],
+                    # ['P(Event Co-observed | Co-observable)', np.round(p_event_co_obs_if_co_observable,n_decimals)],
+                    # ['P(Event Fully Co-observed | Fully Co-observable)', np.round(p_event_co_obs_fully_if_co_observable_fully,n_decimals)],
+                    # ['P(Event Partially Co-observed | Partially Co-observable)', np.round(p_event_co_obs_partial_if_co_observable_partially,n_decimals)],
                     
                     ['P(Event Observed | Event Detected)', np.round(p_event_observed_if_detected,n_decimals)],
                     ['P(Event Re-observed | Event Detected)', np.round(p_event_re_obs_if_detected,n_decimals)],
-                    ['P(Event Co-observed | Event Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
-                    ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
-                    ['P(Event Co-observed Partially | Event Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
+                    # ['P(Event Co-observed | Event Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
+                    # ['P(Event Co-observed Fully | Event Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
+                    # ['P(Event Co-observed Partially | Event Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
 
                     ['P(Event Observed | Event Observable and Detected)', np.round(p_event_observed_if_detected,n_decimals)],
                     ['P(Event Re-observed | Event Re-observable and Detected)', np.round(p_event_re_obs_if_detected,n_decimals)],
-                    ['P(Event Co-observed | Event Co-observable and Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
-                    ['P(Event Co-observed Fully | Event Fully Co-observable and Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
-                    ['P(Event Co-observed Partially | Event Partially Co-observable and Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
+                    # ['P(Event Co-observed | Event Co-observable and Detected)', np.round(p_event_co_obs_if_detected,n_decimals)],
+                    # ['P(Event Co-observed Fully | Event Fully Co-observable and Detected)', np.round(p_event_co_obs_fully_if_detected,n_decimals)],
+                    # ['P(Event Co-observed Partially | Event Partially Co-observable and Detected)', np.round(p_event_co_obs_partial_if_detected,n_decimals)],
 
                     # Task Observation Probabilities
+                    # TODO add co-observation probabilities
                     ['P(Task Observable)', np.round(p_task_observable,n_decimals)],
                     ['P(Task Observed)', np.round(p_task_observed,n_decimals)],
                     ['P(Task Observed | Task Observable)', np.round(p_task_observed_if_observable,n_decimals)],
@@ -1080,7 +1084,7 @@ class Simulation:
                                     and gp_idx_img == task_gp_idx
                                     and abs(img_lat - task_lat) <= 1e-3 
                                     and abs(img_lon - task_lon) <= 1e-3
-                                ]
+                                ] if (task_lat, task_lon) in observations_per_gp else []
                 
                 # append to task lists
                 task_access_windows.extend(access_intervals)
@@ -1204,7 +1208,7 @@ class Simulation:
                                     and gp_idx_img == event_gp_idx
                                     and abs(img_lat - event_lat) <= 1e-3 
                                     and abs(img_lon - event_lon) <= 1e-3
-                                ]
+                                ] if (event_lat, event_lon) in observations_per_gp else []
         matching_observations.sort(key= lambda a : a[1])  # sort by observation start time
 
         # return classified data

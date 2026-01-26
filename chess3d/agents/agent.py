@@ -441,6 +441,7 @@ class AbstractAgent(Agent):
                 isinstance(self._clock_config, FixedTimesStepClockConfig) 
                 or isinstance(self._clock_config, EventDrivenClockConfig)
                 ):
+
                 # desired time not yet reached
                 t0 = self.get_current_time()
                 tf = t0 + delay
@@ -449,7 +450,7 @@ class AbstractAgent(Agent):
                 self.state : SimulationAgentState
                 
                 # wait for time update        
-                ignored = []   
+                ignored_manager_msgs = []   
 
                 while self.get_current_time() <= t0:
                     # initiate tic request
@@ -483,7 +484,7 @@ class AbstractAgent(Agent):
                         else:
                             # unrelated manager message received; store message for later
                             self.log(f'some other manager message was received. ignoring...')
-                            ignored.append((dst, src, content))
+                            ignored_manager_msgs.append((dst, src, content))
                     
                     # cancel wait for response if timed out
                     for task in pending:
@@ -491,9 +492,11 @@ class AbstractAgent(Agent):
                         await task
 
             elif isinstance(self._clock_config, AcceleratedRealTimeClockConfig):
+                # real-time clock; perform asyncio sleep
                 await asyncio.sleep(delay / self._clock_config.sim_clock_freq)
 
             else:
+                # fallback for unsupported clock type
                 raise NotImplementedError(f'`sim_wait()` for clock of type {type(self._clock_config)} not yet supported.')
         
         except asyncio.CancelledError as e:
@@ -504,24 +507,22 @@ class AbstractAgent(Agent):
 
             # wait for pending tasks to be aborted
             if wait_for_response is not None and not wait_for_response.done():
-                wait_for_response.cancel()
-                await wait_for_response
+                wait_for_response.cancel(); await wait_for_response
+
             if pending is not None:
                 for task in pending:
-                        task.cancel()
-                        await task
+                    task.cancel(); await task
 
             # re-raise cancellation error
             raise e
 
         finally:
-            if (
-                isinstance(self._clock_config, FixedTimesStepClockConfig) 
+            if (isinstance(self._clock_config, FixedTimesStepClockConfig) 
                 or isinstance(self._clock_config, EventDrivenClockConfig)
-                ) and ignored is not None:
+                ) and ignored_manager_msgs is not None:
 
-                # forward all ignored messages as manager messages
-                for dst, src, content in ignored:
+                # forward all ignored manager messages as manager messages
+                for dst,src,content in ignored_manager_msgs:
                     await self.manager_inbox.put((dst,src,content))
     
     @runtime_tracker
@@ -1021,7 +1022,8 @@ class SimulatedAgent(AbstractAgent):
                             for req in self.known_reqs
                             if req.task.is_available(state.t)       # only active or future events
                             and (not future_broadcast.only_own_info
-                                 and req.task in future_broadcast.desc)  # include requests from all agents if `only_own_info` is not set
+                                 and (future_broadcast.desc is None 
+                                      or req.task in future_broadcast.desc))  # include requests from all agents if `only_own_info` is not set
                             or (future_broadcast.only_own_info and 
                                 req.requester == state.agent_name)  # only requests created by myself if `only_own_info` is set
                             ])
@@ -1029,13 +1031,15 @@ class SimulatedAgent(AbstractAgent):
                 else: # unsupported broadcast type
                     raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
             
+            if not msgs:
+                x = 1 # breakpoint
+
             # remove future message action from current plan
             for future_broadcast in future_broadcasts: 
                 self.plan.remove(future_broadcast, state.t)
 
             # check if requested information from future messages was found
-            if not msgs: 
-
+            if not msgs:
                 # # remove future broadcast actions from plan if they exist
                 # plan_out = [action for action in plan_out 
                 #             if not isinstance(action, FutureBroadcastMessageAction)]
@@ -1059,12 +1063,11 @@ class SimulatedAgent(AbstractAgent):
                 # remove future message actions from output plan
                 for i in sorted(future_broadcast_indices, reverse=True): plan_out.pop(i)
                 
-                if msgs:
-                    # add broadcast message action from current plan
-                    self.plan.add(broadcast, state.t)
-                    
-                    # replace future message action with broadcast action in out plan
-                    plan_out.insert(min(future_broadcast_indices), broadcast)    
+                # add broadcast message action from current plan
+                self.plan.add(broadcast, state.t)
+                
+                # replace future message action with broadcast action in out plan
+                plan_out.insert(min(future_broadcast_indices), broadcast)    
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_plan(self.plan, "UPDATED-REPLAN", logging.WARNING)
@@ -1073,12 +1076,20 @@ class SimulatedAgent(AbstractAgent):
 
                 return plan_out
         
+        except Exception as e:
+            self.log(f'Error in `get_next_actions()`: {e}', logging.ERROR)
+            raise e
+
         finally:
             assert plan_out, \
                 "No actions were returned from `get_next_actions()`."
             assert all([action.t_start <= state.t + 1e-3 for action in plan_out]), \
                 "All returned actions must start at or before the current time."
              # ensure no future broadcast message actions in output plan
+
+            if any([isinstance(action, FutureBroadcastMessageAction) for action in plan_out]):
+                x=1
+
             assert all([not isinstance(action, FutureBroadcastMessageAction) for action in plan_out]), \
                 "No future broadcast message actions should be present in the output plan."
 

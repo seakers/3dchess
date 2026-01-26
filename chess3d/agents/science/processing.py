@@ -6,6 +6,8 @@ import pandas as pd
 
 from execsatm.events import GeophysicalEvent
 from execsatm.mission import Mission
+from execsatm.objectives import EventDrivenObjective
+from execsatm.tasks import EventObservationTask
 
 from chess3d.messages import *
 from chess3d.agents.science.requests import TaskRequest, TaskRequest

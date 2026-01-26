@@ -41,9 +41,17 @@ class Plan(ABC):
 
     def remove(self, action : AgentAction, t : float) -> None:
         """ removes action from plan """
-        if action in self.actions: 
-            self.actions.remove(action)
-            self.t = t
+        # check if action is in plan
+        if action not in self.actions:  raise ValueError(f"Action {action} not found in plan; cannot be removed.")
+            
+        # remove action from plan
+        self.actions.remove(action)
+
+        # update latest update time
+        self.t = t
+        
+        # check action was removed
+        assert action not in self.actions, f"Action {action} could not be removed from plan."
 
     def update(self, *action_lists, t : float) -> None:
         """ Updates the current plan to a new list of actions """
@@ -296,8 +304,8 @@ class Plan(ABC):
                                         for action in self.actions 
                                         if action.t_start - eps <= t <= action.t_end + eps]
         
-        # sort plan in order of ascending start time 
-        plan_out.sort(key=lambda a: (a.t_start, a.t_end))
+        # sort plan in order of ascending start time, duration, and end time
+        plan_out.sort(key=lambda a: (a.t_start, a.t_end-a.t_start, a.t_end))
 
         # if there are waits in the plan out, remove them and execute them in a future batch
         if not all([isinstance(action, WaitAction) for action in plan_out]):
