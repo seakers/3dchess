@@ -780,7 +780,8 @@ class AbstractPlanner(ABC):
                 obs_perf[TemporalRequirementAttributes.REVISIT_TIME.value] = 0.0
 
             # update instrument-specific observation performance information
-            if 'vnir' in instrument_name.lower() or 'tir' in instrument_name.lower():
+            if (('vnir' in instrument_name.lower() or 'tir' in instrument_name.lower())
+                or ('vnir' in instrument_spec._type.lower() or 'tir' in instrument_spec._type.lower())):
                 if isinstance(instrument_spec.spectral_resolution, str):
                     obs_perf.update({
                         ObservationRequirementAttributes.SPECTRAL_RESOLUTION.value : instrument_spec.spectral_resolution.lower()
@@ -792,7 +793,8 @@ class AbstractPlanner(ABC):
                 else:
                     raise ValueError('Unsupported type for spectral resolution in instrument specification.')
                 
-            elif 'altimeter' in instrument_name.lower():
+            elif ('altimeter' in instrument_name.lower()
+                  or 'altimeter' in instrument_spec._type.lower()):
                 obs_perf.update({
                     ObservationRequirementAttributes.ACCURACY.value : observation_performance_metrics[loc][ObservationRequirementAttributes.ACCURACY.value],
                 })

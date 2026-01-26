@@ -45,6 +45,7 @@
 
 ### Full Factorial Trials
 Full list of combinations from test matrix
+
 ```
 cd ~/Documents/GitHub/3dchess
 conda activate ./.venv

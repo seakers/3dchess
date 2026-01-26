@@ -339,44 +339,6 @@ def main(trial_filename : str,
             ground_operator_specs_template
         )
 
-        # # create mission specifications from template
-        # mission_specs = copy.deepcopy(mission_specs_template)
-        
-        # # set simulation duration and propagator step size
-        # mission_specs['duration'] = duration
-        # mission_specs['propagator']['stepSize'] = step_size
-
-        # # set scenario specifications
-        # mission_specs['scenario'] = create_scenario_specifications(base_path, trial_filename, scenario_id)
-
-        # # set target distribution type
-        # mission_specs['grid'] = create_grid_specifications(base_path, target_distribution)
-
-        # # set propagator settings
-        # mission_specs['settings'] \
-        #     = create_propagator_settings_specifications(base_path, scenario_id, num_sats, gnd_segment, target_distribution)
-        
-        # # create satellite specifications
-        # mission_specs['spacecraft'] \
-        #     = create_spacecraft_specifications(num_sats, spacecraft_specs_template, instrument_specs, 
-        #                                       base_path, scenario_id, gnd_segment)
-        
-        # # set ground operator specifications if specified
-        # if gnd_segment.lower() != "none":
-        #     # get network name from ground segment type
-        #     network_name = "gs_nen_1.csv" if "single" in gnd_segment.lower() else "gs_nen_full.csv"
-            
-        #     # set up ground stations for coverage calculations
-        #     mission_specs['groundStation'] \
-        #         = load_ground_stations(base_path, network_name)
-
-        #     # assign ground operator to mission specs
-        #     mission_specs['groundOperator'] \
-        #         = create_ground_operator_specifications(base_path, scenario_id, ground_operator_specs_template)
-            
-        # run experiment
-        print_banner(f"Scenario ID: {scenario_id}")
-
         ## define results output file name
         results_dir = os.path.join(base_path, 'results', f"{trial_filename}_scenario_{scenario_id}")
         results_summary_path = os.path.join(results_dir, 'summary.csv')
@@ -392,7 +354,7 @@ def main(trial_filename : str,
             continue 
 
         # initialize simulation mission
-        print(" - Running full simulation...")
+        print(" - Running full simulation...\n")
         
         # check if results do not exist or overwrite/reevaluate is set
         if not os.path.isfile(results_summary_path) or overwrite or reevaluate:
@@ -425,14 +387,14 @@ def main(trial_filename : str,
         else:
             print(' - Simulation data found! Skipping execution...')
 
-        # print results if it hasn't been performed yet or if results need to be reevaluated
-        if not os.path.isfile(results_summary_path) or reevaluate: 
-            print(' - Printing simulation results...')
-            mission.process_results()
+        # # print results if it hasn't been performed yet or if results need to be reevaluated
+        # if not os.path.isfile(results_summary_path) or reevaluate: 
+        #     print(' - Printing simulation results...')
+        #     mission.process_results()
 
-        # ensure if summary file was properly generated at the end of the simulation
-        assert os.path.isfile(results_summary_path), \
-            f"Results summary file not found at: {results_summary_path}"
+        # # ensure if summary file was properly generated at the end of the simulation
+        # assert os.path.isfile(results_summary_path), \
+        #     f"Results summary file not found at: {results_summary_path}"
 
     # study done
     return

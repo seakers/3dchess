@@ -1173,9 +1173,12 @@ class SimulatedAgent(AbstractAgent):
             # check if requested information from future messages was found
             if not msgs: 
 
-                # remove future broadcast actions from plan if they exist
-                plan_out = [action for action in plan_out 
-                            if not isinstance(action, FutureBroadcastMessageAction)]
+                # # remove future broadcast actions from plan if they exist
+                # plan_out = [action for action in plan_out 
+                #             if not isinstance(action, FutureBroadcastMessageAction)]
+
+                # get next actions from updated plan
+                plan_out : List[AgentAction] = self.plan.get_next_actions(state.t, False)
 
                 # return next actions
                 return plan_out

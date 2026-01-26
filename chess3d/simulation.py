@@ -347,11 +347,14 @@ class Simulation:
         print(f"\n\n{'='*20}{'='*20}\n")
         print(f"\nSIMULATION RESULTS SUMMARY:\n{str(results_summary)}\n\n")
 
-        # save to csv if needed
+        # save summary to csv if needed
         if print_to_csv: results_summary.to_csv(summary_path, index=False)
 
         # return results summary
         return results_summary
+    
+    # def foo(self) -> None:
+    #     # TODO: print time-series or reobservations/coobservationspass
     
     def __validate_execution(self) -> None:
         """ Validates that the simulation has been executed successfully before printing results. """
@@ -783,11 +786,11 @@ class Simulation:
                     ['P(Message Broadcasted | Bid Message )', len(agent_broadcasts_df[agent_broadcasts_df['message type']=='BUS']) / len(agent_broadcasts_df) if len(agent_broadcasts_df) > 0 else 0.0],
                     ['P(Message Broadcasted | Measurement Request Message )', len(agent_broadcasts_df[agent_broadcasts_df['message type']=='MEASUREMENT_REQ']) / len(agent_broadcasts_df) if len(agent_broadcasts_df) > 0 else 0.0],
 
+                    # TODO Utility Statistics 
+
                     # Simulation Runtime
                     # ['Total Runtime [s]', round(self.environment.t_f - self.environment.t_0, n_decimals)]
                 ]
-
-        # TODO: print time-series or reobservations/coobservations
 
         return pd.DataFrame(summary_data, columns=summary_headers)
                        
