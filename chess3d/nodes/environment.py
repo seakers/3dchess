@@ -93,7 +93,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         # load events
         self.events_path : str = events_path
-        self.events : pd.DataFrame = self.load_events(events_path)
+        self.events : List[GeophysicalEvent] = self.load_events(events_path)
 
         # initialize parameters
         self.connectivity = connectivity
@@ -116,7 +116,7 @@ class SimulationEnvironment(EnvironmentNode):
 
         self.broadcasts_history = []
         
-    def load_events(self, events_path : str) -> pd.DataFrame:
+    def load_events(self, events_path : str) -> List[GeophysicalEvent]:
         """ Loads events present in the simulation """
         # checks if event path exists
         if events_path is None: return None
@@ -177,15 +177,18 @@ class SimulationEnvironment(EnvironmentNode):
 
             # track agent and simulation states
             while True:
-                # get list of sockets with incoming messages or requests
-                socks = dict(await poller.poll())
+                # # get list of sockets with incoming messages or requests
+                # socks = dict(await poller.poll())
 
-                # handle incoming messages or requests
-                req_status : bool = await self.handle_request(socks, agent_socket, agent_broadcasts, manager_socket)
+                # # handle incoming messages or requests
+                # req_status : bool = await self.handle_request(socks, agent_socket, agent_broadcasts, manager_socket)
+                
+                # listen for requests
+                req_status : bool = await self.listen_for_requests(poller, agent_socket, agent_broadcasts, manager_socket)
                 
                 # check if end of simulation message was received
                 if not req_status: 
-                    # print final results and exit live loop
+                    # if so, print final results and exit live loop
                     return self.print_results()                   
 
         except asyncio.CancelledError:
@@ -195,7 +198,15 @@ class SimulationEnvironment(EnvironmentNode):
         except Exception as e:
             self.log(f'`live()` failed. {e.with_traceback()}', level=logging.ERROR)
             raise e
-    
+        
+    @runtime_tracker
+    async def listen_for_requests(self, poller : azmq.Poller, agent_socket : zmq.Socket, agent_broadcasts : zmq.Socket, manager_socket : zmq.Socket) -> bool:
+        # get list of sockets with incoming messages or requests
+        socks = dict(await poller.poll())
+
+        # handle incoming messages or requests
+        return await self.handle_request(socks, agent_socket, agent_broadcasts, manager_socket)
+            
     @runtime_tracker
     async def handle_request(self, 
                              socks : dict, 
@@ -287,10 +298,9 @@ class SimulationEnvironment(EnvironmentNode):
             # unpack message
             t = content['t']
             
-            # update internal databases
-            time_step = self.get_orbitdata_time_step()
-            if self.t_update is None or abs(self.t_update - t) / time_step > 10:
-            # if self.get_current_time() < msg.t:
+            # update internal databases if needed
+            # if self.t_update is None or abs(self.t_update - t) // self.get_orbitdata_time_step() > 100: # update every 100 time steps
+            if self.t_update is None or abs(self.t_update - t) / 3600 > 1: # update every hour
                 self.update_databases(t)
 
             # update internal clock
@@ -306,21 +316,23 @@ class SimulationEnvironment(EnvironmentNode):
 
         return True
     
+    def get_simulation_duration(self) -> float:
+        return min(agent_orbitdata.duration * 24 * 3600 
+                    for agent_orbitdata in self.orbitdata.values())
+    
     def get_orbitdata_time_step(self) -> float:
-        for _,agent_orbitdata in self.orbitdata.items():
-            agent_orbitdata : OrbitData
+        for agent_orbitdata in self.orbitdata.values():
             return agent_orbitdata.time_step
 
     @runtime_tracker
     def update_databases(self, t : float) -> None:
-        # TODO fix update orbitdata to consider two time steps ago
-        for _,agent_orbitdata in self.orbitdata.items(): 
-            agent_orbitdata : OrbitData
-            t_update = self.t_update if self.t_update is not None else 0.0
-            agent_orbitdata.update_databases(t_update)
+        # update orbit databases
+        for agent_orbitdata in self.orbitdata.values(): 
+            agent_orbitdata.update_databases(t)
 
-        # update events
-        self.events = [event for event in self.events if event.is_active(t) or event.is_future(t)]
+        # update events; only keep active and future events
+        self.events = [event for event in self.events 
+                       if event.is_active(t) or event.is_future(t)]
         
         # update time tracker
         self.t_update = t
@@ -580,16 +592,16 @@ class SimulationEnvironment(EnvironmentNode):
         else:
             raise NotImplementedError(f"Measurement results query not yet supported for agents with state of type {type(agent_state)}")
 
-    def query_event_data(self, lat_img, lon_img, t_img, instrument_name) -> list:
-        """ Checks any of the events in its database is being observed and return its severity and required measurements """
+    # def query_event_data(self, lat_img, lon_img, t_img, instrument_name) -> list:
+    #     """ Checks any of the events in its database is being observed and return its severity and required measurements """
 
-        return [{"severity" : severity, "measurements" : measurements }
-                for lat,lon,t_start,duration,severity,measurements in self.events.values
-                if lat==lat_img 
-                and lon==lon_img
-                and t_start<= t_img <=t_start+duration
-                and instrument_name in measurements  #TODO include better reasoning
-                ]
+    #     return [{"severity" : severity, "measurements" : measurements }
+    #             for lat,lon,t_start,duration,severity,measurements in self.events.values
+    #             if lat==lat_img 
+    #             and lon==lon_img
+    #             and t_start<= t_img <=t_start+duration
+    #             and instrument_name in measurements  #TODO include better reasoning
+    #             ]
     
     def print_results(self) -> None:
         try:

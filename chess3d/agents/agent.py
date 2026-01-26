@@ -1031,19 +1031,12 @@ class SimulatedAgent(AbstractAgent):
                 else: # unsupported broadcast type
                     raise NotImplementedError(f'Future broadcast type {future_broadcast.broadcast_type} not yet supported.')
             
-            if not msgs:
-                x = 1 # breakpoint
-
             # remove future message action from current plan
             for future_broadcast in future_broadcasts: 
                 self.plan.remove(future_broadcast, state.t)
 
             # check if requested information from future messages was found
             if not msgs:
-                # # remove future broadcast actions from plan if they exist
-                # plan_out = [action for action in plan_out 
-                #             if not isinstance(action, FutureBroadcastMessageAction)]
-
                 # get next actions from updated plan
                 plan_out : List[AgentAction] = self.plan.get_next_actions(state.t, False)
 

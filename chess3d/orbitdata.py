@@ -165,14 +165,16 @@ class TimeIndexedData(AbstractData):
     def update_expired_values(self, t : float):
         # only keep values that are still active or that haven't expired yet
         unexpired_indeces = [(i,t_i) for i, t_i in enumerate(self.t) 
-                             if t_i >= t or abs(t_i - t) <= 1e-6]
+                            if t_i >= t or abs(t_i - t) <= 1e-6]
+        
+        # to avoid empty data, keep the last value if all values have expired
+        if not unexpired_indeces and self.t.size > 0:
+            unexpired_indeces = [(len(self.t)-1, self.t[-1])]
         
         # update internal data
         self.t = np.array([t_i for _, t_i in unexpired_indeces])
         self.data = {col : np.array([self.data[col][i] for i, _ in unexpired_indeces]) 
-                     for col in self.columns}
-
-        return 
+                    for col in self.columns}
 
 class IntervalData(AbstractData):
     def __init__(self, 
@@ -243,8 +245,13 @@ class IntervalData(AbstractData):
         """ 
         Updates the data by removing all intervals that have ended before time `t`. 
         """
-        self.data = [(t_start,t_end,*row) for t_start,t_end,*row in self.data
-                     if t <= t_end or abs(t - t_end) <= 1e-6]
+        # only keep intervals that are still active or that haven't expired yet
+        data = [(t_start,t_end,*row) for t_start,t_end,*row in self.data
+                    if t <= t_end or abs(t - t_end) <= 1e-6]
+        
+        # update internal data if there are any unexpired intervals;
+        #  to avoid empty data, keep the last value if all values have expired
+        self.data = [self.data[-1]] if not data and self.data else data
         
     def __len__(self):
         return len(self.data)

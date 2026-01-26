@@ -313,6 +313,7 @@ class Simulation:
     
     def process_results(self, 
                         reevaluate : bool = False, 
+                        display_summary : bool = True,
                         print_to_csv : bool = True,
                         precision : int = 5
                         ) -> pd.DataFrame:
@@ -320,7 +321,7 @@ class Simulation:
         self.__validate_execution()
         
         # print divider
-        print(f"\n\n{'='*30} SIMULATION RESULTS {'='*30}\n")
+        if display_summary: print(f"\n\n{'='*30} SIMULATION RESULTS {'='*30}\n")
 
         # define results summary filename
         summary_path = os.path.join(f"{self.results_path}","summary.csv")
@@ -344,10 +345,11 @@ class Simulation:
                                           events, events_detected, task_reqs, tasks_known, agent_broadcasts_df, precision)
 
         # log results summary
-        print(f"\n\n{'-'*80}\n")
-        print(f"\nSIMULATION RESULTS SUMMARY:\n")
-        print(results_summary.to_string(index=False))
-        print(f"\n{'='*80}\n")
+        if display_summary:
+            print(f"\n\n{'-'*80}\n")
+            print(f"\nSIMULATION RESULTS SUMMARY:\n")
+            print(results_summary.to_string(index=False))
+            print(f"\n{'='*80}\n")
 
         # save summary to csv if needed
         if print_to_csv: results_summary.to_csv(summary_path, index=False)

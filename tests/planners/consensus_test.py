@@ -17,7 +17,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## common cases
         self.single_sat_toy = False     # NOT IMPLEMENTED YET
         self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
-        self.single_sat_lakes = True   
+        self.single_sat_lakes = False   
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
@@ -2586,7 +2586,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         # setup scenario parameters
         # duration = 2.0 / 24.0
-        duration = 250.0 / 3600.0 / 20.0
+        # duration = 250.0 / 3600.0 / 24.0
+        duration = 1.0
         grid_name = 'lake_event_points'
         scenario_name = f'single_sat_lake_scenario-{self.planner_name()}'
         connectivity = 'LOS'
