@@ -28,7 +28,7 @@ def action_from_dict(action_type : str, **kwargs) -> AgentAction:
         else:
             return BroadcastMessageAction(**kwargs)
     elif action_type == ActionTypes.WAIT.value:
-        return WaitForMessages(**kwargs)
+        return WaitAction(**kwargs)
     elif action_type == ActionTypes.OBSERVE.value:
         return ObservationAction(**kwargs)
     else:
@@ -306,11 +306,11 @@ class ObservationAction(AgentAction):
         out['obs_opp'] = self.obs_opp.to_dict() if self.obs_opp else 'None'
         return out
 
-class WaitForMessages(AgentAction):
+class WaitAction(AgentAction):
     """
-    ## Wait for Messages Action
+    ## Wait Action
 
-    Instructs an agent to idle until a roadcast from a peer is received or a timer runs out
+    Instructs an agent to idle until a given time.
 
     ### Attributes:
         - action_type (`str`): type of action to be performed

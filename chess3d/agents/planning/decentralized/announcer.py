@@ -14,7 +14,7 @@ from execsatm.mission import Mission
 from execsatm.objectives import EventDrivenObjective
 from execsatm.utils import Interval
 
-from chess3d.agents.actions import BroadcastMessageAction, WaitForMessages
+from chess3d.agents.actions import BroadcastMessageAction, WaitAction
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.plan import PeriodicPlan, Plan
 from chess3d.agents.science.requests import TaskRequest
@@ -192,7 +192,7 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
                     broadcasts.append(broadcast)
 
         # connection waits; allows for messages to be received right after access start times
-        waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
+        waits = [WaitAction(t_access_start, t_access_start) for t_access_start in t_access_starts]
         broadcasts.extend(waits)
 
         return broadcasts

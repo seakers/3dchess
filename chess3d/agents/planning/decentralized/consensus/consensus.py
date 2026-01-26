@@ -15,7 +15,7 @@ from execsatm.observations import ObservationOpportunity
 from execsatm.mission import Mission
 from execsatm.utils import Interval
 
-from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, IdleAction, ObservationAction, WaitForMessages
+from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, IdleAction, ObservationAction, WaitAction
 from chess3d.agents.planning.reactive import AbstractReactivePlanner
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.planning.plan import Plan, PeriodicPlan, ReactivePlan
@@ -1599,12 +1599,12 @@ class ConsensusPlanner(AbstractReactivePlanner):
             broadcasts.extend(preplan_broadcasts)
             
             # connection waits; allows for messages to be received right after access start times
-            waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
+            waits = [WaitAction(t_access_start, t_access_start) for t_access_start in t_access_starts]
             
             # include established zero-length waits from preplan
             preplan_waits = [action for action in self.preplan.actions
                                     # extract only wait-for-message actions
-                                    if isinstance(action, WaitForMessages)
+                                    if isinstance(action, WaitAction)
                                     and action.t_end - action.t_start <= self.EPS]
             waits.extend(preplan_waits)            
             broadcasts.extend(waits)
@@ -1614,7 +1614,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         
         finally:
             assert isinstance(broadcasts, list), "Scheduled broadcasts is not a list."
-            assert all(isinstance(broadcast, (BroadcastMessageAction, WaitForMessages)) for broadcast in broadcasts), \
+            assert all(isinstance(broadcast, (BroadcastMessageAction, WaitAction)) for broadcast in broadcasts), \
                 "Not all scheduled broadcasts are of type `BroadcastMessageAction` or `WaitForMessages`."
 
     """
@@ -1641,7 +1641,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 t_wait_start = state.t
 
         # create wait action
-        return [WaitForMessages(t_wait_start, t_next)] if t_wait_start < t_next else []  
+        return [WaitAction(t_wait_start, t_next)] if t_wait_start < t_next else []  
 
     """
     LOGGING

@@ -18,7 +18,7 @@ from execsatm.objectives import DefaultMissionObjective
 from execsatm.requirements import GridSpatialRequirement, SpatialCoverageRequirement, SinglePointSpatialRequirement, MultiPointSpatialRequirement
 from execsatm.utils import Interval
 
-from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ManeuverAction, ObservationAction, WaitForMessages
+from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ManeuverAction, ObservationAction, WaitAction
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.periodic import AbstractPeriodicPlanner
 from chess3d.agents.planning.tracker import ObservationHistory
@@ -192,7 +192,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
         self.plan : PeriodicPlan = PeriodicPlan(plan_broadcasts, t=state.t, horizon=self.horizon, t_next=state.t+self.period)    
         
         # schedule wait for next planning period to start
-        replan_waits : list[WaitForMessages] = self._schedule_periodic_replan(state, self.plan, state.t+self.period)
+        replan_waits : list[WaitAction] = self._schedule_periodic_replan(state, self.plan, state.t+self.period)
 
         # add waits to plan
         self.plan.add_all(replan_waits, t=state.t)
@@ -603,7 +603,7 @@ class DealerPlanner(AbstractPeriodicPlanner):
                 raise ValueError(f'Unknown sharing mode `{self.sharing}` specified.')          
            
         # connection waits; allows for messages to be received right after access start times
-        waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
+        waits = [WaitAction(t_access_start, t_access_start) for t_access_start in t_access_starts]
         broadcasts.extend(waits)
 
         # TODO test waits functionality

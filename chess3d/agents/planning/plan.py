@@ -300,8 +300,8 @@ class Plan(ABC):
         plan_out.sort(key=lambda a: (a.t_start, a.t_end))
 
         # if there are waits in the plan out, remove them and execute them in a future batch
-        if not all([isinstance(action, WaitForMessages) for action in plan_out]):
-            plan_out = [action for action in plan_out if not isinstance(action, WaitForMessages)]
+        if not all([isinstance(action, WaitAction) for action in plan_out]):
+            plan_out = [action for action in plan_out if not isinstance(action, WaitAction)]
 
         # check if actions are contained in output plan
         if plan_out:
@@ -313,7 +313,7 @@ class Plan(ABC):
             t_idle = self.actions[0].t_start if not self.is_empty() else self.t_next
             assert t_idle >= t, \
                 f'next action time {t_idle} cannot be prior to current time {t}'
-            return [WaitForMessages(t, t_idle)]
+            return [WaitAction(t, t_idle)]
     
     def copy(self) -> object:
         """ Copy contructor. Creates a deep copy of this oject. """
@@ -383,7 +383,7 @@ class Plan(ABC):
             for action in self.actions:
                 if isinstance(action, AgentAction):
 
-                    if isinstance(action, WaitForMessages):
+                    if isinstance(action, WaitAction):
                         if abs(action.t_end - self.t_next) < 1e-3:
                             out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\ttrigger periodic replanning"
                         else:

@@ -12,7 +12,7 @@ from execsatm.mission import Mission
 from execsatm.utils import Interval
 
 from chess3d.agents.planning.decentralized.consensus.consensus import ConsensusPlanner
-from chess3d.agents.actions import ObservationAction, WaitForMessages
+from chess3d.agents.actions import ObservationAction, WaitAction
 from chess3d.agents.planning.tracker import ObservationHistory
 from chess3d.agents.planning.plan import Plan
 from chess3d.agents.planning.decentralized.consensus.bids import Bid

@@ -528,7 +528,8 @@ class Simulation:
                 if not default_tasks_temp.empty else default_tasks_df
 
         # remove duplicates
-        default_tasks_df = default_tasks_df.drop_duplicates().reset_index(drop=True)
+        default_tasks_df = default_tasks_df.drop_duplicates().reset_index(drop=True) \
+            if default_tasks_df is not None else pd.DataFrame([])
         
         # convert to list of tasks
         tasks_known : list[GenericObservationTask] = []
@@ -1106,6 +1107,8 @@ class Simulation:
 
         # unpackage event
         event_lat,event_lon,event_grid_idx,event_gp_idx = event.location
+        event_lat = round(event_lat,6)
+        event_lon = round(event_lon,6)
         event_type = event.event_type.lower()
         event_id = event.id
 

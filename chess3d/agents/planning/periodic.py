@@ -12,7 +12,7 @@ from execsatm.observations import ObservationOpportunity
 from execsatm.mission import Mission
 from execsatm.utils import Interval
 
-from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitForMessages
+from chess3d.agents.actions import BroadcastMessageAction, FutureBroadcastMessageAction, ObservationAction, WaitAction
 from chess3d.agents.planning.plan import Plan, PeriodicPlan
 from chess3d.agents.planning.planner import AbstractPlanner
 from chess3d.agents.planning.tracker import ObservationHistory
@@ -249,7 +249,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
                         broadcasts.extend([state_msg, observations_msg, task_requests_msg])
 
                 # connection waits; allows for messages to be received right after access start times
-                waits = [WaitForMessages(t_access_start, t_access_start) for t_access_start in t_access_starts]
+                waits = [WaitAction(t_access_start, t_access_start) for t_access_start in t_access_starts]
                 broadcasts.extend(waits)
 
             else:
@@ -284,7 +284,7 @@ class AbstractPeriodicPlanner(AbstractPlanner):
                 t_wait_start = state.t
 
         # create wait action
-        return [WaitForMessages(t_wait_start, t_next)] if t_wait_start < t_next else []
+        return [WaitAction(t_wait_start, t_next)] if t_wait_start < t_next else []
     
     @runtime_tracker
     def get_ground_points(self,
