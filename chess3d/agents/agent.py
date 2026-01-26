@@ -435,7 +435,7 @@ class AbstractAgent(Agent):
         manager_message = NodeDeactivatedMessage(self.get_element_name(), SimulationElementRoles.MANAGER.value)
         await self._send_manager_msg(manager_message, zmq.PUB)
 
-    async def sim_wait(self, delay: float, timeout : float=1*60) -> None:
+    async def sim_wait(self, delay: float, timeout : float=np.Inf) -> None:
         try:  
             if (
                 isinstance(self._clock_config, FixedTimesStepClockConfig) 
@@ -742,7 +742,7 @@ class SimulatedAgent(AbstractAgent):
                 self.plan_history.append((state.t, plan_copy))
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 
@@ -797,7 +797,7 @@ class SimulatedAgent(AbstractAgent):
                 pending_actions = []
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 
@@ -805,7 +805,7 @@ class SimulatedAgent(AbstractAgent):
         plan_out = self.get_next_actions(state, True)
         
         # --- FOR DEBUGGING PURPOSES ONLY: ---        
-        self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
+        # self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
         # -------------------------------------        
 
         # return next actions to perform

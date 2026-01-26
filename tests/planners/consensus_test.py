@@ -21,7 +21,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
-        self.toy_1 = False  # single sat    default mission     single target, no events
+        self.toy_1 = True  # single sat    default mission     single target, no events
         self.toy_2 = False  # single sat    no default mission  one event
         self.toy_3 = False  # two sats      no default mission  one event
         self.toy_4 = False  # two sats      no default mission  one event           optimistic bidding
