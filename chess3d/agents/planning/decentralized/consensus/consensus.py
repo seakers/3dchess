@@ -1523,8 +1523,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
             empty_bids = [
                 task
                 for task,bids in self.results.items()
-                if isinstance(task, EventObservationTask)  # only consider bids for event-driven tasks
-                if not bids
+                if isinstance(task, EventObservationTask)   # only consider bids for event-driven tasks
+                if not bids                                 # no bids to share
             ]
 
             # compile results message containing all bid messages
@@ -1576,7 +1576,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                                                      t_broadcast, 
                                                                      only_own_info=False,
                                                                      desc = empty_bids
-                                                                     )
+                                                                    )
                     broadcasts.append(task_requests_msg)
                     
 

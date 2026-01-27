@@ -214,7 +214,7 @@ def setup_announcer_preplanner(base_path : str, scenario_id : int) -> dict:
 
 def load_ground_stations(base_path : str, network_name : str) -> List[dict]:
     # construct ground stations file path
-    ground_stations_path = os.path.join(base_path, 'resources','gstations', network_name)
+    ground_stations_path = os.path.join(base_path, 'resources','gstations', f"{network_name}.csv")
     assert os.path.isfile(ground_stations_path), f"Ground stations file not found: {ground_stations_path}"
     
     # load ground station network from file
@@ -280,7 +280,7 @@ def generate_scenario_mission_specs(mission_specs_template : dict, duration : fl
     # set ground operator specifications if specified
     if gnd_segment.lower() != "none":
         # get network name from ground segment type
-        network_name = "gs_nen_1.csv" if "single" in gnd_segment.lower() else "gs_nen_full.csv"
+        network_name = "gs_nen_1" if "single" in gnd_segment.lower() else "gs_nen_full"
         
         # set up ground stations for coverage calculations
         mission_specs['groundStation'] \

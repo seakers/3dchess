@@ -41,6 +41,7 @@ class SimulationEnvironment(EnvironmentNode):
     def __init__(self, 
                 results_path : str, 
                 orbitdata_dir : str,
+                scenario_duration : float,
                 sat_list : list,
                 uav_list : list,
                 gs_list : list,                
@@ -56,7 +57,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.results_path : str = os.path.join(results_path, self.get_element_name().lower())
 
         # load observation data
-        self.orbitdata : Dict[str,OrbitData] = OrbitData.from_directory(orbitdata_dir) if orbitdata_dir is not None else None
+        self.orbitdata : Dict[str,OrbitData] = OrbitData.from_directory(orbitdata_dir, scenario_duration) if orbitdata_dir is not None else None
 
         # load agent names and classify by type of agent
         self.agents = {}

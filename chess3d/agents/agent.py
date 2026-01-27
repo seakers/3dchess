@@ -1033,12 +1033,12 @@ class SimulatedAgent(AbstractAgent):
                 elif future_broadcast.broadcast_type == FutureBroadcastMessageAction.REQUESTS:
                     msgs.extend([MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
                             for req in self.known_reqs
-                            if req.task.is_available(state.t)       # only active or future events
+                            if req.task.is_available(state.t)                   # only active or future events
                             and (not future_broadcast.only_own_info
                                  and (future_broadcast.desc is None 
-                                      or req.task in future_broadcast.desc))  # include requests from all agents if `only_own_info` is not set
+                                      or req.task in future_broadcast.desc))    # include requests from all agents if `only_own_info` is not set
                             or (future_broadcast.only_own_info and 
-                                req.requester == state.agent_name)  # only requests created by myself if `only_own_info` is set
+                                req.requester == state.agent_name)              # only requests created by myself if `only_own_info` is set
                             ])
 
                 else: # unsupported broadcast type

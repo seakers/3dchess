@@ -83,6 +83,7 @@ class Simulation:
         port = random.randint(5555, 9999)
 
         # unpack agent info
+        scenario_duration : float = mission_specs['duration']  
         spacecraft_dict : dict = mission_specs.get('spacecraft', None)
         uav_dict        : dict = mission_specs.get('uav', None)
         gstation_dict   : dict = mission_specs.get('groundStation', None)
@@ -95,7 +96,6 @@ class Simulation:
 
         # unpack scenario info
         grid_dict : dict = mission_specs.get('grid', None)
-        settings_dict : dict = mission_specs.get('settings', None)
         
         # load agent names
         agent_names = [SimulationElementRoles.ENVIRONMENT.value]
@@ -175,6 +175,7 @@ class Simulation:
                                                     scenario_name, 
                                                     results_path,
                                                     orbitdata_dir,
+                                                    scenario_duration,
                                                     spacecraft,
                                                     spacecraft_dict.index(spacecraft), 
                                                     missions,
@@ -198,6 +199,7 @@ class Simulation:
                                                     scenario_name, 
                                                     results_path,
                                                     orbitdata_dir,
+                                                    scenario_duration,
                                                     ground_operator,
                                                     gops_dict.index(ground_operator), 
                                                     missions,
@@ -250,6 +252,7 @@ class Simulation:
         connectivity = scenario_dict.get('connectivity','full').upper()
         environment = SimulationEnvironment(results_path, 
                                             orbitdata_dir,
+                                            scenario_duration,
                                             spacecraft_dict,
                                             uav_dict,
                                             gops_dict,
@@ -1695,6 +1698,7 @@ class SimulationElementFactory:
     def generate_agent(     scenario_name : str, 
                             results_path : str,
                             orbitdata_dir : Any,
+                            scenario_duration : float,
                             agent_dict : dict, 
                             agent_index : int,
                             missions : Dict[str,Mission],
@@ -1724,13 +1728,13 @@ class SimulationElementFactory:
         # load payload
         if agent_type == SimulationAgentTypes.SATELLITE:
             # load orbitdata
-            agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name) if orbitdata_dir is not None else None
+            agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name, scenario_duration) if orbitdata_dir is not None else None
 
             # load satellite specs
             agent_specs : Spacecraft = Spacecraft.from_dict(agent_dict)
         elif agent_type == SimulationAgentTypes.GROUND_OPERATOR:
             # load orbitdata
-            agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name) if orbitdata_dir is not None else None
+            agent_orbitdata : OrbitData = OrbitData.load(orbitdata_dir, agent_name, scenario_duration) if orbitdata_dir is not None else None
             
             # load payload
             instruments_dict = agent_dict.get('instrument', None)   
