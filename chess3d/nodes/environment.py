@@ -194,7 +194,7 @@ class SimulationEnvironment(EnvironmentNode):
             return
 
         except Exception as e:
-            self.log(f'`live()` failed. {e.with_traceback(None)}', level=logging.ERROR)
+            self.log(f'`live()` failed. {e}', level=logging.ERROR)
             raise e
         
     @runtime_tracker
@@ -398,26 +398,30 @@ class SimulationEnvironment(EnvironmentNode):
     
     @runtime_tracker
     def handle_agent_state(self, content : dict) -> SimulationMessage:
-        # unpack message
-        self.log(f'state message received from {content["src"]}. updating state tracker...')
+        try:
+            # unpack message
+            self.log(f'state message received from {content["src"]}. updating state tracker...')
 
-        # update agent state
-        updated_state = self.update_agent_state(content)
+            # update agent state
+            updated_state = self.update_agent_state(content)
 
-        # create state response message
-        updated_state_msg = content.copy()
-        updated_state_msg['src'] = self.get_element_name()
-        updated_state_msg['dst'] = content["src"]
-        updated_state_msg['state'] = updated_state
+            # create state response message
+            updated_state_msg = content.copy()
+            updated_state_msg['src'] = self.get_element_name()
+            updated_state_msg['dst'] = content["src"]
+            updated_state_msg['state'] = updated_state
 
-        # initiate response message list
-        resp_msgs = [updated_state_msg]
+            # initiate response message list
+            resp_msgs = [updated_state_msg]
 
-        # update agent connectivity 
-        resp_msgs.extend(self.update_agent_connectivity(content))
+            # update agent connectivity 
+            resp_msgs.extend(self.update_agent_connectivity(content))
 
-        # send response
-        return BusMessage(self.get_element_name(), content["src"], resp_msgs)
+            # send response
+            return BusMessage(self.get_element_name(), content["src"], resp_msgs)
+        except Exception as e:
+            self.log(f'Error handling agent state: {e}', level=logging.ERROR)
+            raise e
     
     @runtime_tracker
     def get_current_time(self) -> float:

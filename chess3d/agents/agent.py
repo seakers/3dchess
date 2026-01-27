@@ -421,8 +421,11 @@ class AbstractAgent(Agent):
         # check new current time 
         t_new = self.get_current_time()
 
+        # check if task was completed
+        completed = t_new > action.t_end or abs(t_new - action.t_end) < 1e-6
+
         # return action completion
-        return AgentAction.COMPLETED if t_new >= action.t_end else AgentAction.ABORTED
+        return AgentAction.COMPLETED if completed else AgentAction.ABORTED
 
     """
     --------------------
@@ -756,6 +759,7 @@ class SimulatedAgent(AbstractAgent):
                 self.plan_history.append((state.t, plan_copy))
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
+                if self.preplanner._debug: self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
@@ -811,6 +815,8 @@ class SimulatedAgent(AbstractAgent):
                 pending_actions = []
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
+                if self.replanner._debug and state.t > 16.0: 
+                    self.__log_plan(self.plan, "REPLAN", logging.WARNING)
                 # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
@@ -820,6 +826,8 @@ class SimulatedAgent(AbstractAgent):
         
         # --- FOR DEBUGGING PURPOSES ONLY: ---        
         # self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
+        # if state.t > 16.0:
+        #     self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
         # -------------------------------------        
 
         # return next actions to perform

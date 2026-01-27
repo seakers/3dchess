@@ -15,7 +15,6 @@ from datetime import timedelta
 from orbitpy.mission import Mission
 
 from execsatm.utils import Interval
-from pyparsing import col
 from tqdm import tqdm
 
 class ConnectivityLevels(Enum):
@@ -146,8 +145,13 @@ class TimeIndexedData(AbstractData):
         # get desired columns
         columns = columns if columns is not None else self.columns
 
+        # check if there is any data
+        if not self.grouped_t: 
+            return {col: [] for col in columns + ['time [s]']}
+
         # find the bin to search
-        bin_index = min(int(t // self.bin_size), len(self.grouped_t) - 1) # ensure index is within bounds
+        bin_index = min(int(t // self.bin_size), len(self.grouped_t) - 1) \
+                    if t < np.Inf else len(self.grouped_t) - 1 # ensure index is within bounds
 
         # search for exact time in the appropriate bin
         if bin_index < len(self.grouped_t):            
@@ -182,16 +186,17 @@ class TimeIndexedData(AbstractData):
         assert t_start <= t_end, 'start time must be less than end time'
         assert t_start >= 0.0, 'start time must be greater than 0.0'
 
-        # Cap the end time at the last available time
-        t_end = min(t_end, self.t[-1]) if self.t.size > 0 else t_end
-
         # get desired columns
         columns = columns if columns is not None else self.columns
+
+        # check if there is any data
+        if not self.grouped_t: 
+            return {col: [] for col in columns + ['time [s]']}
 
         # find the bin indices of the start and end times
         bin_index_start = int(t_start // self.bin_size)
         bin_index_end = min(int(t_end // self.bin_size), len(self.grouped_t) - 1) \
-                        if t_end < np.Inf else len(self.grouped_data) - 1 # ensure end index is within bounds
+                        if t_end < np.Inf else len(self.grouped_t) - 1 # ensure end index is within bounds
 
         # search for data in appropriate bins
         if bin_index_start < len(self.grouped_t):      
@@ -221,31 +226,6 @@ class TimeIndexedData(AbstractData):
             
         # return the data between the start and end times
         return out
-        
-        # TEMP Original implementation without binning
-        # # validata imputs
-        # assert t_start <= t_end, 'start time must be less than end time'
-        # assert t_start >= 0.0, 'start time must be greater than 0.0'
-
-        # # Cap the end time at the last available time
-        # t_end = min(t_end, self.t[-1]) if self.t.size > 0 else t_end
-
-        # # find the indices of the start and end times
-        # i_start = np.searchsorted(self.t, t_start, side='left')
-        # i_end = np.searchsorted(self.t, t_end, side='right')
-
-        # # get desired columns
-        # columns = columns if columns is not None else self.columns
-
-        # # get the data between the start and end times
-        # out : dict[np.array] = {col : self.data[col][i_start:i_end]
-        #                     for col in columns}
-        # out['time [s]'] = [t for t in self.t[i_start:i_end]]
-
-        # assert all([len(out[col]) == len(out['time [s]']) for col in columns]), 'number of time steps and data do not match'
-            
-        # # return the data between the start and end times
-        # return out
         
     def __iter__(self):
         """
@@ -327,8 +307,13 @@ class IntervalData(AbstractData):
         """
         Returns interval that contains time `t`. Returns None if no interval contains time `t`
         """
+        # check if there is any data
+        if not self.grouped_data: 
+            return None
+
         # find appropriate bin to search
-        bin_index = int(t // self.bin_size) if t < np.Inf else len(self.grouped_data) - 1
+        bin_index = min(int(t // self.bin_size), len(self.grouped_data) - 1) \
+                    if t < np.Inf else len(self.grouped_data) - 1 # ensure index is within bounds
 
         # search for interval in appropriate bin
         if bin_index < len(self.grouped_data):
@@ -355,9 +340,14 @@ class IntervalData(AbstractData):
         """
         Returns all intervals that overlap with the interval [t_start, t_end]
         """
+        # check if there is any data
+        if not self.grouped_data: 
+            return []
+
         # find appropriate bin to search
-        bin_index_start = int(t_start // self.bin_size)
-        bin_index_end = int(t_end // self.bin_size) if t_end < np.Inf else len(self.grouped_data) - 1
+        bin_index_start = min(int(t_start // self.bin_size), len(self.grouped_data) - 1)
+        bin_index_end = min(int(t_end // self.bin_size), len(self.grouped_data) - 1) \
+                            if t_end < np.Inf else len(self.grouped_data) - 1
 
         # search for intervals in appropriate bins
         if bin_index_start < len(self.grouped_data):
