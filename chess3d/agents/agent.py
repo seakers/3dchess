@@ -435,6 +435,12 @@ class AbstractAgent(Agent):
         manager_message = NodeDeactivatedMessage(self.get_element_name(), SimulationElementRoles.MANAGER.value)
         await self._send_manager_msg(manager_message, zmq.PUB)
 
+    """
+    --------------------
+        UTILITIES       
+    --------------------
+    """
+    @runtime_tracker
     async def sim_wait(self, delay: float, timeout : float=np.Inf) -> None:
         try:  
             if (

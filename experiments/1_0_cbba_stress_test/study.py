@@ -314,9 +314,10 @@ def main(trial_filename : str,
         spacecraft_specs_template, instrument_specs = load_templates(base_path)
     print(f" - Loaded experiment templates from `resources/templates/`")
 
-    # set simulation duration
-    duration = 0.5 / 24.0 if debug else 1.0     # [days]
-    step_size = 100 if debug else 10            # [s]
+    # set simulation duration and step size
+    duration = 1000 / 3600 / 24.0 if debug else 1.0 # [days]
+    duration = min(duration, 1.0)                   # cap at 1 day for sanity
+    step_size = 10                                  # [s]
 
     # iterate through each trial
     for scenario_id,num_sats,gnd_segment,task_arrival_rate,target_distribution in trials.itertuples(index=False):
@@ -327,8 +328,9 @@ def main(trial_filename : str,
         print(f"\n--- Running Trial Scenario ID: {scenario_id} ---")
         print(f" - Num Sats: {num_sats}")
         print(f" - Ground Segment: {gnd_segment}")
-        print(f" - Task Arrival Rate: {task_arrival_rate}")
-        print(f" - Target Distribution: (-{target_distribution}°, +{target_distribution}°)")
+        print(f" - Task Arrival Rate: {task_arrival_rate} [tasks/day]")
+        print(f" - Target Distribution: Lat=(-{target_distribution}°, +{target_distribution}°)")
+        print(f" - Propagation Duration: {round(duration*24*3600,3)} [seconds] ({round(duration, 3)} [days])")
 
         # generate mission specifications for the scenario
         mission_specs : dict = generate_scenario_mission_specs(

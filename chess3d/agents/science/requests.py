@@ -55,6 +55,11 @@ class TaskRequest:
         out['task'] = self.task.to_dict()
         return out
     
+    def __eq__(self, value : 'TaskRequest') -> bool:
+        """ compares two TaskRequest objects for equality """
+        assert isinstance(value, TaskRequest), f'Cannot compare `TaskRequest` object to an object of type {type(value)}.'
+        return self.to_dict() == value.to_dict() 
+    
     @classmethod
     def from_dict(cls, d : dict) -> 'TaskRequest':
         return cls(**d)

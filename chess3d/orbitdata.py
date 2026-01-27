@@ -15,6 +15,7 @@ from datetime import timedelta
 from orbitpy.mission import Mission
 
 from execsatm.utils import Interval
+from pyparsing import col
 from tqdm import tqdm
 
 class ConnectivityLevels(Enum):
@@ -56,14 +57,39 @@ class TimeIndexedData(AbstractData):
                  name : str,
                  columns : list,
                  t : list,
-                 data : Dict[str, np.ndarray]):
+                 data : Dict[str, np.ndarray],
+                 bin_size : float = 3600 # in seconds, default 1 hour
+                 ):
+        
+        # validate inputs
+        assert isinstance(name, str), 'name must be a string'
         assert len(columns) == len(data), 'number of columns and data do not match'
         assert all([len(data[col]) == len(t) for col in columns]), 'number of time steps and data do not match'
+        assert isinstance(t, (list, np.ndarray)) and all([isinstance(val, (int, float)) for val in t]), 't must be a list or numpy array of numbers'
         
-        self.name = name
-        self.columns = columns
-        self.t = t
-        self.data = data
+        self.name : str = name
+        self.columns : List[str] = columns
+        self.t : List[float] = t
+        self.data : Dict[str, np.ndarray] = data
+        self.bin_size : float = bin_size
+                
+        # group data into bins depending on their time for faster lookup
+        n_bins = ceil(max(t, default=0) / bin_size) 
+        grouped_indices : List[List[float]] = [
+            [(t_indx, t_i) for t_indx,t_i in enumerate(t)
+                if (i*self.bin_size) <= t_i < ((i+1)*self.bin_size)]
+            for i in tqdm(range(n_bins), desc=f'Grouping time-indexed {name} time', unit=' time bins', leave=False)
+        ]   
+        self.grouped_t : List[List[float]] = [
+            [t_i for _,t_i in grouped_indices[i]] for i in range(n_bins)
+        ]
+
+        self.grouped_data : Dict[List[List[tuple]]] \
+            = {col : [
+                    [vals[t_indx] for t_indx,_ in grouped_indices[i] ]
+                    for i in tqdm(range(n_bins), desc=f'Grouping `{col}` data', unit=' time bins', leave=False)
+                ] for col,vals in tqdm(data.items(), desc=f'Grouping time-indexed {name} data', unit=' data columns', leave=False)}
+        
 
     def from_dataframe(df : pd.DataFrame, time_step : float, name : str = 'param') -> 'TimeIndexedData':
         # validate inputs
@@ -118,12 +144,34 @@ class TimeIndexedData(AbstractData):
         """
         # get desired columns
         columns = columns if columns is not None else self.columns
+
+        # find the bin to search
+        bin_index = min(int(t // self.bin_size), len(self.grouped_t) - 1) # ensure index is within bounds
+
+        # search for exact time in the appropriate bin
+        if bin_index < len(self.grouped_t):            
+            # if exact time not found, interpolate the data to find the value at time `t` and return the data at the specified columns
+            out = {col : np.interp(t, self.grouped_t[bin_index], self.grouped_data[col][bin_index]) 
+                    for col in columns}
+            out['time [s]'] = t
+            return out
         
-        # interpolate the data to find the value at time `t` and return the data at the specified columns
-        out = {col : np.interp(t, self.t, self.data[col]) 
-                for col in columns}
-        out['time [s]'] = t
-        return out
+        else:
+            # if exact time not found, interpolate the data to find the value at time `t` and return the data at the specified columns
+            out = {col : np.interp(t, self.t, self.data[col]) 
+                    for col in columns}
+            out['time [s]'] = t
+            return out
+
+        # TEMP Original implementation without binning
+        # # get desired columns
+        # columns = columns if columns is not None else self.columns
+        
+        # # interpolate the data to find the value at time `t` and return the data at the specified columns
+        # out = {col : np.interp(t, self.t, self.data[col]) 
+        #         for col in columns}
+        # out['time [s]'] = t
+        # return out
     
     def lookup_interval(self, t_start : float, t_end : float, columns : list = None) -> list:
         """
@@ -136,22 +184,66 @@ class TimeIndexedData(AbstractData):
         # Cap the end time at the last available time
         t_end = min(t_end, self.t[-1]) if self.t.size > 0 else t_end
 
-        # find the indices of the start and end times
-        i_start = np.searchsorted(self.t, t_start, side='left')
-        i_end = np.searchsorted(self.t, t_end, side='right')
-
         # get desired columns
         columns = columns if columns is not None else self.columns
 
-        # get the data between the start and end times
-        out : dict[np.array] = {col : self.data[col][i_start:i_end]
-                            for col in columns}
-        out['time [s]'] = [t for t in self.t[i_start:i_end]]
+        # find the bin indices of the start and end times
+        bin_index_start = int(t_start // self.bin_size)
+        bin_index_end = min(int(t_end // self.bin_size), len(self.grouped_t) - 1) # ensure end index is within bounds
 
+        # search for data in appropriate bins
+        if bin_index_start < len(self.grouped_t):      
+            # search for data in the bins
+            out : dict[np.array] = {col : [val 
+                                            for i in range(bin_index_start, bin_index_end + 1)
+                                            for t_i,val in zip(self.grouped_t[i], self.grouped_data[col][i])
+                                            if t_start-1e-6 <= t_i <= t_end+1e-6]
+                                    for col in columns}
+            
+            out['time [s]'] = [t_i for i in range(bin_index_start, bin_index_end + 1)
+                                for t_i in self.grouped_t[i]
+                                if t_start-1e-6 <= t_i <= t_end+1e-6]
+
+        else:
+            # find the indices of the start and end times
+            i_start = np.searchsorted(self.t, t_start, side='left')
+            i_end = np.searchsorted(self.t, t_end, side='right')
+
+            # get the data between the start and end times
+            out : dict[np.array] = {col : self.data[col][i_start:i_end]
+                                for col in columns}
+            out['time [s]'] = [t for t in self.t[i_start:i_end]]
+
+        # ensure data lengths match
         assert all([len(out[col]) == len(out['time [s]']) for col in columns]), 'number of time steps and data do not match'
             
         # return the data between the start and end times
         return out
+        
+        # TEMP Original implementation without binning
+        # # validata imputs
+        # assert t_start <= t_end, 'start time must be less than end time'
+        # assert t_start >= 0.0, 'start time must be greater than 0.0'
+
+        # # Cap the end time at the last available time
+        # t_end = min(t_end, self.t[-1]) if self.t.size > 0 else t_end
+
+        # # find the indices of the start and end times
+        # i_start = np.searchsorted(self.t, t_start, side='left')
+        # i_end = np.searchsorted(self.t, t_end, side='right')
+
+        # # get desired columns
+        # columns = columns if columns is not None else self.columns
+
+        # # get the data between the start and end times
+        # out : dict[np.array] = {col : self.data[col][i_start:i_end]
+        #                     for col in columns}
+        # out['time [s]'] = [t for t in self.t[i_start:i_end]]
+
+        # assert all([len(out[col]) == len(out['time [s]']) for col in columns]), 'number of time steps and data do not match'
+            
+        # # return the data between the start and end times
+        # return out
         
     def __iter__(self):
         """
@@ -179,11 +271,29 @@ class TimeIndexedData(AbstractData):
 class IntervalData(AbstractData):
     def __init__(self, 
                  name : str,
-                 columns : list,
-                 data : list):
-        self.name = name
-        self.columns = columns
-        self.data = data
+                 columns : List[str],
+                 data : List[tuple],
+                 bin_size : float = 3600 # in seconds, default 1 hour
+                 ):
+        # validate inputs
+        assert isinstance(name, str), 'name must be a string'
+        assert isinstance(columns, list) and all([isinstance(col, str) for col in columns]), 'columns must be a list of strings'
+        assert isinstance(data, list) and all([isinstance(row, tuple) and len(row) >= 2 for row in data]), 'data must be a list of tuples with at least 2 elements (start time, end time)'
+        assert isinstance(bin_size, (int, float)) and bin_size > 0, 'bin_size must be a positive number'
+
+        # set attributes
+        self.name : str = name
+        self.columns : List[str] = columns
+        self.data : List[tuple] = data
+        self.bin_size : float = bin_size
+                
+        # group data into bins depending on their start time for faster lookup
+        n_bins = ceil(max([t_start for t_start,*_ in data], default=0) / bin_size)
+        self.grouped_data : List[List[tuple]] = [
+            [(t_start, t_end, *row) for t_start,t_end,*row in self.data
+             if (i*self.bin_size) <= t_start < ((i+1)*self.bin_size)]
+            for i in tqdm(range(n_bins), desc=f'Grouping interval {name} data', unit=' time bins', leave=False)
+        ]
 
     def from_dataframe(df : pd.DataFrame, time_step : float, name : str = 'param') -> 'IntervalData':
         assert time_step > 0.0, 'time step must be greater than 0.0'
@@ -215,20 +325,56 @@ class IntervalData(AbstractData):
         """
         Returns interval that contains time `t`. Returns None if no interval contains time `t`
         """
-        intervals = [(t_start,t_end,row) 
-                     for t_start,t_end,*row in self.data
-                     if t_start-1e-6 <= t <= t_end+1e-6]
+        # find appropriate bin to search
+        bin_index = int(t // self.bin_size) if t < np.Inf else len(self.grouped_data) - 1
+
+        # search for interval in appropriate bin
+        if bin_index < len(self.grouped_data):
+            # get data in the bin to search
+            search_data = self.grouped_data[bin_index]
+            
+            # search for interval in the bin
+            intervals = [(t_start,t_end,row)
+                        for t_start,t_end,*row in search_data
+                        if t_start-1e-6 <= t <= t_end+1e-6]
+        else:
+            # if no bin was found, search all data
+            intervals = [(t_start,t_end,row) 
+                        for t_start,t_end,*row in self.data
+                        if t_start-1e-6 <= t <= t_end+1e-6]
+        
+        # sort intervals by start time
         intervals.sort()
 
+        # return the first matching interval or None if no interval was found
         return intervals[0] if intervals else None
 
     def lookup_intervals(self, t_start : float, t_end : float) -> List[Interval]:
         """
         Returns all intervals that overlap with the interval [t_start, t_end]
         """
-        intervals = [(t_start_i,t_end_i) 
-                     for t_start_i,t_end_i,*_ in self.data
-                     if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
+        # find appropriate bin to search
+        bin_index_start = int(t_start // self.bin_size)
+        bin_index_end = int(t_end // self.bin_size) if t_end < np.Inf else len(self.grouped_data) - 1
+
+        # search for intervals in appropriate bins
+        if bin_index_start < len(self.grouped_data):
+            # compile list of bins to search
+            bins_to_search = self.grouped_data[bin_index_start : bin_index_end + 1]
+            
+            # search for intervals in the bins
+            intervals = [(t_start_i,t_end_i,*_)
+                         for search_data in bins_to_search
+                         for t_start_i,t_end_i,*_ in search_data
+                         if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
+            
+        else:
+            # if no bin was found, search all data
+            intervals = [(t_start_i,t_end_i) 
+                        for t_start_i,t_end_i,*_ in self.data
+                        if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
+        
+        # sort intervals by start time
         intervals.sort()
         
         # return clipped intervals that match the requested interval
@@ -432,26 +578,29 @@ class OrbitData:
 
     def __get_next_intervals(self, interval_data : IntervalData, t : float, t_max: float = np.Inf, include_current: bool = False) -> List[Tuple[float, float]]:
         # find all intervals that end after time `t` and start before time `t_max`
-        future_intervals: list[tuple[float, float]] = [(t_start, t_end)
-                                                        for t_start,t_end,*_ in interval_data.data
-                                                        if t <= t_end # interval ends after or at time `t`
-                                                        and t_start <= t_max # interval starts before or at time `t_max`
-                                                        ]
+        # future_intervals: list[tuple[float, float]] = [(t_start, t_end)
+        #                                                 for t_start,t_end,*_ in interval_data.data
+        #                                                 if t <= t_end # interval ends after or at time `t`
+        #                                                 and t_start <= t_max # interval starts before or at time `t_max`
+        #                                                 ]
+
+        future_intervals : List[Interval] = interval_data.lookup_intervals(t, t_max)
+        future_interval_pairs = [(interval.left, interval.right) for interval in future_intervals]
         
         # check if current interval should be included
         if not include_current:
             # exclude intervals that contain time `t`
-            future_intervals = [(t_start, t_end) for t_start,t_end in future_intervals
+            future_interval_pairs = [(t_start, t_end) for t_start,t_end in future_interval_pairs
                                 if t < t_start] # interval starts after time `t`
         else:
             # include current intervals but clip to start at time `t`
-            future_intervals = [(max(t, t_start), t_end) for t_start,t_end in future_intervals]
+            future_interval_pairs = [(max(t, t_start), t_end) for t_start,t_end in future_interval_pairs]
 
         # check if there are any valid intervals
-        if not future_intervals: return None
+        if not future_interval_pairs: return None
         
         # sort by start time and return
-        return sorted(future_intervals, key=lambda interval: interval[0])
+        return sorted(future_interval_pairs, key=lambda interval: interval[0])
     
     def get_latest_agent_access(self, target : str, t: float, t_max: float, include_current: bool = False) -> Interval:
         """ returns the latest access interval to another agent or ground station after or during time `t`. """
@@ -1196,11 +1345,26 @@ class OrbitData:
             mission.execute()                
             print("Propagation done!")
 
+        # update mission duration if needed
+        orbitdata_filename = os.path.join(data_dir, 'MissionSpecs.json')
+        ## check if mission specs file exists
+        original_duration = scenario_specs['duration']
+        if os.path.exists(orbitdata_filename):
+            with open(orbitdata_filename, 'r') as orbitdata_specs:
+                # load existing mission specs
+                orbitdata_dict : dict = json.load(orbitdata_specs)
+
+                # update duration to that of the longest mission
+                scenario_specs['duration'] = max(scenario_specs['duration'], orbitdata_dict['duration'])
+
         # save specifications of propagation in the orbit data directory
         with open(os.path.join(data_dir,'MissionSpecs.json'), 'w') as mission_specs:
             mission_specs.write(json.dumps(scenario_specs, indent=4))
             assert os.path.exists(os.path.join(data_dir,'MissionSpecs.json')), \
                 'Mission specifications not saved correctly!'
+            
+        # restore original duration value
+        scenario_specs['duration'] = original_duration
 
         return data_dir
     

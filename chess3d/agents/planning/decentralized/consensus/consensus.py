@@ -957,6 +957,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
     BUNDLE-BUILDING PHASE
     ---------------------------
     """
+    @runtime_tracker
     def generate_plan(self, 
                       state : SimulationAgentState,
                       specs : object,

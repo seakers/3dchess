@@ -108,7 +108,9 @@ class SimulationEnvironment(EnvironmentNode):
 
         self.agent_state_update_times = {}
 
-        self.measurement_reqs : set[TaskRequest] = set()
+        # self.measurement_reqs : set[TaskRequest] = set()
+        # self.measurement_reqs : set[dict] = set()
+        self.task_reqs : list[dict] = list()
         self.stats = {}
         self.t_0 = None
         self.t_f = None
@@ -177,12 +179,6 @@ class SimulationEnvironment(EnvironmentNode):
 
             # track agent and simulation states
             while True:
-                # # get list of sockets with incoming messages or requests
-                # socks = dict(await poller.poll())
-
-                # # handle incoming messages or requests
-                # req_status : bool = await self.handle_request(socks, agent_socket, agent_broadcasts, manager_socket)
-                
                 # listen for requests
                 req_status : bool = await self.listen_for_requests(poller, agent_socket, agent_broadcasts, manager_socket)
                 
@@ -196,7 +192,7 @@ class SimulationEnvironment(EnvironmentNode):
             return
 
         except Exception as e:
-            self.log(f'`live()` failed. {e.with_traceback()}', level=logging.ERROR)
+            self.log(f'`live()` failed. {e.with_traceback(None)}', level=logging.ERROR)
             raise e
         
     @runtime_tracker
@@ -255,24 +251,31 @@ class SimulationEnvironment(EnvironmentNode):
         *_, content = await self.listen_peer_broadcast()
 
         if content['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value:
-            # some agent broadcasted a measurement request
-            measurement_req : TaskRequest = TaskRequest.from_dict(content['req'])
+            # # some agent broadcasted a measurement request
+            # measurement_req : TaskRequest = TaskRequest.from_dict(content['req'])
 
-            # add to list of received measurement requests 
-            self.measurement_reqs.add(measurement_req)
+            # # add to list of received measurement requests 
+            # self.measurement_reqs.add(measurement_req)
+
+            # add to list of received broadcasts
+            self.task_reqs.append(content['req'])
 
         elif content['msg_type'] == SimulationMessageTypes.BUS.value:
             # an agent made a broadcast of multiple measurements
             bus_msg : BusMessage = message_from_dict(**content)
             
             # filter out measurement request messages
-            measurement_reqs : list[TaskRequest] \
-                = [ TaskRequest.from_dict(msg['req'])
+            # measurement_reqs : list[TaskRequest] \
+            #     = [ TaskRequest.from_dict(msg['req'])
+            #         for msg in bus_msg.msgs
+            #         if msg['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value]
+            measurement_reqs : list[dict] \
+                = [ msg['req']
                     for msg in bus_msg.msgs
                     if msg['msg_type'] == SimulationMessageTypes.MEASUREMENT_REQ.value]
 
             # add to list of received measurement requests 
-            self.measurement_reqs.update(measurement_reqs)
+            self.task_reqs.extend(measurement_reqs)
 
         # add to list of received broadcasts
         content['t_msg'] = self.get_current_time()
@@ -300,8 +303,9 @@ class SimulationEnvironment(EnvironmentNode):
             
             # update internal databases if needed
             # if self.t_update is None or abs(self.t_update - t) // self.get_orbitdata_time_step() > 100: # update every 100 time steps
-            if self.t_update is None or abs(self.t_update - t) / 3600 > 1: # update every hour
-                self.update_databases(t)
+            
+            # if self.t_update is None or abs(self.t_update - t) / 3600 > 1: # update every hour
+            #     self.update_databases(t)
 
             # update internal clock
             self.log(f"received message of type {content['msg_type']}. updating internal clock to {t}[s]...")
@@ -340,36 +344,59 @@ class SimulationEnvironment(EnvironmentNode):
     @runtime_tracker
     def handle_observation(self, content : dict) -> SimulationMessage:
         # unpack message
-        msg = ObservationResultsMessage(**content)
-        self.log(f'received masurement data request from {msg.src}. quering measurement results...')
-        agent_state = SimulationAgentState.from_dict(msg.agent_state)
-        instrument = Instrument.from_dict(msg.instrument) if isinstance(msg.instrument, dict) else msg.instrument
+        agent_state_dict = content['agent_state']
+        instrument_dict = content['instrument']
+        t_start = content['t_start']
+        t_end = content['t_end']
 
         # find/generate measurement results
-        observation_data = self.query_measurement_data(agent_state, instrument, msg.t_start, msg.t_end)
-
-        # DEBUG ----------------
-        # targets_requested : set = {(np.round(lat,3),np.round(lon,3)) for lat,lon,_ in msg.observation_action['targets']}
-        # targets_observed : set = {(obs['lat [deg]'], obs['lon [deg]']) for obs in observation_data}
-        # additional_targets = targets_observed.difference(targets_requested)
-        # if len(targets_requested) > len(targets_observed):
-        #     print(f'\nWARNING: number of targets requested ({len(targets_requested)}) is larger than observed ({len(targets_observed)}) at T={np.round(self.get_current_time(),3)} [s].')
-        # elif additional_targets:
-        #     print(f'\nWARNING: number of targets observed ({len(targets_observed)}) does not match requested targets ({len(msg.observation_action["targets"])}) at T={np.round(self.get_current_time(),3)} [s].')
-        # ----------------------
+        observation_data = self.query_measurement_data(agent_state_dict, instrument_dict, t_start, t_end)
 
         # repsond to request
         self.log(f'measurement results obtained! responding to request')
-        resp : ObservationResultsMessage = copy.deepcopy(msg)
-        resp.dst = resp.src
-        resp.src = self.get_element_name()
-        resp.observation_data = observation_data
+        resp : ObservationResultsMessage = copy.deepcopy(content)
+        resp['dst'] = resp['src']
+        resp['src'] = self.get_element_name()
+        resp['observation_data'] = observation_data
 
         # save observation
         self.observation_history.append(resp)
 
         # return observation response
         return resp
+
+        # TEMP original implementation commented out
+        # # unpack message
+        # msg = ObservationResultsMessage(**content)
+        # self.log(f'received masurement data request from {msg.src}. quering measurement results...')
+        # agent_state = SimulationAgentState.from_dict(msg.agent_state)
+        # instrument = Instrument.from_dict(msg.instrument) if isinstance(msg.instrument, dict) else msg.instrument
+
+        # # find/generate measurement results
+        # observation_data = self.query_measurement_data(agent_state, instrument, msg.t_start, msg.t_end)
+
+        # # DEBUG ----------------
+        # # targets_requested : set = {(np.round(lat,3),np.round(lon,3)) for lat,lon,_ in msg.observation_action['targets']}
+        # # targets_observed : set = {(obs['lat [deg]'], obs['lon [deg]']) for obs in observation_data}
+        # # additional_targets = targets_observed.difference(targets_requested)
+        # # if len(targets_requested) > len(targets_observed):
+        # #     print(f'\nWARNING: number of targets requested ({len(targets_requested)}) is larger than observed ({len(targets_observed)}) at T={np.round(self.get_current_time(),3)} [s].')
+        # # elif additional_targets:
+        # #     print(f'\nWARNING: number of targets observed ({len(targets_observed)}) does not match requested targets ({len(msg.observation_action["targets"])}) at T={np.round(self.get_current_time(),3)} [s].')
+        # # ----------------------
+
+        # # repsond to request
+        # self.log(f'measurement results obtained! responding to request')
+        # resp : ObservationResultsMessage = copy.deepcopy(msg)
+        # resp.dst = resp.src
+        # resp.src = self.get_element_name()
+        # resp.observation_data = observation_data
+
+        # # save observation
+        # self.observation_history.append(resp)
+
+        # # return observation response
+        # return resp
     
     @runtime_tracker
     def handle_agent_state(self, content : dict) -> SimulationMessage:
@@ -497,8 +524,8 @@ class SimulationEnvironment(EnvironmentNode):
 
     @runtime_tracker
     def query_measurement_data( self,
-                                agent_state : SimulationAgentState, 
-                                instrument : Instrument,
+                                agent_state_dict : dict, 
+                                instrument_dict : dict,
                                 t_start : float,
                                 t_end : float
                                 ) -> dict:
@@ -506,36 +533,43 @@ class SimulationEnvironment(EnvironmentNode):
         Queries internal models or data and returns observation information being sensed by the agent
         """
 
-        if isinstance(agent_state, SatelliteAgentState):
-            agent_orbitdata : OrbitData = self.orbitdata[agent_state.agent_name]
+        # if isinstance(agent_state, SatelliteAgentState):
+        if agent_state_dict['state_type'] == SimulationAgentTypes.SATELLITE.value:
+            # get orbit data for the agent
+            agent_orbitdata : OrbitData = self.orbitdata[agent_state_dict['agent_name']]
 
             # get access data for the agent
             raw_access_data = agent_orbitdata.gp_access_data.lookup_interval(t_start, t_end)
                         
             # get satellite's off-axis angle
-            satellite_off_axis_angle = agent_state.attitude[0]
+            satellite_off_axis_angle = agent_state_dict['attitude'][0]
             
             # collect data for every instrument model onboard
             obs_data = []
-            for instrument_model in instrument.mode:
+            for instrument_model in instrument_dict['mode']:
                 # get observation FOV from instrument model
-                if isinstance(instrument_model, BasicSensorModel):
-                    instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
-                    instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
-                    instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
-                elif isinstance(instrument_model, PassiveOpticalScannerModel):
-                    instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
-                    instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
-                    instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
+                if instrument_model['@type'] == 'Basic Sensor':
+                    instrument_off_axis_fov = instrument_model['fieldOfViewGeometry']['angleWidth'] / 2.0
+                elif instrument_model['@type'] == 'Passive Optical Scanner':
+                    instrument_off_axis_fov = instrument_model['fieldOfViewGeometry']['angleWidth'] / 2.0
+                
+                # if isinstance(instrument_model, BasicSensorModel):
+                #     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
+                #     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
+                #     instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
+                # elif isinstance(instrument_model, PassiveOpticalScannerModel):
+                #     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
+                #     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
+                #     instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
 
                 else:
-                    raise NotImplementedError(f'measurement data query not yet suported for sensor models of type {type(instrument_model)}.')
+                    raise NotImplementedError(f"measurement data query not yet suported for sensor models of type {instrument_model['model_type']}.")
 
                 # query coverage data of everything that is within the field of view of the agent
                 # TODO Add along-track angle checking. Currently assumes that only cross-track maneuverability is available
                 valid_access_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
                                      if abs(raw_access_data['off-nadir axis angle [deg]'][i] - satellite_off_axis_angle) <= instrument_off_axis_fov
-                                     and instrument.name == raw_access_data['instrument'][i]]
+                                     and instrument_dict['name'] == raw_access_data['instrument'][i]]
         
                 matching_data = {col : [raw_access_data[col][i] for i in valid_access_data_indeces]
                                             for col in raw_access_data}
@@ -590,7 +624,7 @@ class SimulationEnvironment(EnvironmentNode):
             return obs_data
 
         else:
-            raise NotImplementedError(f"Measurement results query not yet supported for agents with state of type {type(agent_state)}")
+            raise NotImplementedError(f"Measurement results query not yet supported for agents with state of type {agent_state_dict['state_type']}")
 
     # def query_event_data(self, lat_img, lon_img, t_img, instrument_name) -> list:
     #     """ Checks any of the events in its database is being observed and return its severity and required measurements """
@@ -764,10 +798,10 @@ class SimulationEnvironment(EnvironmentNode):
             columns = None
             data = []
             
-            for msg in tqdm(self.observation_history, 
+            for msg_dict in tqdm(self.observation_history, 
                             desc='Compiling observations results', 
                             leave=True):
-                msg : ObservationResultsMessage
+                msg : ObservationResultsMessage = ObservationResultsMessage(**msg_dict)
                 observation_data : List[dict] = msg.observation_data
                 observer = msg.dst
 
@@ -819,6 +853,11 @@ class SimulationEnvironment(EnvironmentNode):
         return pd.DataFrame(data=data, columns=columns)
     
     def compile_requests(self) -> pd.DataFrame:
+        # convert measurement request dictionaries to Task Requests
+        self.task_reqs : list[TaskRequest] = list({
+            TaskRequest.from_dict(req_dict)
+            for req_dict in self.task_reqs})
+
         columns = ['request id', 'requester', 'event id', 'parameter', 't_req', 'mission name']
         data = [[req.id,
                  req.requester,
@@ -827,10 +866,10 @@ class SimulationEnvironment(EnvironmentNode):
                  req.t_req,
                  req.mission_name,
                  ] 
-                 for req in self.measurement_reqs
+                 for req in self.task_reqs
                  if isinstance(req.task, EventObservationTask)]
         
-        assert all(isinstance(req.task, EventObservationTask) for req in self.measurement_reqs), \
+        assert all(isinstance(req.task, EventObservationTask) for req in self.task_reqs), \
             'Only `EventObservationTask` measurement requests are currently supported in the results compilation.'
 
         return pd.DataFrame(data=data, columns=columns)
