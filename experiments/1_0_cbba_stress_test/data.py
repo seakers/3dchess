@@ -24,7 +24,7 @@ def print_runtime_data(trial_name : str, scenario_id : int) -> None:
                 data = pd.read_parquet(file_path)
                 print(data.to_string(index=False))
 
-        if 'env' in dir_name:
+        if 'env' in dir_name or 'manager' in dir_name:
             x= 1
 
 if __name__ == "__main__":

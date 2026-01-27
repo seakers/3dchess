@@ -47,7 +47,7 @@ class AbstractPlanner(ABC):
 
         # initialize attributes
         self.known_reqs : set[TaskRequest] = set()                                # set of known measurement requests
-        self.stats : dict = dict()                                                # collector for runtime performance statistics
+        self.stats : dict = defaultdict(list)                                     # collector for runtime performance statistics
         self.last_performed_observations : List[ObservationOpportunity] = list()  # list of last performed observations
         
         # set attribute parameters
@@ -96,48 +96,111 @@ class AbstractPlanner(ABC):
         # compile coverage data
         raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(planning_horizon.left, planning_horizon.right)
 
-        # initiate access times
-        access_opportunities : Dict[int, Dict[int, Dict[str, List]]] = {}
-        
-        for i in tqdm(range(len(raw_coverage_data['time [s]'])), 
-                        desc=f'{state.agent_name}/PREPLANNER: Compiling access opportunities', 
-                        leave=False):
-            t_img = raw_coverage_data['time [s]'][i]
+        # group by grid index and ground point index
+        coverage_idx_by_target : Dict[int, Dict[int, Dict[str, list]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        for i,t in tqdm(enumerate(raw_coverage_data['time [s]']), 
+                        desc=f'{state.agent_name}/PLANNER: Grouping access opportunities', 
+                        unit=' time-step', leave=False):
+            # extract relevant data
             grid_index = raw_coverage_data['grid index'][i]
             gp_index = raw_coverage_data['GP index'][i]
             instrument = raw_coverage_data['instrument'][i]
-            # look_angle = raw_coverage_data['look angle [deg]'][i]
-            off_nadir_angle = raw_coverage_data['off-nadir axis angle [deg]'][i]
-            
-            # initialize dictionaries if needed
-            if grid_index not in access_opportunities:
-                access_opportunities[grid_index] = {}
-                
-            if gp_index not in access_opportunities[grid_index]:
-                access_opportunities[grid_index][gp_index] = defaultdict(list)
 
-            # compile time interval information 
-            found = False
-            for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
-                interval : Interval
-                t : list
-                th : list
+            # place in appropriate dictionary entry
+            coverage_idx_by_target[grid_index][gp_index][instrument].append((i,t))
 
-                overlap_interval = Interval(t_img - orbitdata.time_step, 
-                                            t_img + orbitdata.time_step)
-                
-                if overlap_interval.overlaps(interval):
-                    interval.extend(t_img)
-                    t.append(t_img)
-                    th.append(off_nadir_angle)
-                    found = True
-                    break      
+        # initiate merged access opportunities
+        access_opportunities : Dict[int, Dict[int, Dict[str, List[tuple]]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
-            if not found:
-                access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [off_nadir_angle]])     
+        # merge access interval opportunities
+        for grid_idx,gp_accesses in tqdm(coverage_idx_by_target.items(), 
+                                         desc=f'{state.agent_name}/PLANNER: Merging access opportunities', leave=False):
+            for gp_idx,instrument_accesses in gp_accesses.items():
+                for instrument,access_indices in instrument_accesses.items():
+                    # initialize merged access intervals
+                    merged_access_intervals : list[tuple] = []
+                    interval_indices : list = []
 
-        # return access times and grid information
+                    # sort access indices
+                    access_indices.sort()
+
+                    # initialize first interval
+                    t_start = access_indices[0][1]
+                    t_end = access_indices[0][1]
+                    indices = [access_indices[0][0]]
+
+                    # iterate through access indices and merge intervals
+                    for idx,t in access_indices[1:]:
+                        if t <= t_end + orbitdata.time_step + self.EPS:
+                            # extend current interval
+                            t_end = t
+                            indices.append(idx)
+                        else:
+                            # save current interval
+                            merged_access_intervals.append( Interval(t_start, t_end) )
+                            interval_indices.append(list(indices))
+                            
+                            # start new interval
+                            t_start = t
+                            t_end = t
+                            indices = [idx]
+
+                    if abs(t_start - access_indices[0][1]) < self.EPS:
+                        # only one interval
+                        merged_access_intervals.append( Interval(t_start, t_end) )
+                        interval_indices.append(list(indices))
+
+                    for interval,indices in zip(merged_access_intervals, interval_indices):
+                        access_opportunities[grid_idx][gp_idx][instrument].append( (interval, 
+                                                                                    [raw_coverage_data['time [s]'][i] for i in indices],
+                                                                                    [raw_coverage_data['off-nadir axis angle [deg]'][i] for i in indices]
+                                                                                    ) )
+
         return access_opportunities
+
+        # TEMP previous implementation kept for reference
+        # # initiate access times
+        # access_opportunities : Dict[int, Dict[int, Dict[str, List]]] = {}
+        
+        # for i in tqdm(range(len(raw_coverage_data['time [s]'])), 
+        #                 desc=f'{state.agent_name}/PLANNER: Compiling access opportunities', 
+        #                 leave=False):
+        #     t_img = raw_coverage_data['time [s]'][i]
+        #     grid_index = raw_coverage_data['grid index'][i]
+        #     gp_index = raw_coverage_data['GP index'][i]
+        #     instrument = raw_coverage_data['instrument'][i]
+        #     # look_angle = raw_coverage_data['look angle [deg]'][i]
+        #     off_nadir_angle = raw_coverage_data['off-nadir axis angle [deg]'][i]
+            
+        #     # initialize dictionaries if needed
+        #     if grid_index not in access_opportunities:
+        #         access_opportunities[grid_index] = {}
+                
+        #     if gp_index not in access_opportunities[grid_index]:
+        #         access_opportunities[grid_index][gp_index] = defaultdict(list)
+
+        #     # compile time interval information 
+        #     found = False
+        #     for interval, t, th in access_opportunities[grid_index][gp_index][instrument]:
+        #         interval : Interval
+        #         t : list
+        #         th : list
+
+        #         overlap_interval = Interval(t_img - orbitdata.time_step, 
+        #                                     t_img + orbitdata.time_step)
+                
+        #         if overlap_interval.overlaps(interval):
+        #             interval.extend(t_img)
+        #             t.append(t_img)
+        #             th.append(off_nadir_angle)
+        #             found = True
+        #             break      
+
+        #     if not found:
+        #         access_opportunities[grid_index][gp_index][instrument].append([Interval(t_img, t_img), [t_img], [off_nadir_angle]])     
+
+        # # return access times and grid information
+        # return access_opportunities
 
     @runtime_tracker
     def create_observation_opportunities_from_accesses(self, 

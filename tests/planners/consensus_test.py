@@ -17,7 +17,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## common cases
         self.single_sat_toy = False     # NOT IMPLEMENTED YET
         self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
-        self.single_sat_lakes = False   
+        self.single_sat_lakes = True   
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases

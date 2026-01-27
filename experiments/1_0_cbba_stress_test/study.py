@@ -146,6 +146,9 @@ def create_spacecraft_specifications(num_sats : int,
         # create satellite specification from template
         satellite_spec = copy.deepcopy(spacecraft_specs_template)
 
+        # planner settings
+        satellite_spec['planner'].pop('preplanner')
+
         # assign orbit state
         satellite_spec['orbitState']['state'] = orbit_state
 

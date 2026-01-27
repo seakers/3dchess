@@ -385,7 +385,9 @@ class IntervalData(AbstractData):
         """
         Returns True if time `t` is in any of the intervals
         """
-        return any([t_start-1e-6 <= t <= t_end+1e-6 for t_start,t_end,*_ in self.data])
+        current_interval = self.lookup(t)
+        return current_interval is not None
+        # return any([t_start-1e-6 <= t <= t_end+1e-6 for t_start,t_end,*_ in self.data])
     
     def update_expired_values(self, t : float) -> None:
         """ 
@@ -657,13 +659,10 @@ class OrbitData:
         if target not in self.comms_links.keys(): return False
 
         # get next access interval
-        next_access : Interval = self.__get_next_interval(self.comms_links[target], t, include_current=True)
+        next_access = self.comms_links[target].lookup(t)
 
-        # if no current or future access interval, return False
-        if next_access is None: return False
-
-        # check if the next access interval contains time `t`
-        return t in next_access
+        # check if there is a current access interval
+        return next_access is not None
 
     def is_accessing_ground_station(self, target : str, t: float) -> bool:
         raise NotImplementedError('TODO: implement ground station access check.')

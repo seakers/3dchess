@@ -307,6 +307,15 @@ class Plan(ABC):
         # sort plan in order of ascending start time, duration, and end time
         plan_out.sort(key=lambda a: (a.t_start, a.t_end-a.t_start, a.t_end))
 
+        # select only action with the same duration as the earliest action
+        if plan_out:
+            first_action : AgentAction = plan_out[0]
+            first_action_duration = first_action.t_end - first_action.t_start
+            plan_out = [action for action in plan_out 
+                        if abs((action.t_end - action.t_start) - first_action_duration) < 1e-6
+                        or action.t_end-action.t_start == first_action_duration]
+            assert plan_out, "No actions found in `plan_out` after filtering by duration."
+
         # if there are waits in the plan out, remove them and execute them in a future batch
         if not all([isinstance(action, WaitAction) for action in plan_out]):
             plan_out = [action for action in plan_out if not isinstance(action, WaitAction)]

@@ -32,9 +32,6 @@ class SimulationManager(AbstractManager):
         super().__init__(simulation_element_name_list, clock_config, network_config, level, logger)
 
         self.results_path : str = results_path
-        self.stats = {f"{name}_wait" : [] for name in simulation_element_name_list}
-        self.stats["clock_wait"] = []
-        self.stats["sim_runtime"] = []
 
     def _check_element_list(self):
         env_count = 0

@@ -40,6 +40,11 @@
         }
     },
     "planner" : {
+        "preplanner": {
+            "@type": "heuristic",
+            "debug": "True",
+            "period" : 500
+        },
         "replanner": {
             "@type": "consensus",
             "model": "heuristicInsertion",

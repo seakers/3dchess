@@ -13,6 +13,7 @@ from orbitpy.util import Spacecraft
 from dmas.agents import *
 from dmas.modules import InternalModule
 from dmas.utils import runtime_tracker
+from tqdm import tqdm
 from zmq import SocketType
 
 from execsatm.tasks import GenericObservationTask, DefaultMissionTask, EventObservationTask
@@ -202,15 +203,16 @@ class AbstractAgent(Agent):
     --------------------
     """
     @runtime_tracker
-    async def do(self, actions: list) -> dict:
+    async def do(self, actions: List[AgentAction]) -> dict:
+        # log actions to be performed
         self.log(f'performing {len(actions)} actions', level=logging.DEBUG)
 
         # perform each action and record action status
         statuses = []
-        while actions:
-            # unpack action
-            action_dict : dict = actions.pop(0)
-            action : AgentAction = action_from_dict(**action_dict) if isinstance(action_dict, dict) else action_dict
+        for action in tqdm(actions, desc=f"T:{self.get_current_time()}[s]: {self.get_element_name()} - Performing Actions", 
+                           unit=" action", leave=False, disable=len(actions) <= 1): # only enable progress bar if multiple actions are to be performed
+            # convert action from dict if necessary
+            if isinstance(action, dict): action : AgentAction = action_from_dict(**action)
 
             # check action start time
             t_curr = self.get_current_time()
@@ -316,8 +318,8 @@ class AbstractAgent(Agent):
         self.state.update_state(self.get_current_time(), status=SimulationAgentState.MESSAGING)
         self.state_history.append(self.state.to_dict())
         
-        # add random wait allow for connections to finish being establieshed; aim to avoid sync issues
-        await asyncio.sleep(np.random.random() * 1e-6) 
+        # # add random wait allow for connections to finish being establieshed; aim to avoid sync issues
+        # await asyncio.sleep(np.random.random() * 1e-6) 
 
         # set source and destination of message
         msg_out.src = self.get_element_name()
@@ -326,8 +328,8 @@ class AbstractAgent(Agent):
         # perform broadcast
         await self.send_peer_broadcast(msg_out)
 
-        # add random wait to allow for messages to be received; aim to avoid sync issues
-        await asyncio.sleep(np.random.random() * 1e-6) 
+        # # add random wait to allow for messages to be received; aim to avoid sync issues
+        # await asyncio.sleep(np.random.random() * 1e-6) 
 
         # log broadcast
         self.log(f'\n\tSent broadcast!\n\tfrom:\t{msg_out.src}\n\tto:\t{msg_out.dst}',level=logging.DEBUG)
@@ -458,7 +460,7 @@ class AbstractAgent(Agent):
                 # wait for time update        
                 ignored_manager_msgs = []   
 
-                while self.get_current_time() <= t0:
+                while True:
                     # initiate tic request
                     toc_msg = None
                     confirmation = None
@@ -494,8 +496,14 @@ class AbstractAgent(Agent):
                     
                     # cancel wait for response if timed out
                     for task in pending:
+                        raise NotImplementedError('timeout reached while waiting for `TocMessage` from manager.')
                         task.cancel()
                         await task
+
+                    if self.get_current_time() >= tf: 
+                        break
+                    else:
+                        x = 1 # continue waiting
 
             elif isinstance(self._clock_config, AcceleratedRealTimeClockConfig):
                 # real-time clock; perform asyncio sleep
@@ -980,7 +988,6 @@ class SimulatedAgent(AbstractAgent):
     def get_next_actions(self, state : SimulationAgentState, earliest : bool = True) -> List[AgentAction]:
         try:
             # get list of next actions from plan
-            # plan_out : List[AgentAction] = self.plan.get_next_actions(state.t, earliest)
             plan_out : List[AgentAction] = self.plan.get_next_actions(state.t, False)
 
             # check for future broadcast message actions in plan
@@ -1085,12 +1092,46 @@ class SimulatedAgent(AbstractAgent):
             assert all([action.t_start <= state.t + 1e-3 for action in plan_out]), \
                 "All returned actions must start at or before the current time."
              # ensure no future broadcast message actions in output plan
-
-            if any([isinstance(action, FutureBroadcastMessageAction) for action in plan_out]):
-                x=1
-
             assert all([not isinstance(action, FutureBroadcastMessageAction) for action in plan_out]), \
                 "No future broadcast message actions should be present in the output plan."
+            # ensure all output tasks have the same duration
+            assert all([((action.t_end - action.t_start) == (plan_out[0].t_end - plan_out[0].t_start)
+                        or abs(action.t_end - action.t_start) - (plan_out[0].t_end - plan_out[0].t_start) < 1e-6) 
+                        for action in plan_out]), \
+                "All returned actions must have the same duration."
+            
+            # if all actions are a broadcasting action, merge into a single broadcast
+            if len(plan_out) > 1 and all([isinstance(action, BroadcastMessageAction) for action in plan_out]):
+                # collect start and end times
+                t_start = min([action.t_start for action in plan_out]) # should be equal amongst all actions
+                t_end = max([action.t_end for action in plan_out])      # should be equal amongst all actions
+                
+                # collect all messages
+                msgs = []
+                for action in plan_out:
+                    if isinstance(action, BroadcastMessageAction) and action.msg['msg_type'] == SimulationMessageTypes.BUS.value:
+                        msgs.extend(action.msg.get('msgs', []))
+                    else:
+                        msgs.append(action.msg)
+                
+                # create bus message to hold all messages
+                bus_msg = BusMessage(  src=self.get_element_name(),
+                                        dst=self.get_element_name(),
+                                        msgs=msgs
+                                    )
+                # create single broadcast action
+                broadcast_action = BroadcastMessageAction(  t_start=t_start,
+                                                            t_end=t_end,
+                                                            msg=bus_msg.to_dict()
+                                                        )
+                # replace multiple broadcasts with single broadcast in original plan
+                for action in plan_out: self.plan.remove(action, state.t)
+                self.plan.add(broadcast_action, state.t)
+
+                # update plan out to only include single broadcast action
+                plan_out = [broadcast_action]
+
+                return plan_out
 
     
     def get_latest_observations(self, 
