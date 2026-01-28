@@ -14,12 +14,14 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        # planner output toggle
+        self.planner_debug = True
 
         # test case toggles
         ## common cases
         self.single_sat_toy = False     # NOT IMPLEMENTED YET
         self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
-        self.single_sat_lakes = False   
+        self.single_sat_lakes = True   
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
@@ -44,7 +46,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_19 = False # single sat    default mission     multiple targets    two events           preplan w/short horizon + replan
         self.toy_20 = False # two sats       default mission     multiple targets    two events           preplan w/short horizon + replan
         self.toy_21 = False # single sat    no default mission     multiple targets    two events announced by GS  replan
-        self.toy_22 = True # two sats      no default mission     multiple targets    two events announced by GS   replan
+        self.toy_22 = False # two sats      no default mission     multiple targets    two events announced by GS   replan
 
         self.toy_23 = False 
         self.toy_24 = False
@@ -59,7 +61,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                 "heuristic" : "taskPriority",
                 "replanThreshold": 1,
                 "optimisticBiddingThreshold": 1,
-                "debug": "True"
+                "debug": str(self.planner_debug)
             }
         }
     
@@ -67,7 +69,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         return {
             "preplanner": {
                 "@type": "heuristic",
-                "debug": "True",
+                "debug": str(self.planner_debug),
                 # "period" : 250,
             },
             "replanner": {
@@ -76,7 +78,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                 "heuristic" : "taskPriority",
                 "replanThreshold": 1,
                 "optimisticBiddingThreshold": 1,
-                "debug": "True"
+                "debug": str(self.planner_debug)
             }
         }
     
@@ -85,7 +87,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             "preplanner": {
                 "@type": "worker",
                 "dealerName" : -1, # TODO need to define dealer name
-                "debug": "True",
+                "debug": str(self.planner_debug),
             },
             "replanner": {
                 "@type": "consensus",
@@ -94,7 +96,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                 "replanThreshold": 1,
                 "optimisticBiddingThreshold": 1,
                 "periodicOverwrite": "True",
-                "debug": "True"
+                "debug": str(self.planner_debug)
             }
         }
     
@@ -103,14 +105,14 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         return {
             "preplanner": {
                 "@type": "heuristic",
-                "debug": "True",
+                "debug": str(self.planner_debug),
             },
             "replanner": {
                 "@type": "consensus",
                 "model": "heuristicInsertion",
                 "heuristic" : "taskValue",
                 "replanThreshold": 1,
-                "debug": "True"
+                "debug": str(self.planner_debug)
             }
         }
         
@@ -129,7 +131,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         return {
                 "preplanner": {
                     "@type": "eventAnnouncer",
-                    "debug": "True",                        
+                    "debug": str(self.planner_debug),                        
                     "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
                 }
             }
@@ -153,7 +155,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                 "planner" : {
                     "preplanner": {
                         "@type": "eventAnnouncer",
-                        "debug": "True",                        
+                        "debug": str(self.planner_debug),                        
                         "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
                     }
                 },
@@ -181,7 +183,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                         "heuristic" : "taskPriority",
                         "replanThreshold": 1,
                         "optimisticBiddingThreshold": 1,
-                        "debug": "True"
+                        "debug": str(self.planner_debug)
                     }
                 },
                 "mission" : mission_name,
@@ -209,7 +211,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                 "planner" : {
                     "preplanner": {
                         "@type": "eventAnnouncer",
-                        "debug": "True",                        
+                        "debug": str(self.planner_debug),                        
                         "eventsPath" : f"./tests/planners/resources/events/{event_name}.csv"
                     },
                     "replanner": {
@@ -218,7 +220,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                         "heuristic" : "taskPriority",
                         "replanThreshold": 1,
                         "optimisticBiddingThreshold": 1,
-                        "debug": "True"
+                        "debug": str(self.planner_debug)
                     }
                 },
                 "mission" : mission_name,
@@ -2039,6 +2041,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Observable'].values[0][1], 2)
         self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Observed'].values[0][1], 1)
         self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Requested'].values[0][1], 1)
+        self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Re-observed'].values[0][1], 0)
 
         # print done
         print(f"{scenario_name}: DONE")
