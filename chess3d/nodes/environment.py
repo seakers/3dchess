@@ -164,6 +164,11 @@ class SimulationEnvironment(EnvironmentNode):
         # nothing to set up
         return
 
+    """
+    ---------------------------
+    MAIN LIVE LOOP
+    ---------------------------
+    """
     async def live(self) -> None:
         try:
             self.t_0 = time.perf_counter()
@@ -225,6 +230,11 @@ class SimulationEnvironment(EnvironmentNode):
         elif manager_socket in socks:
             return await self.handle_manager_broadcast()
 
+    """
+    ---------------------------
+    AGENT-RELEVANT HANDLERS
+    ---------------------------
+    """
     @runtime_tracker
     async def handle_agent_request(self) -> bool:
         # get incoming message
@@ -282,101 +292,6 @@ class SimulationEnvironment(EnvironmentNode):
         return True
     
     @runtime_tracker
-    async def handle_manager_broadcast(self) -> bool:
-        dst, src, content = await self.listen_manager_broadcast()
-
-        if (dst in self.name 
-            and SimulationElementRoles.MANAGER.value in src 
-            and content['msg_type'] == ManagerMessageTypes.SIM_END.value
-            ):
-            # sim end message received
-            self.log(f"received message of type {content['msg_type']}. ending simulation...")
-            return False
-
-        elif content['msg_type'] == ManagerMessageTypes.TOC.value:
-            # toc message received
-
-            # unpack message
-            t = content['t']
-            
-            # update internal databases if needed
-            # if self.t_update is None or abs(self.t_update - t) // self.get_orbitdata_time_step() > 100: # update every 100 time steps
-            
-            # if self.t_update is None or abs(self.t_update - t) / 3600 > 1: # update every hour
-            #     self.update_databases(t)
-
-            # update internal clock
-            self.log(f"received message of type {content['msg_type']}. updating internal clock to {t}[s]...")
-            await self.update_current_time(t)
-
-            # wait for all agent's to send their updated states
-            self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
-
-            # TODO TEMPORARY: breakpoint for debugging
-            if 94.0 < t < 95.0:
-                # update connectivity matrix for debugging
-                connectivity = defaultdict(lambda: defaultdict(lambda: 0))
-                for sender in self.agent_connectivity:
-                    for receiver in self.agent_connectivity:
-                        connectivity[sender][receiver] = self.check_agent_connectivity(sender, receiver)
-
-                # print connectivity matrix
-                print('\n\n\n')
-                for sender in self.agent_connectivity:
-                    line = ""
-                    for receiver in self.agent_connectivity:
-                        if sender == receiver:
-                            line += "0,"
-                            continue
-                        line += f"{connectivity[sender][receiver]},"                        
-
-                    print(line[:-1])
-                
-                # check for mismatches
-                for sender in self.agent_connectivity:
-                    for receiver in self.agent_connectivity:
-                        if sender == receiver:
-                            continue
-                        
-                        if connectivity[sender][receiver] != self.agent_connectivity[receiver][sender]:
-                            a_to_b = self.check_agent_connectivity(sender, receiver)
-                            b_to_a = self.check_agent_connectivity(receiver, sender)
-                            x = 1 # breakpoint
-                            
-
-                        assert connectivity[sender][receiver] == self.agent_connectivity[receiver][sender], \
-                            f'Connectivity mismatch between {sender} and {receiver}: {connectivity[sender][receiver]} vs {self.agent_connectivity[receiver][sender]}'
-
-                x = 1 # breakpoint
-        
-        else:
-            # ignore message
-            self.log(f"received message of type {content['msg_type']}. ignoring message...")
-
-        return True
-    
-    def get_simulation_duration(self) -> float:
-        return min(agent_orbitdata.duration * 24 * 3600 
-                    for agent_orbitdata in self.orbitdata.values())
-    
-    def get_orbitdata_time_step(self) -> float:
-        for agent_orbitdata in self.orbitdata.values():
-            return agent_orbitdata.time_step
-
-    @runtime_tracker
-    def update_databases(self, t : float) -> None:
-        # update orbit databases
-        for agent_orbitdata in self.orbitdata.values(): 
-            agent_orbitdata.update_databases(t)
-
-        # update events; only keep active and future events
-        self.events = [event for event in self.events 
-                       if event.is_active(t) or event.is_future(t)]
-        
-        # update time tracker
-        self.t_update = t
-
-    @runtime_tracker
     def handle_observation(self, content : dict) -> SimulationMessage:
         # unpack message
         agent_state_dict = content['agent_state']
@@ -399,39 +314,6 @@ class SimulationEnvironment(EnvironmentNode):
 
         # return observation response
         return resp
-
-        # TEMP original implementation commented out
-        # # unpack message
-        # msg = ObservationResultsMessage(**content)
-        # self.log(f'received masurement data request from {msg.src}. quering measurement results...')
-        # agent_state = SimulationAgentState.from_dict(msg.agent_state)
-        # instrument = Instrument.from_dict(msg.instrument) if isinstance(msg.instrument, dict) else msg.instrument
-
-        # # find/generate measurement results
-        # observation_data = self.query_measurement_data(agent_state, instrument, msg.t_start, msg.t_end)
-
-        # # DEBUG ----------------
-        # # targets_requested : set = {(np.round(lat,3),np.round(lon,3)) for lat,lon,_ in msg.observation_action['targets']}
-        # # targets_observed : set = {(obs['lat [deg]'], obs['lon [deg]']) for obs in observation_data}
-        # # additional_targets = targets_observed.difference(targets_requested)
-        # # if len(targets_requested) > len(targets_observed):
-        # #     print(f'\nWARNING: number of targets requested ({len(targets_requested)}) is larger than observed ({len(targets_observed)}) at T={np.round(self.get_current_time(),3)} [s].')
-        # # elif additional_targets:
-        # #     print(f'\nWARNING: number of targets observed ({len(targets_observed)}) does not match requested targets ({len(msg.observation_action["targets"])}) at T={np.round(self.get_current_time(),3)} [s].')
-        # # ----------------------
-
-        # # repsond to request
-        # self.log(f'measurement results obtained! responding to request')
-        # resp : ObservationResultsMessage = copy.deepcopy(msg)
-        # resp.dst = resp.src
-        # resp.src = self.get_element_name()
-        # resp.observation_data = observation_data
-
-        # # save observation
-        # self.observation_history.append(resp)
-
-        # # return observation response
-        # return resp
     
     @runtime_tracker
     def handle_agent_state(self, content : dict) -> SimulationMessage:
@@ -461,54 +343,53 @@ class SimulationEnvironment(EnvironmentNode):
             raise e
     
     @runtime_tracker
-    def get_current_time(self) -> float:
-        return super().get_current_time()
-
-    @runtime_tracker
     def update_agent_state(self, msg_dict : dict) -> dict:
-        # 
+        # check if agent has previous state update time
         if msg_dict["src"] not in self.agent_state_update_times: 
+            # initialize last update time
             self.agent_state_update_times[msg_dict["src"]] = -1.0
 
-        # TODO support ground stations
+        # get current simulation time 
+        t = self.get_current_time()
         
-        # check if time has passed between state updates
+        # get relevant orbit data for agent
         sat_orbitdata : OrbitData = self.orbitdata[msg_dict["src"]]
-        t_state_update = round(self.agent_state_update_times[msg_dict["src"]] / sat_orbitdata.time_step)
-        t_curr = round(self.get_current_time() / sat_orbitdata.time_step)
 
+        # normalize times to orbit data time step
+        t_state_update = round(self.agent_state_update_times[msg_dict["src"]] // sat_orbitdata.time_step)
+        t_curr = round(t // sat_orbitdata.time_step)
+
+        # check if time has passed between state updates
         if abs(t_state_update - t_curr) < 1 and self.agent_state_update_times[msg_dict["src"]] >= 0.0: 
+            # not enough time has passed since the last update; do not update state
+            return msg_dict["state"]
+
+        # update state based on agent type
+        if msg_dict["src"] in self.agents[SimulationAgentTypes.SATELLITE]:
+            # source satellite agent; look up orbit state
+            pos, vel, eclipse = sat_orbitdata.get_orbit_state(self.get_current_time())
+
+            # update state
+            updated_state = msg_dict["state"]
+            updated_state['pos'] = pos
+            updated_state['vel'] = vel
+            updated_state['eclipse'] = int(eclipse)
+
+        elif msg_dict["src"] in self.agents[SimulationAgentTypes.GROUND_OPERATOR]:
+            # source ground operator agent; no need to update state
             updated_state = msg_dict["state"]
 
         else:
-            # check current state
-            if msg_dict["src"] in self.agents[SimulationAgentTypes.SATELLITE]:
-                # look up orbit state
-                pos, vel, eclipse = self.get_updated_orbit_state(sat_orbitdata, self.get_current_time())
+            # fallback case; unrecognized agent
+            raise ValueError(f'Unrecognized agent performed an update state request. Agent {msg_dict["src"]} is not part of this simulation.')
 
-                # update state
-                updated_state = msg_dict["state"]
-                updated_state['pos'] = pos
-                updated_state['vel'] = vel
-                updated_state['eclipse'] = int(eclipse)
+        # update last update time
+        updated_state['t'] = max(self.get_current_time(), updated_state['t'])
+        self.agent_state_update_times[msg_dict["src"]] = updated_state['t']
 
-            elif msg_dict["src"] in self.agents[SimulationAgentTypes.GROUND_OPERATOR]:
-                # Do NOT update state
-                updated_state = msg_dict["state"]
-
-            else:
-                raise ValueError(f'Unrecognized agent performed an update state request. Agent {msg_dict["src"]} is not part of this simulation.')
-
-            updated_state['t'] = max(self.get_current_time(), updated_state['t'])
-            self.agent_state_update_times[msg_dict["src"]] = updated_state['t']
-
+        # return updated agent state
         return updated_state
-    
-    @runtime_tracker
-    def get_updated_orbit_state(self, orbitdata : OrbitData, t : float) -> tuple:
-        # look up orbit state
-        return orbitdata.get_orbit_state(t)
-    
+        
     @runtime_tracker
     def update_agent_connectivity(self, msg_dict : dict) -> list:
         # initiate update list
@@ -558,6 +439,90 @@ class SimulationEnvironment(EnvironmentNode):
         #                     self.agent_connectivity[msg_dict["src"]][adjacent] = 1
 
         return resp_msgs
+
+    """
+    ---------------------------
+    MANAGER-RELEVANT HANDLERS
+    ---------------------------
+    """
+    
+    @runtime_tracker
+    async def handle_manager_broadcast(self) -> bool:
+        dst, src, content = await self.listen_manager_broadcast()
+
+        if (dst in self.name 
+            and SimulationElementRoles.MANAGER.value in src 
+            and content['msg_type'] == ManagerMessageTypes.SIM_END.value
+            ):
+            # sim end message received
+            self.log(f"received message of type {content['msg_type']}. ending simulation...")
+            return False
+
+        elif content['msg_type'] == ManagerMessageTypes.TOC.value:
+            # toc message received; propagate time update
+
+            # unpack message
+            t = content['t']
+
+            # check if time advanced
+            if self.get_current_time() > t:
+                # update connectivity matrix
+                pass
+
+            # update internal clock
+            self.log(f"received message of type {content['msg_type']}. updating internal clock to {t}[s]...")
+            await self.update_current_time(t)
+
+            # wait for all agent's to send their updated states
+            self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
+
+            # TODO breakpoint for debugging
+            # if 95.0 < t < 96.0:
+            #     # update connectivity matrix for debugging
+            #     connectivity = defaultdict(lambda: defaultdict(lambda: 0))
+            #     for sender in self.agent_connectivity:
+            #         for receiver in self.agent_connectivity:
+            #             connectivity[sender][receiver] = self.check_agent_connectivity(sender, receiver)
+
+            #     # print connectivity matrix
+            #     print('\n\n\n')
+            #     for sender in self.agent_connectivity:
+            #         line = ""
+            #         for receiver in self.agent_connectivity:
+            #             line += f"{connectivity[sender][receiver]},"                        
+
+            #         print(line[:-1])
+                
+            #     # check for mismatches
+            #     for sender in self.agent_connectivity:
+            #         for receiver in self.agent_connectivity:
+            #             if sender == receiver:
+            #                 continue
+                        
+            #             if connectivity[sender][receiver] != connectivity[receiver][sender]:
+            #                 a_to_b = self.check_agent_connectivity(sender, receiver)
+            #                 b_to_a = self.check_agent_connectivity(receiver, sender)
+            #                 x = 1 # breakpoint                            
+            #             assert connectivity[sender][receiver] == connectivity[receiver][sender], \
+            #                 f'Connectivity mismatch between sat{list(connectivity.keys()).index(sender)}={sender} and sat{list(connectivity.keys()).index(receiver)}={receiver}: {connectivity[sender][receiver]} vs {self.agent_connectivity[receiver][sender]}'
+
+            #     x = 1 # breakpoint
+        
+        else:
+            # ignore message
+            self.log(f"received message of type {content['msg_type']}. ignoring message...")
+
+        return True
+            
+    """
+    ---------------------------
+    UTILITY METHODS
+    ---------------------------
+    """
+    
+    @runtime_tracker
+    def get_current_time(self) -> float:
+        return super().get_current_time()
     
     @runtime_tracker
     def check_agent_connectivity(self, src : str, target : str) -> int:
@@ -693,17 +658,60 @@ class SimulationEnvironment(EnvironmentNode):
 
         else:
             raise NotImplementedError(f"Measurement results query not yet supported for agents with state of type {agent_state_dict['state_type']}")
+    
 
-    # def query_event_data(self, lat_img, lon_img, t_img, instrument_name) -> list:
-    #     """ Checks any of the events in its database is being observed and return its severity and required measurements """
+    async def sim_wait(self, delay: float) -> None:
+        try:
+            if isinstance(self._clock_config, FixedTimesStepClockConfig):
+                tf = self.get_current_time() + delay
+                while tf > self.get_current_time():
+                    # listen for manager's toc messages
+                    _, _, msg_dict = await self.listen_manager_broadcast()
 
-    #     return [{"severity" : severity, "measurements" : measurements }
-    #             for lat,lon,t_start,duration,severity,measurements in self.events.values
-    #             if lat==lat_img 
-    #             and lon==lon_img
-    #             and t_start<= t_img <=t_start+duration
-    #             and instrument_name in measurements  #TODO include better reasoning
-    #             ]
+                    if msg_dict is None:
+                        raise asyncio.CancelledError()
+
+                    msg_dict : dict
+                    msg_type = msg_dict.get('msg_type', None)
+
+                    # check if message is of the desired type
+                    if msg_type != ManagerMessageTypes.TOC.value:
+                        continue
+                    
+                    # update time
+                    msg = TocMessage(**msg_type)
+                    self.update_current_time(msg.t)
+
+            elif isinstance(self._clock_config, AcceleratedRealTimeClockConfig):
+                await asyncio.sleep(delay / self._clock_config.sim_clock_freq)
+
+            else:
+                raise NotImplementedError(f'`sim_wait()` for clock of type {type(self._clock_config)} not yet supported.')
+                
+        except asyncio.CancelledError:
+            return
+
+    @runtime_tracker
+    async def listen_internal_broadcast(self) -> tuple:
+        return await super().listen_internal_broadcast()
+    
+    @runtime_tracker
+    async def listen_manager_broadcast(self) -> tuple:
+        return await super().listen_manager_broadcast()
+    
+    @runtime_tracker
+    async def listen_peer_broadcast(self) -> tuple:
+        return await super().listen_peer_broadcast()
+    
+    @runtime_tracker
+    async def listen_internal_message(self) -> tuple:
+        return await super().listen_internal_message()
+
+    """
+    ---------------------------
+    RESULTS PRINTOUTS
+    ---------------------------
+    """    
     
     def print_results(self) -> None:
         try:
@@ -783,84 +791,7 @@ class SimulationEnvironment(EnvironmentNode):
         # print final time
         print('\n')
         self.log(f'successfully shutdown', level=logging.WARNING)
-        
-    #     try:
-    #         self.t_f = time.perf_counter()
-
-    #         self.log('Compiling results...',level=logging.WARNING)
-
-    #         # compile observations performed
-    #         observations_performed : pd.DataFrame = self.compile_observations()
-
-    #         # log and save results
-    #         # self.log(f"MEASUREMENTS RECEIVED:\n{len(observations_performed.values)}\n\n", level=logging.WARNING)
-    #         observations_performed.to_csv(f"{self.results_path}/measurements.csv", index=False)
-            
-    #         # commpile list of broadcasts performed
-    #         broadcasts_performed : pd.DataFrame = self.compile_broadcasts()
-
-    #         # log and save results
-    #         # self.log(f"BROADCASTS RECEIVED:\n{len(broadcasts_performed.values)}\n\n", level=logging.WARNING)
-    #         broadcasts_performed.to_csv(f"{self.results_path}/broadcasts.csv", index=False)
-
-    #         # compile list of measurement requests 
-    #         measurement_reqs : pd.DataFrame = self.compile_requests()
-
-    #         # log and save results
-    #         # self.log(f"MEASUREMENT REQUESTS RECEIVED:\n{len(measurement_reqs.values)}\n\n", level=logging.WARNING)
-    #         measurement_reqs.to_csv(f"{self.results_path}/requests.csv", index=False)
-
-    #         # log performance stats
-    #         runtime_dir = os.path.join(self.results_path, "runtime")
-    #         if not os.path.isdir(runtime_dir): os.mkdir(runtime_dir)
-
-    #         columns = ['routine','t_avg','t_std','t_med','t_max','t_min','n','t_total']
-    #         data = []
-
-    #         n_decimals = 3
-    #         for routine in tqdm(self.stats, desc="ENVIRONMENT: Compiling runtime statistics", leave=False):
-    #             # compile stats
-    #             n = len(self.stats[routine])
-    #             t_avg = np.round(np.mean(self.stats[routine]),n_decimals) if n > 0 else -1
-    #             t_std = np.round(np.std(self.stats[routine]),n_decimals) if n > 0 else 0.0
-    #             t_median = np.round(np.median(self.stats[routine]),n_decimals) if n > 0 else -1
-    #             t_max = np.round(max(self.stats[routine]),n_decimals) if n > 0 else -1
-    #             t_min = np.round(min(self.stats[routine]),n_decimals) if n > 0 else -1
-    #             t_total = n * t_avg
-
-    #             line_data = [ 
-    #                             routine,
-    #                             t_avg,
-    #                             t_std,
-    #                             t_median,
-    #                             t_max,
-    #                             t_min,
-    #                             n,
-    #                             t_total
-    #                             ]
-    #             data.append(line_data)
-
-    #             # save time-series
-    #             time_series = [[v] for v in self.stats[routine]]
-    #             routine_df = pd.DataFrame(data=time_series, columns=['dt'])
-    #             routine_dir = os.path.join(runtime_dir, f"time_series-{routine}.csv")
-    #             routine_df.to_csv(routine_dir,index=False)
-
-    #         stats_df = pd.DataFrame(data, columns=columns)
-    #         # self.log(f'\nENVIRONMENT RUN-TIME STATS\n{str(stats_df)}\n', level=logging.WARNING)
-    #         stats_df.to_csv(f"{self.results_path}/runtime_stats.csv", index=False)
-
-    #         # print final time
-    #         print('\n')
-    #         self.log(f'successfully shutdown', level=logging.WARNING)
-        
-    #     except asyncio.CancelledError as e:
-    #         raise e
-    #     except Exception as e:
-    #         print('\n','\n','\n')
-    #         print(e.with_traceback())
-    #         raise e        
-            
+                    
     def compile_observations(self) -> pd.DataFrame:
         try:
             columns = None
@@ -945,107 +876,5 @@ class SimulationEnvironment(EnvironmentNode):
 
         return pd.DataFrame(data=data, columns=columns)
 
-    def calc_coverage_metrics(self) -> tuple:
-        # TODO improve performance or load precomputed vals
-        return np.NAN, np.NAN, np.NAN
-            
-        # compile coverage calcs 
-        consolidated_orbitdata = None
-
-        for _,agent_orbitdata in self.orbitdata.items():
-            agent_orbitdata : OrbitData
-            if consolidated_orbitdata is None:
-                consolidated_orbitdata : OrbitData = agent_orbitdata.copy()
-                consolidated_orbitdata.agent_name = 'all'
-                continue
-
-            consolidated_orbitdata.gp_access_data = pd.concat([consolidated_orbitdata.gp_access_data, agent_orbitdata.gp_access_data],
-                                                               axis=0)
-
-        # calculate coverage metrics          
-        if consolidated_orbitdata is not None:
-            return consolidated_orbitdata.calculate_percent_coverage() 
-        else: 
-            return np.NAN, np.NAN, np.NAN
-       
-        # # calculate possible number of measurements given coverage metrics
-        # n_obervations_pos = 0
-        # for req in measurement_reqs:
-
-        #     req : MeasurementRequest
-        #     lat,lon,_ = req.target
-
-        #     observable_measurements = []
-        #     for _, coverage_data in self.orbitdata.items():
-        #         coverage_data : OrbitData
-        #         req_start = req.t_start/coverage_data.time_step
-        #         req_end = req.t_end/coverage_data.time_step
-        #         grid_index, gp_index, gp_lat, gp_lon = coverage_data.find_gp_index(lat,lon)
-
-        #         df = coverage_data.gp_access_data.query('`time index` >= @req_start & `time index` <= @req_end & `GP index` == @gp_index & `grid index` == @grid_index')
-
-        #         # if not df.empty:
-        #         #     print(df['time index'] * coverage_data.time_step)
-
-        #         for _, row in df.iterrows():
-        #             instrument : str = row['instrument']
-        #             if (instrument in req.observations_types 
-        #                 and instrument not in observable_measurements):
-        #                 observable_measurements.append(instrument)
-
-        #             if len(observable_measurements) == len(req.observations_types):
-        #                 break
-
-        #         if len(observable_measurements) == len(req.observations_types):
-        #             break
-
-        #     n_obervations_pos += len(observable_measurements)
-
-    async def sim_wait(self, delay: float) -> None:
-        try:
-            if isinstance(self._clock_config, FixedTimesStepClockConfig):
-                tf = self.get_current_time() + delay
-                while tf > self.get_current_time():
-                    # listen for manager's toc messages
-                    _, _, msg_dict = await self.listen_manager_broadcast()
-
-                    if msg_dict is None:
-                        raise asyncio.CancelledError()
-
-                    msg_dict : dict
-                    msg_type = msg_dict.get('msg_type', None)
-
-                    # check if message is of the desired type
-                    if msg_type != ManagerMessageTypes.TOC.value:
-                        continue
-                    
-                    # update time
-                    msg = TocMessage(**msg_type)
-                    self.update_current_time(msg.t)
-
-            elif isinstance(self._clock_config, AcceleratedRealTimeClockConfig):
-                await asyncio.sleep(delay / self._clock_config.sim_clock_freq)
-
-            else:
-                raise NotImplementedError(f'`sim_wait()` for clock of type {type(self._clock_config)} not yet supported.')
-                
-        except asyncio.CancelledError:
-            return
-
-    @runtime_tracker
-    async def listen_internal_broadcast(self) -> tuple:
-        return await super().listen_internal_broadcast()
-    
-    @runtime_tracker
-    async def listen_manager_broadcast(self) -> tuple:
-        return await super().listen_manager_broadcast()
-    
-    @runtime_tracker
-    async def listen_peer_broadcast(self) -> tuple:
-        return await super().listen_peer_broadcast()
-    
-    @runtime_tracker
-    async def listen_internal_message(self) -> tuple:
-        return await super().listen_internal_message()
     
    
