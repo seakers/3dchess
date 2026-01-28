@@ -15,13 +15,13 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
         # planner output toggle
-        self.planner_debug = True
+        self.planner_debug = False
 
         # test case toggles
         ## common cases
         self.single_sat_toy = False     # NOT IMPLEMENTED YET
         self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
-        self.single_sat_lakes = True   
+        self.single_sat_lakes = False   
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
@@ -32,7 +32,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_5 = False  # two sats      no default mission  one event           comm delays
         self.toy_6 = False  # two sats      no default mission  two targets         two events
         self.toy_7 = False  # two sats      no default mission  two targets         two events at different times
-        self.toy_8 = False  # single sat    default mission     multiple targets    no events
+        self.toy_8 = True  # single sat    default mission     multiple targets    no events
         self.toy_9 = False  # two sats      default mission     multiple targets    no events
         self.toy_10 = False # single sat    no default mission  two targets         two expiring events 
         self.toy_11 = False # two sat       no default mission  two targets         two expiring events 
@@ -106,6 +106,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
             "preplanner": {
                 "@type": "heuristic",
                 "debug": str(self.planner_debug),
+                "period" : 100,
             },
             "replanner": {
                 "@type": "consensus",

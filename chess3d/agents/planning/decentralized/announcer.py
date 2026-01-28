@@ -72,10 +72,10 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
     @runtime_tracker
     def generate_plan(  self, 
                         state : SimulationAgentState,
-                        specs : object,
-                        clock_config : ClockConfig,
+                        _ : object,
+                        __ : ClockConfig,
                         orbitdata : OrbitData,
-                        *_
+                        *___
                     ) -> Plan:
         """ Generates a new plan for the agent """            
         # schedule broadcasts to be perfomed
@@ -105,13 +105,13 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
         broadcasts : List[BroadcastMessageAction] = []
 
         # get list of future events
-        future_events : List[GeophysicalEvent] = [event for event in tqdm(self.events, desc=f'{state.agent_name}/PREPLANNER: Collecting future events', leave=False) 
+        future_events : List[GeophysicalEvent] = [event for event in tqdm(self.events, desc=f'{state.agent_name}-PREPLANNER: Collecting future events', leave=False) 
                                                   if event.is_available(state.t)]
 
         # create requests for each event
         task_requests : List[Tuple[GeophysicalEvent, TaskRequest]] = []
         for event in tqdm(future_events, 
-                          desc=f'{state.agent_name}/PREPLANNER: Generating task request from known events',
+                          desc=f'{state.agent_name}-PREPLANNER: Generating task request from known events',
                           leave=False):
             # get event objetives from mission
             objectives  : list[EventDrivenObjective] = [objective for objective in self.parent_mission.objectives

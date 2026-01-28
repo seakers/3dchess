@@ -568,11 +568,20 @@ class SimulationEnvironment(EnvironmentNode):
             agent_orbitdata : OrbitData = self.orbitdata[agent_state_dict['agent_name']]
 
             # get access data for the agent
-            raw_access_data = agent_orbitdata.gp_access_data.lookup_interval(t_start, t_end)
+            raw_access_data : Dict[str, list] = agent_orbitdata.gp_access_data.lookup_interval(t_start, t_end)
                         
             # get satellite's off-axis angle
             satellite_off_axis_angle = agent_state_dict['attitude'][0]
             
+            # collect instrument information
+            name = instrument_dict["name"]
+            instruments = np.asarray(raw_access_data["instrument"])
+            ID_COLS = {'instrument', 'agent name', 'grid index', 'GP index',
+           'lat [deg]', 'lon [deg]', 'pnt-opt index'}
+            
+            # create instrument mask for data filtering
+            inst_mask = (instruments == name)
+
             # collect data for every instrument model onboard
             obs_data = []
             for instrument_model in instrument_dict['mode']:
@@ -581,74 +590,71 @@ class SimulationEnvironment(EnvironmentNode):
                     instrument_off_axis_fov = instrument_model['fieldOfViewGeometry']['angleWidth'] / 2.0
                 elif instrument_model['@type'] == 'Passive Optical Scanner':
                     instrument_off_axis_fov = instrument_model['fieldOfViewGeometry']['angleWidth'] / 2.0
-                
-                # if isinstance(instrument_model, BasicSensorModel):
-                #     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
-                #     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
-                #     instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
-                # elif isinstance(instrument_model, PassiveOpticalScannerModel):
-                #     instrument_fov : ViewGeometry = instrument_model.get_field_of_view()
-                #     instrument_fov_geometry : SphericalGeometry = instrument_fov.sph_geom
-                #     instrument_off_axis_fov = instrument_fov_geometry.angle_width / 2.0
-
                 else:
                     raise NotImplementedError(f"measurement data query not yet suported for sensor models of type {instrument_model['model_type']}.")
 
                 # query coverage data of everything that is within the field of view of the agent
                 # TODO Add along-track angle checking. Currently assumes that only cross-track maneuverability is available
-                valid_access_data_indeces = [i for i in range(len(raw_access_data['time [s]']))
-                                     if abs(raw_access_data['off-nadir axis angle [deg]'][i] - satellite_off_axis_angle) <= instrument_off_axis_fov
-                                     and instrument_dict['name'] == raw_access_data['instrument'][i]]
-        
-                matching_data = {col : [raw_access_data[col][i] for i in valid_access_data_indeces]
-                                            for col in raw_access_data}
 
-                # compile data
-                unique_targets = {(matching_data['grid index'][i], matching_data['GP index'][i]) 
-                                  for i in range(len(matching_data['time [s]']))}
-                for grid_index,gp_index in unique_targets:
-                    # get matching observations for a given (lat,lon) target
-                    matching_observation_indeces = [i for i in range(len(matching_data['time [s]']))
-                                                    if matching_data['grid index'][i] == grid_index
-                                                    and matching_data['GP index'][i] == gp_index]
-                    matching_observations = { column : [matching_data[column][i] for i in matching_observation_indeces]
-                                             for column in matching_data }
+                angles = np.asarray(raw_access_data["off-nadir axis angle [deg]"])
+                angles_inst = angles[inst_mask]            # smaller array
 
-                    # initialzie merged observation dictionary
-                    merged_observation = { column : [] for column in matching_observations.keys() }
-                    merged_observation['t_start'] = np.Inf
-                    merged_observation['t_end'] = np.NINF
+                mask = np.abs(angles_inst - satellite_off_axis_angle) <= instrument_off_axis_fov
 
-                    # merge observations
-                    for obs_index in range(len(matching_observations['time [s]'])):
-                        datum = { column : matching_observations[column][obs_index] 
-                                 for column in matching_observations.keys() }
-                        
-                        # fix data types to serializable types
-                        for column in datum.keys():
-                            if isinstance(datum[column], np.int64):
-                                datum[column] = int(datum[column])
-                            elif isinstance(datum[column], np.float64):
-                                datum[column] = float(datum[column])
-                        
-                        datum['t_start'] = datum['time [s]'] 
-                        datum['t_end'] = datum['time [s]'] 
-                        
-                        for column in matching_observations.keys():
-                            if (column in ['instrument', 'agent name', 'grid index', 'GP index', 'lat [deg]', 'lon [deg]', 'pnt-opt index']
-                                and len(merged_observation[column]) > 0): 
-                                continue
-                            merged_observation[column].append(datum[column])
+                matching_data = {col: np.asarray(vals)[inst_mask][mask] 
+                                 for col, vals in tqdm(raw_access_data.items(), 
+                                                       desc=f"{self.get_element_name()}-Filtering access data for instrument {name}...", 
+                                                       leave=False)}
+                
+                # convert columns to arrays once
+                cols = {k: np.asarray(v) for k, v in matching_data.items()}
+                grid = cols['grid index'].astype(np.int64, copy=False)
+                gp   = cols['GP index'].astype(np.int64, copy=False)
+                time = cols['time [s]']
 
-                        merged_observation['t_start'] = min(datum['t_start'], merged_observation['t_start'])
-                        merged_observation['t_end'] = max(datum['t_end'], merged_observation['t_end'])
+                # check if there is any data to process
+                if len(time) == 0: continue
 
-                    for key in merged_observation:
-                        if isinstance(merged_observation[key], list) and len(merged_observation[key]) == 1:
-                            merged_observation[key] = merged_observation[key][0]
+                # ---- Build unique groups for (grid, gp) efficiently ----
+                # Stack into (n,2) and unique rows
+                pairs = np.column_stack((grid, gp))  # shape (n,2)
+                _, inv = np.unique(pairs, axis=0, return_inverse=True)
+                # inv[i] = group id of row i, groups are 0..G-1
 
-                    obs_data.append(merged_observation)
+                # Sort rows by group id so each group is contiguous
+                order = np.argsort(inv, kind="mergesort")
+                inv_sorted = inv[order]
 
+                # Find group boundaries in the sorted order
+                # starts: indices in `order` where a new group begins
+                starts = np.r_[0, np.flatnonzero(inv_sorted[1:] != inv_sorted[:-1]) + 1]
+                ends   = np.r_[starts[1:], len(order)]
+
+                obs_data: list[dict] = []
+
+                # Iterate groups (G is usually much smaller than N)
+                for s,e in zip(starts, ends):
+                    idx = order[s:e]  # row indices for this group
+
+                    merged = {
+                        't_start': float(np.min(time[idx])),
+                        't_end':   float(np.max(time[idx])),
+                    }
+
+                    # For ID columns: take first value
+                    # For other columns: collect list (or scalar if length 1)
+                    for col, arr in cols.items():
+                        if col in ID_COLS:
+                            v = arr[idx[0]]
+                            merged[col] = v.item() if hasattr(v, "item") else v
+                        else:
+                            v = arr[idx]
+                            # Convert numpy scalars to Python types if needed
+                            lst = [x.item() if hasattr(x, "item") else x for x in v.tolist()]
+                            merged[col] = lst[0] if len(lst) == 1 else lst
+
+                    obs_data.append(dict(merged))
+                
             # return processed observation data
             return obs_data
 

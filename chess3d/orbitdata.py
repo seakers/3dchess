@@ -178,7 +178,7 @@ class TimeIndexedData(AbstractData):
         # out['time [s]'] = t
         # return out
     
-    def lookup_interval(self, t_start : float, t_end : float, columns : list = None) -> list:
+    def lookup_interval(self, t_start : float, t_end : float, columns : list = None) -> Dict[str, list]:
         """
         Returns the value of data between the start and end times in seconds
         """
