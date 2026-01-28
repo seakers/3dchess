@@ -1080,7 +1080,7 @@ class Simulation:
                 # find observations performed at task location while task was active
                 matching_observations = [   (observer, t_obs_start, t_obs_end, img_lat, img_lon, instrument)
                                     # for observer,gp_idx_img,_,img_lat,img_lon,*__,grid_idx_img,instrument,agent_name,___,t_obs_start,t_obs_end in observations_per_gp[(task_lat, task_lon)].values
-                                    for observer,t_obs_start,t_obs_end,gp_idx_img,_,img_lat,img_lon,*_, grid_idx_img, instrument,agent_name,_ in observations_per_gp[(task_lat, task_lon)].values
+                                    for gp_idx_img,agent_name,grid_idx_img,_,_,_,instrument,img_lat,img_lon,_,_,observer,_,_,t_obs_end,t_obs_start,_ in observations_per_gp[(task_lat, task_lon)].values
                                                                      
                                     # check if observation time overlaps with event time
                                     if Interval(t_obs_start, t_obs_end).overlaps(task.availability)
@@ -1205,7 +1205,8 @@ class Simulation:
 
         # find observations that overlooked a given event's location
         matching_observations = [   (observer, t_obs_start, t_obs_end, img_lat, img_lon, instrument)
-                                    for observer,gp_idx_img,_,img_lat,img_lon,*__,grid_idx_img,instrument,agent_name,___,t_obs_start,t_obs_end in observations_per_gp[(event_lat, event_lon)].values
+                                    # for observer,gp_idx_img,_,img_lat,img_lon,*__,grid_idx_img,instrument,agent_name,___,t_obs_start,t_obs_end in observations_per_gp[(event_lat, event_lon)].values
+                                    for gp_idx_img,agent_name,grid_idx_img,_,_,_,instrument,img_lat,img_lon,_,_,observer,_,_,t_obs_end,t_obs_start,_ in observations_per_gp[(event_lat, event_lon)].values
                                                                      
                                     # check if observation time overlaps with event time
                                     if Interval(t_obs_start, t_obs_end).overlaps(event.availability)
@@ -1627,8 +1628,8 @@ class Simulation:
                     continue
 
                 # get observation times
-                _,t_start,*__ = observation
-                _,__,t_prev_end,*____ = prev_observation
+                *_,t_start,_ = observation
+                *_,t_prev_end,__,___ = prev_observation
 
                 # calculate revisit
                 # t : Interval = Interval(t_start, t_end)

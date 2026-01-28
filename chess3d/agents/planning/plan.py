@@ -396,38 +396,46 @@ class Plan(ABC):
         if self.is_empty():
             out += 'EMPTY\n\n'
         else:
-            for action in self.actions:
-                if isinstance(action, AgentAction):
+            # select actions to print
+            if len(self.actions) > 20:
+                actions_to_print = self.actions[:10] + self.actions[-10:]
+            else:
+                actions_to_print = self.actions
 
-                    if isinstance(action, WaitAction):
-                        if abs(action.t_end - self.t_next) < 1e-3:
-                            out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\ttrigger periodic replanning"
-                        else:
-                            out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\t-"
+            for action_idx,action in enumerate(actions_to_print):
+
+                if isinstance(action, WaitAction):
+                    if abs(action.t_end - self.t_next) < 1e-3:
+                        out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\ttrigger periodic replanning"
                     else:
-                        out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}"
+                        out += f"{action.id.split('-')[0]}  {action.action_type}\t\t{round(action.t_start,1)}\t{round(action.t_end,1)}\t-"
+                else:
+                    out += f"{action.id.split('-')[0]}  {action.action_type}\t{round(action.t_start,1)}\t{round(action.t_end,1)}"
 
-                    if isinstance(action, ObservationAction):
-                        locations = {int(gp_idx) for *_,gp_idx in action.obs_opp.get_location()}
-                        locations = sorted(list(locations))
-                        n_locations = len(locations)
+                if isinstance(action, ObservationAction):
+                    locations = {int(gp_idx) for *_,gp_idx in action.obs_opp.get_location()}
+                    locations = sorted(list(locations))
+                    n_locations = len(locations)
 
-                        if n_locations > 3:
-                            locations = locations[:3]
-                            locations.append('...')
+                    if n_locations > 3:
+                        locations = locations[:3]
+                        locations.append('...')
 
-                        out += f"\t{action.instrument_name}, targets: {n_locations} {locations}"
-                    
-                    elif isinstance(action, ManeuverAction):
-                        # TODO increase dimensionality of maneuver description
-                        out += f"\t{round(action.initial_attitude[0],1)}° -> {round(action.final_attitude[0],1)}°"
+                    out += f"\t{action.instrument_name}, targets: {n_locations} {locations}"
+                
+                elif isinstance(action, ManeuverAction):
+                    # TODO increase dimensionality of maneuver description
+                    out += f"\t{round(action.initial_attitude[0],1)}° -> {round(action.final_attitude[0],1)}°"
 
-                    elif isinstance(action, FutureBroadcastMessageAction):
-                        out += f"\t{action.broadcast_type.lower()} broadcast"
-                    elif isinstance(action, BroadcastMessageAction):
-                        out += f"\t{action.msg['msg_type'].split('_')[-1].lower()} broadcast"
+                elif isinstance(action, FutureBroadcastMessageAction):
+                    out += f"\t{action.broadcast_type.lower()} broadcast"
+                elif isinstance(action, BroadcastMessageAction):
+                    out += f"\t{action.msg['msg_type'].split('_')[-1].lower()} broadcast"
 
-                    out += '\n'    
+                if len(self.actions) > 20 and action_idx == 9:
+                    out += f'\n\t\t...'
+
+                out += '\n'    
         
         # divider 
         for _ in range(L_LINE + L_LINE_PADding): out += '_'

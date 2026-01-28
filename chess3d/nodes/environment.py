@@ -311,6 +311,43 @@ class SimulationEnvironment(EnvironmentNode):
 
             # wait for all agent's to send their updated states
             self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
+
+            # TODO TEMPORARY: breakpoint for debugging
+            if 94.0 < t < 95.0:
+                # update connectivity matrix for debugging
+                connectivity = defaultdict(lambda: defaultdict(lambda: 0))
+                for sender in self.agent_connectivity:
+                    for receiver in self.agent_connectivity:
+                        connectivity[sender][receiver] = self.check_agent_connectivity(sender, receiver)
+
+                # print connectivity matrix
+                print('\n\n\n')
+                for sender in self.agent_connectivity:
+                    line = ""
+                    for receiver in self.agent_connectivity:
+                        if sender == receiver:
+                            line += "0,"
+                            continue
+                        line += f"{connectivity[sender][receiver]},"                        
+
+                    print(line[:-1])
+                
+                # check for mismatches
+                for sender in self.agent_connectivity:
+                    for receiver in self.agent_connectivity:
+                        if sender == receiver:
+                            continue
+                        
+                        if connectivity[sender][receiver] != self.agent_connectivity[receiver][sender]:
+                            a_to_b = self.check_agent_connectivity(sender, receiver)
+                            b_to_a = self.check_agent_connectivity(receiver, sender)
+                            x = 1 # breakpoint
+                            
+
+                        assert connectivity[sender][receiver] == self.agent_connectivity[receiver][sender], \
+                            f'Connectivity mismatch between {sender} and {receiver}: {connectivity[sender][receiver]} vs {self.agent_connectivity[receiver][sender]}'
+
+                x = 1 # breakpoint
         
         else:
             # ignore message
@@ -840,14 +877,14 @@ class SimulationEnvironment(EnvironmentNode):
                     
                     # find column names 
                     if columns is None:
-                        columns = [key for key in obs]
+                        columns = sorted([key for key in obs])
                         columns.insert(0, 'observer')
                         # columns.insert(2, 't_img')
                         # columns.remove('t_start')
                         # columns.remove('t_end')
 
                     # add observation to data list
-                    obs['observer'] = observer
+                    obs['observer'] = observer.lower()
                     for key in columns:
                         val = obs.get(key, None)
                         if isinstance(val, list):
@@ -863,7 +900,10 @@ class SimulationEnvironment(EnvironmentNode):
 
                     data.append([obs[key] for key in columns])
 
-            return pd.DataFrame(data=data, columns=columns)
+            observations_df = pd.DataFrame(data=data, columns=columns)
+            observations_df = observations_df.sort_index(axis=1)
+
+            return observations_df
         
         except Exception as e:
             print(e.with_traceback())

@@ -934,15 +934,15 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return list of bids in violation
         return bids_in_violation   
     
-    def needs_planning(self, *_) -> bool:
+    def needs_planning(self, state : SimulationAgentState, *_) -> bool:
         # -------------------------------
         # DEBUG BREAKPOINTS
-        # if self.task_announcements_received:
-        #     x = 1 # breakpoint
-        # if self.results_changes_performed:
-        #     x = 1  # breakpoint
-        # if self.bundle_changes_performed:
-        #     x = 1  # breakpoint
+        if self.task_announcements_received:
+            x = 1 # breakpoint
+        if self.results_changes_performed:
+            x = 1  # breakpoint
+        if self.bundle_changes_performed:
+            x = 1  # breakpoint
         # -------------------------------
 
         # trigger replan if either...
@@ -1508,6 +1508,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
             elif orbitdata is None:
                 raise ValueError(f'`orbitdata` required for agents of type `{type(state)}`.')
 
+            # -------------------------------
+            # DEBUG BREAKPOINTS
+            # -------------------------------
+
             # initialize list of broadcasts to be done
             broadcasts = []       
 
@@ -1541,22 +1545,16 @@ class ConsensusPlanner(AbstractReactivePlanner):
             if any([isinstance(task, EventObservationTask) for task in self.results]):
                 # schedule broadcast times and find useful access intervals
                 for target in orbitdata.comms_links.keys():
-                    
+
                     # get access intervals with target agent
-                    next_access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, state.t, include_current=True)
-
-                    # collect access start times for future reference
-                    t_access_starts.update([access.left 
-                                            for access in next_access_intervals 
-                                            if not access.is_empty()])
-
-                    # create broadcast actions for each access interval
-                    for next_access_interval in next_access_intervals:
-                        # if no access opportunities in this planning horizon, skip scheduling
-                        if next_access_interval.is_empty(): continue
+                    next_access_interval : Interval = orbitdata.get_next_agent_access(target, state.t, include_current=True)
+                    
+                    # if no access opportunities in this planning horizon, skip scheduling
+                    if next_access_interval is not None:
+                        # collect access start times for future reference
+                        t_access_starts.add(next_access_interval.left)
 
                         # get last access interval and calculate broadcast time
-                        # t_broadcast : float = max(next_access.left, state.t)
                         t_broadcast : float = max(
                                                 min(next_access_interval.left + 5*self.EPS,    # give buffer time for access to start
                                                     next_access_interval.right),               # ensure broadcast is before access ends
@@ -1564,6 +1562,32 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
                         # add to list of broadcast times if not already present
                         t_broadcasts.add(t_broadcast)
+                    else:
+                        test = orbitdata.get_next_agent_access(target, state.t, include_current=True)
+                        x = 1 # breakpoint
+                    
+                    # # get access intervals with target agent
+                    # next_access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, state.t, include_current=True)
+
+                    # # collect access start times for future reference
+                    # t_access_starts.update([access.left 
+                    #                         for access in next_access_intervals 
+                    #                         if not access.is_empty()])
+
+                    # # create broadcast actions for each access interval
+                    # for next_access_interval in next_access_intervals:
+                    #     # if no access opportunities in this planning horizon, skip scheduling
+                    #     if next_access_interval.is_empty(): continue
+
+                    #     # get last access interval and calculate broadcast time
+                    #     # t_broadcast : float = max(next_access.left, state.t)
+                    #     t_broadcast : float = max(
+                    #                             min(next_access_interval.left + 5*self.EPS,    # give buffer time for access to start
+                    #                                 next_access_interval.right),               # ensure broadcast is before access ends
+                    #                             state.t)                                # ensure broadcast is not in the past
+
+                    #     # add to list of broadcast times if not already present
+                    #     t_broadcasts.add(t_broadcast)
                    
                 # check if any communication links are available at all
                 if not orbitdata.comms_links:
@@ -1601,9 +1625,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
             
             # include established zero-length waits from preplan
             preplan_waits = [action for action in self.preplan.actions
-                                    # extract only wait-for-message actions
-                                    if isinstance(action, WaitAction)
-                                    and action.t_end - action.t_start <= self.EPS]
+                                # extract only wait-for-message actions
+                                if isinstance(action, WaitAction)
+                                and action.t_end - action.t_start <= self.EPS]
             
             # connection waits; allows for messages to be received right after access start times
             waits = [WaitAction(t_access_start, t_access_start) for t_access_start in t_access_starts]

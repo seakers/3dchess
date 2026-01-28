@@ -208,10 +208,19 @@
             "env": {
                 "PYTHONPATH": "${workspaceRoot}"
             },
+            // "args": [
+            //     "-n", "toy_trials",
+            //     "-o", "False",
+            //     "-d", "True"
+            // ]
             "args": [
-                "-n", "toy_trials",
+                // "-n", "full_factorial_trials",
+                "-n", "lhs_trials-2_samples-1000_seed",
                 "-o", "False",
-                "-d", "True"
+                "-d", "True",
+                // "-p", "True",
+                "-l", "3",
+                "-u", "4"
             ]
         },
         {

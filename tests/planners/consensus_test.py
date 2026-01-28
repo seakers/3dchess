@@ -15,13 +15,13 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
         # planner output toggle
-        self.planner_debug = False
+        self.planner_debug = True
 
         # test case toggles
         ## common cases
         self.single_sat_toy = False     # NOT IMPLEMENTED YET
         self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
-        self.single_sat_lakes = True   
+        self.single_sat_lakes = False   
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
@@ -49,7 +49,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_22 = False # two sats      no default mission     multiple targets    two events announced by GS   replan
 
         self.toy_23 = False 
-        self.toy_24 = False
+        self.toy_24 = True
         self.toy_25 = False
         self.toy_26 = False
 
@@ -1552,13 +1552,19 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         1) latitude,longitude = 0.0°, 0.0°
 
         Contacts:
+        - Sat 0 and 1 contact: 0[s] - 7200.0[s]
+        - Sat 0 and 2 contact: 0[s] - 7200.0[s]
+        - Sat 0 and 3 contact: 0[s] - 7200.0[s]
+        - Sat 1 and 2 contact:     None
         - Sat 1 and 3 contact: 2531.02[s] - 7200.0[s]
+        - Sat 2 and 3 contact: 0[s] - 5187.22[s]
+        - Sat 3 as relay: 2531.02[s] - 5187.22[s]
+        
+        Event 1 Accesses:
         - Sat 1 target 1 access 1: 33.67[s] - 34.27[s]
         - Sat 1 target 1 access 2: 5914.70[s] - 5915.32[s]
-        - Sat 2 and 3 contact: 0[s] - 5187.22[s]
         - Sat 2 target 1 access 1: 755.61[s] - 756.19[s]
         - Sat 2 target 1 access 2: 6636.75[s] - 6637.[s]
-        - Sat 3 as relay: 2531.02[s] - 5187.22[s]
 
         Timeline:
         - T:0[s] Sat 2 and 3 contact starts
@@ -1640,8 +1646,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         - T:5914.70[s] Sat 3 informs Sat 1 that Sat 1 won n=3 for event 1 for t=5914.70[s]
 
         - T:6636.75[s] Sat 2 performs observation n=4 of event 1
-        - T:6636.75[s] Sat 1 assumes Sat 2 performed observation n=4 of event 1 for t=6636.75[s]
-        - T:6636.75[s] Sat 3 assumes Sat 2 performed observation n=4 of event 1 for t=6636.75[s]
+        - T:6636.75[s] Sat 2 determines it won n=4 of event 1 at t=6636.75[s]
 
         - T:7200.00[s] Event 2 ends
         - T:7200.00[s] Sat 1 and 3 contact ends
@@ -2246,7 +2251,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
     
     def test_toy_case_24(self):
         """
-        ## TOY CASE 23
+        ## TOY CASE 24
         Test case for a two satellites responding to event announcements from a announcer satelite
           while bidding against a ground operator agent. Satellites can never see eachother, can only
           share information via the ground station.

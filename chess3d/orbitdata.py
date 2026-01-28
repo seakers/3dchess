@@ -380,41 +380,29 @@ class IntervalData(AbstractData):
         self.data : List[tuple] = data
         self.bin_size : float = bin_size
 
-        # base-case for no data
-        if not data:
-            self.n_bins = 1
-            self.grouped_data = [[]]
-            return
+        # find maximum time to determine number of bins
+        max_t_start = max([t_start for t_start,*_ in data], default=0.0)
+        max_t_end = max([t_end for _,t_end,*_ in data], default=0.0)
+        max_t = max(max_t_start, max_t_end)
 
-        # group data into bins depending on their start time for faster lookup
-        starts = np.fromiter((row[0] for row in data), dtype=np.float64, count=len(data))
-        max_start = float(starts.max())
+        # store raw columns in parallel arrays for speed
+        self.n_bins = max(1, int(max_t // self.bin_size) + 1)
+        self.bin_to_data_indices = [[] for _ in range(self.n_bins)]
 
-        # set number of bins
-        self.n_bins = int(max_start // bin_size) + 1
+        # group data indices into bins depending on their interval for faster lookup
+        for interval_idx, (t_start, t_end, *_) in tqdm(enumerate(data), desc=f'Grouping interval {name} data', unit=' time bins', leave=False):
+            b0 = max(0, int(t_start // self.bin_size))
+            b1 = min(self.n_bins - 1, int(t_end // self.bin_size))
 
-        # compute bin ids for each data row
-        bin_ids = np.floor_divide(starts, self.bin_size).astype(np.int64)
-        bin_ids = np.clip(bin_ids, 0, self.n_bins - 1)
+            assert b1 >= b0, \
+                'invalid bin indices computed for interval data'
 
-        # stable sort by bin id, then slice contiguous segments
-        order = np.argsort(bin_ids, kind="mergesort")
-        bin_ids_sorted = bin_ids[order]
+            for b in range(b0, b1 + 1):
+                self.bin_to_data_indices[b].append(interval_idx)
 
-        # boundaries where bin changes
-        cuts = np.flatnonzero(bin_ids_sorted[1:] != bin_ids_sorted[:-1]) + 1
-        starts_idx = np.r_[0, cuts]
-        ends_idx   = np.r_[cuts, len(order)]
-
-        # build bins
-        bins = [[] for _ in range(self.n_bins)]
-        for s, e in zip(starts_idx, ends_idx):
-            b = int(bin_ids_sorted[s])
-            # append rows belonging to this bin
-            bins[b] = [data[i] for i in order[s:e]]
-
-        # assign grouped data
-        self.grouped_data = bins
+        # sort each bin by start time for early stopping during lookup
+        for ids in tqdm(self.bin_to_data_indices, desc=f'Sorting interval {name} data indices', unit=' time bins', leave=False):
+            ids.sort(key=lambda idx: data[idx][0])
 
         # TEMP Original implementation        
         # # group data into bins depending on their start time for faster lookup
@@ -456,37 +444,45 @@ class IntervalData(AbstractData):
         Returns interval that contains time `t`. Returns None if no interval contains time `t`
         """        
         # check if there is any data
-        if not self.grouped_data: return None
-        
+        if len(self.data) == 0: return None
+
         # set tolerance for floating point comparisons
         eps = 1e-6
 
         # find appropriate bin to search
-        if not np.isfinite(t):
-            bin_index = len(self.grouped_data) - 1
-        else:
-            bin_index = int(t // self.bin_size)
-            if bin_index < 0:
-                bin_index = 0
-            if bin_index >= len(self.grouped_data):
-                bin_index = len(self.grouped_data) - 1
+        bin_idx = int(t // self.bin_size)
+        
+        # bound bin index
+        if bin_idx < 0: 
+            bin_idx = 0
+        if bin_idx >= self.n_bins: 
+            bin_idx = self.n_bins - 1
+
+        # define earliest matching interval
+        earliest_interval_idx = None
+        t_start_earliest = np.Inf
 
         # search for interval in appropriate bin
-        best = None
-        best_start = None
-        for t_start,t_end,*row in self.grouped_data[bin_index]:
-            # since sorted by start, once start > t we can stop
-            if t_start > t + eps: break
+        for data_idx in self.bin_to_data_indices[bin_idx]:
+            # get interval data
+            t_start_i,t_end_i,*_ = self.data[data_idx]
 
-            # check if t is within interval
-            if t_start - eps <= t <= t_end + eps:
-                # compare to best match found so far
-                if best is None or t_start < best_start:
-                    best = (t_start, t_end, row)
-                    best_start = t_start
+            # check if interval time starts after `t`
+            if t + eps < t_start_i:  
+                # early stop because bin list is sorted by start time;
+                # no need to check further intervals
+                break
 
-        # return the best matching interval or None if no interval was found
-        return best
+            # check if `t` is within interval
+            if t_start_i - eps <= t <= t_end_i + eps:
+                # choose whatever tie-break you want; here earliest start
+                if earliest_interval_idx is None or t_start_i < t_start_earliest:
+                    earliest_interval_idx = data_idx
+                    t_start_earliest = t_start_i
+
+        # return the earliest matching interval if found
+        return tuple(self.data[earliest_interval_idx]) \
+            if earliest_interval_idx is not None else None
 
     # TEMP Original implementation
     # def lookup(self, t : float) -> list:
@@ -526,50 +522,66 @@ class IntervalData(AbstractData):
         """
         Returns all intervals that overlap with the interval [t_start, t_end]
         """
-        # check if there is any data
-        if not self.grouped_data: return []
+        # validate inputs
+        assert isinstance(t_start, (int,float)) and t_start >= 0.0, 'start time must be a positive number'
+        assert isinstance(t_end, (int,float)) and t_end >= 0.0, 'end time must be a positive number'
+        assert t_start <= t_end, 'start time must be less than end time'
 
+        # check if there is any data
+        if len(self.data) == 0: return []
+        
         # set tolerance for floating point comparisons
         eps = 1e-6
 
-        # define query interval with tolerance
-        q0 = t_start - eps
-        q1 = t_end + eps
+        # set query interval with tolerance
+        q0, q1 = t_start - eps, t_end + eps
 
         # find appropriate bins to search
-        b0 = int(t_start // self.bin_size)
-        if b0 < 0: b0 = 0
-        b1 = (len(self.grouped_data) - 1) if not np.isfinite(t_end) else int(t_end // self.bin_size)
-        if b1 >= len(self.grouped_data): b1 = len(self.grouped_data) - 1
+        b0 = max(int(t_start // self.bin_size), 0)
+        b1 = int(t_end // self.bin_size) if not np.isinf(t_end) else self.n_bins - 1
+        
+        # check if start bin is beyond range
+        if b0 >= self.n_bins: 
+            return []
 
+        # bound bin indices
+        b0 = min(self.n_bins - 1, b0)
+        b1 = min(self.n_bins - 1, b1)
+
+        assert b1 >= b0, \
+            'invalid bin indices computed for interval data lookup'
+
+        # store seen interval indices to avoid duplicates
+        seen = set()
+        
         # search for intervals in appropriate bins
         out = []
-        seen = set()  # avoid duplicates across bins; replace with interval_id if you have it
+        for bin_idx in range(b0, b1 + 1):
+            # search for intervals in the bin
+            for data_idx in self.bin_to_data_indices[bin_idx]:
+                # avoid duplicates
+                if data_idx in seen: continue
 
-        for b in range(b0, b1 + 1):
-            bin_data = self.grouped_data[b]  # sorted by start
+                # mark interval as seen
+                seen.add(data_idx)
 
-            for rec in bin_data:
-                s, e, *rest = rec
+                # unpack interval data
+                t_start_i,t_end_i,*row = self.data[data_idx]
 
-                # early stop: if starts after query, nothing else in this bin can overlap
-                if s > q1:
+                # check if interval time starts after `t_end`
+                if t_start_i > q1:  
+                    # early stop because bin list is sorted by start time;
+                    # no need to check further intervals
                     break
 
-                # overlap test: not (e < q0 or s > q1)
-                if e >= q0:
-                    key = (s, e, *rest)  # better: use an explicit unique id if available
-                    if key in seen:
-                        continue
-                    seen.add(key)
+                if not (t_end_i < q0 or t_start_i > q1):
+                    out.append((t_start_i, t_end_i, *row))
 
-                    out.append((max(s, t_start), min(e, t_end)))
-        
-        # sort output intervals by start time
-        out.sort()
+        # sort intervals by start time
+        out.sort(key=lambda r: r[0])
 
-        # return as Interval objects
-        return [Interval(s, e) for s, e in out]
+        # return the matching intervals
+        return [Interval(t_start_i, t_end_i) for t_start_i,t_end_i,*_ in out]
     
         # TEMP Original implementation
         # try:
@@ -794,26 +806,45 @@ class OrbitData:
     def __get_next_interval(self, interval_data : IntervalData, t : float, t_max: float = np.Inf, include_current: bool = False) -> Interval:
         """ returns the next access interval from `interval_data` after or during time `t`. """
         # get next intervals
-        future_intervals: list[tuple[float, float]] = self.__get_next_intervals(interval_data, t, t_max, include_current)
+        future_intervals : list[Interval] = interval_data.lookup_intervals(t, t_max)
+
+        # check if current interval should be included
+        if not include_current:
+            # exclude intervals that contain time `t`
+            future_intervals = [interval for interval in future_intervals
+                                if t < interval.left] # interval starts after time `t`
+        else:
+            # include current intervals but clip to start at time `t`
+            future_intervals = [Interval(max(t, interval.left), interval.right) if interval.left <= t <= interval.right else interval
+                                for interval in future_intervals]
 
         # check if there are any valid intervals
         if not future_intervals: return None
 
-        # get interval bounds
-        t_start,t_end = future_intervals[0]
+        # get next interval
+        next_interval = future_intervals[0]
 
         # return the first interval that starts after or at time `t`
-        return Interval(max(t, t_start), min(t_end, t_max))
+        return Interval(max(t, next_interval.left), min(next_interval.right, t_max))
+        
+        # TEMP previous implementation
+        # # get next intervals
+        # future_intervals: list[tuple[float, float]] = self.__get_next_intervals(interval_data, t, t_max, include_current)
+
+        # # check if there are any valid intervals
+        # if not future_intervals: return None
+
+        # # get interval bounds
+        # t_start,t_end = future_intervals[0]
+
+        # # return the first interval that starts after or at time `t`
+        # return Interval(max(t, t_start), min(t_end, t_max))
 
     def __get_next_intervals(self, interval_data : IntervalData, t : float, t_max: float = np.Inf, include_current: bool = False) -> List[Tuple[float, float]]:
         # find all intervals that end after time `t` and start before time `t_max`
-        # future_intervals: list[tuple[float, float]] = [(t_start, t_end)
-        #                                                 for t_start,t_end,*_ in interval_data.data
-        #                                                 if t <= t_end # interval ends after or at time `t`
-        #                                                 and t_start <= t_max # interval starts before or at time `t_max`
-        #                                                 ]
-
         future_intervals : List[Interval] = interval_data.lookup_intervals(t, t_max)
+        
+        # convert to tuple form
         future_interval_pairs = [(interval.left, interval.right) for interval in future_intervals]
         
         # check if current interval should be included
@@ -1053,29 +1084,26 @@ class OrbitData:
                 # remove file extension and split sender and receiver
                 isl = re.sub(".csv", "", file)
                 sender, _, receiver = isl.split('_')
+                
+                # generate ISL access file path
+                isl_file = os.path.join(comms_path, file)
 
-                # check if this ISL involves the current spacecraft
-                if sat_id in sender or sat_id in receiver:
+                # load ISL data depending on whether the current spacecraft is the sender or receiver
+                if sat_id == sender:
+                    # sat_id in sender
+                    receiver_index = int(re.sub("[^0-9]", "", receiver))
+                    receiver_name = spacecraft_list[receiver_index].get('name')
 
-                    # generate ISL access file path
-                    isl_file = os.path.join(comms_path, file)
-
-                    # load ISL data depending on whether the current spacecraft is the sender or receiver
-                    if sat_id in sender:
-                        # sat_id in sender
-                        receiver_index = int(re.sub("[^0-9]", "", receiver))
-                        receiver_name = spacecraft_list[receiver_index].get('name')
-
-                        # load ISL data
-                        isl_data[receiver_name] = OrbitData.load_isl_data(isl_file, connectivity, simulation_duration, time_step)
-                        
-                    else:
-                        # sat_id in receiver
-                        sender_index = int(re.sub("[^0-9]", "", sender))
-                        sender_name = spacecraft_list[sender_index].get('name')
-                        
-                        # load ISL data
-                        isl_data[sender_name] = OrbitData.load_isl_data(isl_file, connectivity, simulation_duration, time_step)
+                    # load ISL data
+                    isl_data[receiver_name] = OrbitData.load_isl_data(isl_file, connectivity, simulation_duration, time_step)
+                    
+                elif sat_id == receiver:
+                    # sat_id in receiver
+                    sender_index = int(re.sub("[^0-9]", "", sender))
+                    sender_name = spacecraft_list[sender_index].get('name')
+                    
+                    # load ISL data
+                    isl_data[sender_name] = OrbitData.load_isl_data(isl_file, connectivity, simulation_duration, time_step)
 
             # compile list of ground stations that are part of the desired network
             gs_network_name = spacecraft.get('groundStationNetwork', None)

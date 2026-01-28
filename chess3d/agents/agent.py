@@ -760,7 +760,8 @@ class SimulatedAgent(AbstractAgent):
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # if self.preplanner._debug: self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
-                # self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                if state.t < 1:
+                    self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 x = 1 # breakpoint
                 # -------------------------------------
 
@@ -816,7 +817,10 @@ class SimulatedAgent(AbstractAgent):
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
                 # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
-                x = 1 # breakpoint
+                # x = 1 # breakpoint
+                if 16.0 < state.t < 17.0:
+                    self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                    x = 1 # breakpoint
                 # -------------------------------------
 
         # get next actions to perform
@@ -824,8 +828,10 @@ class SimulatedAgent(AbstractAgent):
         
         # --- FOR DEBUGGING PURPOSES ONLY: ---        
         # self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
-        # if state.t > 16.0:
-        #     self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
+        if 16.0 < state.t < 17.0:
+            self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
+        if state.t > 17.0:
+            x = 1 # breakpoint
         # -------------------------------------        
 
         # return next actions to perform
