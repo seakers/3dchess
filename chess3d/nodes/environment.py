@@ -654,7 +654,7 @@ class SimulationEnvironment(EnvironmentNode):
                             merged[col] = lst[0] if len(lst) == 1 else lst
 
                     obs_data.append(dict(merged))
-                
+
             # return processed observation data
             return obs_data
 
