@@ -144,11 +144,10 @@ class AbstractPlanner(ABC):
                             t_start = t
                             t_end = t
                             indices = [idx]
-
-                    if abs(t_start - access_indices[0][1]) < self.EPS:
-                        # only one interval
-                        merged_access_intervals.append( Interval(t_start, t_end) )
-                        interval_indices.append(list(indices))
+                    
+                    # add last interval
+                    merged_access_intervals.append( Interval(t_start, t_end) )
+                    interval_indices.append(list(indices))
 
                     for interval,indices in zip(merged_access_intervals, interval_indices):
                         access_opportunities[grid_idx][gp_idx][instrument].append( (interval, 

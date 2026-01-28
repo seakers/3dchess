@@ -73,21 +73,21 @@ class TimeIndexedData(AbstractData):
         self.bin_size : float = bin_size
                 
         # group data into bins depending on their time for faster lookup
-        n_bins = ceil(max(t, default=0) / bin_size) 
+        self.n_bins = ceil(max(t, default=0) / bin_size) 
         grouped_indices : List[List[float]] = [
             [(t_indx, t_i) for t_indx,t_i in enumerate(t)
                 if (i*self.bin_size) <= t_i < ((i+1)*self.bin_size)]
-            for i in tqdm(range(n_bins), desc=f'Grouping time-indexed {name} time', unit=' time bins', leave=False)
-        ] if n_bins > 1 else [ [(t_indx, t_i) for t_indx,t_i in enumerate(t)] ]
+            for i in tqdm(range(self.n_bins), desc=f'Grouping time-indexed {name} time', unit=' time bins', leave=False)
+        ] if self.n_bins > 1 else [ [(t_indx, t_i) for t_indx,t_i in enumerate(t)] ]
         
         self.grouped_t : List[List[float]] = [
-            [t_i for _,t_i in grouped_indices[i]] for i in range(n_bins)
-        ]
+            [t_i for _,t_i in grouped_indices[i]] for i in range(self.n_bins)
+        ] if self.n_bins > 1 else [ [t_i for _,t_i in grouped_indices[0]] ]
 
         self.grouped_data : Dict[List[List[tuple]]] \
             = {col : [
                     [vals[t_indx] for t_indx,_ in grouped_indices[i] ]
-                    for i in tqdm(range(n_bins), desc=f'Grouping `{col}` data', unit=' time bins', leave=False)
+                    for i in tqdm(range(self.n_bins), desc=f'Grouping `{col}` data', unit=' time bins', leave=False)
                 ] for col,vals in tqdm(data.items(), desc=f'Grouping time-indexed {name} data', unit=' data columns', leave=False)}
         
 
@@ -270,12 +270,12 @@ class IntervalData(AbstractData):
         self.bin_size : float = bin_size
                 
         # group data into bins depending on their start time for faster lookup
-        n_bins = ceil(max([t_start for t_start,*_ in data], default=0) / bin_size)
+        self.n_bins = ceil(max([t_start for t_start,*_ in data], default=0) / bin_size)
         self.grouped_data : List[List[tuple]] = [
             [(t_start, t_end, *row) for t_start,t_end,*row in self.data
              if (i*self.bin_size) <= t_start < ((i+1)*self.bin_size)]
-            for i in tqdm(range(n_bins), desc=f'Grouping interval {name} data', unit=' time bins', leave=False)
-        ]
+            for i in tqdm(range(self.n_bins), desc=f'Grouping interval {name} data', unit=' time bins', leave=False)
+        ] if self.n_bins > 1 else [ self.data ]
 
     def from_dataframe(df : pd.DataFrame, time_step : float, name : str = 'param') -> 'IntervalData':
         assert time_step > 0.0, 'time step must be greater than 0.0'
@@ -340,38 +340,41 @@ class IntervalData(AbstractData):
         """
         Returns all intervals that overlap with the interval [t_start, t_end]
         """
-        # check if there is any data
-        if not self.grouped_data: 
-            return []
+        try:
+            # check if there is any data
+            if not self.grouped_data: return []
 
-        # find appropriate bin to search
-        bin_index_start = min(int(t_start // self.bin_size), len(self.grouped_data) - 1)
-        bin_index_end = min(int(t_end // self.bin_size), len(self.grouped_data) - 1) \
-                            if t_end < np.Inf else len(self.grouped_data) - 1
+            # find appropriate bin to search
+            bin_index_start = min(int(t_start // self.bin_size), len(self.grouped_data) - 1)
+            bin_index_end = min(int(t_end // self.bin_size), len(self.grouped_data) - 1) \
+                                if t_end < np.Inf else len(self.grouped_data) - 1
 
-        # search for intervals in appropriate bins
-        if bin_index_start < len(self.grouped_data):
-            # compile list of bins to search
-            bins_to_search = self.grouped_data[bin_index_start : bin_index_end + 1]
+            # search for intervals in appropriate bins
+            if bin_index_start < len(self.grouped_data):
+                # compile list of bins to search
+                bins_to_search = self.grouped_data[bin_index_start : bin_index_end + 1]
+                
+                # search for intervals in the bins
+                intervals = [(t_start_i,t_end_i,*_)
+                            for search_data in bins_to_search
+                            for t_start_i,t_end_i,*_ in search_data
+                            if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
+                
+            else:
+                # if no bin was found, search all data
+                intervals = [(t_start_i,t_end_i) 
+                            for t_start_i,t_end_i,*_ in self.data
+                            if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
             
-            # search for intervals in the bins
-            intervals = [(t_start_i,t_end_i,*_)
-                         for search_data in bins_to_search
-                         for t_start_i,t_end_i,*_ in search_data
-                         if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
+            # sort intervals by start time
+            intervals.sort()
             
-        else:
-            # if no bin was found, search all data
-            intervals = [(t_start_i,t_end_i) 
-                        for t_start_i,t_end_i,*_ in self.data
-                        if not (t_end_i < t_start - 1e-6 or t_start_i > t_end + 1e-6)]
-        
-        # sort intervals by start time
-        intervals.sort()
-        
-        # return clipped intervals that match the requested interval
-        return [Interval(max(t_start_i, t_start),(min(t_end_i, t_end))) 
-                for t_start_i,t_end_i in intervals]
+            # return clipped intervals that match the requested interval
+            return [Interval(max(t_start_i, t_start),(min(t_end_i, t_end))) 
+                    for t_start_i,t_end_i in intervals]
+        except Exception as e:
+            x = 1 
+            raise e
     
     def is_active(self, t : float) -> bool:
         """

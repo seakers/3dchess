@@ -1,6 +1,7 @@
 
+from collections import defaultdict
 import os
-from typing import List
+from typing import List, Tuple
 import numpy as np
 import pandas as pd
 
@@ -104,10 +105,11 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
         broadcasts : List[BroadcastMessageAction] = []
 
         # get list of future events
-        future_events : List[GeophysicalEvent] = [event for event in self.events if event.is_available(state.t)]
+        future_events : List[GeophysicalEvent] = [event for event in tqdm(self.events, desc=f'{state.agent_name}/PREPLANNER: Collecting future events', leave=False) 
+                                                  if event.is_available(state.t)]
 
         # create requests for each event
-        task_requests : List[TaskRequest] = []
+        task_requests : List[Tuple[GeophysicalEvent, TaskRequest]] = []
         for event in tqdm(future_events, 
                           desc=f'{state.agent_name}/PREPLANNER: Generating task request from known events',
                           leave=False):
@@ -127,72 +129,135 @@ class EventAnnouncerPlanner(AbstractPeriodicPlanner):
                                             mission_name = self.parent_mission.name,
                                             t_req = event.t_start)
                 
+                # generate measurement request message
+                task_request_msg = MeasurementRequestMessage(state.agent_name, state.agent_name, task_request.to_dict())
+                
                 # update list of generated requests 
-                task_requests.append(task_request)
+                task_requests.append((event, task_request, task_request_msg.to_dict()))
+
+        ### NEW IMPLEMENTATION
+        # initialize set of times when broadcasts are scheduled
+        t_access_starts = set()   
+        t_broadcasts = set() 
+
+        # get all future access times within planning horizon
+        for target in orbitdata.comms_links.keys():
+            access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, state.t, include_current=True)
+            t_access_starts.update([access.left for access in access_intervals if not access.is_empty()])
 
         # check if no comms links are available
         if len(orbitdata.comms_links.keys()) == 0: 
-            # set broadcast time to immediate
-            t_broadcast : float = state.t # immediate broadcast if no comms links available
-
-            # initiate broadcasts list 
-            task_requests_msgs : List[MeasurementRequestMessage] = []
-
-            # create broadcasts for each future request
-            for req in tqdm(task_requests, 
-                        desc=f'{state.agent_name}/PREPLANNER: Scheduling broadcasts for generated task requests',
-                        leave=False):
-
-                # generate plan message to share any task requests generated
-                task_requests_msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
-
-                # add to list of task request messages
-                task_requests_msgs.append(task_requests_msg.to_dict())
-
-            # compile all requests into single broadcast
-            bus_broadcast = BusMessage(state.agent_name, state.agent_name, task_requests_msgs)
-
-            # create single broadcast action for all requests
-            broadcasts.append(BroadcastMessageAction(bus_broadcast.to_dict(), t_broadcast))
-
-        # initialize set of times when broadcasts are scheduled
-        t_access_starts = set()    
+            # set broadcast time to immediate if no comms links available
+            t_access_starts.add(state.t)
 
         # create broadcasts for each request
-        for req in tqdm(task_requests, 
-                        desc=f'{state.agent_name}/PREPLANNER: Scheduling broadcasts for generated task requests',
-                        leave=False):
+        for event,task_req,task_request_msg in tqdm(task_requests, 
+                                                    desc=f'{state.agent_name}/PREPLANNER: Scheduling broadcasts for generated task requests',
+                                                    leave=False):
             
             # schedule broadcasts to all available agents
             for target in orbitdata.comms_links.keys():
                 # get access intervals with the client agent within the planning horizon
-                access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, req.t_req, include_current=True)
-
-                # collect access start times for future reference
-                t_access_starts.update([access.left for access in access_intervals if not access.is_empty()])
+                access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, task_req.t_req, include_current=True)
 
                 # create broadcast actions for each access interval
                 for next_access in access_intervals:
                     # if no access opportunities in this planning horizon, skip scheduling
                     if next_access.is_empty(): continue
 
-                    # get last access interval and calculate broadcast time
-                    # t_broadcast : float = max(next_access.left, req.t_req)
+                    # check if the task is available during the given access interval
+                    if not event.availability.overlaps(next_access): continue
+
+                    # collect access start times for future reference
+                    t_access_starts.add(next_access.left)
+
+                    # calculate broadcast time to earliest in this access interval
                     t_broadcast : float = max(
                                               min(next_access.left + 5*self.EPS,    # give buffer time for access to start
                                                   next_access.right),               # ensure broadcast is before access ends
-                                            state.t)                                # ensure broadcast is not in the past
+                                            task_req.t_req)                                # ensure broadcast is not in the past
+                    
+                    # add broadcast time to set of broadcast times
+                    t_broadcasts.add(t_broadcast)
 
-                    # generate plan message to share any task requests generated
-                    task_requests_msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+        # iterate through access start times to find active requests
+        for t_broadcast in sorted(t_broadcasts):
+            # initiate bus messages list 
+            task_requests_msgs : List[MeasurementRequestMessage] \
+                = [req_msg for event,_,req_msg in task_requests 
+                    if event.is_active(t_broadcast)]
+            
+            # ensure there is at least one active request to broadcast;
+            #  should always be true due to previous checks
+            assert len(task_requests_msgs) > 0, "No active task requests found for broadcast time."
+            
+            # compile all requests into single broadcast message
+            bus_broadcast = BusMessage(state.agent_name, state.agent_name, task_requests_msgs)
 
-                    # create broadcast action and add to client broadcast list
-                    broadcast = BroadcastMessageAction(task_requests_msg.to_dict(), t_broadcast)
+            # create single broadcast action for all requests
+            broadcasts.append(BroadcastMessageAction(bus_broadcast.to_dict(), t_broadcast))
+        
+        ### OLD IMPLEMENTATION
+        # # check if no comms links are available
+        # if len(orbitdata.comms_links.keys()) == 0: 
+        #     # set broadcast time to immediate
+        #     t_broadcast : float = state.t # immediate broadcast if no comms links available
 
-                    broadcasts.append(broadcast)
+        #     # initiate broadcasts list 
+        #     task_requests_msgs : List[MeasurementRequestMessage] = []
 
+        #     # create broadcasts for each future request
+        #     for _,req in tqdm(task_requests, 
+        #                 desc=f'{state.agent_name}/PREPLANNER: Scheduling broadcasts for generated task requests',
+        #                 leave=False):
+
+        #         # generate plan message to share any task requests generated
+        #         task_requests_msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+
+        #         # add to list of task request messages
+        #         task_requests_msgs.append(task_requests_msg.to_dict())
+
+        #     # compile all requests into single broadcast
+        #     bus_broadcast = BusMessage(state.agent_name, state.agent_name, task_requests_msgs)
+
+        #     # create single broadcast action for all requests
+        #     broadcasts.append(BroadcastMessageAction(bus_broadcast.to_dict(), t_broadcast))
+
+        # # create broadcasts for each request
+        # for req in tqdm(task_requests, 
+        #                 desc=f'{state.agent_name}/PREPLANNER: Scheduling broadcasts for generated task requests',
+        #                 leave=False):
+            
+        #     # schedule broadcasts to all available agents
+        #     for target in orbitdata.comms_links.keys():
+        #         # get access intervals with the client agent within the planning horizon
+        #         access_intervals : List[Interval] = orbitdata.get_next_agent_accesses(target, req.t_req, include_current=True)
+
+        #         # collect access start times for future reference
+        #         t_access_starts.update([access.left for access in access_intervals if not access.is_empty()])
+
+        #         # create broadcast actions for each access interval
+        #         for next_access in access_intervals:
+        #             # if no access opportunities in this planning horizon, skip scheduling
+        #             if next_access.is_empty(): continue
+
+        #             # get last access interval and calculate broadcast time
+        #             # t_broadcast : float = max(next_access.left, req.t_req)
+        #             t_broadcast : float = max(
+        #                                       min(next_access.left + 5*self.EPS,    # give buffer time for access to start
+        #                                           next_access.right),               # ensure broadcast is before access ends
+        #                                     state.t)                                # ensure broadcast is not in the past
+
+        #             # generate plan message to share any task requests generated
+        #             task_requests_msg = MeasurementRequestMessage(state.agent_name, state.agent_name, req.to_dict())
+
+        #             # create broadcast action and add to client broadcast list
+        #             broadcast = BroadcastMessageAction(task_requests_msg.to_dict(), t_broadcast)
+
+        #             broadcasts.append(broadcast)
+   
         # connection waits; allows for messages to be received right after access start times
         waits = [WaitAction(t_access_start, t_access_start) for t_access_start in t_access_starts]
         broadcasts.extend(waits)
 
-        return broadcasts
+        return sorted(broadcasts, key=lambda action: action.t_start)

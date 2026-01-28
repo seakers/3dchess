@@ -55,6 +55,7 @@ from chess3d.utils import setup_results_directory
 
 class Simulation:
     def __init__(self,
+                 duration : float,
                  results_path : str,
                  orbitdata_dir : str,
                  missions : Dict[str, Mission],
@@ -64,7 +65,9 @@ class Simulation:
                  monitor : ResultsMonitor,
                  level : int
             ) -> None:
+        """ initializes simulation instance """
         
+        self.duration : float = duration
         self.results_path : str = results_path
         self.orbitdata_dir : str = orbitdata_dir
         self.missions : Dict[str, Mission] = missions
@@ -264,7 +267,7 @@ class Simulation:
                                             logger)
         
         # return initialized mission
-        return Simulation(results_path, orbitdata_dir, missions, manager, environment, agents, monitor, level)
+        return Simulation(scenario_duration, results_path, orbitdata_dir, missions, manager, environment, agents, monitor, level)
     
     def execute(self) -> None:
         """ executes the simulation """
@@ -390,7 +393,7 @@ class Simulation:
     def __collect_results(self) -> tuple:
         # collect results
         print('Collecting orbit data...')
-        compiled_orbitdata : Dict[str, OrbitData] = OrbitData.from_directory(self.orbitdata_dir) \
+        compiled_orbitdata : Dict[str, OrbitData] = OrbitData.from_directory(self.orbitdata_dir, self.duration) \
             if self.orbitdata_dir is not None else None
 
         # collect missions
@@ -415,7 +418,7 @@ class Simulation:
         events_df = pd.read_csv(self.environment.events_path)         
 
         # filter out events that do not occur during this simulation
-        events_df = events_df[events_df['start time [s]'] <= self.manager._clock_config.get_total_seconds()] 
+        events_df = events_df[events_df['start time [s]'] <= self.duration*3600*24] 
 
         # convert event to dataframe to list of GeophysicalEvent
         events : list[GeophysicalEvent] = []
@@ -676,7 +679,7 @@ class Simulation:
         t_event_reobservation = self._calc_event_coverage_metrics(events_observed)
 
         # Generate summary
-        summary_headers = ['Metric ', 'Value']
+        summary_headers = ['Metric', 'Value']
         summary_data = [
                     # Dates
                     # ['Simulation Start Date', self.environment._clock_config.start_date], 

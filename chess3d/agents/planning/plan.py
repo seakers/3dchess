@@ -295,14 +295,13 @@ class Plan(ABC):
                            if 1e-9 < t - action.t_end]
         for action in expired_actions: self.actions.remove(action)
 
-    def get_next_actions(self, t : float, earliest : bool = True) -> list:
+    def get_next_actions(self, t : float, earliest : bool = True, tolerance : float = 1e-6) -> list:
         """ returns a list of dicts """
 
         # get next available action to perform
-        eps = 1e-6
         plan_out : list[AgentAction] = [action
                                         for action in self.actions 
-                                        if action.t_start - eps <= t <= action.t_end + eps]
+                                        if action.t_start - tolerance <= t <= action.t_end + tolerance]
         
         # sort plan in order of ascending start time, duration, and end time
         plan_out.sort(key=lambda a: (a.t_start, a.t_end-a.t_start, a.t_end))
@@ -312,7 +311,7 @@ class Plan(ABC):
             first_action : AgentAction = plan_out[0]
             first_action_duration = first_action.t_end - first_action.t_start
             plan_out = [action for action in plan_out 
-                        if abs((action.t_end - action.t_start) - first_action_duration) < 1e-6
+                        if abs((action.t_end - action.t_start) - first_action_duration) < tolerance
                         or action.t_end-action.t_start == first_action_duration]
             assert plan_out, "No actions found in `plan_out` after filtering by duration."
 

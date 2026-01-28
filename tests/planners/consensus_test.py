@@ -3,6 +3,8 @@ import os
 from typing import List
 import unittest
 
+import pandas as pd
+
 from chess3d.simulation import Simulation
 from chess3d.utils import print_banner
 from tests.planners.tester import PlannerTester
@@ -17,7 +19,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ## common cases
         self.single_sat_toy = False     # NOT IMPLEMENTED YET
         self.multiple_sat_toy = False   # NOT IMPLEMENTED YET
-        self.single_sat_lakes = True   
+        self.single_sat_lakes = False   
         self.multiple_sat_lakes = False # NOT IMPLEMENTED YET
 
         ## toy cases
@@ -1576,7 +1578,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         - T:33.67[s] Sat 1 performs observation n=1 of event 1
 
         - T:755.61[s] Sat 2 performs observation n=1 of event 1
-        - T:755.61[s] Sat 3 determines it won n=1 for event 1 for t=755.61[s]
+        - T:755.61[s] Sat 2 determines it won n=1 for event 1 for t=755.61[s]
 
         - T:755.61[s] Sat 2 informs Sat 3 that it performed n=1 for event 1 for t=755.61[s]
         - T:755.61[s] Sat 3 determines that Sat 2 won n=1 for event 1 for t=755.61[s]
@@ -1976,6 +1978,9 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         """
         ## TOY CASE 21
         Test case for a single satellite responding to event announcements from a ground station.
+        
+        Two events present. Both can be observed by the satellite but only one can be announced in time
+        due to GS-satellite contact constraints. Only one event should be observed.
         """
 
         if not self.toy_21: return
@@ -2028,14 +2033,24 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.simulation.execute()
 
         # print results
-        self.simulation.process_results()
+        results_summary : pd.DataFrame = self.simulation.process_results()
 
+        # verify results
+        self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Observable'].values[0][1], 2)
+        self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Observed'].values[0][1], 1)
+        self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Requested'].values[0][1], 1)
+
+        # print done
         print(f"{scenario_name}: DONE")
 
     def test_toy_case_22(self):
         """
         ## TOY CASE 22
         Test case for multiple satellite responding to event announcements from a ground station.
+
+        Two events present. Both can be observed by both satellites but only one can be announced in time
+        due to GS-satellite contact constraints. The other is announced but agents cannot reach the task in time
+        due to orbital constraints. Only one event should be observed twice.
         """
 
         if not self.toy_22: return
@@ -2098,10 +2113,17 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
 
         # execute mission
         self.simulation.execute()
-
+        
         # print results
-        self.simulation.process_results()
+        results_summary : pd.DataFrame = self.simulation.process_results()
 
+        # verify results
+        self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Observable'].values[0][1], 2)
+        self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Observed'].values[0][1], 1)
+        self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Requested'].values[0][1], 2)
+        self.assertEqual(results_summary.loc[results_summary['Metric']=='Events Re-observed'].values[0][1], 1)
+
+        # print done
         print(f"{scenario_name}: DONE")
 
     def test_toy_case_23(self):
