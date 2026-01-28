@@ -455,10 +455,6 @@ class SimulationEnvironment(EnvironmentNode):
                 updated_state['vel'] = vel
                 updated_state['eclipse'] = int(eclipse)
 
-            # elif msg.src in self.agents[SimulationAgentTypes.UAV]:
-            #     # Do NOT update
-            #     updated_state = msg_dict["state"]
-
             elif msg_dict["src"] in self.agents[SimulationAgentTypes.GROUND_OPERATOR]:
                 # Do NOT update state
                 updated_state = msg_dict["state"]
@@ -574,13 +570,13 @@ class SimulationEnvironment(EnvironmentNode):
             satellite_off_axis_angle = agent_state_dict['attitude'][0]
             
             # collect instrument information
-            name = instrument_dict["name"]
+            instrument_name = instrument_dict["name"]
             instruments = np.asarray(raw_access_data["instrument"])
             ID_COLS = {'instrument', 'agent name', 'grid index', 'GP index',
            'lat [deg]', 'lon [deg]', 'pnt-opt index'}
             
             # create instrument mask for data filtering
-            inst_mask = (instruments == name)
+            inst_mask = (instruments == instrument_name)
 
             # collect data for every instrument model onboard
             obs_data = []
@@ -603,7 +599,7 @@ class SimulationEnvironment(EnvironmentNode):
 
                 matching_data = {col: np.asarray(vals)[inst_mask][mask] 
                                  for col, vals in tqdm(raw_access_data.items(), 
-                                                       desc=f"{self.get_element_name()}-Filtering access data for instrument {name}...", 
+                                                       desc=f"{self.get_element_name()}-Filtering access data for instrument {instrument_name}...", 
                                                        leave=False)}
                 
                 # convert columns to arrays once
@@ -633,7 +629,7 @@ class SimulationEnvironment(EnvironmentNode):
                 obs_data: list[dict] = []
 
                 # Iterate groups (G is usually much smaller than N)
-                for s,e in zip(starts, ends):
+                for s,e in tqdm(zip(starts, ends), desc=f"{self.get_element_name()}-Merging observation data for instrument {instrument_name}...", unit=' obs', leave=False):
                     idx = order[s:e]  # row indices for this group
 
                     merged = {
