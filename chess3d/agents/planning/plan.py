@@ -311,7 +311,8 @@ class Plan(ABC):
             first_action : AgentAction = plan_out[0]
             first_action_duration = first_action.t_end - first_action.t_start
             plan_out = [action for action in plan_out 
-                        if abs((action.t_end - action.t_start) - first_action_duration) < tolerance
+                        if (np.isinf(first_action_duration) and np.isinf(action.t_end - action.t_start))
+                        or abs((action.t_end - action.t_start) - first_action_duration) < tolerance
                         or action.t_end-action.t_start == first_action_duration]
             assert plan_out, "No actions found in `plan_out` after filtering by duration."
 

@@ -770,7 +770,7 @@ class SimulationEnvironment(EnvironmentNode):
             
             # collect instrument information
             instrument_name = instrument_dict["name"]
-            instruments = np.asarray(raw_access_data["instrument"])
+            instruments = np.asarray(raw_access_data["instrument"], dtype=str)
             ID_COLS = {'instrument', 'agent name', 'grid index', 'GP index',
            'lat [deg]', 'lon [deg]', 'pnt-opt index'}
             

@@ -174,7 +174,7 @@ class AbstractAgent(Agent):
                 await asyncio.sleep(np.random.random() * 1e-8)
 
                 # unsubscribe from broadcasts
-                self.unsubscribe_to_broadcasts(conn_msg.target)
+                await self.unsubscribe_to_broadcasts(conn_msg.target)
 
         return senses 
     
