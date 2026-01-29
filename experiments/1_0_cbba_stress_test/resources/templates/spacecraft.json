@@ -43,7 +43,7 @@
         "preplanner": {
             "@type": "blank",
             "debug": "True",
-            "period" : 3000
+            "period" : 1000
         },
         "replanner": {
             "@type": "consensus",

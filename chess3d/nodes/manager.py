@@ -139,7 +139,10 @@ class SimulationManager(AbstractManager):
                         # await self.send_monitor_message(toc) 
 
                         self.log(f'toc for time {t_next}[s] sent!')
-                        
+
+                        if t_next - t > 1e-5:
+                           x = 1 # breakpoint when time is advanced
+
                         # updete time and display
                         pbar.update(t_next - t)
                         t = t_next
@@ -147,7 +150,7 @@ class SimulationManager(AbstractManager):
                         
                         dt = time.perf_counter() - t_0
                         self.stats['clock_wait'].append(dt)
-
+                    
             else:
                 raise NotImplemented(f'clock configuration of type {type(self._clock_config)} not yet supported.')
 
@@ -172,6 +175,7 @@ class SimulationManager(AbstractManager):
 
             with tqdm(total=len(self._simulation_element_name_list) - 1, 
                       desc='Waiting for tic requests', 
+                      mininterval=0.5,
                       leave=False) as pbar:
 
                 while(

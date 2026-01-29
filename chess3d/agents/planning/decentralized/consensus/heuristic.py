@@ -244,6 +244,9 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
         # get only available tasks from existing plan and urgent tasks
         available_tasks : list[GenericObservationTask] = self.get_available_tasks(tasks, planning_horizon)
                 
+        # check if any available tasks exist
+        if not available_tasks: return []
+
         # calculate coverage opportunities for available tasks
         access_opportunities : dict[tuple] = self.calculate_access_opportunities(state, planning_horizon, orbitdata)
 

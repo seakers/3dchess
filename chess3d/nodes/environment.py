@@ -157,11 +157,29 @@ class SimulationEnvironment(EnvironmentNode):
         # group events by interval 
         events_per_interval : Dict[Interval, List[tuple]] \
             = {interval : [] for interval in connectivity_intervals}
+        
         for evt in tqdm(connectivity_events, desc='Grouping connectivity events by interval', unit=' events', leave=False):
-            for interval,interval_events in events_per_interval.items():
+            # group by bisection search, asuuming `connectivity_intervals` is sorted
+            low = 0
+            high = len(connectivity_intervals) - 1
+
+            while low <= high:
+                mid = (low + high) // 2
+                interval = connectivity_intervals[mid]
+
                 if evt[0] in interval:
-                    interval_events.append(evt)
-                    break            
+                    events_per_interval[interval].append(evt)
+                    break
+
+                if evt[0] < interval.left:
+                    high = mid - 1
+                else:
+                    low = mid + 1
+
+            # for interval,interval_events in events_per_interval.items():
+            #     if evt[0] in interval:
+            #         interval_events.append(evt)
+            #         break            
         
         # initialize interval-connectivity list
         interval_connectivities : List[tuple] = []

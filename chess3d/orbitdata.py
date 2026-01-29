@@ -366,7 +366,7 @@ class OrbitData:
             if ground_ops_list: agents_to_load.extend(ground_ops_list)
 
             # load pre-computed data for each agent
-            for agent in agents_to_load:
+            for agent in tqdm(agents_to_load, desc='Loading and verifying orbit data', unit='agent'):
                 agent_name = agent.get('name')
                 data[agent_name] = OrbitData.load(orbitdata_dir, agent_name, simulation_duration)
             

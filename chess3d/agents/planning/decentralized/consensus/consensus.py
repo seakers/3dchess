@@ -143,10 +143,20 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # if (task_updates or results_updates or bundle_updates) and self._debug:
         if self._debug:
             self._log_results('CONSENSUS PHASE - RESULTS (AFTER)', state, self.results)
-            print(f'`{state.agent_name}` - Received {len(incoming_bids)} incoming bids and {len(self.incoming_event_tasks)} task requests.')
-            self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
+            print(f'`{state.agent_name}` - Performed {len(task_updates)} task updates, {len(results_updates)} results updates, and {len(bundle_updates)} bundle updates.')
+            if any([
+                len(task_updates) > 0,
+                len(results_updates) > 0, 
+                len(bundle_updates) > 0
+            ]):
+                print(f'`{state.agent_name}` - Relevant updates detected; replanning is required.')
+            else:
+                print(f'`{state.agent_name}` - No relevant updates detected; no replanning required.')
+            # self._log_bundle('CONSENSUS PHASE - BUNDLE (AFTER)', state, self.bundle)
             # self._log_path('CONSENSUS PHASE - PATH (AFTER)', state, self.path)
-            x = 1 # debug breakpoint
+
+            if "c_sat_5" in state.agent_name:
+                x = 1 # debug breakpoint
         # -------------------------------
 
         # set replanning flags
@@ -587,6 +597,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # iterate through grouped bids and compare with existing results
         for other_agent,incoming_results in grouped_bids.items():
+            
             for task,bids in incoming_results.items():
                 # count number of existing and incoming bids
                 n_existing_bids = len(self.results[task]) if task in self.results else 0
@@ -597,14 +608,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     # task already exists and number of bids match existing results for this task;
                     # add empty bids to incoming results for each missing observation numbers
                     bids.extend([
-                        Bid(task, other_agent, n_obs, t_bid=state.t) 
+                        Bid(task, other_agent, n_obs, t_bid=np.NINF) 
                         for n_obs in range(n_incoming_bids, n_existing_bids)
                     ])
                 elif task not in self.results or n_incoming_bids > n_existing_bids:
                     # task does not they exist in results or more incoming bids than existing; 
                     #  initialize missing elements in results with empty bids
                     self.results[task].extend([
-                        Bid(task, state.agent_name, n_obs, t_bid=state.t)
+                        Bid(task, state.agent_name, n_obs, t_bid=np.NINF)
                         for n_obs in range(n_existing_bids, n_incoming_bids)
                     ])
 
@@ -618,9 +629,16 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 while bids:
                     # get next incoming bid
                     incoming_bid : Bid = bids.pop(0)
-
+                        
                     # get current bid for this task and observation number
                     current_bid : Bid = self.results[incoming_bid.task][incoming_bid.n_obs]
+
+                    # TODO debug section
+                    if "c_sat_5" in other_agent and incoming_bid.n_obs > 0:
+                        x = 1 # debug breakpoint:
+                    if incoming_bid.n_obs > 0 and current_bid.has_winner():
+                        x = 1 # debug breakpoint:
+                    # -------
                     
                     # compare incoming bid with existing bids for the same task
                     updated_bid : Bid = current_bid.update(incoming_bid, state.t)
@@ -638,6 +656,15 @@ class ConsensusPlanner(AbstractReactivePlanner):
                         # bid was performed; add updated bid to results updates
                         results_updates.append(updated_bid)                 
                     
+                    # TODO debug section
+                    if "c_sat_5" in other_agent and incoming_bid.n_obs > 0:
+                        x = 1 # debug breakpoint:
+                    if incoming_bid.n_obs > 0 and current_bid.has_winner():
+                        x = 1 # debug breakpoint:
+                    else:
+                        x = 1 # debug breakpoint:
+                    # -------
+
                     # check if both bids corresponded to a performed observation
                     if current_bid.was_performed() and incoming_bid.was_performed():
                         # both bids were performed; check which bid was the one that won the comparison
@@ -672,7 +699,16 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
                         # add updated bid to list of bids to be processed
                         bids.append(loser_bid)
-               
+
+                    # TODO debug section
+                    if "c_sat_5" in other_agent:
+                        x = 1 # debug breakpoint:
+                    # -------
+
+                # TODO debug section
+                if "c_sat_5" in other_agent:
+                    x = 1 # debug breakpoint:
+                # -------
         # -------------------------------
         # DEBUG PRINTOUTS
         # for task, bids in self.results.items():
@@ -1075,9 +1111,11 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        if self._debug and new_bids:
+        # if self._debug and new_bids:
+        if new_bids:
             self._log_results('PLANNING PHASE - RESULTS (AFTER)', state, self.results)
             self._log_bundle('PLANNING PHASE - BUNDLE (AFTER)', state, self.bundle)
+            print(f'`{state.agent_name}` - New bundle built with {len(new_bids)} new entries ({len(self.bundle)} total) and {len(self.path)} scheduled observations.')
             x = 1 # breakpoint
         # -------------------------------
 
@@ -1742,11 +1780,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
            
             for i_bid,bid in enumerate(printed_bids):
                 bid : Bid
-                # if bid.winner == bid.NONE: continue
+                    
+                if bid.winner != bid.NONE: 
+                    bid_winner = bid.winner.split('_')
+                    bid_winner = f'{bid_winner[-2]}{bid_winner[-1]}'
 
                 try:
                     if bid.winner != bid.NONE:
-                        line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t{bid.winner[0].lower()}{bid.winner[-1]}\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
+                        line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t{bid_winner.lower()}\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
                     else:
                         line = f'{req_id_short} {bid.n_obs}\t{bid.main_measurement}\t\tn/a\t{np.round(bid.winning_bid,4)}\t{np.round(bid.t_img,1)}\t{np.round(bid.t_bid,1)}\t{self.optimistic_bidding_counters[bid.task][bid.n_obs]}\t{(bid.performed)}\n'
                 except IndexError:
