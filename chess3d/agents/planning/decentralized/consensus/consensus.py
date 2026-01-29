@@ -194,9 +194,6 @@ class ConsensusPlanner(AbstractReactivePlanner):
         new_urgent_task_added \
             = self.__process_incoming_task_requests(state, incoming_reqs, incoming_bids)
 
-        # check if planned tasks expired
-        expired_tasks = self.__remove_expired_tasks(state)
-
         # check if new base plan is available
         preplan_obs, preplan_resets \
             = self.__update_bundle_from_preplan(state, current_plan)
@@ -208,8 +205,13 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # compare results with incoming bids and update bundle
         comparison_updates = self.__compare_incoming_bids(state, incoming_bids)
 
-        # check if bids in results would have been performed by other agents
-        performed_updates = self.__update_performed_bids(state)
+        # check if planned tasks expired
+        expired_tasks, self.bundle, expired_bundle_updates \
+              = self.__remove_expired_tasks(state)
+
+        # TODO make sure this is not needed:
+        # # check if bids in results would have been performed by other agents
+        # performed_updates = self.__update_performed_bids(state)
         
         # compile updates and return list of updates
         task_updates = list(chain.from_iterable([
@@ -223,10 +225,11 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                                     preplan_obs,
                                                     performed_bundle_updates,
                                                     comparison_updates, 
-                                                    performed_updates,
+                                                    # performed_updates, # TODO re-enable when implemented
                                                    ]))   
         bundle_updates = list(chain.from_iterable([
                                                     preplan_resets,
+                                                    expired_bundle_updates
                                                     # performed_bundle_updates
                                                 ]))
 
@@ -396,43 +399,84 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return list of new task bids added to results
         return new_task_added
     
-    def __remove_expired_tasks(self, state : SimulationAgentState) -> List[Bid]:
+    def __remove_expired_tasks(self, state : SimulationAgentState) -> Tuple[list, list, list]:
         """ Remove expired tasks from results. """
-
-        # initialize list of removed bids
-        removed_bids = []
 
         # identify expired tasks
         expired_tasks = [task for task in self.results 
                          if not task.is_available(state.t)]
+
+        # initialize list of removed bids
+        expired_bids = []
         
-        # remove expired tasks from results
+        # remove expired tasks from results and check if any expired task exist in bundle
+        bundle_idx_to_remove = None
         for task in expired_tasks:
             # remove task from results
             bids_removed = self.results.pop(task)
-
-            # # reset bids to empty list in results
-            # self.results[task] = []
-
+           
             # remove optimistic bidding counters
             self.optimistic_bidding_counters.pop(task, None)
 
             # add removed bids to list
-            removed_bids.extend(bids_removed)
+            expired_bids.extend(bids_removed)
 
             # check if expired task was in the bundle
-            bundle_idx_to_remove = None
             for bundle_idx,(_,tasks) in enumerate(self.bundle):
-                if task in tasks:
+                if (task in tasks 
+                    and (bundle_idx_to_remove is None
+                         or bundle_idx < bundle_idx_to_remove)):
                     bundle_idx_to_remove = bundle_idx
                     break
             
-            if bundle_idx_to_remove is not None:
-                # TODO ensure that this is not needed. Bids should not be placed for tasks that will expire before they are performed.
-                raise NotImplementedError("Removal of expired tasks from bundle not yet implemented.")
+        # check if no expired task exists in bundle
+        if bundle_idx_to_remove is None:
+            # return expired bids and do not modify bundle
+            return expired_bids, self.bundle, []
+
+        # TODO ensure that the following section is not needed. Bids should not 
+        #   be placed for tasks that will expire before they are performed.
+        # raise NotImplementedError("Removal of expired tasks from bundle not yet implemented.")
+
+        # initialize list of bundle updates
+        bundle_updates = []
+
+        # split bundle at first updated task
+        revised_bundle = self.bundle[:bundle_idx_to_remove]
+
+        # iterate through remaining bundle to update bids
+        for _, obs_tasks in self.bundle[bundle_idx_to_remove:]:
+            # reset subsequent bids for all tasks in bundle if the bidder is still listed as the winner
+            for task, n_obs in obs_tasks.items():
+                # initiate list of bids being reset for this task
+                bids_reset = []
+
+                # reset invalid bid along with all subsequent bids  
+                for bid_idx in range(n_obs, len(self.results[task])):
+                    
+                    # check if this agent is still listed as the winning bidder
+                    if not self.results[task][bid_idx].is_bidder_winning():
+                        continue # another agent is winning this bid; skip
+                    elif self.results[task][bid_idx].was_performed():
+                        continue # bid was already performed by this agent; do not reset
+
+                    # get bid to reset and remove from results
+                    bid_to_reset : Bid = self.results[task][bid_idx]
+
+                    # reset bid
+                    bid_to_reset.reset(state.t)
+
+                    # update results
+                    self.results[task][bid_idx] = bid_to_reset
+
+                    # add to list of resets
+                    bids_reset.append(bid_to_reset)
+
+                # add to violations list
+                bundle_updates.append(bids_reset)
 
         # return list of removed bids
-        return removed_bids
+        return expired_bids, revised_bundle, bundle_updates
     
     def __update_performed_bundle_observations(self, state : SimulationAgentState, performed_observations : List[ObservationAction]) -> Tuple[list, List[Bid]]:
         """ Checks if planned observations were performed by parent agent and updates results accordingly. """
@@ -528,76 +572,14 @@ class ConsensusPlanner(AbstractReactivePlanner):
                        incoming_bids : List[Bid]
                        ) -> Tuple[List[Bid], List[Bid]]:
         """ Update results from incoming bids. """
+        # group bids by bidding agent 
+        grouped_bids : Dict[str, Dict[str, List[Bid]]] = self.__group_incoming_bids(incoming_bids)
+
         # initialize list of updates done to results
         results_updates = []        
 
-        # group bids by bidding agent 
-        grouped_bids : Dict[str, Dict[GenericObservationTask, List[Bid]]] \
-              = defaultdict(lambda: defaultdict(list))
-        for bid in sorted(incoming_bids, key=lambda b: (b.owner, b.task.id, b.n_obs)):
-            try:
-                # get current bid for this task and observation number
-                current_bid = grouped_bids[bid.owner][bid.task][bid.n_obs]
-                
-                # compare incoming bid with existing bids for the same task
-                updated_bid = current_bid.update(bid, state.t)
-
-                # update grouped bids with modified bid
-                grouped_bids[bid.owner][bid.task][bid.n_obs] = updated_bid
-
-            except IndexError:
-                
-                # ensure incoming bids are sorted by observation number within each task
-                n_obs_max : Set[int] = set(range(bid.n_obs+1))
-                n_obs_curr : Set[int] = {grouped_bid.n_obs for grouped_bid in grouped_bids[bid.owner][bid.task]}
-
-                assert len(n_obs_max) > len(n_obs_curr), \
-                    "Incoming bids must be processed in order of observation number within each task."
-
-                # determine missing observation numbers
-                missing_n_obs : Set[int] = n_obs_max - n_obs_curr
-
-                # add empty bids as needed to fill in missing observation numbers
-                for n_obs in missing_n_obs:
-                    # add empty bid for missing observation number
-                    grouped_bids[bid.owner][bid.task].append(Bid(bid.task, bid.owner, n_obs, t_bid=state.t))
-
-                # sort bids by observation number
-                grouped_bids[bid.owner][bid.task] = sorted(grouped_bids[bid.owner][bid.task], key=lambda b: b.n_obs)
-
-                # get current bid for this task and observation number
-                current_bid = grouped_bids[bid.owner][bid.task][bid.n_obs]
-                
-                # compare incoming bid with existing bids for the same task
-                updated_bid = current_bid.update(bid, state.t)
-
-                # update grouped bids with modified bid
-                grouped_bids[bid.owner][bid.task][bid.n_obs] = updated_bid
-
-        # sort incoming bids by observation number within each task
-        for other_agent,incoming_results in grouped_bids.items():
-            for task,bids in incoming_results.items():
-                # ensure incoming bids are sorted by observation number within each task
-                n_obs_max : Set[int] = set(range(max(bid.n_obs for bid in bids)+1))
-                n_obs_curr : Set[int] = {bid.n_obs for bid in bids}
-
-                # determine missing observation numbers
-                missing_n_obs : Set[int] = n_obs_max - n_obs_curr
-
-                # add empty bids as needed to fill in missing observation numbers
-                for n_obs in missing_n_obs:
-                    # add empty bid for missing observation number
-                    bids.append(Bid(task, other_agent, n_obs, t_bid=state.t))
-
-                # sort bids by observation number
-                incoming_results[task] = sorted(bids, key=lambda b: b.n_obs)
-
-                assert all(n_obs == bid.n_obs for n_obs,bid in enumerate(incoming_results[task])), \
-                    "Incoming bids must be sorted by observation number within each task."
-
         # iterate through grouped bids and compare with existing results
         for other_agent,incoming_results in grouped_bids.items():
-            
             for task,bids in incoming_results.items():
                 # count number of existing and incoming bids
                 n_existing_bids = len(self.results[task]) if task in self.results else 0
@@ -724,37 +706,108 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # return result changes
         return results_updates
     
+
+    def __group_incoming_bids(self,
+                              incoming_bids : List[Bid]
+                              ) -> Dict[str, Dict[GenericObservationTask, List[Bid]]]:
+        """ Groups incoming bids by bidding agent and task. """
+        # initialize grouped bids dictionary
+        grouped_bids : Dict[str, Dict[GenericObservationTask, List[Bid]]] \
+              = defaultdict(lambda: defaultdict(list))
+        
+        # iterate through incoming bids and group them
+        for bid in sorted(incoming_bids, key=lambda b: (b.owner, b.task.id, b.n_obs)):
+            try:
+                # get current bid for this task and observation number
+                current_bid : Bid = grouped_bids[bid.owner][bid.task][bid.n_obs]
+
+            except IndexError:
+                # ensure incoming bids are sorted by observation number within each task
+                n_obs_max : Set[int] = set(range(bid.n_obs+1))
+                n_obs_curr : Set[int] = {grouped_bid.n_obs for grouped_bid in grouped_bids[bid.owner][bid.task]}
+
+                assert len(n_obs_max) > len(n_obs_curr), \
+                    "Incoming bids must be processed in order of observation number within each task."
+
+                # determine missing observation numbers
+                missing_n_obs : Set[int] = n_obs_max - n_obs_curr
+
+                # add empty bids as needed to fill in missing observation numbers
+                for n_obs in missing_n_obs:
+                    # add empty bid for missing observation number
+                    grouped_bids[bid.owner][bid.task].append(Bid(bid.task, bid.owner, n_obs, t_bid=np.NINF))
+
+                # sort bids by observation number
+                grouped_bids[bid.owner][bid.task] = sorted(grouped_bids[bid.owner][bid.task], key=lambda b: b.n_obs)
+
+                # get current bid for this task and observation number
+                current_bid : Bid = grouped_bids[bid.owner][bid.task][bid.n_obs]
+                
+            # determine comparison time between incoming bids
+            t_comp = max(current_bid.t_bid, bid.t_bid)
+
+            # compare incoming bid with existing bids for the same task
+            updated_bid : Bid = current_bid.update(bid, t_comp)
+
+            # update grouped bids with modified bid
+            grouped_bids[bid.owner][bid.task][bid.n_obs] = updated_bid
+
+        # sort incoming bids by observation number within each task
+        for other_agent,incoming_results in grouped_bids.items():
+            for task,bids in incoming_results.items():
+                # ensure incoming bids are sorted by observation number within each task
+                n_obs_max : Set[int] = set(range(max(bid.n_obs for bid in bids)+1))
+                n_obs_curr : Set[int] = {bid.n_obs for bid in bids}
+
+                # determine missing observation numbers
+                missing_n_obs : Set[int] = n_obs_max - n_obs_curr
+
+                # add empty bids as needed to fill in missing observation numbers
+                for n_obs in missing_n_obs:
+                    # add empty bid for missing observation number
+                    bids.append(Bid(task, other_agent, n_obs, t_bid=np.NINF))
+
+                # sort bids by observation number
+                incoming_results[task] = sorted(bids, key=lambda b: b.n_obs)
+
+                # ensure bid order matches their observation numbers
+                assert all(n_obs == bid.n_obs for n_obs,bid in enumerate(incoming_results[task])), \
+                    "Incoming bids must be sorted by observation number within each task."
+        
+        # return grouped bids
+        return grouped_bids
+    
     def __update_performed_bids(self, state : SimulationAgentState) -> List[Bid]:
         """ Assumes tasks who were won by other agents and whose imaging time has passed were performed by those agents. """
 
         # initialize list of performed updates
         performed_updates = []
 
-        # TODO should this even be done? Agents should announce when they perform bids, not assume so.
-        # TODO implement after testing other parts of consensus planner
-        # # check every bid in results for performed status
-        # for task, bids in self.results.items():
-        #     for n_obs, bid in enumerate(bids):
-        #         # check if bid is already marked as performed
-        #         if bid.was_performed():
-        #             continue # already marked or has no winner; skip
+        # TODO should this even be done? Agents should announce when they perform bids, 
+        #   not assume so. Implement after testing other parts of consensus planner
+        # check every bid in results for performed status
+        for task, bids in self.results.items():
+            for n_obs, bid in enumerate(bids):
+                # check if bid is already marked as performed
+                if bid.was_performed():
+                    continue # already marked or has no winner; skip
                 
-        #         # check if imaging time has passed
-        #         if np.NINF < bid.t_img < state.t:
-        #             # assume bid has a winner different from this agent
-        #             assert bid.has_winner(), \
-        #                 "Cannot mark bid as performed if it has no winner."
-        #             assert bid.winner != state.agent_name, \
-        #                 "Bid should have been marked as performed by parent agent in previous steps."
+                # check if imaging time has passed
+                if np.NINF < bid.t_img < state.t:
+                    # assume bid has a winner different from this agent
+                    assert bid.has_winner(), \
+                        "Cannot mark bid as performed if it has no winner."
+                    assert bid.winner != state.agent_name, \
+                        "Bid should have been marked as performed by parent agent in previous steps."
                     
-        #             # mark bid as performed
-        #             bid.set_performed(state.t, performed=True, performer=bid.winner)
+                    # mark bid as performed
+                    bid.set_performed(state.t, performed=True, performer=bid.winner)
 
-        #             # update results
-        #             self.results[task][n_obs] = bid
+                    # update results
+                    self.results[task][n_obs] = bid
 
-        #             # add to list of performed updates
-        #             performed_updates.append(bid.copy())
+                    # add to list of performed updates
+                    performed_updates.append(bid.copy())
 
         # return list of performed bids
         return performed_updates
@@ -1111,8 +1164,8 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # -------------------------------
         # DEBUG PRINTOUTS
-        # if self._debug and new_bids:
-        if new_bids:
+        if self._debug and new_bids:
+        # if new_bids:
             self._log_results('PLANNING PHASE - RESULTS (AFTER)', state, self.results)
             self._log_bundle('PLANNING PHASE - BUNDLE (AFTER)', state, self.bundle)
             print(f'`{state.agent_name}` - New bundle built with {len(new_bids)} new entries ({len(self.bundle)} total) and {len(self.path)} scheduled observations.')
@@ -1783,7 +1836,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
                     
                 if bid.winner != bid.NONE: 
                     bid_winner = bid.winner.split('_')
-                    bid_winner = f'{bid_winner[-2]}{bid_winner[-1]}'
+                    if len(bid_winner) >=2:
+                        bid_winner = f'{bid_winner[-2]}{bid_winner[-1]}'
+                    else:
+                        bid_winner = f'{bid_winner[0][0]}{bid_winner[0][-1]}'
 
                 try:
                     if bid.winner != bid.NONE:

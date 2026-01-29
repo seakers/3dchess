@@ -429,17 +429,10 @@ if __name__ == "__main__":
                         type=int,
                         required=False,
                         default=np.Inf)
-    parser.add_argument('-L', 
-                        '--level',
-                        choices=['DEBUG', 'INFO', 'WARNING', 'CRITICAL', 'ERROR'],
-                        default='WARNING',
-                        help='logging level',
-                        required=False,
-                        type=str) 
     parser.add_argument('-p', 
                         '--propagate-only',
-                        default=False,
                         help='toggles to only precompute orbit data without running full simulation',
+                        default=False,
                         required=False,
                         type=bool) 
     parser.add_argument('-o', 
@@ -450,16 +443,23 @@ if __name__ == "__main__":
                         type=bool) 
     parser.add_argument('-r', 
                         '--reevaluate',
-                        default=False,
                         help=' results reevaluation toggle',
+                        default=False,
                         required=False,
                         type=bool) 
     parser.add_argument('-d', 
                         '--debug',
-                        default=False,
                         help='toggles to run just one experiment for debugging purposes',
+                        default=False,
                         required=False,
                         type=bool) 
+    parser.add_argument('-L', 
+                        '--level',
+                        choices=['DEBUG', 'INFO', 'WARNING', 'CRITICAL', 'ERROR'],
+                        default='WARNING',
+                        help='logging level',
+                        required=False,
+                        type=str) 
     
     # parse arguments
     args = parser.parse_args()

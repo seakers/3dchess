@@ -90,8 +90,7 @@ class AbstractPlanner(ABC):
         """ Calculate access opportunities for targets visible in the planning horizon """
 
         # check planning horizon span
-        if planning_horizon.is_empty(): 
-            return {}
+        if planning_horizon.is_empty(): return {}
 
         # compile coverage data
         raw_coverage_data : dict = orbitdata.gp_access_data.lookup_interval(planning_horizon.left, planning_horizon.right)
@@ -114,7 +113,7 @@ class AbstractPlanner(ABC):
 
         # merge access interval opportunities
         for grid_idx,gp_accesses in tqdm(coverage_idx_by_target.items(), 
-                                         desc=f'{state.agent_name}/PLANNER: Merging access opportunities', leave=False):
+                                         desc=f'{state.agent_name}/PLANNER: Merging access opportunities', leave=False, mininterval=0.5):
             for gp_idx,instrument_accesses in gp_accesses.items():
                 for instrument,access_indices in instrument_accesses.items():
                     # initialize merged access intervals
@@ -258,12 +257,12 @@ class AbstractPlanner(ABC):
         
     @runtime_tracker
     def single_task_observation_opportunity_from_accesses(self,
-                                   available_tasks : List[GenericObservationTask],
-                                   access_times : List[tuple], 
-                                   cross_track_fovs : dict,
-                                   orbitdata : OrbitData,
-                                   threshold : float = 1e-9
-                                   ) -> List[ObservationOpportunity]:
+                                                          available_tasks : List[GenericObservationTask],
+                                                          access_times : List[tuple], 
+                                                          cross_track_fovs : dict,
+                                                          orbitdata : OrbitData,
+                                                          threshold : float = 1e-9
+                                                        ) -> List[ObservationOpportunity]:
         """ Creates one instance of a task observation opportunity per each access opportunity 
         for every available task """
 

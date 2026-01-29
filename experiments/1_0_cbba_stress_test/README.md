@@ -43,22 +43,74 @@
 
 ## Running Trials
 
-### Full Factorial Trials
-Full list of combinations from test matrix
+### Commandline Arguments and Parameters
+- `-n` or `--name` : (`str`) filename of `.csv` file outlining simulation trial cases to be ran,
+- `-p` or `--propagate` : (`bool`) only performs orbit propagation of trial cases, does not simulate satellite mission.
+- `-l` or `--lower-bound` : (`int`) lower bound of simulation trial indeces to be run (inclusive).
+- `-u` or `--upper-bound` : (`int`) upper bound of simulation trial indeces to be run (non-inclusive).
+- `-o` or `--overwrite` : (`bool`) results overwrite toggle. Will skip simulating a  false and simulation has been run previously.
+- `-r` or `--reevaluate` : (`bool`) toggles the reprocessing and overwritting of results from simulations that were previously executed.
+- `-d` or ```debug` : (`bool`) toggles the use of reduced complexity simulation trials for debugging purposes.
 
+
+### Trial Simulation Commands
+Example commands to be used for running simulations in from a `Unix` terminal. Paths are listed for the local directories of the machine used to develop this tool. Substitute `cd ~/Documents/GitHub/3dchess` with `cd path/to/repository/3dchess` when implementing in your own machine. 
+
+#### Full Factorial Trials
+*Runs simulations from full list of combinations from test matrix*
+
+Simulate all cases:
 ```
 cd ~/Documents/GitHub/3dchess
 conda activate ./.venv
-python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials -o False -l LOWER -u UPPER
+python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials
 ```
 
-### Latin Hypercube Sampling Trials
-Cases selected from full list of combinations using a LHS $n_{sample} = 2$.
-
+Only propagate orbits for all cases:
 ```
 cd ~/Documents/GitHub/3dchess
 conda activate ./.venv
-python ./experiments/1_0_cbba_stress_test/study.py -n lhs_trials-2_samples-1000_seed -o False -l LOWER -u UPPER
+python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials -p True
+```
+
+Generate processed results for all cases:
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials -r True 
+```
+
+Simulate cases from trial interval `[LOWER, UPPER)`:
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials -l LOWER -u UPPER
+```
+
+Generate processed results for selected case from trial interval `[LOWER, UPPER)`:
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n full_factorial_trials -r True -l LOWER -u UPPER
+```
+
+
+
+#### Latin Hypercube Sampling Trials
+*Cases selected from full list of combinations using a LHS $n_{sample} = 2$.*
+
+Simulate all cases:
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n lhs_trials-2_samples-1000_seed
+```
+
+Simulate cases from trial interval `[LOWER, UPPER)`:
+```
+cd ~/Documents/GitHub/3dchess
+conda activate ./.venv
+python ./experiments/1_0_cbba_stress_test/study.py -n lhs_trials-2_samples-1000_seed -l LOWER -u UPPER
 ```
 
 Propagate only cases

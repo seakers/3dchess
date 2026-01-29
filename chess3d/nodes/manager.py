@@ -111,7 +111,7 @@ class SimulationManager(AbstractManager):
                 t = 0
                 tf = self._clock_config.get_total_seconds()
                 iter_counter = 0
-                with tqdm(total=tf , desc=desc, leave=True) as pbar:
+                with tqdm(total=tf , desc=desc, leave=True, mininterval=0.5) as pbar:
                     while t < tf:
                         
                         t_0 = time.perf_counter()
