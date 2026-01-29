@@ -270,7 +270,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
         # initiate list of changes to bundle        
         bundle_resets = []
         
-        # TODO reset any prior bids from previous plan
+        # update bundle according to new preplan
         while self.bundle:
             # get next bundle entry
             _,tasks = self.bundle.pop(0)
@@ -290,6 +290,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
 
         # reset path
         self.path = []
+
+        # add an element to rests to trigger replanning
+        if not bundle_resets:
+            bundle_resets.append('Bid') # dummy bid to trigger replanning
 
         # return updates
         return preplan_path, bundle_resets
@@ -1046,16 +1050,22 @@ class ConsensusPlanner(AbstractReactivePlanner):
             assert len(self.bundle) == 0, "Current bundle not empty during preplan-based bundle building."
             assert len(self.path) == 0, "Current path not empty during preplan-based bundle building."        
             
-            # build bundle from periodic preplan
+            # build initial bundle from periodic preplan
             self.bundle, self.path, new_bids = \
-                self._build_bundle_from_preplan(state, specs, current_plan, clock_config, orbitdata, mission, observation_history)
-
+                self._build_bundle_from_preplan(state, specs, current_plan, clock_config, 
+                                                orbitdata, mission, observation_history)
             # TODO ensure bids that all observations that were able to be added to bundle match observations in preplan
-            
-        else: # no new periodic plan; generate new plan based on changes to tasks or bundle
-            # build new bundle and path according to replanning model
-            self.bundle, self.path, new_bids = \
-                self._bundle_building_phase(state, specs, current_plan, tasks, clock_config, orbitdata, mission, observation_history)
+           
+            # check if new path and bundle are valid
+            self.__validate_new_bundle(state, specs, new_bids)
+
+            # update results with initial periodic plan bundle
+            self.__update_results_from_bundle(state, new_bids)
+
+        # update bundle and path according to replanning model
+        self.bundle, self.path, new_bids = \
+            self._bundle_building_phase(state, specs, current_plan, tasks, clock_config, 
+                                        orbitdata, mission, observation_history)
 
         # check if new path and bundle are valid
         self.__validate_new_bundle(state, specs, new_bids)
@@ -1540,6 +1550,9 @@ class ConsensusPlanner(AbstractReactivePlanner):
             # initialize search for broadcast times during access opportunities
             t_broadcasts = set()
             t_access_starts = set()
+
+            # outline planning horizon interval
+            t_next = max(self.preplan.t + self.preplan.horizon, state.t)
             
             # check if shareble bids to share exist
             if any([isinstance(task, EventObservationTask) for task in self.results]):
@@ -1547,7 +1560,7 @@ class ConsensusPlanner(AbstractReactivePlanner):
                 for target in orbitdata.comms_links.keys():
 
                     # get access intervals with target agent
-                    next_access_interval : Interval = orbitdata.get_next_agent_access(target, state.t, include_current=True)
+                    next_access_interval : Interval = orbitdata.get_next_agent_access(target, state.t, t_max=t_next, include_current=True)
                     
                     # if no access opportunities in this planning horizon, skip scheduling
                     if next_access_interval is not None:
@@ -1630,7 +1643,10 @@ class ConsensusPlanner(AbstractReactivePlanner):
                                 and action.t_end - action.t_start <= self.EPS]
             
             # connection waits; allows for messages to be received right after access start times
-            waits = [WaitAction(t_access_start, t_access_start) for t_access_start in t_access_starts]
+            if state.t in t_access_starts:
+                t_access_starts.remove(state.t)  # already at current time; no need to wait
+            waits = [WaitAction(t_access_start, t_access_start) 
+                     for t_access_start in t_access_starts]
             waits.extend(preplan_waits)            
             broadcasts.extend(waits)
 

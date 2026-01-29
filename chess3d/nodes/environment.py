@@ -118,6 +118,7 @@ class SimulationEnvironment(EnvironmentNode):
         self.observation_history = []
         self.broadcasts_history = []
 
+    @runtime_tracker
     def __precompute_connectivity(self) -> List[tuple]:
         """ 
         Precomputes initial connectivity matrix for all agents 
@@ -147,22 +148,33 @@ class SimulationEnvironment(EnvironmentNode):
             connectivity_intervals.append( Interval(t_start, t_end, right_open=True) )
 
         # initialize previous connectivity matrix
-        prev_interval = Interval(np.NINF, unique_event_times[0], left_open=True, right_open=True)
+        t_start = unique_event_times[0] if unique_event_times else np.Inf
+        prev_interval = Interval(np.NINF, t_start, left_open=True, right_open=True)
         connectivity_intervals.insert(0, prev_interval)
         prev_connectivity_matrix = {sender : {receiver : 0 for receiver in self.orbitdata.keys()} 
                              for sender in self.orbitdata.keys()}
+        
+        # group events by interval 
+        events_per_interval : Dict[Interval, List[tuple]] \
+            = {interval : [] for interval in connectivity_intervals}
+        for evt in tqdm(connectivity_events, desc='Grouping connectivity events by interval', unit=' events', leave=False):
+            for interval,interval_events in events_per_interval.items():
+                if evt[0] in interval:
+                    interval_events.append(evt)
+                    break            
         
         # initialize interval-connectivity list
         interval_connectivities : List[tuple] = []
         
         # create adjacency matrix per interval
-        for interval in connectivity_intervals:
+        for interval in tqdm(connectivity_intervals, desc='Precomputing agent connectivity intervals', unit=' intervals', leave=False):
             # copy previous connectivity state
             interval_connectivity_matrix \
                 = copy.deepcopy(prev_connectivity_matrix)                    
             
             # get connectivity events that occur during the interval
-            interval_events = [ evt for evt in connectivity_events if evt[0] in interval ]
+            # interval_events = [ evt for evt in connectivity_events if evt[0] in interval ]
+            interval_events = events_per_interval[interval]
 
             # update connectivity matrix based on events
             for _,sender,receiver,status in interval_events:
@@ -190,6 +202,7 @@ class SimulationEnvironment(EnvironmentNode):
         # return compiled list of interval connectivities
         return interval_connectivities
     
+    @runtime_tracker
     def __get_connected_components(self, adj: Dict[str, Dict[str, int]]):
         """
         adj: dict[node] -> dict[neighbor] -> weight/int (nonzero means edge exists)

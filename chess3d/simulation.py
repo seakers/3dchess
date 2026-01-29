@@ -31,6 +31,7 @@ from execsatm.requirements import CapabilityRequirement, ExplicitCapabilityRequi
 from execsatm.utils import Interval
 
 from chess3d.agents.agents import *
+from chess3d.agents.planning.decentralized.blank import BlankPlanner
 from chess3d.agents.science.processing import LookupProcessor
 from chess3d.nodes.manager import SimulationManager
 from chess3d.nodes.monitor import ResultsMonitor
@@ -2243,6 +2244,10 @@ class SimulationElementFactory:
                 dealer_name = preplanner_dict.get('dealerName', None)
                 preplanner = WorkerPlanner(dealer_name, debug, logger)
 
+            elif preplanner_type.lower() == 'blank':
+                preplanner = BlankPlanner(horizon, period, sharing, debug, logger)
+
+            # TODO reactivate MILP preplanner when implemented
             # elif preplanner_type.lower() in ['milp', 'mixed-integer-linear-programming']:
             #     # unpack preplanner parameters
             #     obj = preplanner_dict.get('objective', 'reward').lower()

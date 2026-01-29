@@ -155,6 +155,7 @@ class HeuristicInsertionConsensusPlanner(ConsensusPlanner):
                        observation_history : ObservationHistory
                     ) -> tuple:
         
+        """ Build new bundle and path according to selected heuristic model. """
         # compile instrument field of view specifications   
         cross_track_fovs : dict = self._collect_fov_specs(specs)
 

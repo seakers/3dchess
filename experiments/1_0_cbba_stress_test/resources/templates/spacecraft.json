@@ -41,9 +41,9 @@
     },
     "planner" : {
         "preplanner": {
-            "@type": "heuristic",
+            "@type": "blank",
             "debug": "True",
-            "period" : 500
+            "period" : 3000
         },
         "replanner": {
             "@type": "consensus",

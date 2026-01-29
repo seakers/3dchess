@@ -759,10 +759,10 @@ class SimulatedAgent(AbstractAgent):
                 self.plan_history.append((state.t, plan_copy))
                 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # if self.preplanner._debug: self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
-                if state.t < 1:
-                    self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
+                if self.preplanner._debug: self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 x = 1 # breakpoint
+                # if state.t < 1:
+                #     self.__log_plan(self.plan, "PRE-PLAN", logging.WARNING)
                 # -------------------------------------
 
         # --- Modify plan ---
