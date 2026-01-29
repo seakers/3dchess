@@ -1,31 +1,31 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 import copy
 import os
 import time
-from typing import Dict
+from typing import Dict, List, Set, Tuple
 from dmas.elements import SimulationMessage
 from dmas.messages import SimulationMessage
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from zmq import asyncio as azmq
-
-from instrupy.base import Instrument
-from instrupy.base import BasicSensorModel
-from instrupy.passive_optical_scanner_model import PassiveOpticalScannerModel
-from instrupy.util import SphericalGeometry, ViewGeometry
+import asyncio
+import logging
+import zmq
 
 from execsatm.events import GeophysicalEvent
 from execsatm.tasks import EventObservationTask
+from execsatm.utils import Interval
 
-from chess3d.agents.science.requests import *
+from chess3d.agents.science.requests import TaskRequest
 from chess3d.orbitdata import OrbitData
-from chess3d.agents.states import *
-from chess3d.agents.states import SimulationAgentState
-from chess3d.messages import *
+from chess3d.agents.states import SimulationAgentTypes
+from chess3d.messages import ManagerMessageTypes, SimulationElementRoles, SimulationMessageTypes, ObservationResultsMessage, BusMessage, NodeReceptionIgnoredMessage, TocMessage, AgentConnectivityUpdate
 
-from dmas.environments import *
-from dmas.messages import *
+from dmas.environments import EnvironmentNode
+from dmas.network import NetworkConfig
+from dmas.clocks import FixedTimesStepClockConfig, AcceleratedRealTimeClockConfig
+from dmas.utils import runtime_tracker
 
 
 class SimulationEnvironment(EnvironmentNode):
@@ -47,10 +47,12 @@ class SimulationEnvironment(EnvironmentNode):
                 gs_list : list,                
                 env_network_config: NetworkConfig, 
                 manager_network_config: NetworkConfig, 
-                connectivity : str = 'full',
+                connectivity_level : str = 'FULL',
+                connectivity_relays : bool = False,
                 events_path : str = None,
                 level: int = logging.INFO, 
-                logger: logging.Logger = None) -> None:
+                logger: logging.Logger = None
+                ) -> None:
         super().__init__(env_network_config, manager_network_config, [], level, logger)
 
         # setup results folder:
@@ -95,32 +97,146 @@ class SimulationEnvironment(EnvironmentNode):
 
         # load events
         self.events_path : str = events_path
-        self.events : List[GeophysicalEvent] = self.load_events(events_path)
+        self.events : List[GeophysicalEvent] = self.__load_events(events_path)
 
-        # initialize parameters
-        self.connectivity = connectivity
-        self.observation_history = []
-        self.agent_connectivity = defaultdict(lambda: defaultdict(lambda: -1))
-        for src in agent_names:
-            for target in agent_names:
-                if src not in self.agent_connectivity:
-                    self.agent_connectivity[src] = {}    
-                if target != src:
-                    self.agent_connectivity[src][target] = -1
-
-        self.agent_state_update_times = {}
-
-        # self.measurement_reqs : set[TaskRequest] = set()
-        # self.measurement_reqs : set[dict] = set()
-        self.task_reqs : list[dict] = list()
+        # setup connectivity
+        self.connectivity_level : str = connectivity_level.upper()
+        self.interval_connectivities : List[Tuple[Interval, Dict, List]]\
+            = self.__precompute_connectivity() # list of (interval, connectivity_matrix, components_list)
+        self.current_connectivity_interval, self.current_connectivity_matrix, self.current_connectivity_components\
+            = self.__get_agent_connectivity(0.0) # serve as references for connectivity at current time
+        self.agent_connectivity : Dict[str, Dict[str, int]] \
+            = {agent : {other_agent : -1 for other_agent in agent_names} for agent in agent_names} # represents the last known connectivity status for each agent
         
+        # initialize parameters
+        self.connectivity_relays : bool = connectivity_relays
         self.t_0 = None
         self.t_f = None
-        self.t_update = None
+        self.agent_state_update_times = {}
+        self.task_reqs : list[dict] = list()        
 
+        self.observation_history = []
         self.broadcasts_history = []
+
+    def __precompute_connectivity(self) -> List[tuple]:
+        """ 
+        Precomputes initial connectivity matrix for all agents 
         
-    def load_events(self, events_path : str) -> List[GeophysicalEvent]:
+        ### Returns 
+            - interval_connectivities (`List[tuple]`): list of tuples of the form (interval, connectivity_matrix, components_list)
+        """
+        # compile event markers for changes in connectivity 
+        connectivity_events : List[tuple] = []
+        for sender,agent_orbitdata in self.orbitdata.items():
+            for receiver,data in agent_orbitdata.comms_links.items():
+                for t_start,t_end,*_ in data:
+                    connectivity_events.append( (t_start, sender, receiver, 1) )   # link comes online
+                    connectivity_events.append( (t_end, sender, receiver, 0) )     # link goes offline
+
+        # sort events by time
+        connectivity_events.sort(key=lambda x: x[0])
+
+        # extract unique event times
+        unique_event_times : List[float] = sorted(set([evt[0] for evt in connectivity_events]))
+
+        # group unique event times into intervals 
+        connectivity_intervals : List[Interval] = []
+        for i,_ in enumerate(unique_event_times):
+            t_start = unique_event_times[i]
+            t_end = unique_event_times[i+1] if i + 1 < len(unique_event_times) else np.Inf
+            connectivity_intervals.append( Interval(t_start, t_end, right_open=True) )
+
+        # initialize previous connectivity matrix
+        prev_interval = Interval(np.NINF, unique_event_times[0], left_open=True, right_open=True)
+        connectivity_intervals.insert(0, prev_interval)
+        prev_connectivity_matrix = {sender : {receiver : 0 for receiver in self.orbitdata.keys()} 
+                             for sender in self.orbitdata.keys()}
+        
+        # initialize interval-connectivity list
+        interval_connectivities : List[tuple] = []
+        
+        # create adjacency matrix per interval
+        for interval in connectivity_intervals:
+            # copy previous connectivity state
+            interval_connectivity_matrix \
+                = copy.deepcopy(prev_connectivity_matrix)                    
+            
+            # get connectivity events that occur during the interval
+            interval_events = [ evt for evt in connectivity_events if evt[0] in interval ]
+
+            # update connectivity matrix based on events
+            for _,sender,receiver,status in interval_events:
+                interval_connectivity_matrix[sender][receiver] = status
+
+            # create component list from connectivity matrix
+            interval_components = self.__get_connected_components(interval_connectivity_matrix)
+
+            # store interval connectivity data
+            interval_connectivities.append( (interval, interval_connectivity_matrix, interval_components) )
+
+            # set previous connectivity to current for next iteration
+            prev_connectivity_matrix = interval_connectivity_matrix
+
+            # DEBUG PRINTOUTS -------------
+            # print(F"Connectivity during interval {interval}:")
+            # print('-'*50)
+            # self.__print_connectivity_matrix(interval_connectivity_matrix)
+            # print('-'*50)
+            # self.__print_connected_components(interval_components)
+            # print('='*50 + '\n')
+            # x = 1 # breakpoint
+            # -------------------------------
+
+        # return compiled list of interval connectivities
+        return interval_connectivities
+    
+    def __get_connected_components(self, adj: Dict[str, Dict[str, int]]):
+        """
+        adj: dict[node] -> dict[neighbor] -> weight/int (nonzero means edge exists)
+        Assumes undirected (symmetric) or at least that reachability should be treated undirected.
+        Returns: list of components (each is list of node names)
+        """
+        # initialize BFS variables
+        visited = set()
+        comps = []
+
+        # BFS to find components
+        for start in adj.keys():
+            # skip visited nodes
+            if start in visited: continue
+
+            # initialize queue with starting node as root
+            q = deque([start])
+
+            # mark root as visited 
+            visited.add(start)
+
+            # explore subgraph components starting from root
+            comp = []
+            while q:
+                # pop next node
+                u = q.popleft()
+
+                # add to component list
+                comp.append(u)
+
+                # iterate neighbors; keep only truthy edges
+                for v, connected in adj[u].items():
+                    # check if connected to neighbor
+                    if not connected: continue
+                    
+                    # check neighbor has been visited
+                    if v not in visited:                        
+                        visited.add(v)
+                        q.append(v)
+
+            # add component to component list
+            comps.append(comp)
+
+        # return list of components
+        return comps
+
+    def __load_events(self, events_path : str) -> List[GeophysicalEvent]:
         """ Loads events present in the simulation """
         # checks if event path exists
         if events_path is None: return None
@@ -392,53 +508,68 @@ class SimulationEnvironment(EnvironmentNode):
         
     @runtime_tracker
     def update_agent_connectivity(self, msg_dict : dict) -> list:
-        # initiate update list
+        """ Checks if there has been a change in connectivity for the sending agent"""        
+        # initiate network connectivity update message list
         resp_msgs = []
+        
+        # unpack incoming message
+        sender = msg_dict["src"]
 
+        # get matching component list for sender
+        components_sender : list = next((components for components in self.current_connectivity_components 
+                                        if sender in components))
+        
         # check connectivity of sender agent status with all other agents
-        for target in self.agent_connectivity[msg_dict["src"]]:
-            # check updated connectivity
-            connected = self.check_agent_connectivity(msg_dict["src"], target)
-            
+        for receiver in self.agent_connectivity[sender]:
+            # check current connectivity status between sender and receiver
+            connected_conditions = [
+                self.connectivity_level == 'FULL',
+                (sender != receiver and receiver in components_sender and self.connectivity_relays),
+                self.current_connectivity_matrix[sender][receiver] == 1
+            ]
+
+            # convert to binary connectivity
+            connected = int(any(connected_conditions))
+
             # check if it changes from previously known connectivity state
-            if connected == 0 and self.agent_connectivity[msg_dict["src"]][target] == -1:
+            if connected == 0 and self.agent_connectivity[sender][receiver] == -1:
                 # no change found; do not announce
                 pass
 
-            elif self.agent_connectivity[msg_dict["src"]][target] != connected:
+            elif self.agent_connectivity[sender][receiver] != connected:
                 # change found; make announcement 
-                connectivity_update = AgentConnectivityUpdate(msg_dict["src"], target, connected)
+                connectivity_update = AgentConnectivityUpdate(sender, receiver, connected)
                 resp_msgs.append(connectivity_update.to_dict())
 
             # update internal state
-            self.agent_connectivity[msg_dict["src"]][target] = connected   
+            self.agent_connectivity[sender][receiver] = connected  
 
-        # TODO use bfs or dfs to propagate connectivity changes through the network
-        # queue = [[src] for src in self.agent_connectivity.keys()]
-        # visited = set()
-        # while queue:
-        #     path = queue.pop(0)
-        #     node = path[-1]
-
-        #     if node not in visited:
-        #         visited.add(node)
-                
-        #         for adjacent in self.agent_connectivity.get(node, {}):
-                    
-        #             if self.agent_connectivity[node][adjacent] == 1:
-        #                 new_path = list(path)
-        #                 new_path.append(adjacent)
-        #                 queue.append(new_path)
-
-        #                 # check if connectivity to adjacent has changed
-        #                 if self.agent_connectivity[msg_dict["src"]][adjacent] != 1:
-        #                     # change found; make announcement 
-        #                     connectivity_update = AgentConnectivityUpdate(msg_dict["src"], adjacent, 1)
-        #                     resp_msgs.append(connectivity_update.to_dict())
-        #                     # update internal state
-        #                     self.agent_connectivity[msg_dict["src"]][adjacent] = 1
-
+        # return connectivity list
         return resp_msgs
+        
+        # TEMP original connectivity update code commented out for debugging purposes
+        # # initiate update list
+        # resp_msgs = []
+
+        # # check connectivity of sender agent status with all other agents
+        # for target in self.agent_connectivity[msg_dict["src"]]:
+        #     # check updated connectivity
+        #     connected = self.check_agent_connectivity(msg_dict["src"], target)
+            
+            # # check if it changes from previously known connectivity state
+            # if connected == 0 and self.agent_connectivity[msg_dict["src"]][target] == -1:
+            #     # no change found; do not announce
+            #     pass
+
+            # elif self.agent_connectivity[msg_dict["src"]][target] != connected:
+            #     # change found; make announcement 
+            #     connectivity_update = AgentConnectivityUpdate(msg_dict["src"], target, connected)
+            #     resp_msgs.append(connectivity_update.to_dict())
+
+            # # update internal state
+            # self.agent_connectivity[msg_dict["src"]][target] = connected   
+        
+        # return resp_msgs
 
     """
     ---------------------------
@@ -464,17 +595,18 @@ class SimulationEnvironment(EnvironmentNode):
             # unpack message
             t = content['t']
 
-            # check if time advanced
-            if self.get_current_time() > t:
-                # update connectivity matrix
-                pass
-
             # update internal clock
             self.log(f"received message of type {content['msg_type']}. updating internal clock to {t}[s]...")
             await self.update_current_time(t)
 
             # wait for all agent's to send their updated states
             self.log(f"internal clock uptated to time {self.get_current_time()}[s]!")
+
+            # update current connectivity if needed
+            if t not in self.current_connectivity_interval:
+                self.current_connectivity_interval, self.current_connectivity_matrix, \
+                    self.current_connectivity_components = self.__get_agent_connectivity(t)
+                self.log(f"inter-agent network connectivity status updated!")
 
             # TODO breakpoint for debugging
             # if 95.0 < t < 96.0:
@@ -525,29 +657,63 @@ class SimulationEnvironment(EnvironmentNode):
         return super().get_current_time()
     
     @runtime_tracker
-    def check_agent_connectivity(self, src : str, target : str) -> int:
-        """
-        Checks if an agent is in communication range with another agent
-
-        #### Arguments:
-            - src (`str`): name of agent starting the connection
-            - target (`str`): name of agent receving the connection
-
-        #### Returns:
-            - connected (`int`): binary value representing if the `src` and `target` are connected
-        """
-        # check if full connectivity has been assumed
-        if self.connectivity == 'FULL': return 1
-
-        # check if orbit data is available for the source agent
-        assert src in self.orbitdata, f'No orbit data found for agent `{src}`.'
+    def __get_agent_connectivity(self, t : float) -> tuple:
+        """ Searches and returns the current connectivity matrix and components for agents at time `t` """
         
-        # check if target is in the list of comms links for the source agent
-        if target not in self.orbitdata[src].comms_links: return 0
+        # use binary search to find the correct interval
+        low = 0
+        high = len(self.interval_connectivities) - 1
+        
+        while low <= high:
+            # find mid index
+            mid = (low + high) // 2
 
-        # check connectivity based on orbit data
-        src_data : OrbitData = self.orbitdata[src]
-        return int(src_data.is_accessing_agent(target, self.get_current_time()))
+            # unpack interval data
+            interval, connectivity, components \
+                = self.interval_connectivities[mid]
+
+            # return if time t is in the interval
+            if t in interval: return interval, connectivity, components
+            
+            # if not, adjust search bounds
+            if t < interval.left:
+                high = mid - 1
+            else:
+                low = mid + 1
+
+        # time t not found in any interval
+        raise ValueError(f'Time {t}[s] not found in any precomputed connectivity interval.')
+        # #   return empty connectivity and isolated components
+        # interval_connectivity = Interval(t, np.Inf, right_open=True)
+        # connectivity = {sender : {receiver : 0 for receiver in self.orbitdata.keys()} 
+        #                      for sender in self.orbitdata.keys()}
+        # interval_components = [[agent] for agent in self.orbitdata.keys()]
+
+        # return interval_connectivity, connectivity, interval_components
+    
+    # @runtime_tracker
+    # def check_agent_connectivity(self, src : str, target : str, t : float) -> int:
+    #     """
+    #     Checks if an agent is in communication range with another agent
+
+    #     #### Arguments:
+    #         - src (`str`): name of agent starting the connection
+    #         - target (`str`): name of agent receving the connection
+
+    #     #### Returns:
+    #         - connected (`int`): binary value representing if the `src` and `target` are connected
+    #     """
+    #     # check if full connectivity has been assumed
+    #     if self.connectivity_level == 'FULL': return 1
+
+    #     # check if orbit data is available for the source agent
+    #     assert src in self.orbitdata, f'No orbit data found for agent `{src}`.'
+        
+    #     # get orbit data for source agent
+    #     src_data : OrbitData = self.orbitdata[src]
+        
+    #     # check connectivity based on orbit data
+    #     return int(src_data.is_accessing_agent(target, t))
 
     @runtime_tracker
     def query_measurement_data( self,
@@ -707,12 +873,31 @@ class SimulationEnvironment(EnvironmentNode):
     async def listen_internal_message(self) -> tuple:
         return await super().listen_internal_message()
 
+    def __print_connectivity_matrix(self, conn_matrix : Dict[str, Dict[str, int]]) -> None:
+        """ Prints connectivity matrix to console """
+        agent_names = list(conn_matrix.keys())
+        header = "\t\t" + "  ".join([f"{name:>5}" for name in agent_names])
+        print(header)
+        for sender in agent_names:
+            row = f"{sender:>5}\t"
+            if len(sender) < 8:
+                row += "\t"
+            for receiver in agent_names:
+                row += f"{conn_matrix[sender][receiver]:>3}\t"
+            print(row)
+
+    def __print_connected_components(self, components : List[Set[str]]) -> None:
+        """ Prints connected components to console """
+        print("Connected Components:")
+        for i,comp in enumerate(sorted(components)):
+            print(f" - Component {i}: " + ", ".join(comp))
+
     """
     ---------------------------
     RESULTS PRINTOUTS
     ---------------------------
     """    
-    
+
     def print_results(self) -> None:
         try:
             # set final simulation time
@@ -877,4 +1062,3 @@ class SimulationEnvironment(EnvironmentNode):
         return pd.DataFrame(data=data, columns=columns)
 
     
-   

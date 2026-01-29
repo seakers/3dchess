@@ -41,7 +41,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_14 = False # single sat    default mission     multiple targets    two events          preplan + replan
         self.toy_15 = False # two sats      default mission     multiple targets    two events          preplan + replan
         self.toy_16 = False # single sat    no default mission  two targets         two expiring events  preplan + replan   not the correct instruments
-        self.toy_17 = False # moving relay scenario
+        self.toy_17 = True # moving relay scenario
         self.toy_18 = False # static relay scenario
         self.toy_19 = False # single sat    default mission     multiple targets    two events           preplan w/short horizon + replan
         self.toy_20 = False # two sats       default mission     multiple targets    two events           preplan w/short horizon + replan
@@ -49,7 +49,7 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         self.toy_22 = False # two sats      no default mission     multiple targets    two events announced by GS   replan
 
         self.toy_23 = False 
-        self.toy_24 = True
+        self.toy_24 = False
         self.toy_25 = False
         self.toy_26 = False
 
@@ -1662,17 +1662,6 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         event_name = 'toy_17'
         mission_name = 'toy_missions'
 
-        # SAT0 : announcer satellite 
-        announcer_spacecraft : dict = copy.deepcopy(self.spacecraft_template)
-        announcer_spacecraft['@id'] = 'sat0_announcer'
-        announcer_spacecraft['name'] = 'sat0'
-        announcer_spacecraft['planner'] = self.setup_announcer_config(event_name)
-        announcer_spacecraft['instrument'] = self.instruments['TIR'] # wide swath instrument
-        announcer_spacecraft['orbitState']['state']['sma'] = self.R + 400.0 
-        announcer_spacecraft['orbitState']['state']['inc'] = 0.0
-        announcer_spacecraft['orbitState']['state']['ta'] = -22.5 # in constant LOS of SAT1 and SAT2
-        announcer_spacecraft['mission'] = "toy_mission_17"
-
         # SAT1 : reactive satellite with narrow swath instrument
         ractive_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
         ractive_spacecraft_1['@id'] = 'sat1_vnir'
@@ -1686,6 +1675,17 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_1['orbitState']['state']['ta'] = 0.0 # outside of LOS of SAT2
         ractive_spacecraft_1['mission'] = "toy_mission_17"
 
+        # SAT0_1 : announcer satellite 1
+        announcer_spacecraft_1 : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft_1['@id'] = 'sat0_announcer_1'
+        announcer_spacecraft_1['name'] = 'sat0_1'
+        announcer_spacecraft_1['planner'] = self.setup_announcer_config(event_name)
+        announcer_spacecraft_1['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft_1['orbitState']['state']['sma'] = self.R + 400.0 
+        announcer_spacecraft_1['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft_1['orbitState']['state']['ta'] = 0.0 # in constant LOS of SAT1
+        announcer_spacecraft_1['mission'] = "toy_mission_17"
+
         # SAT2 : reactive satellite with narrow swath instrument
         ractive_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
         ractive_spacecraft_2['@id'] = 'sat2_vnir'
@@ -1698,6 +1698,17 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
         ractive_spacecraft_2['orbitState']['state']['inc'] = 0.0
         ractive_spacecraft_2['orbitState']['state']['ta'] = -45.0 # outside of LOS of SAT1
         ractive_spacecraft_2['mission'] = "toy_mission_17"
+
+        # SAT0_2 : announcer satellite 2
+        announcer_spacecraft_2 : dict = copy.deepcopy(self.spacecraft_template)
+        announcer_spacecraft_2['@id'] = 'sat0_announcer_2'
+        announcer_spacecraft_2['name'] = 'sat0_2'
+        announcer_spacecraft_2['planner'] = self.setup_announcer_config(event_name)
+        announcer_spacecraft_2['instrument'] = self.instruments['TIR'] # wide swath instrument
+        announcer_spacecraft_2['orbitState']['state']['sma'] = self.R + 400.0 
+        announcer_spacecraft_2['orbitState']['state']['inc'] = 0.0
+        announcer_spacecraft_2['orbitState']['state']['ta'] = -45.0 # in constant LOS of SAT2
+        announcer_spacecraft_2['mission'] = "toy_mission_17"
 
         # SAT3 : relay satellite with wrong instrument for event tasks
         ractive_spacecraft_3 : dict = copy.deepcopy(self.spacecraft_template)
@@ -1723,7 +1734,8 @@ class TestConsensusPlanner(PlannerTester, unittest.TestCase):
                                                    event_name,
                                                    mission_name,
                                                    spacecraft=[
-                                                       announcer_spacecraft,
+                                                       announcer_spacecraft_1,
+                                                       announcer_spacecraft_2,
                                                        ractive_spacecraft_1,
                                                        ractive_spacecraft_2,
                                                        ractive_spacecraft_3

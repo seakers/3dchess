@@ -816,11 +816,11 @@ class SimulatedAgent(AbstractAgent):
                 pending_actions = []
 
                 # --- FOR DEBUGGING PURPOSES ONLY: ---
-                # self.__log_plan(self.plan, "REPLAN", logging.WARNING)
-                # x = 1 # breakpoint
-                if 95.0 < state.t < 96.0:
-                    self.__log_plan(self.plan, "REPLAN", logging.WARNING)
-                    x = 1 # breakpoint
+                self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                x = 1 # breakpoint
+                # if 95.0 < state.t < 96.0:
+                #     self.__log_plan(self.plan, "REPLAN", logging.WARNING)
+                #     x = 1 # breakpoint
                 # -------------------------------------
 
         # get next actions to perform
@@ -828,10 +828,10 @@ class SimulatedAgent(AbstractAgent):
         
         # --- FOR DEBUGGING PURPOSES ONLY: ---        
         # self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
-        if 95.0 < state.t < 96.0:
-            self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
-        if state.t > 96.0:
-            x = 1 # breakpoint
+        # if 95.0 < state.t < 96.0:
+        #     self.__log_plan(plan_out, "NEXT ACTIONS", logging.WARNING)
+        # if state.t > 96.0:
+        #     x = 1 # breakpoint
         # -------------------------------------        
 
         # return next actions to perform

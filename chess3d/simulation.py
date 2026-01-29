@@ -262,6 +262,7 @@ class Simulation:
                                             env_network_config, 
                                             manager_network_config,
                                             connectivity,
+                                            True,
                                             events_path,
                                             level,
                                             logger)
