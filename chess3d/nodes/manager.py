@@ -160,6 +160,9 @@ class SimulationManager(AbstractManager):
 
         except asyncio.CancelledError:
             return
+        except Exception as e:
+            self.log(f'`sim_wait` failed. {e}', level=logging.ERROR)
+            raise e
         
     async def wait_for_tic_requests(self, timeout : float=10*60):
         """

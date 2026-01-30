@@ -298,7 +298,7 @@ class Simulation:
 
             # Wait for the first exception or completion
             done, not_done = concurrent.futures.wait(futures, 
-                                                        return_when=concurrent.futures.FIRST_EXCEPTION)
+                                                     return_when=concurrent.futures.FIRST_EXCEPTION)
 
             # If any finished future raised, propagate it and stop everyone
             for fut in done:
