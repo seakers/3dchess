@@ -596,7 +596,6 @@ class SimulatedAgent(AbstractAgent):
         self.plan_history = []
         self.tasks : list[GenericObservationTask] = SimulatedAgent.__initialize_default_mission_tasks(mission, orbitdata)
         self.known_reqs : set[TaskRequest] = set() # TODO do we need this or is the task list enough?
-        self.observation_history : ObservationHistory = None
 
         # initialize observation history
         self.observation_history = ObservationHistory(orbitdata)
@@ -975,18 +974,18 @@ class SimulatedAgent(AbstractAgent):
                                if req.task.is_available(self.get_current_time())
                                }
 
-    @runtime_tracker
-    def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
-        """
-        Compiles completed observations from the plan.
-        """
-        completed_observations = {action for action in completed_actions
-                        if isinstance(action, ObservationAction)}
-        completed_observations.update({action_from_dict(**msg.observation_action) 
-                            for msg in misc_messages
-                            if isinstance(msg, ObservationPerformedMessage)})
+    # @runtime_tracker
+    # def compile_completed_observations(self, completed_actions : list, misc_messages : list) -> set:
+    #     """
+    #     Compiles completed observations from the plan.
+    #     """
+    #     completed_observations = {action for action in completed_actions
+    #                     if isinstance(action, ObservationAction)}
+    #     completed_observations.update({action_from_dict(**msg.observation_action) 
+    #                         for msg in misc_messages
+    #                         if isinstance(msg, ObservationPerformedMessage)})
         
-        return completed_observations
+    #     return completed_observations
 
     @runtime_tracker
     def __update_observation_history(self, observations : list) -> None:

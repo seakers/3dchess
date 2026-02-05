@@ -4,7 +4,7 @@ import numpy as np
 
 from chess3d.utils import print_banner
 from chess3d.agents.planning.decentralized.consensus.bids import Bid, BidComparisonResults
-from chess3d.agents.planning.tasks import DefaultMissionTask
+from execsatm.tasks import DefaultMissionTask
 
 
 class TestBids(unittest.TestCase):
